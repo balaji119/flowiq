@@ -1,17 +1,13 @@
-export type StockOption = {
-  label: string;
-  stockCode: string;
-  substrateLabel: string;
-  materialRatePerSqm: number;
-};
+export const formatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0', 'Mega', 'DOT M', 'MP'] as const;
 
-export type ProcessOption = {
-  label: string;
-  ratePerSqm: number;
-};
+export type FormatKey = (typeof formatKeys)[number];
+
+export type QuantityBreakdown = Record<FormatKey, number>;
 
 export type OperationOption = {
-  name: string;
+  id: string;
+  label: string;
+  operationName: string;
   enabledByDefault?: boolean;
 };
 
@@ -22,46 +18,86 @@ export type ContactDetails = {
   email: string;
 };
 
+export type CampaignLine = {
+  id: string;
+  market: string;
+  assetId: string;
+  assetSearch: string;
+  selectedWeeks: number[];
+};
+
+export type MarketAssetOption = {
+  id: string;
+  market: string;
+  asset: string;
+  label: string;
+  state: string;
+  quantities: QuantityBreakdown;
+};
+
+export type MarketMetadata = {
+  name: string;
+  assets: MarketAssetOption[];
+};
+
+export type CampaignLineResult = {
+  id: string;
+  market: string;
+  assetLabel: string;
+  state: string;
+  runCount: number;
+  selectedWeeks: number[];
+  breakdown: QuantityBreakdown;
+};
+
+export type CampaignTotals = {
+  market: string;
+  breakdown: QuantityBreakdown;
+  posterTotal: number;
+  frameTotal: number;
+  specialFormatTotal: number;
+  totalUnits: number;
+  activeAssets: number;
+  activeRuns: number;
+};
+
+export type CampaignCalculationSummary = {
+  lines: CampaignLineResult[];
+  perMarket: CampaignTotals[];
+  grandTotal: CampaignTotals;
+};
+
+export type CalculatorMetadataResponse = {
+  markets: MarketMetadata[];
+  formatKeys: FormatKey[];
+};
+
 export type OrderFormValues = {
   customerCode: string;
   customerReference: string;
   jobTitle: string;
   jobDescription: string;
-  quantity: string;
-  finishWidth: string;
-  finishHeight: string;
-  sectionWidth: string;
-  sectionHeight: string;
-  pages: string;
+  notes: string;
   productCategory: string;
   sectionType: string;
   foldCatalog: string;
   stockCode: string;
   processFront: string;
   processReverse: string;
+  targetFreightPrice: string;
+  quantity: string;
+  finishWidth: string;
+  finishHeight: string;
+  sectionWidth: string;
+  sectionHeight: string;
+  pages: string;
   kindName: string;
-  notes: string;
+  campaignStartDate: string;
+  numberOfWeeks: string;
+  campaignLines: CampaignLine[];
   contact: ContactDetails;
   selectedJobOperations: string[];
   selectedSectionOperations: string[];
-  wastePercent: string;
-  setupCost: string;
-  cutCostPerUnit: string;
-  targetFreightPrice: string;
-};
-
-export type CalculationSummary = {
-  quantity: number;
-  finishAreaSqm: number;
-  totalAreaSqm: number;
-  chargeableAreaSqm: number;
-  printSides: number;
-  estimatedRunHours: number;
-  materialCost: number;
-  printCost: number;
-  finishingCost: number;
-  setupCost: number;
-  estimatedTotal: number;
 };
 
 export type PrintIqQuotePayload = {

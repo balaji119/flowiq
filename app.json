@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "FlowIQ",
-    "slug": "FlowIQ",
+    "slug": "flowiq",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,6 +15,8 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.balaji119.flowiq",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -25,6 +27,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "faf05e55-9f1a-4256-ae58-7d0625680d16"
+      }
+    },
+    "owner": "balaji119"
   }
 }

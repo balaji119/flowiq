@@ -1,24 +1,21 @@
 # FlowIQ
 
-Shared React Native + Expo application for web and mobile that captures printing order inputs for ADS Australia / Revolution360, calculates an estimated quote in-app, and sends a PrintIQ quote request through a secure proxy.
+Shared React Native + Expo application for web and mobile that captures campaign print schedule inputs, calculates workbook-based poster and frame quantities, and sends a PrintIQ quote request through a secure proxy.
 
 ## What is included
 
 - Expo app that runs on web, Android, and iOS from one codebase.
-- Shared form for customer, product spec, operations, and contact details.
-- In-app estimate calculator based on inferred spreadsheet-style inputs.
+- Shared form for campaign scheduling, quote details, operations, and contact details.
+- Workbook-backed calculator based on the included `Print Orders + Install Calculator.xlsx`.
 - Node/Express proxy to request the PrintIQ token and submit `GetPrice`.
 - PrintIQ payload preview so the business mapping is visible before submission.
 
-## Important assumption
+## Calculation source
 
-The Excel workbook referenced in the requirement was not present in the project workspace when this app was created. Because of that:
-
-- The calculator logic in `src/utils/calculations.ts` is an inferred first pass.
-- The stock codes, rates, and operation costs in `src/constants.ts` are editable placeholders.
-- The `installs` tab has been ignored as requested.
-
-Once the actual workbook is added, the next step is to map the exact formulas and lookup tables into the calculator module.
+- The app now reads quantity data from `Print Orders + Install Calculator.xlsx`.
+- The active calculation comes from the workbook `V-LOOKUP` ranges and the schedule-style run selection.
+- The `Installs` sheet is still ignored.
+- PrintIQ product setup fields are still configurable in the app because the workbook only covers the schedule quantity logic.
 
 ## Setup
 
@@ -41,7 +38,9 @@ Once the actual workbook is added, the next step is to map the exact formulas an
 
 - `App.tsx`: app entry point
 - `src/screens/QuoteBuilderScreen.tsx`: primary shared UI
-- `src/utils/calculations.ts`: estimated pricing logic
+- `src/utils/campaign.ts`: workbook-total helpers
 - `src/utils/printiq.ts`: form-to-PrintIQ payload mapper
+- `src/services/calculatorApi.ts`: workbook calculator API wrapper
 - `src/services/quoteApi.ts`: client API wrapper
-- `server/index.js`: PrintIQ proxy
+- `server/workbookCalculator.js`: workbook parser and quantity calculator
+- `server/index.js`: calculator and PrintIQ proxy

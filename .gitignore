@@ -31,7 +31,13 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
+
+# local workbooks / keys
+Print Orders + Install Calculator.xlsx
+bk_live
+bk_live.pub
 
 # typescript
 *.tsbuildinfo

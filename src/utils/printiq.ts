@@ -1,16 +1,28 @@
-import { stockOptions } from '../constants';
-import { CalculationSummary, OrderFormValues, PrintIqQuotePayload } from '../types';
+import { jobOperationOptions, sectionOperationOptions, stockOptions } from '../constants';
+import { CampaignCalculationSummary, OrderFormValues, PrintIqQuotePayload } from '../types';
 
-export function buildDefaultJobDescription(values: OrderFormValues) {
+function resolveQuantity(values: OrderFormValues, summary: CampaignCalculationSummary | null) {
+  const explicitQuantity = Number(values.quantity);
+  if (Number.isFinite(explicitQuantity) && explicitQuantity > 0) {
+    return explicitQuantity;
+  }
+
+  return summary?.grandTotal.totalUnits ?? 0;
+}
+
+export function buildDefaultJobDescription(values: OrderFormValues, summary: CampaignCalculationSummary | null) {
   const stock = stockOptions.find((option) => option.stockCode === values.stockCode);
   const lines = [
-    `${values.kindName || 'Item'} - Finished Size: ${values.finishWidth} x ${values.finishHeight}`,
-    `Substrate: ${stock?.substrateLabel ?? values.stockCode}`,
+    `Campaign start: ${values.campaignStartDate || 'TBC'}`,
+    `Run length: ${values.numberOfWeeks || '0'} weeks`,
+    `Substrate: ${stock?.label ?? values.stockCode}`,
     `Mode: ${values.processFront}`,
   ];
 
-  if (values.selectedJobOperations.includes('* Standard Pack and Wrap')) {
-    lines.push('Includes: Bulk packed and Wrapped');
+  if (summary) {
+    lines.push(`Poster total: ${summary.grandTotal.posterTotal}`);
+    lines.push(`Frame total: ${summary.grandTotal.frameTotal}`);
+    lines.push(`Special formats: ${summary.grandTotal.specialFormatTotal}`);
   }
 
   return lines.join('\n');
@@ -18,15 +30,15 @@ export function buildDefaultJobDescription(values: OrderFormValues) {
 
 export function buildPrintIqPayload(
   values: OrderFormValues,
-  _calculation: CalculationSummary,
+  summary: CampaignCalculationSummary | null,
 ): PrintIqQuotePayload {
-  const quantity = Number(values.quantity) || 0;
+  const quantity = resolveQuantity(values, summary);
   const pages = Number(values.pages) || 0;
   const finishWidth = Number(values.finishWidth) || 0;
   const finishHeight = Number(values.finishHeight) || 0;
   const sectionWidth = Number(values.sectionWidth) || finishWidth;
   const sectionHeight = Number(values.sectionHeight) || finishHeight;
-  const resolvedDescription = values.jobDescription.trim() || buildDefaultJobDescription(values);
+  const resolvedDescription = values.jobDescription.trim() || buildDefaultJobDescription(values, summary);
 
   return {
     CustomProduct: {
@@ -43,15 +55,21 @@ export function buildPrintIqPayload(
           SectionSizeHeight: sectionHeight,
           FoldCatalog: values.foldCatalog,
           Pages: pages,
-          SectionOperations: values.selectedSectionOperations.map((name) => ({
-            OperationName: name,
-          })),
+          SectionOperations: values.selectedSectionOperations
+            .map((id) => sectionOperationOptions.find((option) => option.id === id))
+            .filter(Boolean)
+            .map((option) => ({
+              OperationName: option!.operationName,
+            })),
           SideOperations: [],
         },
       ],
-      JobOperations: values.selectedJobOperations.map((name) => ({
-        OperationName: name,
-      })),
+      JobOperations: values.selectedJobOperations
+        .map((id) => jobOperationOptions.find((option) => option.id === id))
+        .filter(Boolean)
+        .map((option) => ({
+          OperationName: option!.operationName,
+        })),
     },
     SelectedQuantity: {
       Quantity: quantity,
