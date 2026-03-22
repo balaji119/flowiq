@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createElement, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   ActivityIndicator,
   Animated,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -13,18 +14,11 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { createCampaignLine, defaultFormValues, jobOperationOptions, processOptions, sectionOperationOptions, stockOptions } from '../constants';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { submitQuoteForPricing } from '../services/quoteApi';
-import {
-  CampaignCalculationSummary,
-  CampaignLine,
-  MarketAssetOption,
-  MarketMetadata,
-  OrderFormValues,
-  QuantityBreakdown,
-  formatKeys,
-} from '../types';
+import { CampaignCalculationSummary, CampaignLine, MarketMetadata, OrderFormValues, QuantityBreakdown, formatKeys } from '../types';
 import { buildDefaultJobDescription, buildPrintIqPayload } from '../utils/printiq';
 
 const steps = [
@@ -32,6 +26,21 @@ const steps = [
   { key: 'totals', title: 'Totals' },
   { key: 'quote', title: 'Quote' },
 ] as const;
+
+const webDateInputStyle: CSSProperties = {
+  borderRadius: 16,
+  borderWidth: '1px',
+  borderStyle: 'solid',
+  borderColor: '#cad8e7',
+  backgroundColor: '#ffffff',
+  minHeight: '50px',
+  padding: '0 14px',
+  fontSize: 16,
+  color: '#0d2033',
+  outline: 'none',
+  width: '100%',
+  boxSizing: 'border-box',
+};
 
 function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBreakdown; inverse?: boolean }) {
   return (
@@ -71,6 +80,224 @@ function Field({
         style={[styles.input, multiline && styles.inputMultiline]}
         placeholderTextColor="#6f7e93"
       />
+    </View>
+  );
+}
+
+function parseDateInput(value: string) {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function DateField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [showNativePicker, setShowNativePicker] = useState(false);
+  const currentDate = useMemo(() => parseDateInput(value), [value]);
+  const webInputRef = useRef<HTMLInputElement | null>(null);
+
+  function openWebDatePicker() {
+    const input = webInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.focus();
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+    }
+  }
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.field}>
+        <Text style={styles.label}>{label}</Text>
+        {createElement('input', {
+          ref: webInputRef,
+          type: 'date',
+          value,
+          onChange: (event: { target: { value: string } }) => onChange(event.target.value),
+          onClick: openWebDatePicker,
+          onFocus: openWebDatePicker,
+          style: webDateInputStyle,
+        })}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <Pressable style={styles.input} onPress={() => setShowNativePicker(true)}>
+        <Text style={styles.dateTriggerText}>{value}</Text>
+      </Pressable>
+      {showNativePicker && (
+        <DateTimePicker
+          value={currentDate}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
+            if (Platform.OS !== 'ios') {
+              setShowNativePicker(false);
+            }
+            if (event.type === 'set' && selectedDate) {
+              onChange(selectedDate.toISOString().slice(0, 10));
+            }
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
+function PickerField({
+  label,
+  selectedValue,
+  items,
+  onValueChange,
+  placeholder,
+}: {
+  label: string;
+  selectedValue: string;
+  items: Array<{ label: string; value: string }>;
+  onValueChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [anchor, setAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const triggerRef = useRef<View>(null);
+  const { width, height } = useWindowDimensions();
+  const isWeb = Platform.OS === 'web';
+  const isSearchablePicker = ['asset', 'market'].includes(label.toLowerCase());
+  const selectedLabel = items.find((item) => item.value === selectedValue)?.label || placeholder || 'Select';
+  const sheetTitle = placeholder || `Choose a ${label.toLowerCase()}`;
+  const filteredItems = useMemo(() => {
+    if (!isSearchablePicker || !searchQuery.trim()) {
+      return items;
+    }
+
+    const query = searchQuery.trim().toLowerCase();
+    return items.filter((item) => item.label.toLowerCase().includes(query));
+  }, [isSearchablePicker, items, searchQuery]);
+
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery('');
+      return;
+    }
+
+    if (!isWeb || typeof window === 'undefined') {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+
+      if (event.key === 'Enter' && filteredItems.length > 0) {
+        event.preventDefault();
+        onValueChange(filteredItems[0].value);
+        setOpen(false);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [filteredItems, isWeb, onValueChange, open]);
+
+  const webPanelWidth = anchor ? Math.min(Math.max(anchor.width, 360), 520, width - 32) : Math.min(width - 32, 520);
+  const webPanelLeft = anchor ? Math.max(16, Math.min(anchor.x, width - webPanelWidth - 16)) : 16;
+  const spaceBelow = anchor ? height - (anchor.y + anchor.height) - 16 : height - 104;
+  const spaceAbove = anchor ? anchor.y - 16 : 72;
+  const openAbove = !!anchor && spaceBelow < 320 && spaceAbove > spaceBelow;
+  const webPanelMaxHeight = Math.max(220, Math.min(420, openAbove ? spaceAbove - 8 : spaceBelow - 8));
+  const webPanelTop = anchor && !openAbove ? anchor.y + anchor.height + 8 : 88;
+  const webPanelBottom = anchor && openAbove ? Math.max(16, height - anchor.y + 8) : undefined;
+
+  function openPicker() {
+    if (isWeb && triggerRef.current?.measureInWindow) {
+      triggerRef.current.measureInWindow((x, y, measuredWidth, measuredHeight) => {
+        setAnchor({ x, y, width: measuredWidth, height: measuredHeight });
+        setOpen(true);
+      });
+      return;
+    }
+
+    setOpen(true);
+  }
+
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <Pressable ref={triggerRef} style={[styles.dropdownTrigger, open && styles.dropdownTriggerOpen]} onPress={openPicker}>
+        <Text style={[styles.dropdownTriggerText, !selectedValue && styles.dropdownPlaceholder]} numberOfLines={1}>
+          {selectedLabel}
+        </Text>
+        <Text style={styles.dropdownChevron}>{open ? '^' : 'v'}</Text>
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={[styles.dropdownOverlay, isWeb ? styles.dropdownOverlayWeb : styles.dropdownOverlayMobile]} onPress={() => setOpen(false)}>
+          <Pressable
+            style={[
+              styles.dropdownSurface,
+              isWeb ? styles.dropdownSurfaceWeb : styles.dropdownSurfaceMobile,
+              isWeb ? { width: webPanelWidth, left: webPanelLeft, top: openAbove ? undefined : webPanelTop, bottom: webPanelBottom, maxHeight: webPanelMaxHeight } : null,
+            ]}
+            onPress={() => undefined}
+          >
+            <View style={styles.dropdownSheetHeader}>
+              <Text style={styles.dropdownSheetLabel}>{label}</Text>
+              <Pressable onPress={() => setOpen(false)} hitSlop={8}>
+                <Text style={styles.dropdownSheetClose}>Close</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.dropdownSheetValue}>{sheetTitle}</Text>
+            {isSearchablePicker ? (
+              <View style={styles.dropdownSearchWrap}>
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder={`Search ${label.toLowerCase()}s`}
+                  placeholderTextColor="#6f7e93"
+                  style={styles.dropdownSearchInput}
+                  autoFocus={isWeb}
+                />
+              </View>
+            ) : null}
+            <ScrollView nestedScrollEnabled style={styles.dropdownScroll}>
+              {filteredItems.map((item, index) => {
+                const active = item.value === selectedValue;
+                return (
+                  <Pressable
+                    key={item.value || item.label}
+                    style={[styles.dropdownItem, active && styles.dropdownItemActive, index === filteredItems.length - 1 && styles.dropdownItemLast]}
+                    onPress={() => {
+                      onValueChange(item.value);
+                      setOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.dropdownItemText, active && styles.dropdownItemTextActive]}>{item.label}</Text>
+                    {active ? <Text style={styles.dropdownItemCheck}>✓</Text> : null}
+                  </Pressable>
+                );
+              })}
+              {filteredItems.length === 0 ? (
+                <View style={styles.dropdownEmptyState}>
+                  <Text style={styles.dropdownEmptyText}>No matching assets</Text>
+                </View>
+              ) : null}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -127,45 +354,6 @@ function WeekSelector({
   );
 }
 
-function AssetSearch({
-  line,
-  assets,
-  onSelectAsset,
-  onSearchChange,
-}: {
-  line: CampaignLine;
-  assets: MarketAssetOption[];
-  onSelectAsset: (asset: MarketAssetOption) => void;
-  onSearchChange: (value: string) => void;
-}) {
-  const query = line.assetSearch.trim().toLowerCase();
-  const matches = query
-    ? assets.filter((asset) => asset.label.toLowerCase().includes(query)).slice(0, 8)
-    : assets.slice(0, 8);
-
-  return (
-    <View style={styles.field}>
-      <Text style={styles.label}>Asset</Text>
-      <TextInput value={line.assetSearch} onChangeText={onSearchChange} style={styles.input} placeholder="Search asset" placeholderTextColor="#6f7e93" />
-      <View style={styles.suggestionList}>
-        {matches.map((asset) => {
-          const selected = asset.id === line.assetId;
-          return (
-            <Pressable
-              key={asset.id}
-              onPress={() => onSelectAsset(asset)}
-              style={[styles.suggestionItem, selected && styles.suggestionSelected]}
-            >
-              <Text style={[styles.suggestionTitle, selected && styles.suggestionTitleSelected]}>{asset.label}</Text>
-              <Text style={[styles.suggestionMeta, selected && styles.suggestionMetaSelected]}>{asset.state}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
 export function QuoteBuilderScreen() {
   const { width } = useWindowDimensions();
   const isWideLayout = width >= 1080;
@@ -211,6 +399,10 @@ export function QuoteBuilderScreen() {
   }, []);
 
   const payload = useMemo(() => buildPrintIqPayload(values, summary), [summary, values]);
+  const activeMarketSummaries = useMemo(
+    () => (summary ? summary.perMarket.filter((market) => market.activeAssets > 0 || market.activeRuns > 0 || market.totalUnits > 0) : []),
+    [summary]
+  );
   const numberOfWeeks = Math.max(1, Math.min(20, Number(values.numberOfWeeks) || 1));
   const currentStep = steps[stepIndex];
   const progressPercent = ((stepIndex + 1) / steps.length) * 100;
@@ -335,9 +527,9 @@ export function QuoteBuilderScreen() {
           </View>
 
           <View style={styles.row}>
-            <View style={styles.rowItem}>
-              <Field label="Campaign start date" value={values.campaignStartDate} onChangeText={(value) => updateField('campaignStartDate', value)} />
-            </View>
+              <View style={styles.rowItem}>
+                <DateField label="Campaign start date" value={values.campaignStartDate} onChange={(value) => updateField('campaignStartDate', value)} />
+              </View>
             <View style={styles.rowItem}>
               <Field label="Number of weeks" value={values.numberOfWeeks} onChangeText={(value) => updateField('numberOfWeeks', value)} keyboardType="numeric" />
             </View>
@@ -357,38 +549,38 @@ export function QuoteBuilderScreen() {
                   </Pressable>
                 </View>
 
-                <Text style={styles.label}>Market</Text>
-                <View style={styles.pillWrap}>
-                  {markets.map((market) => {
-                    const selected = line.market === market.name;
-                    return (
-                      <Pressable
-                        key={market.name}
-                        onPress={() =>
-                          updateCampaignLine(line.id, (current) => ({
-                            ...current,
-                            market: market.name,
-                            assetId: '',
-                            assetSearch: '',
-                          }))
-                        }
-                        style={[styles.pill, selected && styles.pillSelected]}
-                      >
-                        <Text style={[styles.pillText, selected && styles.pillTextSelected]}>{market.name}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                <AssetSearch
-                  line={line}
-                  assets={assets}
-                  onSearchChange={(value) => updateCampaignLine(line.id, (current) => ({ ...current, assetSearch: value }))}
-                  onSelectAsset={(asset) =>
+                <PickerField
+                  label="Market"
+                  selectedValue={line.market}
+                  items={markets.map((market) => ({
+                    label: market.name,
+                    value: market.name,
+                  }))}
+                  onValueChange={(value) =>
                     updateCampaignLine(line.id, (current) => ({
                       ...current,
-                      assetId: asset.id,
-                      assetSearch: asset.label,
+                      market: value,
+                      assetId: '',
+                      assetSearch: '',
+                    }))
+                  }
+                />
+
+                <PickerField
+                  label="Asset"
+                  selectedValue={line.assetId}
+                  items={[
+                    ...assets.map((asset) => ({
+                      label: asset.label,
+                      value: asset.id,
+                    })),
+                  ]}
+                  placeholder={assets.length ? 'Choose an asset' : 'No assets available'}
+                  onValueChange={(value) =>
+                    updateCampaignLine(line.id, (current) => ({
+                      ...current,
+                      assetId: value,
+                      assetSearch: assets.find((asset) => asset.id === value)?.label ?? '',
                     }))
                   }
                 />
@@ -434,10 +626,10 @@ export function QuoteBuilderScreen() {
 
           {summary ? (
             <>
-              {summary.perMarket.map((market) => (
-                <View key={market.market} style={styles.summaryCard}>
-                  <Text style={styles.summaryTitle}>{market.market}</Text>
-                  <Text style={styles.summaryMeta}>
+                {activeMarketSummaries.map((market) => (
+                  <View key={market.market} style={styles.summaryCard}>
+                    <Text style={styles.summaryTitle}>{market.market}</Text>
+                    <Text style={styles.summaryMeta}>
                     {market.activeAssets} active assets, {market.activeRuns} runs, {market.posterTotal} posters, {market.frameTotal} frames
                   </Text>
                   <BreakdownTable breakdown={market.breakdown} />
@@ -829,13 +1021,14 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   lineCard: {
-    borderWidth: 1,
-    borderColor: '#d9e4f0',
-    borderRadius: 20,
-    padding: 14,
-    gap: 10,
-    backgroundColor: '#ffffff',
-  },
+      borderWidth: 1,
+      borderColor: '#d9e4f0',
+      borderRadius: 20,
+      padding: 14,
+      gap: 10,
+      backgroundColor: '#ffffff',
+      overflow: 'visible',
+    },
   lineHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -859,13 +1052,169 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   input: {
-    borderRadius: 16,
-    borderWidth: 1,
+      borderRadius: 16,
+      borderWidth: 1,
     borderColor: '#cad8e7',
     paddingHorizontal: 14,
     paddingVertical: 12,
     backgroundColor: '#ffffff',
+      color: '#0d2033',
+    },
+    dateTriggerText: {
+      color: '#0d2033',
+      fontSize: 16,
+    },
+  dropdownTrigger: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#cad8e7',
+    backgroundColor: '#ffffff',
+    minHeight: 50,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dropdownTriggerOpen: {
+    borderColor: '#5d96bf',
+    shadowColor: '#5d96bf',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  dropdownTriggerText: {
     color: '#0d2033',
+    fontSize: 15,
+    fontWeight: '600',
+    flex: 1,
+    paddingRight: 12,
+  },
+  dropdownPlaceholder: {
+    color: '#6f7e93',
+    fontWeight: '500',
+  },
+  dropdownChevron: {
+    color: '#46627e',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  dropdownOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(8, 17, 26, 0.38)',
+    alignItems: 'center',
+    padding: 16,
+  },
+  dropdownOverlayWeb: {
+    justifyContent: 'flex-start',
+  },
+  dropdownOverlayMobile: {
+    justifyContent: 'flex-end',
+  },
+  dropdownSurface: {
+    backgroundColor: '#ffffff',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#cad8e7',
+    shadowColor: '#0d2033',
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 10,
+  },
+  dropdownSurfaceWeb: {
+    position: 'absolute',
+    borderRadius: 24,
+    maxHeight: 520,
+  },
+  dropdownSurfaceMobile: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    maxHeight: '78%',
+    width: '100%',
+  },
+  dropdownSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 10,
+  },
+  dropdownSheetLabel: {
+    color: '#26415e',
+    fontSize: 13,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  dropdownSheetClose: {
+    color: '#4c84ab',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  dropdownSheetValue: {
+    color: '#0d2033',
+    fontSize: 20,
+    fontWeight: '800',
+    paddingHorizontal: 18,
+    paddingBottom: 12,
+  },
+  dropdownSearchWrap: {
+    paddingHorizontal: 18,
+    paddingBottom: 12,
+  },
+  dropdownSearchInput: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#cad8e7',
+    backgroundColor: '#f5f9fd',
+    color: '#0d2033',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 14,
+  },
+  dropdownScroll: {
+    maxHeight: 360,
+  },
+  dropdownItem: {
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#edf2f7',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dropdownItemActive: {
+    backgroundColor: '#eef6fb',
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownItemText: {
+    color: '#0d2033',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  dropdownItemTextActive: {
+    color: '#1d4f73',
+  },
+  dropdownItemCheck: {
+    color: '#2a6e98',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  dropdownEmptyState: {
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+  },
+  dropdownEmptyText: {
+    color: '#6f7e93',
+    fontSize: 14,
+    textAlign: 'center',
   },
   inputMultiline: {
     minHeight: 100,
@@ -902,34 +1251,6 @@ const styles = StyleSheet.create({
   },
   pillTextSelected: {
     color: '#ffffff',
-  },
-  suggestionList: {
-    gap: 8,
-  },
-  suggestionItem: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#dbe6f1',
-    padding: 10,
-    backgroundColor: '#f6fbff',
-  },
-  suggestionSelected: {
-    borderColor: '#13d9c8',
-    backgroundColor: '#0f5ef7',
-  },
-  suggestionTitle: {
-    color: '#0d2033',
-    fontWeight: '800',
-  },
-  suggestionTitleSelected: {
-    color: '#ffffff',
-  },
-  suggestionMeta: {
-    color: '#64809c',
-    fontSize: 12,
-  },
-  suggestionMetaSelected: {
-    color: '#d7f7ff',
   },
   toggleList: {
     gap: 10,

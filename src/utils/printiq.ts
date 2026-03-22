@@ -50,7 +50,7 @@ export function buildPrintIqPayload(
           SectionType: values.sectionType,
           StockCode: values.stockCode,
           ProcessFront: values.processFront,
-          ProcessReverse: values.processReverse || null,
+          ProcessReverse: values.processReverse.trim() || 'None',
           SectionSizeWidth: sectionWidth,
           SectionSizeHeight: sectionHeight,
           FoldCatalog: values.foldCatalog,

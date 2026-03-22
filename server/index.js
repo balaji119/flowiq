@@ -27,27 +27,74 @@ function getRequiredEnv(name) {
   return value;
 }
 
+function decodeEnvValue(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 function appendPrintIqLog(entry) {
   const line = `${JSON.stringify(entry)}\n`;
   fs.appendFileSync(printIqLogPath, line, 'utf8');
 }
 
+function createRequestId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 async function getLoginToken() {
   const params = new URLSearchParams({
-    UserName: getRequiredEnv('PRINTIQ_USERNAME'),
-    Password: getRequiredEnv('PRINTIQ_PASSWORD'),
-    ApplicationName: getRequiredEnv('PRINTIQ_APPLICATION_NAME'),
-    ApplicationKey: getRequiredEnv('PRINTIQ_APPLICATION_KEY'),
+    UserName: decodeEnvValue(getRequiredEnv('PRINTIQ_USERNAME')),
+    Password: decodeEnvValue(getRequiredEnv('PRINTIQ_PASSWORD')),
+    ApplicationName: decodeEnvValue(getRequiredEnv('PRINTIQ_APPLICATION_NAME')),
+    ApplicationKey: decodeEnvValue(getRequiredEnv('PRINTIQ_APPLICATION_KEY')),
   });
+  const tokenUrl = `${printIqBaseUrl}/api/QuoteProcess/GetApplicationLogInToken`;
+  const attempts = [
+    {
+      name: 'POST querystring',
+      execute: () =>
+        fetch(`${tokenUrl}?${params.toString()}`, {
+          method: 'POST',
+        }),
+    },
+    {
+      name: 'POST form body',
+      execute: () =>
+        fetch(tokenUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: params.toString(),
+        }),
+    },
+    {
+      name: 'GET querystring',
+      execute: () => fetch(`${tokenUrl}?${params.toString()}`),
+    },
+  ];
 
-  const response = await fetch(`${printIqBaseUrl}/api/QuoteProcess/GetApplicationLogInToken?${params.toString()}`);
-  const bodyText = await response.text();
+  const failures = [];
 
-  if (!response.ok) {
-    throw new Error(`Token request failed (${response.status}): ${bodyText}`);
+  for (const attempt of attempts) {
+    const response = await attempt.execute();
+    const bodyText = await response.text();
+
+    if (response.ok) {
+      return bodyText.replace(/^"|"$/g, '').trim();
+    }
+
+    failures.push(`${attempt.name} -> (${response.status}) ${bodyText}`);
+
+    if (![400, 404, 405].includes(response.status)) {
+      break;
+    }
   }
 
-  return bodyText.replace(/^"|"$/g, '').trim();
+  throw new Error(`Token request failed. Attempts: ${failures.join(' | ')}`);
 }
 
 app.get('/api/health', (_req, res) => {
@@ -87,8 +134,11 @@ app.get('/api/printiq/token', async (_req, res) => {
 });
 
 app.post('/api/quotes/price', async (req, res) => {
+  const requestId = createRequestId();
+
   try {
     appendPrintIqLog({
+      requestId,
       timestamp: new Date().toISOString(),
       type: 'request',
       payload: req.body,
@@ -113,9 +163,9 @@ app.post('/api/quotes/price', async (req, res) => {
 
     if (!response.ok) {
       appendPrintIqLog({
+        requestId,
         timestamp: new Date().toISOString(),
         type: 'error',
-        payload: req.body,
         response: parsed,
         status: response.status,
       });
@@ -126,9 +176,9 @@ app.post('/api/quotes/price', async (req, res) => {
     }
 
     appendPrintIqLog({
+      requestId,
       timestamp: new Date().toISOString(),
       type: 'response',
-      payload: req.body,
       response: parsed,
       status: response.status,
     });
@@ -138,6 +188,13 @@ app.post('/api/quotes/price', async (req, res) => {
       result: parsed,
     });
   } catch (error) {
+    appendPrintIqLog({
+      requestId,
+      timestamp: new Date().toISOString(),
+      type: 'error',
+      response: error instanceof Error ? error.message : 'Unknown quote error',
+      status: 500,
+    });
     return res.status(500).json({
       error: error instanceof Error ? error.message : 'Unknown quote error',
     });
