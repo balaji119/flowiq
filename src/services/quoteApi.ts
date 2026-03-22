@@ -1,20 +1,13 @@
 import { PrintIqQuotePayload } from '../types';
-import { buildApiUrl } from './apiBase';
+import { apiFetchJson } from './apiClient';
+
+export type QuotePricingResponse = {
+  amount: number | string | null;
+};
 
 export async function submitQuoteForPricing(payload: PrintIqQuotePayload) {
-  const response = await fetch(buildApiUrl('/api/quotes/price'), {
+  return apiFetchJson<QuotePricingResponse>('/api/quotes/price', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify(payload),
   });
-
-  const body = await response.json();
-
-  if (!response.ok) {
-    throw new Error(body?.error || 'Unable to create PrintIQ quote');
-  }
-
-  return body;
 }

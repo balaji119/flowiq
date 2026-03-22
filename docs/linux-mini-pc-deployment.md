@@ -5,7 +5,8 @@ This deployment setup is designed for a Linux mini PC hosting:
 - the Expo web build
 - the Node/Express API
 - Caddy as the public HTTPS reverse proxy
-- DuckDNS as the free public domain updater
+- optionally DuckDNS for direct public DNS
+- or Cloudflare Tunnel for public access behind CGNAT
 
 ## What Gets Deployed
 
@@ -17,6 +18,12 @@ This deployment setup is designed for a Linux mini PC hosting:
   - serves the web app and proxies `/api/*` to the backend
 - `duckdns`
   - keeps your DuckDNS subdomain pointed to your current public IP
+
+If you are using Cloudflare Tunnel in production:
+
+- `cloudflared` runs outside Docker as a Linux service
+- public traffic goes through Cloudflare Tunnel to `http://localhost:80`
+- Caddy serves the app locally on port `80`
 
 ## Files
 
@@ -32,7 +39,12 @@ This deployment setup is designed for a Linux mini PC hosting:
 2. Copy the project to the mini PC.
 3. Make sure this file exists on the mini PC:
    - `deploy/.env.production`
-4. Forward router ports `80` and `443` to the mini PC.
+4. Forward router ports `80` and `443` to the mini PC if you are using direct public access.
+
+If you are using Cloudflare Tunnel instead:
+
+- router port forwarding is not required
+- make sure the `cloudflared` service is configured and running
 
 ## Production Env File
 
@@ -75,6 +87,14 @@ cd deploy
 docker compose up -d --build api caddy duckdns
 ```
 
+If you are using Cloudflare Tunnel instead of DuckDNS for public access, use:
+
+```bash
+cd deploy
+docker compose up -d --build api
+docker compose up -d --force-recreate caddy
+```
+
 ## Update The App
 
 When you deploy a new version:
@@ -87,7 +107,8 @@ When you deploy a new version:
 ```bash
 cd deploy
 docker compose run --rm web-builder
-docker compose up -d --build api caddy duckdns
+docker compose up -d --build api
+docker compose up -d --force-recreate caddy
 ```
 
 ## Logs
@@ -101,6 +122,13 @@ docker compose logs -f caddy
 docker compose logs -f duckdns
 ```
 
+If you are using Cloudflare Tunnel, also check:
+
+```bash
+sudo systemctl status cloudflared --no-pager
+sudo journalctl -u cloudflared -n 100 --no-pager
+```
+
 Application quote request logs are written to:
 
 `logs/printiq-payloads.log`
@@ -110,3 +138,4 @@ Application quote request logs are written to:
 - The web build uses `EXPO_PUBLIC_API_BASE_URL=/api`, so browser requests go through Caddy to the backend on the same domain.
 - The calculator now uses the checked-in JSON snapshot in `server/workbookMetadata.json`, so the Excel workbook is not required at runtime.
 - If you want to change the public hostname later, update `DOMAIN` and DuckDNS settings, then restart the stack.
+- If you are using Cloudflare Tunnel, make sure `cloudflared` is configured as a system service and that Caddy is recreated with `docker compose up -d --force-recreate caddy` after frontend deployments.

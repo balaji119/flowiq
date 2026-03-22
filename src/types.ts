@@ -5,10 +5,55 @@ export type FormatKey = (typeof formatKeys)[number];
 export type QuantityBreakdown = Record<FormatKey, number>;
 
 export type OperationOption = {
-  id: string;
+  id?: string;
   label: string;
   operationName: string;
   enabledByDefault?: boolean;
+};
+
+export type PrintIqStockOption = {
+  value: string;
+  label: string;
+  description?: string;
+};
+
+export type PrintIqQuoteOptionsResponse = {
+  jobOperations: OperationOption[];
+  sectionOperations: OperationOption[];
+};
+
+export type AuthRole = 'super_admin' | 'admin' | 'user';
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: AuthRole;
+  tenantId: string | null;
+  tenantName: string | null;
+  active: boolean;
+};
+
+export type AuthSession = {
+  token: string;
+  user: AuthUser;
+};
+
+export type TenantRecord = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+export type PrintIqOptionsCacheBucket = {
+  cached: boolean;
+  count: number;
+  updatedAt: string | null;
+};
+
+export type PrintIqOptionsCacheStatus = {
+  stocks: PrintIqOptionsCacheBucket;
+  processes: PrintIqOptionsCacheBucket;
 };
 
 export type ContactDetails = {
@@ -150,3 +195,5 @@ export type PrintIqQuotePayload = {
   JobDueDate: string | null;
   CustomerReference: string;
 };
+
+export type LoginResponse = AuthSession;

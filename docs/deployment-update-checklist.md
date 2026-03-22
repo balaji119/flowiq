@@ -49,16 +49,18 @@ Rebuild the web app:
 docker compose run --rm web-builder
 ```
 
-Rebuild and restart the backend and Caddy:
+Rebuild the backend and recreate Caddy:
 
 ```bash
-docker compose up -d --build api caddy
+docker compose up -d --build api
+docker compose up -d --force-recreate caddy
 ```
 
 If DuckDNS is still part of your deployment, include it too:
 
 ```bash
-docker compose up -d --build api caddy duckdns
+docker compose up -d --build api duckdns
+docker compose up -d --force-recreate caddy
 ```
 
 ## If You Are Using Cloudflare Tunnel
@@ -70,6 +72,12 @@ Only restart it if:
 - tunnel config changed
 - domain/hostname changed
 - service configuration changed
+
+For normal application releases:
+
+- rebuild the web bundle
+- rebuild the API if needed
+- force-recreate Caddy so it picks up the latest frontend output and hostname mapping cleanly
 
 ## Quick Verification
 
@@ -131,7 +139,8 @@ cd ~/flowiq
 git pull
 cd deploy
 docker compose run --rm web-builder
-docker compose up -d --build api caddy
+docker compose up -d --build api
+docker compose up -d --force-recreate caddy
 docker compose ps
 docker compose logs --tail=50 api
 docker compose logs --tail=50 caddy

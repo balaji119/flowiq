@@ -15,10 +15,12 @@ import {
   View,
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { createCampaignLine, defaultFormValues, jobOperationOptions, processOptions, sectionOperationOptions, stockOptions } from '../constants';
+import { createCampaignLine, defaultFormValues } from '../constants';
+import { useAuth } from '../context/AuthContext';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
+import { fetchQuoteOptions, operationOptionToChoice, searchProcessOptions, searchStockOptions } from '../services/printiqOptionsApi';
 import { submitQuoteForPricing } from '../services/quoteApi';
-import { CampaignCalculationSummary, CampaignLine, MarketMetadata, OrderFormValues, QuantityBreakdown, formatKeys } from '../types';
+import { CampaignCalculationSummary, CampaignLine, MarketMetadata, OperationOption, OrderFormValues, PrintIqStockOption, QuantityBreakdown, formatKeys } from '../types';
 import { buildDefaultJobDescription, buildPrintIqPayload } from '../utils/printiq';
 
 const steps = [
@@ -302,6 +304,167 @@ function PickerField({
   );
 }
 
+function AsyncPickerField({
+  label,
+  selectedValue,
+  selectedLabel,
+  placeholder,
+  onValueChange,
+  loadOptions,
+}: {
+  label: string;
+  selectedValue: string;
+  selectedLabel?: string;
+  placeholder: string;
+  onValueChange: (value: string) => void;
+  loadOptions: (query: string) => Promise<Array<{ label: string; value: string; description?: string }>>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [options, setOptions] = useState<Array<{ label: string; value: string; description?: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [anchor, setAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const triggerRef = useRef<View>(null);
+  const { width, height } = useWindowDimensions();
+  const isWeb = Platform.OS === 'web';
+  const displayLabel = selectedLabel || selectedValue || placeholder;
+
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery('');
+      setOptions([]);
+      setError('');
+      return;
+    }
+
+    let active = true;
+    const timeoutId = setTimeout(async () => {
+      setLoading(true);
+      setError('');
+
+      try {
+        const nextOptions = await loadOptions(searchQuery);
+        if (active) {
+          setOptions(nextOptions);
+        }
+      } catch (loadError) {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : `Unable to load ${label.toLowerCase()} options`);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }, 200);
+
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+    };
+  }, [label, loadOptions, open, searchQuery]);
+
+  const webPanelWidth = anchor ? Math.min(Math.max(anchor.width, 360), 520, width - 32) : Math.min(width - 32, 520);
+  const webPanelLeft = anchor ? Math.max(16, Math.min(anchor.x, width - webPanelWidth - 16)) : 16;
+  const spaceBelow = anchor ? height - (anchor.y + anchor.height) - 16 : height - 104;
+  const spaceAbove = anchor ? anchor.y - 16 : 72;
+  const openAbove = !!anchor && spaceBelow < 320 && spaceAbove > spaceBelow;
+  const webPanelMaxHeight = Math.max(220, Math.min(420, openAbove ? spaceAbove - 8 : spaceBelow - 8));
+  const webPanelTop = anchor && !openAbove ? anchor.y + anchor.height + 8 : 88;
+  const webPanelBottom = anchor && openAbove ? Math.max(16, height - anchor.y + 8) : undefined;
+
+  function openPicker() {
+    if (isWeb && triggerRef.current?.measureInWindow) {
+      triggerRef.current.measureInWindow((x, y, measuredWidth, measuredHeight) => {
+        setAnchor({ x, y, width: measuredWidth, height: measuredHeight });
+        setOpen(true);
+      });
+      return;
+    }
+
+    setOpen(true);
+  }
+
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <Pressable ref={triggerRef} style={[styles.dropdownTrigger, open && styles.dropdownTriggerOpen]} onPress={openPicker}>
+        <Text style={[styles.dropdownTriggerText, !selectedValue && styles.dropdownPlaceholder]} numberOfLines={1}>
+          {displayLabel}
+        </Text>
+        <Text style={styles.dropdownChevron}>{open ? '^' : 'v'}</Text>
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={[styles.dropdownOverlay, isWeb ? styles.dropdownOverlayWeb : styles.dropdownOverlayMobile]} onPress={() => setOpen(false)}>
+          <Pressable
+            style={[
+              styles.dropdownSurface,
+              isWeb ? styles.dropdownSurfaceWeb : styles.dropdownSurfaceMobile,
+              isWeb ? { width: webPanelWidth, left: webPanelLeft, top: openAbove ? undefined : webPanelTop, bottom: webPanelBottom, maxHeight: webPanelMaxHeight } : null,
+            ]}
+            onPress={() => undefined}
+          >
+            <View style={styles.dropdownSheetHeader}>
+              <Text style={styles.dropdownSheetLabel}>{label}</Text>
+              <Pressable onPress={() => setOpen(false)} hitSlop={8}>
+                <Text style={styles.dropdownSheetClose}>Close</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.dropdownSheetValue}>{placeholder}</Text>
+            <View style={styles.dropdownSearchWrap}>
+              <TextInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder={`Search ${label.toLowerCase()}s`}
+                placeholderTextColor="#6f7e93"
+                style={styles.dropdownSearchInput}
+                autoFocus={isWeb}
+              />
+            </View>
+            {loading ? (
+              <View style={styles.dropdownEmptyState}>
+                <ActivityIndicator color="#2a6e98" />
+              </View>
+            ) : null}
+            {error ? (
+              <View style={styles.dropdownEmptyState}>
+                <Text style={styles.dropdownEmptyText}>{error}</Text>
+              </View>
+            ) : null}
+            <ScrollView nestedScrollEnabled style={styles.dropdownScroll}>
+              {options.map((item, index) => {
+                const active = item.value === selectedValue;
+                return (
+                  <Pressable
+                    key={item.value}
+                    style={[styles.dropdownItem, active && styles.dropdownItemActive, index === options.length - 1 && styles.dropdownItemLast]}
+                    onPress={() => {
+                      onValueChange(item.value);
+                      setOpen(false);
+                    }}
+                  >
+                    <View style={styles.dropdownOptionTextWrap}>
+                      <Text style={[styles.dropdownItemText, active && styles.dropdownItemTextActive]}>{item.label}</Text>
+                      {item.description ? <Text style={styles.dropdownItemHint}>{item.description}</Text> : null}
+                    </View>
+                    {active ? <Text style={styles.dropdownItemCheck}>✓</Text> : null}
+                  </Pressable>
+                );
+              })}
+              {!loading && !error && options.length === 0 ? (
+                <View style={styles.dropdownEmptyState}>
+                  <Text style={styles.dropdownEmptyText}>No matching options</Text>
+                </View>
+              ) : null}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
 function ToggleList({
   label,
   options,
@@ -361,7 +524,8 @@ function normalizeCampaignLines(campaignLines: CampaignLine[], maxWeeks: number)
   }));
 }
 
-export function QuoteBuilderScreen() {
+export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
+  const { session, logout } = useAuth();
   const { width } = useWindowDimensions();
   const isWideLayout = width >= 1080;
   const [values, setValues] = useState<OrderFormValues>(defaultFormValues);
@@ -371,11 +535,16 @@ export function QuoteBuilderScreen() {
   const [summary, setSummary] = useState<CampaignCalculationSummary | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [quoteResponse, setQuoteResponse] = useState('');
+  const [quoteResponseMessage, setQuoteResponseMessage] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [quantityManuallyEdited, setQuantityManuallyEdited] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const [jobOperationOptions, setJobOperationOptions] = useState<OperationOption[]>([]);
+  const [sectionOperationOptions, setSectionOperationOptions] = useState<OperationOption[]>([]);
+  const [selectedStockOption, setSelectedStockOption] = useState<PrintIqStockOption | null>(null);
+  const [selectedFrontProcessOption, setSelectedFrontProcessOption] = useState<{ label: string; value: string } | null>(null);
+  const [selectedReverseProcessOption, setSelectedReverseProcessOption] = useState<{ label: string; value: string } | null>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -401,6 +570,45 @@ export function QuoteBuilderScreen() {
     }
 
     loadMetadata();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadQuoteOptions() {
+      try {
+        const response = await fetchQuoteOptions();
+        if (!active) {
+          return;
+        }
+
+        setJobOperationOptions(response.jobOperations);
+        setSectionOperationOptions(response.sectionOperations);
+        setValues((current) => ({
+          ...current,
+          selectedJobOperations:
+            current.selectedJobOperations.length > 0
+              ? current.selectedJobOperations
+              : response.jobOperations.filter((option) => option.enabledByDefault).map((option) => option.operationName),
+          selectedSectionOperations:
+            current.selectedSectionOperations.length > 0
+              ? current.selectedSectionOperations
+              : response.sectionOperations.filter((option) => option.enabledByDefault).map((option) => option.operationName),
+        }));
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load PrintIQ quote options');
+      }
+    }
+
+    loadQuoteOptions();
 
     return () => {
       active = false;
@@ -538,11 +746,15 @@ export function QuoteBuilderScreen() {
   async function handleSubmitQuote() {
     setSubmitting(true);
     setError('');
-    setQuoteResponse('');
+    setQuoteResponseMessage('');
 
     try {
       const response = await submitQuoteForPricing(payload);
-      setQuoteResponse(JSON.stringify(response, null, 2));
+      const amount =
+        response.amount === null || response.amount === undefined || response.amount === ''
+          ? 'N/A'
+          : String(response.amount);
+      setQuoteResponseMessage(`Quote created successfully. Amount: ${amount}`);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Unable to create quote');
     } finally {
@@ -744,11 +956,39 @@ export function QuoteBuilderScreen() {
             </View>
           </View>
 
-          <Field label="Stock code" value={values.stockCode} onChangeText={(value) => updateField('stockCode', value)} />
-          <Text style={styles.helperText}>Suggested stock codes: {stockOptions.map((option) => option.stockCode).join(', ')}</Text>
-          <Field label="Front process" value={values.processFront} onChangeText={(value) => updateField('processFront', value)} />
-          <Text style={styles.helperText}>Suggested processes: {processOptions.join(' | ')}</Text>
-          <Field label="Reverse process" value={values.processReverse} onChangeText={(value) => updateField('processReverse', value)} />
+          <AsyncPickerField
+            label="Stock code"
+            selectedValue={values.stockCode}
+            selectedLabel={selectedStockOption?.label}
+            placeholder="Choose a stock code"
+            loadOptions={searchStockOptions}
+            onValueChange={(value) => {
+              updateField('stockCode', value);
+              setSelectedStockOption({ value, label: value });
+            }}
+          />
+          <AsyncPickerField
+            label="Front process"
+            selectedValue={values.processFront}
+            selectedLabel={selectedFrontProcessOption?.label}
+            placeholder="Choose a front process"
+            loadOptions={searchProcessOptions}
+            onValueChange={(value) => {
+              updateField('processFront', value);
+              setSelectedFrontProcessOption({ value, label: value });
+            }}
+          />
+          <AsyncPickerField
+            label="Reverse process"
+            selectedValue={values.processReverse}
+            selectedLabel={selectedReverseProcessOption?.label}
+            placeholder="Choose a reverse process"
+            loadOptions={async (query) => [{ label: 'None', value: '' }, ...(await searchProcessOptions(query))]}
+            onValueChange={(value) => {
+              updateField('processReverse', value);
+              setSelectedReverseProcessOption(value ? { value, label: value } : { value: '', label: 'None' });
+            }}
+          />
           <Field label="Target freight price" value={values.targetFreightPrice} onChangeText={(value) => updateField('targetFreightPrice', value)} keyboardType="numeric" />
           <Field label="Job description" value={values.jobDescription} onChangeText={(value) => updateField('jobDescription', value)} multiline />
             <Pressable style={styles.secondaryButton} onPress={applySuggestedDescription}>
@@ -759,13 +999,13 @@ export function QuoteBuilderScreen() {
 
           <ToggleList
             label="Job operations"
-            options={jobOperationOptions.map((option) => ({ id: option.id, label: option.label }))}
+            options={jobOperationOptions.map(operationOptionToChoice)}
             selected={values.selectedJobOperations}
             onToggle={(id) => toggleSelection('selectedJobOperations', id)}
           />
           <ToggleList
             label="Section operations"
-            options={sectionOperationOptions.map((option) => ({ id: option.id, label: option.label }))}
+            options={sectionOperationOptions.map(operationOptionToChoice)}
             selected={values.selectedSectionOperations}
             onToggle={(id) => toggleSelection('selectedSectionOperations', id)}
           />
@@ -784,7 +1024,7 @@ export function QuoteBuilderScreen() {
             <Text style={styles.primaryButtonText}>{submitting ? 'Submitting...' : 'Create Quote In PrintIQ'}</Text>
           </Pressable>
           {!!error && <Text style={styles.errorText}>{error}</Text>}
-          {!!quoteResponse && <Text style={styles.previewText}>{quoteResponse}</Text>}
+          {!!quoteResponseMessage && <Text style={styles.noticeText}>{quoteResponseMessage}</Text>}
         </View>
       );
     }
@@ -801,6 +1041,21 @@ export function QuoteBuilderScreen() {
           <Text style={styles.eyebrow}>Print Workflow Studio</Text>
           <Text style={styles.title}>FlowIQ</Text>
           <Text style={styles.subtitle}>Build campaign schedules, calculate workbook totals, and prepare PrintIQ-ready quotes.</Text>
+          <View style={styles.sessionRow}>
+            <Text style={styles.sessionText}>
+              {session?.user.name} · {session?.user.role.replace('_', ' ')} · {session?.user.tenantName || 'Global'}
+            </Text>
+            <View style={styles.sessionActions}>
+              {onOpenAdmin ? (
+                <Pressable onPress={onOpenAdmin} style={styles.sessionButton}>
+                  <Text style={styles.sessionButtonText}>Admin</Text>
+                </Pressable>
+              ) : null}
+              <Pressable onPress={() => void logout()} style={styles.sessionButton}>
+                <Text style={styles.sessionButtonText}>Sign Out</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
 
         <View style={styles.progressShell}>
@@ -964,6 +1219,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     maxWidth: 720,
+  },
+  sessionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  sessionText: {
+    color: '#9cb3c9',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sessionActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  sessionButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#35546e',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(18, 34, 49, 0.78)',
+  },
+  sessionButtonText: {
+    color: '#f5f9fc',
+    fontWeight: '800',
+    fontSize: 13,
   },
   progressShell: {
     gap: 8,
@@ -1259,6 +1543,15 @@ const styles = StyleSheet.create({
     color: '#0d2033',
     fontSize: 14,
     fontWeight: '600',
+  },
+  dropdownOptionTextWrap: {
+    flex: 1,
+    gap: 2,
+    paddingRight: 12,
+  },
+  dropdownItemHint: {
+    color: '#6f7e93',
+    fontSize: 12,
   },
   dropdownItemTextActive: {
     color: '#1d4f73',

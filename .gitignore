@@ -40,6 +40,9 @@ Print Orders + Install Calculator.xlsx
 ~$*.xlsx
 bk_live
 bk_live.pub
+server/data/
+__azurite_db_blob__.json
+__azurite_db_blob_extent__.json
 
 # typescript
 *.tsbuildinfo

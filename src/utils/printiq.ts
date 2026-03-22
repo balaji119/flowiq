@@ -1,4 +1,3 @@
-import { jobOperationOptions, sectionOperationOptions, stockOptions } from '../constants';
 import { CampaignCalculationSummary, OrderFormValues, PrintIqQuotePayload } from '../types';
 
 function resolveQuantity(values: OrderFormValues, summary: CampaignCalculationSummary | null) {
@@ -11,11 +10,10 @@ function resolveQuantity(values: OrderFormValues, summary: CampaignCalculationSu
 }
 
 export function buildDefaultJobDescription(values: OrderFormValues, summary: CampaignCalculationSummary | null) {
-  const stock = stockOptions.find((option) => option.stockCode === values.stockCode);
   const lines = [
     `Campaign start: ${values.campaignStartDate || 'TBC'}`,
     `Run length: ${values.numberOfWeeks || '0'} weeks`,
-    `Substrate: ${stock?.label ?? values.stockCode}`,
+    `Substrate: ${values.stockCode}`,
     `Mode: ${values.processFront}`,
   ];
 
@@ -55,21 +53,15 @@ export function buildPrintIqPayload(
           SectionSizeHeight: sectionHeight,
           FoldCatalog: values.foldCatalog,
           Pages: pages,
-          SectionOperations: values.selectedSectionOperations
-            .map((id) => sectionOperationOptions.find((option) => option.id === id))
-            .filter(Boolean)
-            .map((option) => ({
-              OperationName: option!.operationName,
-            })),
+          SectionOperations: values.selectedSectionOperations.map((operationName) => ({
+            OperationName: operationName,
+          })),
           SideOperations: [],
         },
       ],
-      JobOperations: values.selectedJobOperations
-        .map((id) => jobOperationOptions.find((option) => option.id === id))
-        .filter(Boolean)
-        .map((option) => ({
-          OperationName: option!.operationName,
-        })),
+      JobOperations: values.selectedJobOperations.map((operationName) => ({
+        OperationName: operationName,
+      })),
     },
     SelectedQuantity: {
       Quantity: quantity,
