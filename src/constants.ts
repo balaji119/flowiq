@@ -48,7 +48,7 @@ export function createCampaignLine(id: string): CampaignLine {
 }
 
 export const defaultFormValues: OrderFormValues = {
-  customerCode: 'C00014',
+  customerCode: 'TstCus',
   customerReference: 'Q14259:1.0',
   jobTitle: 'Campaign Print Order',
   jobDescription: '',
