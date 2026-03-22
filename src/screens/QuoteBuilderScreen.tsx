@@ -354,6 +354,13 @@ function WeekSelector({
   );
 }
 
+function normalizeCampaignLines(campaignLines: CampaignLine[], maxWeeks: number) {
+  return campaignLines.map((line) => ({
+    ...line,
+    selectedWeeks: [...new Set(line.selectedWeeks.filter((week) => week >= 1 && week <= maxWeeks))].sort((a, b) => a - b),
+  }));
+}
+
 export function QuoteBuilderScreen() {
   const { width } = useWindowDimensions();
   const isWideLayout = width >= 1080;
@@ -366,6 +373,8 @@ export function QuoteBuilderScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [quoteResponse, setQuoteResponse] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [quantityManuallyEdited, setQuantityManuallyEdited] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -415,6 +424,59 @@ export function QuoteBuilderScreen() {
       useNativeDriver: true,
     }).start();
   }, [fadeAnim, stepIndex]);
+
+  useEffect(() => {
+    setValues((current) => {
+      const normalizedLines = normalizeCampaignLines(current.campaignLines, numberOfWeeks);
+      const changed = normalizedLines.some((line, index) => line.selectedWeeks.join(',') !== current.campaignLines[index]?.selectedWeeks.join(','));
+
+      return changed
+        ? {
+            ...current,
+            campaignLines: normalizedLines,
+          }
+        : current;
+    });
+  }, [numberOfWeeks]);
+
+  useEffect(() => {
+    if (loadingMetadata || metadataError) {
+      return;
+    }
+
+    let active = true;
+    const timeoutId = setTimeout(async () => {
+      try {
+        setCalculating(true);
+        const result = await calculateCampaign(values.campaignLines);
+        if (!active) {
+          return;
+        }
+        setSummary(result);
+        if (!quantityManuallyEdited) {
+          setValues((current) => ({
+            ...current,
+            quantity: String(result.grandTotal.totalUnits),
+          }));
+        }
+        setError('');
+      } catch (calculationError) {
+        if (!active) {
+          return;
+        }
+        setError(calculationError instanceof Error ? calculationError.message : 'Unable to calculate campaign');
+      } finally {
+        if (active) {
+          setCalculating(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+    };
+  }, [loadingMetadata, metadataError, quantityManuallyEdited, values.campaignLines]);
 
   function updateField<K extends keyof OrderFormValues>(field: K, value: OrderFormValues[K]) {
     setValues((current) => ({
@@ -470,18 +532,7 @@ export function QuoteBuilderScreen() {
   }
 
   async function handleCalculate() {
-    setCalculating(true);
-    setError('');
-
-    try {
-      const result = await calculateCampaign(values.campaignLines);
-      setSummary(result);
-      setStepIndex(1);
-    } catch (calculationError) {
-      setError(calculationError instanceof Error ? calculationError.message : 'Unable to calculate campaign');
-    } finally {
-      setCalculating(false);
-    }
+    setStepIndex(1);
   }
 
   async function handleSubmitQuote() {
@@ -503,10 +554,13 @@ export function QuoteBuilderScreen() {
     updateField('jobDescription', buildDefaultJobDescription(values, summary));
   }
 
-  function useCalculatedQuantity() {
+  function continueToQuote() {
     if (summary) {
+      setQuantityManuallyEdited(false);
       updateField('quantity', String(summary.grandTotal.totalUnits));
+      setNotice(`Quote quantity set to ${summary.grandTotal.totalUnits}.`);
     }
+    setStepIndex(2);
   }
 
   function nextStep() {
@@ -535,8 +589,9 @@ export function QuoteBuilderScreen() {
             </View>
           </View>
 
-          {loadingMetadata && <ActivityIndicator color="#00b7ff" />}
-          {!!metadataError && <Text style={styles.errorText}>{metadataError}</Text>}
+            {loadingMetadata && <ActivityIndicator color="#00b7ff" />}
+            {!!metadataError && <Text style={styles.errorText}>{metadataError}</Text>}
+            {!!notice && <Text style={styles.noticeText}>{notice}</Text>}
 
           {values.campaignLines.map((line, index) => {
             const assets = assetsForMarket(line.market);
@@ -605,13 +660,13 @@ export function QuoteBuilderScreen() {
           })}
 
           <View style={styles.buttonRow}>
-            <Pressable style={styles.secondaryButton} onPress={addCampaignLine}>
-              <Text style={styles.secondaryButtonText}>Add Line</Text>
-            </Pressable>
-            <Pressable style={[styles.primaryButton, calculating && styles.buttonDisabled]} onPress={handleCalculate} disabled={calculating}>
-              <Text style={styles.primaryButtonText}>{calculating ? 'Calculating...' : 'Calculate Totals'}</Text>
-            </Pressable>
-          </View>
+              <Pressable style={styles.secondaryButton} onPress={addCampaignLine}>
+                <Text style={styles.secondaryButtonText}>Add Line</Text>
+              </Pressable>
+              <Pressable style={[styles.primaryButton, calculating && styles.buttonDisabled]} onPress={handleCalculate} disabled={calculating}>
+                <Text style={styles.primaryButtonText}>{calculating ? 'Refreshing...' : 'Review Totals'}</Text>
+              </Pressable>
+            </View>
         </View>
       );
     }
@@ -641,15 +696,12 @@ export function QuoteBuilderScreen() {
                   {summary.grandTotal.posterTotal} posters, {summary.grandTotal.frameTotal} frames, {summary.grandTotal.specialFormatTotal} special-format units
                 </Text>
                 <BreakdownTable breakdown={summary.grandTotal.breakdown} inverse />
-              </View>
-              <View style={styles.buttonRow}>
-                <Pressable style={styles.secondaryButton} onPress={useCalculatedQuantity}>
-                  <Text style={styles.secondaryButtonText}>Use Total Units For Quote Quantity</Text>
-                </Pressable>
-                <Pressable style={styles.primaryButton} onPress={nextStep}>
-                  <Text style={styles.primaryButtonText}>Continue To Quote</Text>
-                </Pressable>
-              </View>
+                </View>
+                <View style={styles.buttonRow}>
+                  <Pressable style={styles.primaryButton} onPress={continueToQuote}>
+                    <Text style={styles.primaryButtonText}>Continue To Quote</Text>
+                  </Pressable>
+                </View>
             </>
           ) : (
             <View style={styles.emptyState}>
@@ -673,7 +725,15 @@ export function QuoteBuilderScreen() {
           <Field label="Customer reference" value={values.customerReference} onChangeText={(value) => updateField('customerReference', value)} />
           <Field label="Job title" value={values.jobTitle} onChangeText={(value) => updateField('jobTitle', value)} />
           <Field label="Kind name / SKU" value={values.kindName} onChangeText={(value) => updateField('kindName', value)} />
-          <Field label="Quote quantity" value={values.quantity} onChangeText={(value) => updateField('quantity', value)} keyboardType="numeric" />
+          <Field
+            label="Quote quantity"
+            value={values.quantity}
+            onChangeText={(value) => {
+              setQuantityManuallyEdited(true);
+              updateField('quantity', value);
+            }}
+            keyboardType="numeric"
+          />
 
           <View style={styles.row}>
             <View style={styles.rowItem}>
@@ -691,10 +751,11 @@ export function QuoteBuilderScreen() {
           <Field label="Reverse process" value={values.processReverse} onChangeText={(value) => updateField('processReverse', value)} />
           <Field label="Target freight price" value={values.targetFreightPrice} onChangeText={(value) => updateField('targetFreightPrice', value)} keyboardType="numeric" />
           <Field label="Job description" value={values.jobDescription} onChangeText={(value) => updateField('jobDescription', value)} multiline />
-          <Pressable style={styles.secondaryButton} onPress={applySuggestedDescription}>
-            <Text style={styles.secondaryButtonText}>Generate Description</Text>
-          </Pressable>
-          <Field label="Notes" value={values.notes} onChangeText={(value) => updateField('notes', value)} multiline />
+            <Pressable style={styles.secondaryButton} onPress={applySuggestedDescription}>
+              <Text style={styles.secondaryButtonText}>Generate Description</Text>
+            </Pressable>
+            <Field label="Notes" value={values.notes} onChangeText={(value) => updateField('notes', value)} multiline />
+            {!!notice && <Text style={styles.noticeText}>{notice}</Text>}
 
           <ToggleList
             label="Job operations"
@@ -1489,6 +1550,10 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#d64056',
+    fontWeight: '800',
+  },
+  noticeText: {
+    color: '#2b6f48',
     fontWeight: '800',
   },
 });
