@@ -6,13 +6,13 @@ Shared React Native + Expo application for web and mobile that captures campaign
 
 - Expo app that runs on web, Android, and iOS from one codebase.
 - Shared form for campaign scheduling, quote details, operations, and contact details.
-- Workbook-backed calculator based on the included `Print Orders + Install Calculator.xlsx`.
+- Workbook-derived calculator data checked into the repo for runtime use.
 - Node/Express proxy to request the PrintIQ token and submit `GetPrice`.
 - PrintIQ payload preview so the business mapping is visible before submission.
 
 ## Calculation source
 
-- The app now reads quantity data from `Print Orders + Install Calculator.xlsx`.
+- The app now reads quantity data from the checked-in workbook metadata snapshot.
 - The active calculation comes from the workbook `V-LOOKUP` ranges and the schedule-style run selection.
 - The `Installs` sheet is still ignored.
 - PrintIQ product setup fields are still configurable in the app because the workbook only covers the schedule quantity logic.
@@ -44,3 +44,7 @@ Shared React Native + Expo application for web and mobile that captures campaign
 - `src/services/quoteApi.ts`: client API wrapper
 - `server/workbookCalculator.js`: workbook parser and quantity calculator
 - `server/index.js`: calculator and PrintIQ proxy
+
+## Deployment
+
+- Linux mini PC deployment guide: [linux-mini-pc-deployment.md](/C:/Users/BKanagaraju/Documents/FlowIQ/docs/linux-mini-pc-deployment.md)

@@ -1,0 +1,2397 @@
+[
+  {
+    "name": "Sydney",
+    "assets": [
+      {
+        "id": "Sydney-4",
+        "market": "Sydney",
+        "asset": "FOCUS-A",
+        "state": "NSW",
+        "label": "FOCUS-A",
+        "quantities": {
+          "8-sheet": 116,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 24,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-5",
+        "market": "Sydney",
+        "asset": "FOCUS-B",
+        "state": "NSW",
+        "label": "FOCUS-B",
+        "quantities": {
+          "8-sheet": 112,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 24,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-6",
+        "market": "Sydney",
+        "asset": "FOCUS-C",
+        "state": "NSW",
+        "label": "FOCUS-C",
+        "quantities": {
+          "8-sheet": 116,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 20,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-7",
+        "market": "Sydney",
+        "asset": "FOCUS-D",
+        "state": "NSW",
+        "label": "FOCUS-D",
+        "quantities": {
+          "8-sheet": 132,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 24,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-8",
+        "market": "Sydney",
+        "asset": "FOCUS-E",
+        "state": "NSW",
+        "label": "FOCUS-E",
+        "quantities": {
+          "8-sheet": 108,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 28,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-9",
+        "market": "Sydney",
+        "asset": "FOCUS-F",
+        "state": "NSW",
+        "label": "FOCUS-F",
+        "quantities": {
+          "8-sheet": 116,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 24,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-10",
+        "market": "Sydney",
+        "asset": "FOCUS-G",
+        "state": "NSW",
+        "label": "FOCUS-G",
+        "quantities": {
+          "8-sheet": 120,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 16,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-11",
+        "market": "Sydney",
+        "asset": "FOCUS-H",
+        "state": "NSW",
+        "label": "FOCUS-H",
+        "quantities": {
+          "8-sheet": 120,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 16,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-12",
+        "market": "Sydney",
+        "asset": "FOCUS-I",
+        "state": "NSW",
+        "label": "FOCUS-I",
+        "quantities": {
+          "8-sheet": 124,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 16,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-13",
+        "market": "Sydney",
+        "asset": "FOCUS-J",
+        "state": "NSW",
+        "label": "FOCUS-J",
+        "quantities": {
+          "8-sheet": 116,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 24,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-14",
+        "market": "Sydney",
+        "asset": "FOCUS-K",
+        "state": "NSW",
+        "label": "FOCUS-K",
+        "quantities": {
+          "8-sheet": 124,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 16,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-15",
+        "market": "Sydney",
+        "asset": "FOCUS-L",
+        "state": "NSW",
+        "label": "FOCUS-L",
+        "quantities": {
+          "8-sheet": 124,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 12,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-16",
+        "market": "Sydney",
+        "asset": "FOCUS-M",
+        "state": "NSW",
+        "label": "FOCUS-M",
+        "quantities": {
+          "8-sheet": 116,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 20,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-17",
+        "market": "Sydney",
+        "asset": "ROCKSTAR-A",
+        "state": "NSW",
+        "label": "ROCKSTAR-A",
+        "quantities": {
+          "8-sheet": 96,
+          "6-sheet": 12,
+          "4-sheet": 4,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-18",
+        "market": "Sydney",
+        "asset": "ROCKSTAR-B",
+        "state": "NSW",
+        "label": "ROCKSTAR-B",
+        "quantities": {
+          "8-sheet": 92,
+          "6-sheet": 12,
+          "4-sheet": 6,
+          "2-sheet": 0,
+          "QA0": 12,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-19",
+        "market": "Sydney",
+        "asset": "ROCKSTAR-C",
+        "state": "NSW",
+        "label": "ROCKSTAR-C",
+        "quantities": {
+          "8-sheet": 108,
+          "6-sheet": 9,
+          "4-sheet": 4,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-20",
+        "market": "Sydney",
+        "asset": "FOCUS-A (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-A (maintenance)",
+        "quantities": {
+          "8-sheet": 20,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-21",
+        "market": "Sydney",
+        "asset": "FOCUS-B (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-B (maintenance)",
+        "quantities": {
+          "8-sheet": 20,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-22",
+        "market": "Sydney",
+        "asset": "FOCUS-C (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-C (maintenance)",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-23",
+        "market": "Sydney",
+        "asset": "FOCUS-D (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-D (maintenance)",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-24",
+        "market": "Sydney",
+        "asset": "FOCUS-E (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-E (maintenance)",
+        "quantities": {
+          "8-sheet": 20,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-25",
+        "market": "Sydney",
+        "asset": "FOCUS-F (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-F (maintenance)",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-26",
+        "market": "Sydney",
+        "asset": "FOCUS-G (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-G (maintenance)",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-27",
+        "market": "Sydney",
+        "asset": "FOCUS-H (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-H (maintenance)",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-28",
+        "market": "Sydney",
+        "asset": "FOCUS-I (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-I (maintenance)",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-29",
+        "market": "Sydney",
+        "asset": "FOCUS-J (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-J (maintenance)",
+        "quantities": {
+          "8-sheet": 20,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-30",
+        "market": "Sydney",
+        "asset": "FOCUS-K (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-K (maintenance)",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-31",
+        "market": "Sydney",
+        "asset": "FOCUS-L (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-L (maintenance)",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-32",
+        "market": "Sydney",
+        "asset": "FOCUS-M (maintenance)",
+        "state": "NSW",
+        "label": "FOCUS-M (maintenance)",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-33",
+        "market": "Sydney",
+        "asset": "ROCKSTAR-A (maintenance)",
+        "state": "NSW",
+        "label": "ROCKSTAR-A (maintenance)",
+        "quantities": {
+          "8-sheet": 20,
+          "6-sheet": 12,
+          "4-sheet": 4,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-34",
+        "market": "Sydney",
+        "asset": "ROCKSTAR-B (maintenance)",
+        "state": "NSW",
+        "label": "ROCKSTAR-B (maintenance)",
+        "quantities": {
+          "8-sheet": 16,
+          "6-sheet": 12,
+          "4-sheet": 6,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-35",
+        "market": "Sydney",
+        "asset": "ROCKSTAR-C (maintenance)",
+        "state": "NSW",
+        "label": "ROCKSTAR-C (maintenance)",
+        "quantities": {
+          "8-sheet": 20,
+          "6-sheet": 9,
+          "4-sheet": 4,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-36",
+        "market": "Sydney",
+        "asset": "DOM - Ultimo Rd",
+        "state": "NSW",
+        "label": "DOM - Ultimo Rd",
+        "quantities": {
+          "8-sheet": 20,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-37",
+        "market": "Sydney",
+        "asset": "DOM - Enmore Rd",
+        "state": "NSW",
+        "label": "DOM - Enmore Rd",
+        "quantities": {
+          "8-sheet": 12,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-38",
+        "market": "Sydney",
+        "asset": "DOM - New South Head Rd",
+        "state": "NSW",
+        "label": "DOM - New South Head Rd",
+        "quantities": {
+          "8-sheet": 16,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-39",
+        "market": "Sydney",
+        "asset": "DOM - Regent St",
+        "state": "NSW",
+        "label": "DOM - Regent St",
+        "quantities": {
+          "8-sheet": 44,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-40",
+        "market": "Sydney",
+        "asset": "DOM - Cleveland St",
+        "state": "NSW",
+        "label": "DOM - Cleveland St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 44,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-41",
+        "market": "Sydney",
+        "asset": "DOM - Harris St",
+        "state": "NSW",
+        "label": "DOM - Harris St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 16,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-42",
+        "market": "Sydney",
+        "asset": "DOM - Help St",
+        "state": "NSW",
+        "label": "DOM - Help St",
+        "quantities": {
+          "8-sheet": 16,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-43",
+        "market": "Sydney",
+        "asset": "DOM - Marsden & Argyle St",
+        "state": "NSW",
+        "label": "DOM - Marsden & Argyle St",
+        "quantities": {
+          "8-sheet": 20,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-44",
+        "market": "Sydney",
+        "asset": "DOM - The Crescent",
+        "state": "NSW",
+        "label": "DOM - The Crescent",
+        "quantities": {
+          "8-sheet": 8,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 1
+        }
+      },
+      {
+        "id": "Sydney-45",
+        "market": "Sydney",
+        "asset": "DOM - Catherine St, Lilyfield",
+        "state": "NSW",
+        "label": "DOM - Catherine St, Lilyfield",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 52,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-46",
+        "market": "Sydney",
+        "asset": "DOM - Pyrmont Bridge Rd",
+        "state": "NSW",
+        "label": "DOM - Pyrmont Bridge Rd",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 16,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-47",
+        "market": "Sydney",
+        "asset": "HAND SELECT",
+        "state": "NSW",
+        "label": "HAND SELECT",
+        "quantities": {
+          "8-sheet": 4,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-48",
+        "market": "Sydney",
+        "asset": "HS - Catherine St & Brennan St",
+        "state": "NSW",
+        "label": "HS - Catherine St & Brennan St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-49",
+        "market": "Sydney",
+        "asset": "HS - Catherine St & Lilyfield St",
+        "state": "NSW",
+        "label": "HS - Catherine St & Lilyfield St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-50",
+        "market": "Sydney",
+        "asset": "HS - Longport St",
+        "state": "NSW",
+        "label": "HS - Longport St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-51",
+        "market": "Sydney",
+        "asset": "HS - New Canterbury Rd",
+        "state": "NSW",
+        "label": "HS - New Canterbury Rd",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-52",
+        "market": "Sydney",
+        "asset": "HS - Glenmore Rd",
+        "state": "NSW",
+        "label": "HS - Glenmore Rd",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-53",
+        "market": "Sydney",
+        "asset": "HS - King St",
+        "state": "NSW",
+        "label": "HS - King St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 3,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-54",
+        "market": "Sydney",
+        "asset": "HS - West St",
+        "state": "NSW",
+        "label": "HS - West St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-55",
+        "market": "Sydney",
+        "asset": "MEGASITE - Oxford St",
+        "state": "NSW",
+        "label": "MEGASITE - Oxford St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 1,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-56",
+        "market": "Sydney",
+        "asset": "MEGASITE - Anzac Pde",
+        "state": "NSW",
+        "label": "MEGASITE - Anzac Pde",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-57",
+        "market": "Sydney",
+        "asset": "MEGASITE - Penshurst St",
+        "state": "NSW",
+        "label": "MEGASITE - Penshurst St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Sydney-58",
+        "market": "Sydney",
+        "asset": "MEGASITE - Victoria Rd",
+        "state": "NSW",
+        "label": "MEGASITE - Victoria Rd",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      }
+    ]
+  },
+  {
+    "name": "Melbourne",
+    "assets": [
+      {
+        "id": "Melbourne-60",
+        "market": "Melbourne",
+        "asset": "FOCUS-A",
+        "state": "VIC",
+        "label": "FOCUS-A",
+        "quantities": {
+          "8-sheet": 148,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 16,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-61",
+        "market": "Melbourne",
+        "asset": "FOCUS-B",
+        "state": "VIC",
+        "label": "FOCUS-B",
+        "quantities": {
+          "8-sheet": 140,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 16,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-62",
+        "market": "Melbourne",
+        "asset": "FOCUS-C",
+        "state": "VIC",
+        "label": "FOCUS-C",
+        "quantities": {
+          "8-sheet": 132,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 20,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-63",
+        "market": "Melbourne",
+        "asset": "FOCUS-D",
+        "state": "VIC",
+        "label": "FOCUS-D",
+        "quantities": {
+          "8-sheet": 136,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 20,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-64",
+        "market": "Melbourne",
+        "asset": "FOCUS-E",
+        "state": "VIC",
+        "label": "FOCUS-E",
+        "quantities": {
+          "8-sheet": 136,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 20,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-65",
+        "market": "Melbourne",
+        "asset": "FOCUS-F",
+        "state": "VIC",
+        "label": "FOCUS-F",
+        "quantities": {
+          "8-sheet": 136,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 20,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-66",
+        "market": "Melbourne",
+        "asset": "FOCUS-G",
+        "state": "VIC",
+        "label": "FOCUS-G",
+        "quantities": {
+          "8-sheet": 144,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 12,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-67",
+        "market": "Melbourne",
+        "asset": "FOCUS-H",
+        "state": "VIC",
+        "label": "FOCUS-H",
+        "quantities": {
+          "8-sheet": 144,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 12,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-68",
+        "market": "Melbourne",
+        "asset": "FOCUS-I",
+        "state": "VIC",
+        "label": "FOCUS-I",
+        "quantities": {
+          "8-sheet": 136,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 20,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-69",
+        "market": "Melbourne",
+        "asset": "FOCUS-J",
+        "state": "VIC",
+        "label": "FOCUS-J",
+        "quantities": {
+          "8-sheet": 144,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 12,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-70",
+        "market": "Melbourne",
+        "asset": "FOCUS-K",
+        "state": "VIC",
+        "label": "FOCUS-K",
+        "quantities": {
+          "8-sheet": 136,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 12,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-71",
+        "market": "Melbourne",
+        "asset": "FOCUS-L",
+        "state": "VIC",
+        "label": "FOCUS-L",
+        "quantities": {
+          "8-sheet": 136,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 12,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-72",
+        "market": "Melbourne",
+        "asset": "FOCUS-M",
+        "state": "VIC",
+        "label": "FOCUS-M",
+        "quantities": {
+          "8-sheet": 144,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 16,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-73",
+        "market": "Melbourne",
+        "asset": "ROCKSTAR-A",
+        "state": "Melbourne",
+        "label": "ROCKSTAR-A",
+        "quantities": {
+          "8-sheet": 116,
+          "6-sheet": 36,
+          "4-sheet": 30,
+          "2-sheet": 5,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-74",
+        "market": "Melbourne",
+        "asset": "ROCKSTAR-B",
+        "state": "Melbourne",
+        "label": "ROCKSTAR-B",
+        "quantities": {
+          "8-sheet": 92,
+          "6-sheet": 45,
+          "4-sheet": 32,
+          "2-sheet": 6,
+          "QA0": 8,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-75",
+        "market": "Melbourne",
+        "asset": "ROCKSTAR-C",
+        "state": "Melbourne",
+        "label": "ROCKSTAR-C",
+        "quantities": {
+          "8-sheet": 104,
+          "6-sheet": 33,
+          "4-sheet": 28,
+          "2-sheet": 9,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-76",
+        "market": "Melbourne",
+        "asset": "FOCUS-A (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-A (maintenance)",
+        "quantities": {
+          "8-sheet": 28,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-77",
+        "market": "Melbourne",
+        "asset": "FOCUS-B (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-B (maintenance)",
+        "quantities": {
+          "8-sheet": 28,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-78",
+        "market": "Melbourne",
+        "asset": "FOCUS-C (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-C (maintenance)",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-79",
+        "market": "Melbourne",
+        "asset": "FOCUS-D (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-D (maintenance)",
+        "quantities": {
+          "8-sheet": 28,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-80",
+        "market": "Melbourne",
+        "asset": "FOCUS-E (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-E (maintenance)",
+        "quantities": {
+          "8-sheet": 28,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-81",
+        "market": "Melbourne",
+        "asset": "FOCUS-F (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-F (maintenance)",
+        "quantities": {
+          "8-sheet": 28,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-82",
+        "market": "Melbourne",
+        "asset": "FOCUS-G (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-G (maintenance)",
+        "quantities": {
+          "8-sheet": 32,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-83",
+        "market": "Melbourne",
+        "asset": "FOCUS-H (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-H (maintenance)",
+        "quantities": {
+          "8-sheet": 28,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-84",
+        "market": "Melbourne",
+        "asset": "FOCUS-I (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-I (maintenance)",
+        "quantities": {
+          "8-sheet": 28,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-85",
+        "market": "Melbourne",
+        "asset": "FOCUS-J (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-J (maintenance)",
+        "quantities": {
+          "8-sheet": 28,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-86",
+        "market": "Melbourne",
+        "asset": "FOCUS-K (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-K (maintenance)",
+        "quantities": {
+          "8-sheet": 28,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-87",
+        "market": "Melbourne",
+        "asset": "FOCUS-L (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-L (maintenance)",
+        "quantities": {
+          "8-sheet": 28,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-88",
+        "market": "Melbourne",
+        "asset": "FOCUS-M (maintenance)",
+        "state": "Melbourne",
+        "label": "FOCUS-M (maintenance)",
+        "quantities": {
+          "8-sheet": 32,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-89",
+        "market": "Melbourne",
+        "asset": "ROCKSTAR-A (maintenance)",
+        "state": "Melbourne",
+        "label": "ROCKSTAR-A (maintenance)",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 27,
+          "4-sheet": 18,
+          "2-sheet": 5,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-90",
+        "market": "Melbourne",
+        "asset": "ROCKSTAR-B (maintenance)",
+        "state": "Melbourne",
+        "label": "ROCKSTAR-B (maintenance)",
+        "quantities": {
+          "8-sheet": 16,
+          "6-sheet": 27,
+          "4-sheet": 18,
+          "2-sheet": 6,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-91",
+        "market": "Melbourne",
+        "asset": "ROCKSTAR-C (maintenance)",
+        "state": "Melbourne",
+        "label": "ROCKSTAR-C (maintenance)",
+        "quantities": {
+          "8-sheet": 20,
+          "6-sheet": 27,
+          "4-sheet": 18,
+          "2-sheet": 9,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-92",
+        "market": "Melbourne",
+        "asset": "DOM - Swan St",
+        "state": "VIC",
+        "label": "DOM - Swan St",
+        "quantities": {
+          "8-sheet": 84,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-93",
+        "market": "Melbourne",
+        "asset": "DOM - Brunton Ave",
+        "state": "VIC",
+        "label": "DOM - Brunton Ave",
+        "quantities": {
+          "8-sheet": 4,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 7,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-94",
+        "market": "Melbourne",
+        "asset": "DOM - King & Flinders St",
+        "state": "VIC",
+        "label": "DOM - King & Flinders St",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-95",
+        "market": "Melbourne",
+        "asset": "DOM - Punt Rd, Richmond",
+        "state": "VIC",
+        "label": "DOM - Punt Rd, Richmond",
+        "quantities": {
+          "8-sheet": 48,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-96",
+        "market": "Melbourne",
+        "asset": "DOM - Punt Rd, Cremorne",
+        "state": "VIC",
+        "label": "DOM - Punt Rd, Cremorne",
+        "quantities": {
+          "8-sheet": 12,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-97",
+        "market": "Melbourne",
+        "asset": "DOM - Eastern Freeway",
+        "state": "VIC",
+        "label": "DOM - Eastern Freeway",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-98",
+        "market": "Melbourne",
+        "asset": "DOM - Wurundjeri Way",
+        "state": "VIC",
+        "label": "DOM - Wurundjeri Way",
+        "quantities": {
+          "8-sheet": 16,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-99",
+        "market": "Melbourne",
+        "asset": "HAND SELECT",
+        "state": "VIC",
+        "label": "HAND SELECT",
+        "quantities": {
+          "8-sheet": 4,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-100",
+        "market": "Melbourne",
+        "asset": "HS - Egan St",
+        "state": "VIC",
+        "label": "HS - Egan St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 3,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-101",
+        "market": "Melbourne",
+        "asset": "HS - Racecourse Rd",
+        "state": "VIC",
+        "label": "HS - Racecourse Rd",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 2,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-102",
+        "market": "Melbourne",
+        "asset": "HS - Normanby Rd",
+        "state": "VIC",
+        "label": "HS - Normanby Rd",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 4,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-103",
+        "market": "Melbourne",
+        "asset": "MEGASITE - Flemington Rd - A",
+        "state": "VIC",
+        "label": "MEGASITE - Flemington Rd - A",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 2,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-104",
+        "market": "Melbourne",
+        "asset": "MEGASITE - Flemington Rd - B",
+        "state": "VIC",
+        "label": "MEGASITE - Flemington Rd - B",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 2,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-105",
+        "market": "Melbourne",
+        "asset": "MEGASITE - Flemington Rd - C",
+        "state": "VIC",
+        "label": "MEGASITE - Flemington Rd - C",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 2,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-106",
+        "market": "Melbourne",
+        "asset": "MEGASITE - Inkerman & Barkley - A",
+        "state": "VIC",
+        "label": "MEGASITE - Inkerman & Barkley - A",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-107",
+        "market": "Melbourne",
+        "asset": "MEGASITE - Inkerman & Barkley - B",
+        "state": "VIC",
+        "label": "MEGASITE - Inkerman & Barkley - B",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-108",
+        "market": "Melbourne",
+        "asset": "MEGASITE - Swan & Cremorne",
+        "state": "VIC",
+        "label": "MEGASITE - Swan & Cremorne",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-109",
+        "market": "Melbourne",
+        "asset": "MEGASITE - Swan & Stewart",
+        "state": "VIC",
+        "label": "MEGASITE - Swan & Stewart",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-110",
+        "market": "Melbourne",
+        "asset": "MEGASITE - Toorak Rd - North",
+        "state": "VIC",
+        "label": "MEGASITE - Toorak Rd - North",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-111",
+        "market": "Melbourne",
+        "asset": "MEGASITE - Toorak Rd - South",
+        "state": "VIC",
+        "label": "MEGASITE - Toorak Rd - South",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-112",
+        "market": "Melbourne",
+        "asset": "MEGASITE - Armstrong St",
+        "state": "VIC",
+        "label": "MEGASITE - Armstrong St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-113",
+        "market": "Melbourne",
+        "asset": "MEGASITE - King St",
+        "state": "VIC",
+        "label": "MEGASITE - King St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-114",
+        "market": "Melbourne",
+        "asset": "DOT MEGA",
+        "state": "VIC",
+        "label": "DOT MEGA",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 1,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Melbourne-115",
+        "market": "Melbourne",
+        "asset": "MEGA PORTRAIT",
+        "state": "VIC",
+        "label": "MEGA PORTRAIT",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 1
+        }
+      }
+    ]
+  },
+  {
+    "name": "Brisbane",
+    "assets": [
+      {
+        "id": "Brisbane-117",
+        "market": "Brisbane",
+        "asset": "FOCUS-A",
+        "state": "QLD",
+        "label": "FOCUS-A",
+        "quantities": {
+          "8-sheet": 104,
+          "6-sheet": 0,
+          "4-sheet": 12,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-118",
+        "market": "Brisbane",
+        "asset": "FOCUS-B",
+        "state": "QLD",
+        "label": "FOCUS-B",
+        "quantities": {
+          "8-sheet": 88,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-119",
+        "market": "Brisbane",
+        "asset": "FOCUS-C",
+        "state": "QLD",
+        "label": "FOCUS-C",
+        "quantities": {
+          "8-sheet": 92,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-120",
+        "market": "Brisbane",
+        "asset": "FOCUS-D",
+        "state": "QLD",
+        "label": "FOCUS-D",
+        "quantities": {
+          "8-sheet": 88,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-121",
+        "market": "Brisbane",
+        "asset": "FOCUS-E",
+        "state": "QLD",
+        "label": "FOCUS-E",
+        "quantities": {
+          "8-sheet": 92,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-122",
+        "market": "Brisbane",
+        "asset": "FOCUS-F",
+        "state": "QLD",
+        "label": "FOCUS-F",
+        "quantities": {
+          "8-sheet": 88,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-123",
+        "market": "Brisbane",
+        "asset": "FOCUS-G",
+        "state": "QLD",
+        "label": "FOCUS-G",
+        "quantities": {
+          "8-sheet": 100,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-124",
+        "market": "Brisbane",
+        "asset": "FOCUS-H",
+        "state": "QLD",
+        "label": "FOCUS-H",
+        "quantities": {
+          "8-sheet": 100,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-125",
+        "market": "Brisbane",
+        "asset": "FOCUS-A (maintenance)",
+        "state": "QLD",
+        "label": "FOCUS-A (maintenance)",
+        "quantities": {
+          "8-sheet": 32,
+          "6-sheet": 0,
+          "4-sheet": 8,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-126",
+        "market": "Brisbane",
+        "asset": "FOCUS-B (maintenance)",
+        "state": "QLD",
+        "label": "FOCUS-B (maintenance)",
+        "quantities": {
+          "8-sheet": 32,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-127",
+        "market": "Brisbane",
+        "asset": "FOCUS-C (maintenance)",
+        "state": "QLD",
+        "label": "FOCUS-C (maintenance)",
+        "quantities": {
+          "8-sheet": 32,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-128",
+        "market": "Brisbane",
+        "asset": "FOCUS-D (maintenance)",
+        "state": "QLD",
+        "label": "FOCUS-D (maintenance)",
+        "quantities": {
+          "8-sheet": 32,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-129",
+        "market": "Brisbane",
+        "asset": "FOCUS-E (maintenance)",
+        "state": "QLD",
+        "label": "FOCUS-E (maintenance)",
+        "quantities": {
+          "8-sheet": 32,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-130",
+        "market": "Brisbane",
+        "asset": "FOCUS-F (maintenance)",
+        "state": "QLD",
+        "label": "FOCUS-F (maintenance)",
+        "quantities": {
+          "8-sheet": 32,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-131",
+        "market": "Brisbane",
+        "asset": "FOCUS-G (maintenance)",
+        "state": "QLD",
+        "label": "FOCUS-G (maintenance)",
+        "quantities": {
+          "8-sheet": 32,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-132",
+        "market": "Brisbane",
+        "asset": "FOCUS-H (maintenance)",
+        "state": "QLD",
+        "label": "FOCUS-H (maintenance)",
+        "quantities": {
+          "8-sheet": 32,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-133",
+        "market": "Brisbane",
+        "asset": "HAND SELECT",
+        "state": "QLD",
+        "label": "HAND SELECT",
+        "quantities": {
+          "8-sheet": 4,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-134",
+        "market": "Brisbane",
+        "asset": "MEGASITE - Abbotsford Rd",
+        "state": "Bowen Hills",
+        "label": "MEGASITE - Abbotsford Rd",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-135",
+        "market": "Brisbane",
+        "asset": "MEGASITE - Brunswick St",
+        "state": "Fortitude Valley",
+        "label": "MEGASITE - Brunswick St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-136",
+        "market": "Brisbane",
+        "asset": "MEGASITE - Brookes St",
+        "state": "Bowen Hills",
+        "label": "MEGASITE - Brookes St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-137",
+        "market": "Brisbane",
+        "asset": "DOM - Ann St",
+        "state": "Various",
+        "label": "DOM - Ann St (Various)",
+        "quantities": {
+          "8-sheet": 16,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 1
+        }
+      },
+      {
+        "id": "Brisbane-138",
+        "market": "Brisbane",
+        "asset": "DOM - Warner St",
+        "state": "Various",
+        "label": "DOM - Warner St",
+        "quantities": {
+          "8-sheet": 16,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 1
+        }
+      },
+      {
+        "id": "Brisbane-139",
+        "market": "Brisbane",
+        "asset": "DOM - 949 Ann St",
+        "state": "Various",
+        "label": "DOM - 949 Ann St",
+        "quantities": {
+          "8-sheet": 24,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-140",
+        "market": "Brisbane",
+        "asset": "MEGASITE - Gympie Rd",
+        "state": "Various",
+        "label": "MEGASITE - Gympie Rd",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-141",
+        "market": "Brisbane",
+        "asset": "MEGASITE - 667 Stanley St",
+        "state": "Various",
+        "label": "MEGASITE - 667 Stanley St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-142",
+        "market": "Brisbane",
+        "asset": "MEGASITE - Wickham St",
+        "state": "Various",
+        "label": "MEGASITE - Wickham St",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-143",
+        "market": "Brisbane",
+        "asset": "MEGA PORTRAIT",
+        "state": "Various",
+        "label": "MEGA PORTRAIT",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 1
+        }
+      },
+      {
+        "id": "Brisbane-144",
+        "market": "Brisbane",
+        "asset": "MEGASITE - Petrie Tce",
+        "state": "Various",
+        "label": "MEGASITE - Petrie Tce",
+        "quantities": {
+          "8-sheet": 0,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 1,
+          "DOT M": 0,
+          "MP": 0
+        }
+      },
+      {
+        "id": "Brisbane-145",
+        "market": "Brisbane",
+        "asset": "DOM - Ann St",
+        "state": "Various",
+        "label": "DOM - Ann St (Various)",
+        "quantities": {
+          "8-sheet": 16,
+          "6-sheet": 0,
+          "4-sheet": 0,
+          "2-sheet": 0,
+          "QA0": 0,
+          "Mega": 0,
+          "DOT M": 0,
+          "MP": 1
+        }
+      }
+    ]
+  }
+]

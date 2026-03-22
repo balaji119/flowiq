@@ -1,13 +1,5 @@
-const path = require('path');
-const XLSX = require('xlsx');
-
-const workbookPath = path.join(__dirname, '..', 'Print Orders + Install Calculator.xlsx');
+const workbookMetadata = require('./workbookMetadata.json');
 const formatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0', 'Mega', 'DOT M', 'MP'];
-const marketRanges = {
-  Sydney: [4, 58],
-  Melbourne: [60, 115],
-  Brisbane: [117, 145],
-};
 
 function createEmptyBreakdown() {
   return {
@@ -50,64 +42,6 @@ function addBreakdown(target, source, multiplier = 1) {
   }
 }
 
-function loadWorkbookMetadata() {
-  const workbook = XLSX.readFile(workbookPath);
-  const sheet = workbook.Sheets['V-LOOKUP'];
-
-  if (!sheet) {
-    throw new Error('V-LOOKUP sheet not found in workbook');
-  }
-
-  const metadata = [];
-
-  for (const [market, [startRow, endRow]] of Object.entries(marketRanges)) {
-    const rows = [];
-
-    for (let row = startRow; row <= endRow; row += 1) {
-      const asset = sheet[`C${row}`]?.v;
-      const state = sheet[`D${row}`]?.v;
-
-      if (!asset) {
-        continue;
-      }
-
-      rows.push({
-        id: `${market}-${row}`,
-        market,
-        asset,
-        state: state ? String(state) : market,
-        label: String(asset),
-        quantities: {
-          '8-sheet': Number(sheet[`F${row}`]?.v || 0),
-          '6-sheet': Number(sheet[`G${row}`]?.v || 0),
-          '4-sheet': Number(sheet[`H${row}`]?.v || 0),
-          '2-sheet': Number(sheet[`I${row}`]?.v || 0),
-          QA0: Number(sheet[`J${row}`]?.v || 0),
-          Mega: Number(sheet[`K${row}`]?.v || 0),
-          'DOT M': Number(sheet[`L${row}`]?.v || 0),
-          MP: Number(sheet[`M${row}`]?.v || 0),
-        },
-      });
-    }
-
-    const duplicateCounts = rows.reduce((accumulator, item) => {
-      accumulator[item.label] = (accumulator[item.label] || 0) + 1;
-      return accumulator;
-    }, {});
-
-    metadata.push({
-      name: market,
-      assets: rows.map((item) => ({
-        ...item,
-        label: duplicateCounts[item.label] > 1 ? `${item.label} (${item.state})` : item.label,
-      })),
-    });
-  }
-
-  return metadata;
-}
-
-const workbookMetadata = loadWorkbookMetadata();
 const assetLookup = new Map(
   workbookMetadata.flatMap((market) => market.assets.map((asset) => [asset.id, asset])),
 );
