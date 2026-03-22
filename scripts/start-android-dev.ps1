@@ -1,6 +1,8 @@
 param(
   [string]$AvdName = "Pixel_3a_API_34_extension_level_7_x86_64",
   [int]$ExpoPort = 8082,
+  [switch]$NoClearCache,
+  [switch]$KeepExistingMetro,
   [switch]$SkipExpo
 )
 
@@ -14,6 +16,28 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 function Get-EmulatorDevices {
   $output = & $adbPath devices
   return $output | Where-Object { $_ -match "^emulator-\d+\s+device$" }
+}
+
+function Stop-MetroOnPort {
+  param([int]$Port)
+
+  $connections = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+  if (-not $connections) {
+    return
+  }
+
+  $processIds = $connections | Select-Object -ExpandProperty OwningProcess -Unique
+  foreach ($processId in $processIds) {
+    if ($processId -and $processId -ne 0) {
+      try {
+        $process = Get-Process -Id $processId -ErrorAction Stop
+        Write-Host "Stopping existing process on port ${Port}: $($process.ProcessName) ($processId)"
+        Stop-Process -Id $processId -Force
+      } catch {
+        Write-Host "Unable to stop process $processId on port ${Port}: $($_.Exception.Message)"
+      }
+    }
+  }
 }
 
 if (-not (Test-Path $emulatorPath)) {
@@ -55,13 +79,30 @@ if (-not $deviceReady) {
   throw "No emulator became ready within 3 minutes."
 }
 
+Write-Host "Force-stopping old Android app instances..."
+& $adbPath shell am force-stop host.exp.exponent | Out-Null
+& $adbPath shell am force-stop com.balaji119.flowiq | Out-Null
+
 if ($SkipExpo) {
   Write-Host "SkipExpo was set. Emulator startup completed."
   exit 0
 }
 
-Write-Host "Starting Expo on port $ExpoPort..."
-$expoCommand = "Set-Location '$projectRoot'; npx expo start --android --port $ExpoPort"
+if (-not $KeepExistingMetro) {
+  Stop-MetroOnPort -Port 8081
+  if ($ExpoPort -ne 8081) {
+    Stop-MetroOnPort -Port $ExpoPort
+  }
+}
+
+if ($NoClearCache) {
+  Write-Host "Starting Expo on port $ExpoPort without clearing Metro cache..."
+  $expoCommand = "Set-Location '$projectRoot'; npx expo start --android --port $ExpoPort"
+} else {
+  Write-Host "Starting Expo on port $ExpoPort with a clean Metro cache..."
+  $expoCommand = "Set-Location '$projectRoot'; npx expo start --android --clear --port $ExpoPort"
+}
+
 Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", $expoCommand | Out-Null
 
 Write-Host "Expo launch command started in a new PowerShell window."

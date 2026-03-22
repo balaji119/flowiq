@@ -37,6 +37,7 @@ logs/
 
 # local workbooks / keys
 Print Orders + Install Calculator.xlsx
+~$*.xlsx
 bk_live
 bk_live.pub
 

@@ -48,3 +48,5 @@ Shared React Native + Expo application for web and mobile that captures campaign
 ## Deployment
 
 - Linux mini PC deployment guide: [linux-mini-pc-deployment.md](/C:/Users/BKanagaraju/Documents/FlowIQ/docs/linux-mini-pc-deployment.md)
+- Android APK testing guide: [android-apk-testing.md](/C:/Users/BKanagaraju/Documents/FlowIQ/docs/android-apk-testing.md)
+- Deployment update checklist: [deployment-update-checklist.md](/C:/Users/BKanagaraju/Documents/FlowIQ/docs/deployment-update-checklist.md)
