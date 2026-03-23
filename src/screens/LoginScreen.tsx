@@ -52,8 +52,12 @@ export function LoginScreen() {
           />
         </View>
 
-        <Pressable style={[styles.button, submitting && styles.buttonDisabled]} disabled={submitting} onPress={handleSubmit}>
-          {submitting ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Sign In</Text>}
+        <Pressable
+          style={[styles.primaryButton, submitting && styles.buttonDisabled]}
+          onPress={() => void handleSubmit()}
+          disabled={submitting}
+        >
+          {submitting ? <ActivityIndicator color="#000000" /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
         </Pressable>
 
         {!!error && <Text style={styles.errorText}>{error}</Text>}
@@ -113,20 +117,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A1A',
     color: '#F0F0F0',
   },
-  button: {
+  primaryButton: {
     borderRadius: 16,
-    backgroundColor: '#6334D1',
+    backgroundColor: '#FFFFFF',
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 10,
   },
   buttonDisabled: {
     opacity: 0.75,
   },
-  buttonText: {
-    color: '#ffffff',
+  primaryButtonText: {
+    color: '#000000',
     fontWeight: '900',
-    fontSize: 15,
+    fontSize: 16,
   },
   errorText: {
     color: '#FF6B7A',

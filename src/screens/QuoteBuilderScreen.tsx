@@ -1340,8 +1340,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A1A',
   },
   pillSelected: {
-    backgroundColor: '#6334D1',
-    borderColor: '#6334D1',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   pillText: {
     color: '#A0A0A0',
@@ -1349,7 +1349,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   pillTextSelected: {
-    color: '#ffffff',
+    color: '#000000',
   },
   toggleList: {
     gap: 10,
@@ -1378,27 +1378,27 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     borderRadius: 16,
-    backgroundColor: '#6334D1',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 18,
     paddingVertical: 14,
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: '#ffffff',
+    color: '#000000',
     fontSize: 15,
     fontWeight: '900',
   },
   secondaryButton: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#6334D1',
+    borderColor: '#333333',
     paddingHorizontal: 14,
     paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: '#1A1125',
+    backgroundColor: '#1A1A1A',
   },
   secondaryButtonText: {
-    color: '#A78BFA',
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
   },

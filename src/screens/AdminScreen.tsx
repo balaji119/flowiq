@@ -463,14 +463,15 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     borderRadius: 16,
-    backgroundColor: '#6334D1',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     alignItems: 'center',
+    flex: 1,
   },
   primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 15,
+    color: '#000000',
+    fontSize: 14,
     fontWeight: '900',
   },
   cacheGrid: {
@@ -480,7 +481,8 @@ const styles = StyleSheet.create({
   cacheCard: {
     flex: 1,
     borderRadius: 18,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#333333',
+    opacity: 0.6,
     padding: 14,
     gap: 4,
   },
