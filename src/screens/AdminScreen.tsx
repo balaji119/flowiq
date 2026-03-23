@@ -354,7 +354,7 @@ export function AdminScreen({ onBack }: AdminScreenProps) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#0d1620',
+    backgroundColor: '#000000',
   },
   content: {
     padding: 20,
@@ -374,19 +374,19 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   eyebrow: {
-    color: '#8fd2e5',
+    color: '#A78BFA',
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1.2,
   },
   title: {
-    color: '#f5f9fc',
+    color: '#FFFFFF',
     fontSize: 30,
     fontWeight: '900',
   },
   subtitle: {
-    color: '#bfd0df',
+    color: '#888888',
     lineHeight: 22,
   },
   backButton: {
@@ -394,46 +394,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#35546e',
-    backgroundColor: 'rgba(18, 34, 49, 0.78)',
+    borderColor: '#333333',
+    backgroundColor: '#1A1A1A',
   },
   backButtonText: {
-    color: '#f5f9fc',
+    color: '#FFFFFF',
     fontWeight: '800',
   },
   card: {
-    backgroundColor: '#f8fbff',
+    backgroundColor: '#111111',
     borderRadius: 28,
     padding: 20,
     gap: 14,
     borderWidth: 1,
-    borderColor: '#d7e5f3',
+    borderColor: '#2A2A2A',
   },
   cardTitle: {
-    color: '#0d2033',
+    color: '#FFFFFF',
     fontSize: 24,
     fontWeight: '800',
   },
   cardSubtitle: {
-    color: '#5f7288',
+    color: '#888888',
     lineHeight: 22,
   },
   field: {
     gap: 6,
   },
   label: {
-    color: '#26415e',
+    color: '#A0A0A0',
     fontSize: 14,
     fontWeight: '800',
   },
   input: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#cad8e7',
+    borderColor: '#333333',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: '#ffffff',
-    color: '#0d2033',
+    backgroundColor: '#1A1A1A',
+    color: '#F0F0F0',
   },
   chipWrap: {
     flexDirection: 'row',
@@ -443,17 +443,17 @@ const styles = StyleSheet.create({
   chip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#cad8e7',
+    borderColor: '#333333',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#1A1A1A',
   },
   chipActive: {
-    backgroundColor: '#0f5ef7',
-    borderColor: '#0f5ef7',
+    backgroundColor: '#6334D1',
+    borderColor: '#6334D1',
   },
   chipText: {
-    color: '#20415f',
+    color: '#A0A0A0',
     fontSize: 13,
     fontWeight: '800',
     textTransform: 'capitalize',
@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     borderRadius: 16,
-    backgroundColor: '#0f5ef7',
+    backgroundColor: '#6334D1',
     paddingHorizontal: 18,
     paddingVertical: 14,
     alignItems: 'center',
@@ -480,24 +480,24 @@ const styles = StyleSheet.create({
   cacheCard: {
     flex: 1,
     borderRadius: 18,
-    backgroundColor: '#eef6fb',
+    backgroundColor: '#1A1A1A',
     padding: 14,
     gap: 4,
   },
   cacheLabel: {
-    color: '#5d96bf',
+    color: '#A78BFA',
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   cacheValue: {
-    color: '#0d2033',
+    color: '#FFFFFF',
     fontSize: 28,
     fontWeight: '900',
   },
   cacheMeta: {
-    color: '#5f7288',
+    color: '#888888',
     lineHeight: 20,
   },
   buttonDisabled: {
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
   },
   userCard: {
     borderWidth: 1,
-    borderColor: '#dbe6f1',
+    borderColor: '#2A2A2A',
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -516,19 +516,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#1A1A1A',
   },
   userMeta: {
     flex: 1,
     gap: 2,
   },
   userName: {
-    color: '#0d2033',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '800',
   },
   userSubtext: {
-    color: '#5f7288',
+    color: '#888888',
     lineHeight: 20,
     textTransform: 'capitalize',
   },
@@ -538,14 +538,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   errorText: {
-    color: '#d64056',
+    color: '#FF6B7A',
     fontWeight: '800',
   },
   noticeText: {
-    color: '#2b6f48',
+    color: '#6EE7B7',
     fontWeight: '800',
   },
   emptyText: {
-    color: '#68839f',
+    color: '#666666',
   },
 });
