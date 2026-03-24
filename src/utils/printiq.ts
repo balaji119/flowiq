@@ -92,8 +92,8 @@ export function buildPrintIqPayload(
     JobDescription: resolvedDescription,
     JobTitle: values.campaignName,
     Notes: values.notes.trim() || null,
-    CustomerExpectedDate: null,
-    JobDueDate: null,
+    CustomerExpectedDate: values.dueDate || null,
+    JobDueDate: values.printDueDate || null,
     CustomerReference: values.customerReference,
   };
 }

@@ -14,15 +14,22 @@ import {
 } from 'react-native';
 import { HoverablePressable as Pressable } from '../components/HoverablePressable';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { createCampaignAsset, createCampaignMarket, defaultFormValues } from '../constants';
+import { createCampaignAsset, createCampaignMarket, createDefaultFormValues } from '../constants';
 import { useAuth } from '../context/AuthContext';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { fetchQuoteOptions, operationOptionToChoice, searchProcessOptions, searchStockOptions } from '../services/printiqOptionsApi';
+import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 import { submitQuoteForPricing } from '../services/quoteApi';
 import { CampaignAsset, CampaignCalculationSummary, CampaignLine, CampaignMarket, MarketMetadata, OperationOption, OrderFormValues, PrintIqStockOption, QuantityBreakdown, formatKeys } from '../types';
 import { buildDefaultJobDescription, buildPrintIqPayload } from '../utils/printiq';
 
 
+
+const steps = [
+  { key: 'schedule', title: 'Schedule' },
+  { key: 'review', title: 'Review' },
+  { key: 'finalize', title: 'Finalize' },
+] as const;
 
 const webDateInputStyle: CSSProperties = {
   borderRadius: 16,
@@ -39,6 +46,14 @@ const webDateInputStyle: CSSProperties = {
   boxSizing: 'border-box',
 };
 
+const liveSummaryPrimaryKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0', 'Mega', 'DOT M', 'MP'] as const;
+const liveSummarySecondaryKeys = [
+  { key: 'posters', label: 'Posters' },
+  { key: 'frames', label: 'Frames' },
+  { key: 'special', label: 'Special' },
+  { key: 'quoteQty', label: 'Quote Qty' },
+] as const;
+
 function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBreakdown; inverse?: boolean }) {
   return (
     <View style={styles.breakdownTable}>
@@ -48,6 +63,27 @@ function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBre
           <Text style={[styles.breakdownValue, inverse && styles.breakdownValueInverse]}>{breakdown[key]}</Text>
         </View>
       ))}
+    </View>
+  );
+}
+
+function LiveSummarySection({
+  items,
+  highlightValues = false,
+}: {
+  items: ReadonlyArray<{ key: string; label: string; value: number | string }>;
+  highlightValues?: boolean;
+}) {
+  return (
+    <View style={styles.liveSummarySection}>
+      <View style={styles.liveSummaryGrid}>
+        {items.map((item) => (
+          <View key={item.key} style={styles.metricCard}>
+            <Text style={styles.metricLabel}>{item.label}</Text>
+            <Text style={[styles.metricValue, highlightValues && styles.metricValueHighlight]}>{item.value}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -122,7 +158,10 @@ function DateField({
           onChange: (event: { target: { value: string } }) => onChange(event.target.value),
           onClick: openWebDatePicker,
           onFocus: openWebDatePicker,
-          style: webDateInputStyle,
+          style: {
+            ...webDateInputStyle,
+            color: value ? '#F0F0F0' : '#6f7e93',
+          },
         })}
       </View>
     );
@@ -132,7 +171,7 @@ function DateField({
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       <Pressable style={styles.input} onPress={() => setShowNativePicker(true)}>
-        <Text style={styles.dateTriggerText}>{value}</Text>
+        <Text style={[styles.dateTriggerText, !value && styles.dateTriggerPlaceholder]}>{value || 'Select date'}</Text>
       </Pressable>
       {showNativePicker && (
         <DateTimePicker
@@ -532,7 +571,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
   const { session, logout } = useAuth();
   const { width } = useWindowDimensions();
   const isWideLayout = width >= 1080;
-  const [values, setValues] = useState<OrderFormValues>(defaultFormValues);
+  const [values, setValues] = useState<OrderFormValues>(() => createDefaultFormValues());
   const [markets, setMarkets] = useState<MarketMetadata[]>([]);
   const [metadataError, setMetadataError] = useState('');
   const [loadingMetadata, setLoadingMetadata] = useState(true);
@@ -541,13 +580,17 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
   const [submitting, setSubmitting] = useState(false);
   const [quoteResponseMessage, setQuoteResponseMessage] = useState('');
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [quantityManuallyEdited, setQuantityManuallyEdited] = useState(false);
   const [jobOperationOptions, setJobOperationOptions] = useState<OperationOption[]>([]);
   const [sectionOperationOptions, setSectionOperationOptions] = useState<OperationOption[]>([]);
   const [selectedStockOption, setSelectedStockOption] = useState<PrintIqStockOption | null>(null);
   const [selectedFrontProcessOption, setSelectedFrontProcessOption] = useState<{ label: string; value: string } | null>(null);
   const [selectedReverseProcessOption, setSelectedReverseProcessOption] = useState<{ label: string; value: string } | null>(null);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [selectedPurchaseOrderFile, setSelectedPurchaseOrderFile] = useState<File | null>(null);
+  const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
+  const [uploadedPurchaseOrderName, setUploadedPurchaseOrderName] = useState('');
+  const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -623,6 +666,8 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
     [summary]
   );
   const numberOfWeeks = Math.max(1, Math.min(20, Number(values.numberOfWeeks) || 1));
+  const currentStep = steps[stepIndex];
+  const progressPercent = ((stepIndex + 1) / steps.length) * 100;
 
   useEffect(() => {
     setValues((current) => {
@@ -778,6 +823,51 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
     }
   }
 
+  async function handleUploadPurchaseOrder() {
+    if (!selectedPurchaseOrderFile) {
+      setError('Please choose a purchase order file to upload');
+      return;
+    }
+
+    setUploadingPurchaseOrder(true);
+    setError('');
+    try {
+      const response = await uploadPurchaseOrderFile(selectedPurchaseOrderFile);
+      setUploadedPurchaseOrderName(response.originalName);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload purchase order');
+    } finally {
+      setUploadingPurchaseOrder(false);
+    }
+  }
+
+  function reviewTotals() {
+    setStepIndex(1);
+  }
+
+  function handleStartNewSchedule() {
+    setValues(createDefaultFormValues());
+    setSummary(null);
+    setError('');
+    setQuoteResponseMessage('');
+    setQuantityManuallyEdited(false);
+    setSelectedStockOption(null);
+    setSelectedFrontProcessOption(null);
+    setSelectedReverseProcessOption(null);
+    setSelectedPurchaseOrderFile(null);
+    setUploadedPurchaseOrderName('');
+    setStepIndex(0);
+  }
+
+  function openPurchaseOrderPicker() {
+    const input = purchaseOrderInputRef.current;
+    if (!input) {
+      return;
+    }
+    input.focus();
+    input.click();
+  }
+
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.select({ ios: 'padding', default: undefined })}>
       <View style={styles.backgroundGlowTop} />
@@ -804,125 +894,239 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
           </View>
         </View>
 
+        <View style={styles.progressShell}>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+          </View>
+        </View>
+
+        <View style={styles.stepRail}>
+          {steps.map((step, index) => {
+            const active = index === stepIndex;
+            return (
+              <Pressable key={step.key} onPress={() => setStepIndex(index)} style={[styles.stepItem, active && styles.stepItemActive]}>
+                <Text style={[styles.stepText, active && styles.stepTextActive]}>{step.title}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         <View style={[styles.layoutRow, !isWideLayout && styles.layoutRowStack]}>
           <View style={styles.mainColumn}>
-            <View style={styles.card}>
-              <View style={styles.panelHeader}>
-                <Text style={styles.cardTitle}>Campaign Planning</Text>
-                {/* <Text style={styles.cardSubtitle}>Set the run window, define markets, and configure assets with their active weeks.</Text> */}
-              </View>
-
-              <Field label="Campaign Name" value={values.campaignName} onChangeText={(value) => updateField('campaignName', value)} />
-
-              <View style={styles.row}>
-                <View style={styles.rowItem}>
-                  <DateField label="Campaign start date" value={values.campaignStartDate} onChange={(value) => updateField('campaignStartDate', value)} />
+            {currentStep.key === 'schedule' ? (
+              <View style={styles.card}>
+                <View style={styles.panelHeader}>
+                  <Text style={styles.cardTitle}>Campaign Planning</Text>
                 </View>
-                <View style={styles.rowItem}>
-                  <Field label="Number of weeks" value={values.numberOfWeeks} onChangeText={(value) => updateField('numberOfWeeks', value)} keyboardType="numeric" />
-                </View>
-              </View>
 
-              {loadingMetadata && <ActivityIndicator color="#8B5CF6" />}
-              {!!metadataError && <Text style={styles.errorText}>{metadataError}</Text>}
-              {!!notice && <Text style={styles.noticeText}>{notice}</Text>}
+                <Field label="Campaign Name" value={values.campaignName} onChangeText={(value) => updateField('campaignName', value)} />
 
-              {values.campaignMarkets.map((market) => {
-                const availableAssets = assetsForMarket(market.market);
-                const canRemoveMarket = values.campaignMarkets.length > 1;
-                return (
-                  <View key={market.id} style={styles.lineCard}>
-                    <View style={styles.lineHeader}>
-                      <View style={{ flex: 1, marginRight: 12 }}>
-                        <PickerField
-                          label="Market"
-                          selectedValue={market.market}
-                          items={markets.map((m) => ({
-                            label: m.name,
-                            value: m.name,
-                          }))}
-                          onValueChange={(value) =>
-                            updateCampaignMarket(market.id, (m) => ({
-                              ...m,
-                              market: value,
-                              assets: m.assets.map(a => ({ ...a, assetId: '', assetSearch: '' }))
-                            }))
-                          }
-                        />
-                      </View>
-                      {canRemoveMarket && (
-                        <Pressable onPress={() => removeCampaignMarket(market.id)} style={styles.cardCloseBtn}>
-                          <Text style={styles.closeBtnText}>×</Text>
-                        </Pressable>
-                      )}
-                    </View>
-
-                    <View style={styles.assetsContainer}>
-                      <Text style={styles.assetGroupLabel}>Assets</Text>
-                      {market.assets.map((asset) => {
-                        const canRemoveAsset = market.assets.length > 1;
-                        return (
-                          <View key={asset.id} style={styles.assetRow}>
-                            <View style={styles.assetPickerWrap}>
-                              <PickerField
-                                label=""
-                                selectedValue={asset.assetId}
-                                items={availableAssets.map((a) => ({
-                                  label: a.label,
-                                  value: a.id,
-                                }))}
-                                placeholder={availableAssets.length ? 'Choose asset' : 'No assets'}
-                                onValueChange={(value) =>
-                                  updateCampaignAsset(market.id, asset.id, (current) => ({
-                                    ...current,
-                                    assetId: value,
-                                    assetSearch: availableAssets.find((a) => a.id === value)?.label ?? '',
-                                  }))
-                                }
-                              />
-                            </View>
-                            <View style={styles.assetWeeksWrap}>
-                              <WeekSelector
-                                weekCount={numberOfWeeks}
-                                selectedWeeks={asset.selectedWeeks}
-                                onToggle={(week) =>
-                                  updateCampaignAsset(market.id, asset.id, (current) => ({
-                                    ...current,
-                                    selectedWeeks: current.selectedWeeks.includes(week)
-                                      ? current.selectedWeeks.filter((v) => v !== week)
-                                      : [...current.selectedWeeks, week].sort((a, b) => a - b),
-                                  }))
-                                }
-                              />
-                            </View>
-                            <View style={{ width: 32, alignItems: 'center' }}>
-                              {canRemoveAsset && (
-                                <Pressable onPress={() => removeCampaignAsset(market.id, asset.id)} style={styles.assetRemoveBtn}>
-                                  <Text style={styles.removeText}>×</Text>
-                                </Pressable>
-                              )}
-                            </View>
-                          </View>
-                        );
-                      })}
-                      <Pressable style={styles.addAssetBtn} onPress={() => addCampaignAsset(market.id)}>
-                        <Text style={styles.addAssetBtnText}>+ Add Asset</Text>
-                      </Pressable>
-                    </View>
+                <View style={styles.row}>
+                  <View style={styles.rowItem}>
+                    <DateField label="Campaign start date" value={values.campaignStartDate} onChange={(value) => updateField('campaignStartDate', value)} />
                   </View>
-                );
-              })}
+                  <View style={styles.rowItem}>
+                    <Field label="Number of weeks" value={values.numberOfWeeks} onChangeText={(value) => updateField('numberOfWeeks', value)} keyboardType="numeric" />
+                  </View>
+                </View>
+                <View style={styles.row}>
+                  <View style={styles.rowItem}>
+                    <DateField label="Due Date" value={values.dueDate} onChange={(value) => updateField('dueDate', value)} />
+                  </View>
+                  <View style={styles.rowItem}>
+                    <DateField label="Print Due Date" value={values.printDueDate} onChange={(value) => updateField('printDueDate', value)} />
+                  </View>
+                </View>
 
-              <Pressable style={styles.secondaryButton} onPress={addCampaignMarket}>
-                <Text style={styles.secondaryButtonText}>Add Market</Text>
-              </Pressable>
+                {loadingMetadata && <ActivityIndicator color="#8B5CF6" />}
+                {!!metadataError && <Text style={styles.errorText}>{metadataError}</Text>}
 
-              <Pressable style={[styles.primaryButton, (submitting || calculating) && styles.buttonDisabled]} onPress={handleSubmitQuote} disabled={submitting || calculating}>
-                <Text style={styles.primaryButtonText}>{submitting ? 'Submitting...' : calculating ? 'Calculating...' : 'Create Quote In PrintIQ'}</Text>
-              </Pressable>
-              {!!error && <Text style={styles.errorText}>{error}</Text>}
-              {!!quoteResponseMessage && <Text style={styles.noticeText}>{quoteResponseMessage}</Text>}
-            </View>
+                {values.campaignMarkets.map((market) => {
+                  const availableAssets = assetsForMarket(market.market);
+                  const canRemoveMarket = values.campaignMarkets.length > 1;
+                  return (
+                    <View key={market.id} style={styles.lineCard}>
+                      <View style={styles.lineHeader}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                          <PickerField
+                            label="Market"
+                            selectedValue={market.market}
+                            items={markets.map((m) => ({
+                              label: m.name,
+                              value: m.name,
+                            }))}
+                            onValueChange={(value) =>
+                              updateCampaignMarket(market.id, (m) => ({
+                                ...m,
+                                market: value,
+                                assets: m.assets.map(a => ({ ...a, assetId: '', assetSearch: '' })),
+                              }))
+                            }
+                          />
+                        </View>
+                        {canRemoveMarket && (
+                          <Pressable onPress={() => removeCampaignMarket(market.id)} style={styles.cardCloseBtn}>
+                            <Text style={styles.closeBtnText}>×</Text>
+                          </Pressable>
+                        )}
+                      </View>
+
+                      <View style={styles.assetsContainer}>
+                        <Text style={styles.assetGroupLabel}>Assets</Text>
+                        {market.assets.map((asset) => {
+                          const canRemoveAsset = market.assets.length > 1;
+                          return (
+                            <View key={asset.id} style={styles.assetRow}>
+                              <View style={styles.assetPickerWrap}>
+                                <PickerField
+                                  label=""
+                                  selectedValue={asset.assetId}
+                                  items={availableAssets.map((a) => ({
+                                    label: a.label,
+                                    value: a.id,
+                                  }))}
+                                  placeholder={availableAssets.length ? 'Choose asset' : 'No assets'}
+                                  onValueChange={(value) =>
+                                    updateCampaignAsset(market.id, asset.id, (current) => ({
+                                      ...current,
+                                      assetId: value,
+                                      assetSearch: availableAssets.find((a) => a.id === value)?.label ?? '',
+                                    }))
+                                  }
+                                />
+                              </View>
+                              <View style={styles.assetWeeksWrap}>
+                                <WeekSelector
+                                  weekCount={numberOfWeeks}
+                                  selectedWeeks={asset.selectedWeeks}
+                                  onToggle={(week) =>
+                                    updateCampaignAsset(market.id, asset.id, (current) => ({
+                                      ...current,
+                                      selectedWeeks: current.selectedWeeks.includes(week)
+                                        ? current.selectedWeeks.filter((v) => v !== week)
+                                        : [...current.selectedWeeks, week].sort((a, b) => a - b),
+                                    }))
+                                  }
+                                />
+                              </View>
+                              <View style={{ width: 32, alignItems: 'center' }}>
+                                {canRemoveAsset && (
+                                  <Pressable onPress={() => removeCampaignAsset(market.id, asset.id)} style={styles.assetRemoveBtn}>
+                                    <Text style={styles.removeText}>×</Text>
+                                  </Pressable>
+                                )}
+                              </View>
+                            </View>
+                          );
+                        })}
+                        <Pressable style={styles.addAssetBtn} onPress={() => addCampaignAsset(market.id)}>
+                          <Text style={styles.addAssetBtnText}>+ Add Asset</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })}
+
+                <Pressable style={styles.secondaryButton} onPress={addCampaignMarket}>
+                  <Text style={styles.secondaryButtonText}>Add Market</Text>
+                </Pressable>
+
+                <Pressable style={[styles.primaryButton, calculating && styles.buttonDisabled]} onPress={reviewTotals} disabled={calculating}>
+                  <Text style={styles.primaryButtonText}>{calculating ? 'Calculating...' : 'Review Totals'}</Text>
+                </Pressable>
+                {!!error && <Text style={styles.errorText}>{error}</Text>}
+              </View>
+            ) : currentStep.key === 'review' ? (
+              <View style={styles.card}>
+                <View style={styles.panelHeader}>
+                  <Text style={styles.cardTitle}>Review Totals</Text>
+                  <Text style={styles.cardSubtitle}>Confirm workbook totals before finalizing your quote.</Text>
+                </View>
+
+                {summary ? (
+                  <>
+                    {activeMarketSummaries.map((marketSummary) => (
+                      <View key={marketSummary.market} style={styles.summaryCard}>
+                        <Text style={styles.summaryTitle}>{marketSummary.market}</Text>
+                        <Text style={styles.summaryMeta}>
+                          {marketSummary.activeAssets} active assets, {marketSummary.activeRuns} runs, {marketSummary.posterTotal} posters, {marketSummary.frameTotal} frames
+                        </Text>
+                        <BreakdownTable breakdown={marketSummary.breakdown} />
+                      </View>
+                    ))}
+                    <View style={styles.summaryCardDark}>
+                      <Text style={styles.summaryTitleDark}>All Markets</Text>
+                      <Text style={styles.summaryMetaDark}>
+                        {summary.grandTotal.posterTotal} posters, {summary.grandTotal.frameTotal} frames, {summary.grandTotal.specialFormatTotal} special-format units
+                      </Text>
+                      <BreakdownTable breakdown={summary.grandTotal.breakdown} inverse />
+                    </View>
+                    <Pressable style={styles.primaryButton} onPress={() => setStepIndex(2)}>
+                      <Text style={styles.primaryButtonText}>Continue To Finalize</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateTitle}>No totals yet</Text>
+                    <Text style={styles.mutedText}>Go back to Schedule and configure campaign assets first.</Text>
+                  </View>
+                )}
+
+                {!summary && <Text style={styles.helperText}>Complete schedule setup first to continue to finalize.</Text>}
+              </View>
+            ) : (
+              <View style={styles.card}>
+                <View style={styles.panelHeader}>
+                  <Text style={styles.cardTitle}>Finalize Quote</Text>
+                  <Text style={styles.cardSubtitle}>Upload the purchase order, then create the PrintIQ quote.</Text>
+                </View>
+
+                <View style={styles.field}>
+                  <Text style={styles.label}>Purchase Order File</Text>
+                  {Platform.OS === 'web'
+                    ? (
+                      <View style={styles.uploadShell}>
+                        <Pressable style={styles.uploadButton} onPress={openPurchaseOrderPicker}>
+                          <Text style={styles.uploadButtonText}>{selectedPurchaseOrderFile ? 'Change File' : 'Choose File'}</Text>
+                        </Pressable>
+                        <View style={styles.uploadFileInfo}>
+                          <Text style={styles.uploadFileInfoText} numberOfLines={1}>
+                            {selectedPurchaseOrderFile ? selectedPurchaseOrderFile.name : 'No file selected'}
+                          </Text>
+                        </View>
+                        {createElement('input', {
+                          ref: purchaseOrderInputRef,
+                          type: 'file',
+                          onChange: (event: { target: { files?: FileList | null } }) => {
+                            const nextFile = event.target.files?.[0] ?? null;
+                            setSelectedPurchaseOrderFile(nextFile);
+                          },
+                          style: styles.hiddenFileInput as unknown as CSSProperties,
+                        })}
+                      </View>
+                    )
+                    : (
+                      <View style={styles.input}>
+                        <Text style={styles.helperText}>File upload is available on web in this build.</Text>
+                      </View>
+                    )}
+                  {!!uploadedPurchaseOrderName && <Text style={styles.noticeText}>Uploaded: {uploadedPurchaseOrderName}</Text>}
+                </View>
+
+                <Pressable style={[styles.secondaryButton, uploadingPurchaseOrder && styles.buttonDisabled]} onPress={handleUploadPurchaseOrder} disabled={uploadingPurchaseOrder || Platform.OS !== 'web'}>
+                  <Text style={styles.secondaryButtonText}>{uploadingPurchaseOrder ? 'Uploading...' : 'Upload Purchase Order'}</Text>
+                </Pressable>
+
+                <Pressable style={[styles.primaryButton, (submitting || calculating) && styles.buttonDisabled]} onPress={handleSubmitQuote} disabled={submitting || calculating || !summary}>
+                  <Text style={styles.primaryButtonText}>{submitting ? 'Submitting...' : calculating ? 'Calculating...' : 'Create Quote In PrintIQ'}</Text>
+                </Pressable>
+                <Pressable style={styles.secondaryButton} onPress={handleStartNewSchedule}>
+                  <Text style={styles.secondaryButtonText}>Start New Schedule</Text>
+                </Pressable>
+                {!!error && <Text style={styles.errorText}>{error}</Text>}
+                {!!quoteResponseMessage && <Text style={styles.noticeText}>{quoteResponseMessage}</Text>}
+              </View>
+            )}
           </View>
 
           <View style={[styles.sideColumn, !isWideLayout && styles.sideColumnStack]}>
@@ -935,33 +1139,30 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
 
               {summary ? (
                 <>
-                  <View style={styles.metricGrid}>
-                    <View style={styles.metricCard}>
-                      <Text style={styles.metricLabel}>Posters</Text>
-                      <Text style={styles.metricValue}>{summary.grandTotal.posterTotal}</Text>
-                    </View>
-                    <View style={styles.metricCard}>
-                      <Text style={styles.metricLabel}>Frames</Text>
-                      <Text style={styles.metricValue}>{summary.grandTotal.frameTotal}</Text>
-                    </View>
-                    <View style={styles.metricCard}>
-                      <Text style={styles.metricLabel}>Special</Text>
-                      <Text style={styles.metricValue}>{summary.grandTotal.specialFormatTotal}</Text>
-                    </View>
-                    <View style={styles.metricCard}>
-                      <Text style={styles.metricLabel}>Quote Qty</Text>
-                      <Text style={styles.metricValue}>{values.quantity || summary.grandTotal.totalUnits}</Text>
-                    </View>
+                  <View style={styles.liveSummaryWrap}>
+                    <LiveSummarySection
+                      items={liveSummaryPrimaryKeys.map((key) => ({
+                        key,
+                        label: key,
+                        value: summary.grandTotal.breakdown[key],
+                      }))}
+                    />
+                    <View style={styles.liveSummaryDivider} />
+                    <LiveSummarySection
+                      highlightValues
+                      items={[
+                        { key: liveSummarySecondaryKeys[0].key, label: liveSummarySecondaryKeys[0].label, value: summary.grandTotal.posterTotal },
+                        { key: liveSummarySecondaryKeys[1].key, label: liveSummarySecondaryKeys[1].label, value: summary.grandTotal.frameTotal },
+                        { key: liveSummarySecondaryKeys[2].key, label: liveSummarySecondaryKeys[2].label, value: summary.grandTotal.specialFormatTotal },
+                        { key: liveSummarySecondaryKeys[3].key, label: liveSummarySecondaryKeys[3].label, value: values.quantity || summary.grandTotal.totalUnits },
+                      ]}
+                    />
                   </View>
-                  <BreakdownTable breakdown={summary.grandTotal.breakdown} />
                 </>
               ) : (
                 <Text style={styles.sideMeta}>Configure campaign assets to see totals here.</Text>
               )}
 
-              <View style={styles.sideDivider} />
-              <Text style={styles.sideSectionTitle}>Campaign Name</Text>
-              <Text style={styles.sideBody}>{values.campaignName || 'Untitled campaign'}</Text>
             </View>
           </View>
         </View>
@@ -1047,7 +1248,7 @@ const styles = StyleSheet.create({
     borderColor: '#333333',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
   },
   sessionButtonText: {
     color: '#FFFFFF',
@@ -1062,76 +1263,36 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 999,
     overflow: 'hidden',
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
   },
   progressFill: {
     height: '100%',
     borderRadius: 999,
     backgroundColor: '#8B5CF6',
   },
-  progressText: {
-    color: '#888888',
-    fontWeight: '700',
-  },
   stepRail: {
     flexDirection: Platform.select({ web: 'row', default: 'column' }),
     gap: 10,
   },
   stepItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    borderRadius: 18,
-    backgroundColor: '#0F172A',
+    borderRadius: 14,
+    backgroundColor: '#232733',
     borderWidth: 1,
     borderColor: '#232733',
+    alignItems: 'center',
   },
   stepItemActive: {
-    backgroundColor: '#232733',
     borderColor: '#8B5CF6',
-  },
-  stepDot: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#232733',
-  },
-  stepDotActive: {
-    backgroundColor: '#8B5CF6',
-  },
-  stepDotComplete: {
-    backgroundColor: '#8B5CF6',
-  },
-  stepDotText: {
-    color: '#ffffff',
-    fontWeight: '800',
-    fontSize: 13,
+    backgroundColor: '#1C1F26',
   },
   stepText: {
-    color: '#888888',
-    fontWeight: '700',
+    color: '#A0A0A0',
+    fontWeight: '800',
   },
   stepTextActive: {
     color: '#FFFFFF',
-  },
-  pageHeader: {
-    gap: 4,
-  },
-  pageEyebrow: {
-    color: '#8B5CF6',
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  pageTitle: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: '800',
   },
   layoutRow: {
     flexDirection: 'row',
@@ -1151,7 +1312,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   card: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#1C1F26',
     borderRadius: 28,
     padding: 20,
     gap: 14,
@@ -1176,7 +1337,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 14,
     gap: 10,
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
     overflow: 'visible',
   },
   lineHeader: {
@@ -1207,18 +1368,21 @@ const styles = StyleSheet.create({
     borderColor: '#333333',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
     color: '#F0F0F0',
   },
   dateTriggerText: {
     color: '#F0F0F0',
     fontSize: 16,
   },
+  dateTriggerPlaceholder: {
+    color: '#6f7e93',
+  },
   dropdownTrigger: {
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#333333',
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
     minHeight: 50,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -1262,7 +1426,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   dropdownSurface: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#1C1F26',
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#232733',
@@ -1320,7 +1484,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#333333',
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
     color: '#F0F0F0',
     paddingHorizontal: 14,
     paddingVertical: 11,
@@ -1400,8 +1564,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1C1F26',
   },
   pillSelected: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#FFFFFF',
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
   },
   pillText: {
     color: '#A0A0A0',
@@ -1409,7 +1573,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   pillTextSelected: {
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
   toggleList: {
     gap: 10,
@@ -1438,13 +1602,13 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#8B5CF6',
     paddingHorizontal: 18,
     paddingVertical: 14,
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: '#0F172A',
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '900',
   },
@@ -1455,10 +1619,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
   },
   secondaryButtonText: {
-    color: '#FFFFFF',
+    color: '#8B5CF6',
     fontSize: 14,
     fontWeight: '800',
   },
@@ -1467,7 +1631,7 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     borderRadius: 20,
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
     padding: 14,
     gap: 8,
   },
@@ -1527,7 +1691,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   sideCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#1C1F26',
     borderRadius: 28,
     padding: 18,
     gap: 12,
@@ -1555,15 +1719,35 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
   },
+  liveSummaryWrap: {
+    gap: 14,
+  },
+  liveSummarySection: {
+    borderWidth: 1,
+    borderColor: '#2E3445',
+    borderRadius: 20,
+    backgroundColor: '#181C25',
+    padding: 12,
+  },
+  liveSummaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  liveSummaryDivider: {
+    height: 1,
+    backgroundColor: '#2E3445',
+    opacity: 0.9,
+  },
   metricCard: {
     width: '47%',
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
     borderRadius: 18,
     padding: 12,
     gap: 4,
   },
   metricLabel: {
-    color: '#8B5CF6',
+    color: '#888888',
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -1573,20 +1757,8 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
   },
-  sideDivider: {
-    height: 1,
-    backgroundColor: '#232733',
-  },
-  sideSectionTitle: {
+  metricValueHighlight: {
     color: '#8B5CF6',
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  sideBody: {
-    color: '#FFFFFF',
-    lineHeight: 22,
   },
   helperText: {
     color: '#666666',
@@ -1603,7 +1775,7 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     borderRadius: 20,
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
     padding: 20,
     gap: 6,
   },
@@ -1614,39 +1786,6 @@ const styles = StyleSheet.create({
   },
   mutedText: {
     color: '#666666',
-  },
-  footerNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingTop: 6,
-  },
-  footerButton: {
-    borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    backgroundColor: '#1C1F26',
-  },
-  footerButtonDisabled: {
-    backgroundColor: '#0F172A',
-    opacity: 0.6,
-  },
-  footerButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-  },
-  footerButtonTextDisabled: {
-    color: '#555555',
-  },
-  footerButtonPrimary: {
-    borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    backgroundColor: '#8B5CF6',
-  },
-  footerButtonPrimaryText: {
-    color: '#FFFFFF',
-    fontWeight: '900',
   },
   errorText: {
     color: '#FF6B7A',
@@ -1710,7 +1849,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
     borderWidth: 1,
     borderColor: '#232733',
     marginTop: 4,
@@ -1720,5 +1859,37 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
+  uploadShell: {
+    gap: 10,
+  },
+  uploadButton: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#8B5CF6',
+    backgroundColor: '#232733',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  uploadButtonText: {
+    color: '#8B5CF6',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  uploadFileInfo: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#232733',
+    backgroundColor: '#232733',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  uploadFileInfoText: {
+    color: '#D0D0D0',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  hiddenFileInput: {
+    display: 'none',
+  },
 });
-

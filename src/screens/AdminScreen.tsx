@@ -213,7 +213,7 @@ export function AdminScreen({ onBack }: AdminScreenProps) {
             <Text style={styles.subtitle}>Use this once to create tenants and everyday to manage access for admins and users.</Text>
           </View>
           <Pressable onPress={onBack} style={styles.backButton}>
-            <Text style={styles.backButtonText}>Back to Quote Tool</Text>
+            <Text style={styles.backButtonText}>Back to Schedule</Text>
           </Pressable>
         </View>
 
@@ -243,16 +243,18 @@ export function AdminScreen({ onBack }: AdminScreenProps) {
                   <Text style={styles.primaryButtonText}>{creatingTenant ? 'Creating...' : 'Create Tenant'}</Text>
                 </Pressable>
 
-                <View style={styles.chipWrap}>
-                  {tenants.map((tenant) => (
-                    <PickerChip
-                      key={tenant.id}
-                      label={tenant.name}
-                      active={selectedTenantId === tenant.id}
-                      onPress={() => setSelectedTenantId(tenant.id)}
-                    />
-                  ))}
-                </View>
+                {tenants.length > 1 ? (
+                  <View style={styles.chipWrap}>
+                    {tenants.map((tenant) => (
+                      <PickerChip
+                        key={tenant.id}
+                        label={tenant.name}
+                        active={selectedTenantId === tenant.id}
+                        onPress={() => setSelectedTenantId(tenant.id)}
+                      />
+                    ))}
+                  </View>
+                ) : null}
               </View>
             ) : null}
 

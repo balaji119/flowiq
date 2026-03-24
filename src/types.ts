@@ -145,6 +145,8 @@ export type OrderFormValues = {
   pages: string;
   kindName: string;
   campaignStartDate: string;
+  dueDate: string;
+  printDueDate: string;
   numberOfWeeks: string;
   campaignMarkets: CampaignMarket[];
   contact: ContactDetails;
