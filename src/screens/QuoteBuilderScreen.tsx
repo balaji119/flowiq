@@ -1,4 +1,5 @@
 import { createElement, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -31,12 +32,14 @@ const steps = [
   { key: 'finalize', title: 'Finalise' },
 ] as const;
 
+const QUOTE_BUILDER_DRAFT_KEY = 'adsconnect-quote-builder-draft';
+
 const webDateInputStyle: CSSProperties = {
   borderRadius: 16,
   borderWidth: '1px',
   borderStyle: 'solid',
-  borderColor: '#333333',
-  backgroundColor: '#1C1F26',
+  borderColor: '#4F5C73',
+  backgroundColor: '#38455B',
   minHeight: '50px',
   padding: '0 14px',
   fontSize: 16,
@@ -120,6 +123,39 @@ function Field({
 function parseDateInput(value: string) {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+async function setStoredDraft(value: string | null) {
+  if (Platform.OS === 'web') {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (value === null) {
+      window.localStorage.removeItem(QUOTE_BUILDER_DRAFT_KEY);
+    } else {
+      window.localStorage.setItem(QUOTE_BUILDER_DRAFT_KEY, value);
+    }
+    return;
+  }
+
+  if (value === null) {
+    await AsyncStorage.removeItem(QUOTE_BUILDER_DRAFT_KEY);
+  } else {
+    await AsyncStorage.setItem(QUOTE_BUILDER_DRAFT_KEY, value);
+  }
+}
+
+async function getStoredDraft() {
+  if (Platform.OS === 'web') {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    return window.localStorage.getItem(QUOTE_BUILDER_DRAFT_KEY);
+  }
+
+  return AsyncStorage.getItem(QUOTE_BUILDER_DRAFT_KEY);
 }
 
 function DateField({
@@ -572,6 +608,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
   const { width } = useWindowDimensions();
   const isWideLayout = width >= 1080;
   const [values, setValues] = useState<OrderFormValues>(() => createDefaultFormValues());
+  const [draftReady, setDraftReady] = useState(false);
   const [markets, setMarkets] = useState<MarketMetadata[]>([]);
   const [metadataError, setMetadataError] = useState('');
   const [loadingMetadata, setLoadingMetadata] = useState(true);
@@ -591,6 +628,56 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
   const [uploadedPurchaseOrderName, setUploadedPurchaseOrderName] = useState('');
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function hydrateDraft() {
+      try {
+        const stored = await getStoredDraft();
+        if (!stored || !active) {
+          return;
+        }
+
+        const parsed = JSON.parse(stored) as {
+          values?: Partial<OrderFormValues>;
+          quantityManuallyEdited?: boolean;
+        };
+        const defaults = createDefaultFormValues();
+        const nextValues = {
+          ...defaults,
+          ...parsed.values,
+          contact: {
+            ...defaults.contact,
+            ...(parsed.values?.contact || {}),
+          },
+          campaignMarkets:
+            Array.isArray(parsed.values?.campaignMarkets) && parsed.values.campaignMarkets.length > 0
+              ? parsed.values.campaignMarkets
+              : defaults.campaignMarkets,
+          selectedJobOperations: Array.isArray(parsed.values?.selectedJobOperations) ? parsed.values.selectedJobOperations : defaults.selectedJobOperations,
+          selectedSectionOperations: Array.isArray(parsed.values?.selectedSectionOperations)
+            ? parsed.values.selectedSectionOperations
+            : defaults.selectedSectionOperations,
+        };
+
+        setValues(nextValues);
+        setQuantityManuallyEdited(Boolean(parsed.quantityManuallyEdited));
+      } catch {
+        await setStoredDraft(null);
+      } finally {
+        if (active) {
+          setDraftReady(true);
+        }
+      }
+    }
+
+    hydrateDraft();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -622,6 +709,10 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
   }, []);
 
   useEffect(() => {
+    if (!draftReady) {
+      return;
+    }
+
     let active = true;
 
     async function loadQuoteOptions() {
@@ -658,7 +749,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
     return () => {
       active = false;
     };
-  }, []);
+  }, [draftReady]);
 
   const payload = useMemo(() => buildPrintIqPayload(values, summary), [summary, values]);
   const activeMarketSummaries = useMemo(
@@ -670,6 +761,10 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
   const progressPercent = ((stepIndex + 1) / steps.length) * 100;
 
   useEffect(() => {
+    if (!draftReady) {
+      return;
+    }
+
     setValues((current) => {
       const normalizedMarkets = normalizeCampaignMarkets(current.campaignMarkets, numberOfWeeks);
       const flattenWeeks = (markets: CampaignMarket[]) => markets.flatMap(m => m.assets.flatMap(a => a.selectedWeeks)).join(',');
@@ -682,10 +777,10 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
         }
         : current;
     });
-  }, [numberOfWeeks]);
+  }, [draftReady, numberOfWeeks]);
 
   useEffect(() => {
-    if (loadingMetadata || metadataError) {
+    if (!draftReady || loadingMetadata || metadataError) {
       return;
     }
 
@@ -728,7 +823,18 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [loadingMetadata, metadataError, quantityManuallyEdited, values.campaignMarkets]);
+  }, [draftReady, loadingMetadata, metadataError, quantityManuallyEdited, values.campaignMarkets]);
+
+  useEffect(() => {
+    if (!draftReady) {
+      return;
+    }
+
+    void setStoredDraft(JSON.stringify({
+      values,
+      quantityManuallyEdited,
+    }));
+  }, [draftReady, quantityManuallyEdited, values]);
 
   function updateField<K extends keyof OrderFormValues>(field: K, value: OrderFormValues[K]) {
     setValues((current) => ({
@@ -1169,7 +1275,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#313B4D',
   },
   backgroundGlowTop: {
     position: 'absolute',
@@ -1216,7 +1322,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   subtitle: {
-    color: '#888888',
+    color: '#A7B0C0',
     fontSize: 16,
     lineHeight: 24,
     maxWidth: 720,
@@ -1229,7 +1335,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   sessionText: {
-    color: '#777777',
+    color: '#A7B0C0',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1240,10 +1346,10 @@ const styles = StyleSheet.create({
   sessionButton: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#333333',
+    borderColor: '#445067',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#232733',
+    backgroundColor: '#1C1F26',
   },
   sessionButtonText: {
     color: '#FFFFFF',
@@ -1258,7 +1364,7 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 999,
     overflow: 'hidden',
-    backgroundColor: '#232733',
+    backgroundColor: '#5C6B84',
   },
   progressFill: {
     height: '100%',
@@ -1273,17 +1379,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: '#232733',
+    backgroundColor: '#56647C',
     borderWidth: 1,
-    borderColor: '#232733',
+    borderColor: '#697892',
     alignItems: 'center',
   },
   stepItemActive: {
     borderColor: '#8B5CF6',
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#2A3548',
   },
   stepText: {
-    color: '#A0A0A0',
+    color: '#D2D8E2',
     fontWeight: '800',
   },
   stepTextActive: {
@@ -1307,12 +1413,12 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   card: {
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#242B36',
     borderRadius: 28,
     padding: 20,
     gap: 14,
     borderWidth: 1,
-    borderColor: '#232733',
+    borderColor: '#3F4A5F',
   },
   panelHeader: {
     gap: 6,
@@ -1323,12 +1429,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   cardSubtitle: {
-    color: '#888888',
+    color: '#A7B0C0',
     lineHeight: 22,
   },
   lineCard: {
     borderWidth: 1,
-    borderColor: '#232733',
+    borderColor: '#4B556A',
     borderRadius: 20,
     padding: 14,
     gap: 10,
@@ -1353,17 +1459,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    color: '#A0A0A0',
+    color: '#C3CBD8',
     fontSize: 14,
     fontWeight: '800',
   },
   input: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#333333',
+    borderColor: '#4F5C73',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: '#232733',
+    backgroundColor: '#38455B',
     color: '#F0F0F0',
   },
   dateTriggerText: {
@@ -1376,8 +1482,8 @@ const styles = StyleSheet.create({
   dropdownTrigger: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#333333',
-    backgroundColor: '#232733',
+    borderColor: '#4F5C73',
+    backgroundColor: '#38455B',
     minHeight: 50,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -1424,7 +1530,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1C1F26',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#232733',
+    borderColor: '#3F4A5F',
     shadowColor: '#0F172A',
     shadowOpacity: 0.4,
     shadowRadius: 18,
@@ -1453,7 +1559,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   dropdownSheetLabel: {
-    color: '#A0A0A0',
+    color: '#C3CBD8',
     fontSize: 13,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -1478,8 +1584,8 @@ const styles = StyleSheet.create({
   dropdownSearchInput: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#333333',
-    backgroundColor: '#232733',
+    borderColor: '#4F5C73',
+    backgroundColor: '#2F3A4F',
     color: '#F0F0F0',
     paddingHorizontal: 14,
     paddingVertical: 11,
@@ -1492,7 +1598,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#232733',
+    borderBottomColor: '#3F4A5F',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -1553,17 +1659,17 @@ const styles = StyleSheet.create({
   pill: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#333333',
+    borderColor: '#4B556A',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
   },
   pillSelected: {
     backgroundColor: '#8B5CF6',
     borderColor: '#8B5CF6',
   },
   pillText: {
-    color: '#A0A0A0',
+    color: '#D4DAE4',
     fontSize: 13,
     fontWeight: '800',
   },
@@ -1575,7 +1681,7 @@ const styles = StyleSheet.create({
   },
   toggleRow: {
     borderWidth: 1,
-    borderColor: '#232733',
+    borderColor: '#4B556A',
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -1610,7 +1716,7 @@ const styles = StyleSheet.create({
   secondaryButton: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#333333',
+    borderColor: '#4B556A',
     paddingHorizontal: 14,
     paddingVertical: 12,
     alignItems: 'center',
@@ -1636,7 +1742,7 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 8,
     borderWidth: 1,
-    borderColor: '#232733',
+    borderColor: '#4B556A',
   },
   summaryTitle: {
     color: '#FFFFFF',
@@ -1649,7 +1755,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   summaryMeta: {
-    color: '#888888',
+    color: '#A7B0C0',
   },
   summaryMetaDark: {
     color: '#8B5CF6',
@@ -1662,15 +1768,15 @@ const styles = StyleSheet.create({
   breakdownCell: {
     minWidth: 92,
     borderRadius: 16,
-    backgroundColor: '#232733',
+    backgroundColor: '#2F3A4F',
     padding: 10,
     gap: 4,
   },
   breakdownCellInverse: {
-    backgroundColor: '#232733',
+    backgroundColor: '#475569',
   },
   breakdownLabel: {
-    color: '#888888',
+    color: '#C3CBD8',
     fontSize: 12,
     fontWeight: '800',
   },
@@ -1686,12 +1792,12 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   sideCard: {
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#242B36',
     borderRadius: 28,
     padding: 18,
     gap: 12,
     borderWidth: 1,
-    borderColor: '#232733',
+    borderColor: '#3F4A5F',
   },
   sideEyebrow: {
     color: '#8B5CF6',
@@ -1706,7 +1812,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   sideMeta: {
-    color: '#888888',
+    color: '#A7B0C0',
     lineHeight: 20,
   },
   metricGrid: {
@@ -1719,9 +1825,9 @@ const styles = StyleSheet.create({
   },
   liveSummarySection: {
     borderWidth: 1,
-    borderColor: '#2E3445',
+    borderColor: '#46526A',
     borderRadius: 20,
-    backgroundColor: '#181C25',
+    backgroundColor: '#202A3A',
     padding: 12,
   },
   liveSummaryGrid: {
@@ -1731,18 +1837,18 @@ const styles = StyleSheet.create({
   },
   liveSummaryDivider: {
     height: 1,
-    backgroundColor: '#2E3445',
+    backgroundColor: '#46526A',
     opacity: 0.9,
   },
   metricCard: {
     width: '47%',
-    backgroundColor: '#232733',
+    backgroundColor: '#2F3A4F',
     borderRadius: 18,
     padding: 12,
     gap: 4,
   },
   metricLabel: {
-    color: '#888888',
+    color: '#C3CBD8',
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -1764,7 +1870,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: '#D0D0D0',
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
     borderRadius: 18,
     padding: 14,
   },
@@ -1780,7 +1886,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   mutedText: {
-    color: '#666666',
+    color: '#A7B0C0',
   },
   errorText: {
     color: '#FF6B7A',
@@ -1793,12 +1899,12 @@ const styles = StyleSheet.create({
   assetsContainer: {
     gap: 6,
     borderTopWidth: 1,
-    borderTopColor: '#232733',
+    borderTopColor: '#475569',
     paddingTop: 12,
     marginTop: 4,
   },
   assetGroupLabel: {
-    color: '#A0A0A0',
+    color: '#C3CBD8',
     fontSize: 14,
     fontWeight: '800',
   },
@@ -1810,7 +1916,7 @@ const styles = StyleSheet.create({
     marginBottom: -4,
   },
   assetHeaderLabel: {
-    color: '#888888',
+    color: '#A7B0C0',
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -1846,7 +1952,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#232733',
     borderWidth: 1,
-    borderColor: '#232733',
+    borderColor: '#4B556A',
     marginTop: 4,
   },
   addAssetBtnText: {
@@ -1874,7 +1980,7 @@ const styles = StyleSheet.create({
   uploadFileInfo: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#232733',
+    borderColor: '#4B556A',
     backgroundColor: '#232733',
     paddingHorizontal: 12,
     paddingVertical: 10,

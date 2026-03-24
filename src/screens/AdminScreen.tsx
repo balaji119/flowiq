@@ -356,7 +356,7 @@ export function AdminScreen({ onBack }: AdminScreenProps) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#313B4D',
   },
   content: {
     padding: 20,
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   subtitle: {
-    color: '#888888',
+    color: '#A7B0C0',
     lineHeight: 22,
   },
   backButton: {
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#333333',
+    borderColor: '#445067',
     backgroundColor: '#1C1F26',
   },
   backButtonText: {
@@ -404,12 +404,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   card: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#1C1F26',
     borderRadius: 28,
     padding: 20,
     gap: 14,
     borderWidth: 1,
-    borderColor: '#232733',
+    borderColor: '#3F4A5F',
   },
   cardTitle: {
     color: '#FFFFFF',
@@ -417,24 +417,24 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   cardSubtitle: {
-    color: '#888888',
+    color: '#A7B0C0',
     lineHeight: 22,
   },
   field: {
     gap: 6,
   },
   label: {
-    color: '#A0A0A0',
+    color: '#C3CBD8',
     fontSize: 14,
     fontWeight: '800',
   },
   input: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#333333',
+    borderColor: '#4F5C73',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#38455B',
     color: '#F0F0F0',
   },
   chipWrap: {
@@ -445,17 +445,17 @@ const styles = StyleSheet.create({
   chip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#333333',
+    borderColor: '#4B556A',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
   },
   chipActive: {
     backgroundColor: '#8B5CF6',
     borderColor: '#8B5CF6',
   },
   chipText: {
-    color: '#A0A0A0',
+    color: '#D4DAE4',
     fontSize: 13,
     fontWeight: '800',
     textTransform: 'capitalize',
@@ -483,8 +483,8 @@ const styles = StyleSheet.create({
   cacheCard: {
     flex: 1,
     borderRadius: 18,
-    backgroundColor: '#333333',
-    opacity: 0.6,
+    backgroundColor: '#232733',
+    opacity: 1,
     padding: 14,
     gap: 4,
   },
@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   cacheMeta: {
-    color: '#888888',
+    color: '#A7B0C0',
     lineHeight: 20,
   },
   buttonDisabled: {
@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
   },
   userCard: {
     borderWidth: 1,
-    borderColor: '#232733',
+    borderColor: '#4B556A',
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#232733',
   },
   userMeta: {
     flex: 1,
@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   userSubtext: {
-    color: '#888888',
+    color: '#A7B0C0',
     lineHeight: 20,
     textTransform: 'capitalize',
   },
@@ -550,6 +550,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   emptyText: {
-    color: '#666666',
+    color: '#A7B0C0',
   },
 });

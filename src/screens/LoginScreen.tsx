@@ -70,7 +70,7 @@ export function LoginScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#313B4D',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
@@ -79,9 +79,9 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     borderRadius: 28,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#1C1F26',
     borderWidth: 1,
-    borderColor: '#232733',
+    borderColor: '#3F4A5F',
     padding: 24,
     gap: 14,
   },
@@ -98,24 +98,24 @@ const styles = StyleSheet.create({
     fontSize: 30,
   },
   subtitle: {
-    color: '#888888',
+    color: '#A7B0C0',
     lineHeight: 22,
   },
   field: {
     gap: 6,
   },
   label: {
-    color: '#A0A0A0',
+    color: '#C3CBD8',
     fontSize: 14,
     fontWeight: '800',
   },
   input: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#333333',
+    borderColor: '#4F5C73',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: '#1C1F26',
+    backgroundColor: '#38455B',
     color: '#F0F0F0',
   },
   primaryButton: {
