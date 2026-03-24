@@ -146,7 +146,6 @@ export type OrderFormValues = {
   kindName: string;
   campaignStartDate: string;
   dueDate: string;
-  printDueDate: string;
   numberOfWeeks: string;
   campaignMarkets: CampaignMarket[];
   contact: ContactDetails;

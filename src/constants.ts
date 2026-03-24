@@ -40,7 +40,6 @@ export function createDefaultFormValues(): OrderFormValues {
     kindName: 'Campaign-01',
     campaignStartDate: '',
     dueDate: '',
-    printDueDate: '',
     numberOfWeeks: '3',
     campaignMarkets: [createCampaignMarket('market-1')],
     contact: {

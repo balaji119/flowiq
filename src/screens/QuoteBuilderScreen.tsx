@@ -28,7 +28,7 @@ import { buildDefaultJobDescription, buildPrintIqPayload } from '../utils/printi
 const steps = [
   { key: 'schedule', title: 'Schedule' },
   { key: 'review', title: 'Review' },
-  { key: 'finalize', title: 'Finalize' },
+  { key: 'finalize', title: 'Finalise' },
 ] as const;
 
 const webDateInputStyle: CSSProperties = {
@@ -926,15 +926,10 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
                     <DateField label="Campaign start date" value={values.campaignStartDate} onChange={(value) => updateField('campaignStartDate', value)} />
                   </View>
                   <View style={styles.rowItem}>
-                    <Field label="Number of weeks" value={values.numberOfWeeks} onChangeText={(value) => updateField('numberOfWeeks', value)} keyboardType="numeric" />
-                  </View>
-                </View>
-                <View style={styles.row}>
-                  <View style={styles.rowItem}>
                     <DateField label="Due Date" value={values.dueDate} onChange={(value) => updateField('dueDate', value)} />
                   </View>
                   <View style={styles.rowItem}>
-                    <DateField label="Print Due Date" value={values.printDueDate} onChange={(value) => updateField('printDueDate', value)} />
+                    <Field label="Number of weeks" value={values.numberOfWeeks} onChangeText={(value) => updateField('numberOfWeeks', value)} keyboardType="numeric" />
                   </View>
                 </View>
 
@@ -1040,7 +1035,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
               <View style={styles.card}>
                 <View style={styles.panelHeader}>
                   <Text style={styles.cardTitle}>Review Totals</Text>
-                  <Text style={styles.cardSubtitle}>Confirm workbook totals before finalizing your quote.</Text>
+                  <Text style={styles.cardSubtitle}>Confirm workbook totals before finalising your quote.</Text>
                 </View>
 
                 {summary ? (
@@ -1062,7 +1057,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
                       <BreakdownTable breakdown={summary.grandTotal.breakdown} inverse />
                     </View>
                     <Pressable style={styles.primaryButton} onPress={() => setStepIndex(2)}>
-                      <Text style={styles.primaryButtonText}>Continue To Finalize</Text>
+                      <Text style={styles.primaryButtonText}>Continue To Finalise</Text>
                     </Pressable>
                   </>
                 ) : (
@@ -1072,12 +1067,12 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
                   </View>
                 )}
 
-                {!summary && <Text style={styles.helperText}>Complete schedule setup first to continue to finalize.</Text>}
+                {!summary && <Text style={styles.helperText}>Complete schedule setup first to continue to finalise.</Text>}
               </View>
             ) : (
               <View style={styles.card}>
                 <View style={styles.panelHeader}>
-                  <Text style={styles.cardTitle}>Finalize Quote</Text>
+                  <Text style={styles.cardTitle}>Finalise Quote</Text>
                   <Text style={styles.cardSubtitle}>Upload the purchase order, then create the PrintIQ quote.</Text>
                 </View>
 
