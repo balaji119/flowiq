@@ -12,14 +12,11 @@ export const HoverablePressable = forwardRef<View, PressableProps>(
           const { pressed, hovered } = state as any;
           const isFunction = typeof style === 'function';
           const baseStyle = isFunction ? style(state) : style;
-          
-          // Skip applying hover effect to the specific interactive elements that shouldn't visibly get it
-          // OR if disabled, etc. We could do this unconditionally and let React Native manage it.
-          // To be safe, we only apply hover effects if it's "interactive"
+
           return [
             baseStyle,
-            hovered && { opacity: 0.8 },
-            pressed && { opacity: 0.6 }
+            hovered && { opacity: 0.92 },
+            pressed && { opacity: 0.72 },
           ];
         }}
       />

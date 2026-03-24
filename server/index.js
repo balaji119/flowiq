@@ -3,6 +3,7 @@ require('dotenv').config({ quiet: true });
 const cors = require('cors');
 const express = require('express');
 const fs = require('fs');
+const multer = require('multer');
 const path = require('path');
 const { calculateCampaign, formatKeys, workbookMetadata } = require('./workbookCalculator');
 const { authenticateUser, createTenant, createUser, findTenantById, listTenants, listUsers, updateUser } = require('./authStore');
@@ -13,6 +14,7 @@ const app = express();
 const port = Number(process.env.PORT || 4000);
 const printIqBaseUrl = process.env.PRINTIQ_BASE_URL || 'https://adsaust.printiq.com';
 const logDirectory = path.join(__dirname, '..', 'logs');
+const uploadDirectory = path.join(__dirname, '..', 'uploads', 'purchase-orders');
 const printIqLogPath = path.join(logDirectory, 'printiq-payloads.log');
 
 app.use(cors());
@@ -21,6 +23,24 @@ app.use(express.json({ limit: '1mb' }));
 if (!fs.existsSync(logDirectory)) {
   fs.mkdirSync(logDirectory, { recursive: true });
 }
+if (!fs.existsSync(uploadDirectory)) {
+  fs.mkdirSync(uploadDirectory, { recursive: true });
+}
+
+const purchaseOrderUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDirectory),
+    filename: (_req, file, cb) => {
+      const extension = path.extname(file.originalname || '');
+      const safeBaseName = path
+        .basename(file.originalname || 'purchase-order', extension)
+        .replace(/[^a-zA-Z0-9-_]/g, '_')
+        .slice(0, 64) || 'purchase-order';
+      cb(null, `${Date.now()}-${safeBaseName}${extension}`);
+    },
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 },
+});
 
 function getRequiredEnv(name) {
   const value = process.env[name];
@@ -290,6 +310,20 @@ app.post('/api/quotes/price', async (req, res) => {
       error: error instanceof Error ? error.message : 'Unknown quote error',
     });
   }
+});
+
+app.post('/api/purchase-orders/upload', purchaseOrderUpload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  return res.status(201).json({
+    originalName: req.file.originalname,
+    storedName: req.file.filename,
+    size: req.file.size,
+    mimeType: req.file.mimetype,
+    uploadedAt: new Date().toISOString(),
+  });
 });
 
 app.get('/api/admin/tenants', requireRoles('super_admin'), (_req, res) => {

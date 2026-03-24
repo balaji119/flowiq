@@ -6,6 +6,10 @@ export function setApiAuthToken(token: string | null) {
   authToken = token;
 }
 
+export function getApiAuthToken() {
+  return authToken;
+}
+
 export async function apiFetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers || {});
 
