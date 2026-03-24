@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { HoverablePressable as Pressable } from '../components/HoverablePressable';
 import { useAuth } from '../context/AuthContext';
 
 export function LoginScreen() {
@@ -26,7 +27,7 @@ export function LoginScreen() {
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.select({ ios: 'padding', default: undefined })}>
       <View style={styles.card}>
         <Text style={styles.eyebrow}>Secure Access</Text>
-        <Text style={styles.title}>Sign in to FlowIQ</Text>
+        <Text style={styles.title}>Sign in to ADS CONNECT</Text>
         <View style={styles.field}>
           <Text style={styles.label}>Email</Text>
           <TextInput
@@ -57,7 +58,7 @@ export function LoginScreen() {
           onPress={() => void handleSubmit()}
           disabled={submitting}
         >
-          {submitting ? <ActivityIndicator color="#000000" /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
+          {submitting ? <ActivityIndicator color="#0F172A" /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
         </Pressable>
 
         {!!error && <Text style={styles.errorText}>{error}</Text>}
@@ -69,7 +70,7 @@ export function LoginScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#0F172A',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
@@ -78,14 +79,14 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     borderRadius: 28,
-    backgroundColor: '#111111',
+    backgroundColor: '#0F172A',
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#232733',
     padding: 24,
     gap: 14,
   },
   eyebrow: {
-    color: '#A78BFA',
+    color: '#8B5CF6',
     textTransform: 'uppercase',
     fontWeight: '800',
     letterSpacing: 1.2,
@@ -114,7 +115,7 @@ const styles = StyleSheet.create({
     borderColor: '#333333',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
     color: '#F0F0F0',
   },
   primaryButton: {
@@ -128,7 +129,7 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
   primaryButtonText: {
-    color: '#000000',
+    color: '#0F172A',
     fontWeight: '900',
     fontSize: 16,
   },

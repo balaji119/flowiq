@@ -63,13 +63,20 @@ export type ContactDetails = {
   email: string;
 };
 
-export type CampaignLine = {
+export type CampaignAsset = {
   id: string;
-  market: string;
   assetId: string;
   assetSearch: string;
   selectedWeeks: number[];
 };
+
+export type CampaignMarket = {
+  id: string;
+  market: string;
+  assets: CampaignAsset[];
+};
+
+export type CampaignLine = CampaignAsset & { market: string };
 
 export type MarketAssetOption = {
   id: string;
@@ -120,7 +127,7 @@ export type CalculatorMetadataResponse = {
 export type OrderFormValues = {
   customerCode: string;
   customerReference: string;
-  jobTitle: string;
+  campaignName: string;
   jobDescription: string;
   notes: string;
   productCategory: string;
@@ -139,7 +146,7 @@ export type OrderFormValues = {
   kindName: string;
   campaignStartDate: string;
   numberOfWeeks: string;
-  campaignLines: CampaignLine[];
+  campaignMarkets: CampaignMarket[];
   contact: ContactDetails;
   selectedJobOperations: string[];
   selectedSectionOperations: string[];

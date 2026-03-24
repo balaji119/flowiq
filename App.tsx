@@ -12,8 +12,8 @@ function AppShell() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000000' }}>
-        <ActivityIndicator size="large" color="#6334D1" />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0F172A' }}>
+        <ActivityIndicator size="large" color="#8B5CF6" />
       </View>
     );
   }

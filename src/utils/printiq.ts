@@ -72,7 +72,7 @@ export function buildPrintIqPayload(
         KindsArePacks: false,
         Kinds: [
           {
-            Name: values.kindName || values.customerReference || values.jobTitle,
+            Name: values.kindName || values.customerReference || values.campaignName,
             Quantity: quantity,
             Sections: [{ SectionNumber: 1 }],
           },
@@ -90,7 +90,7 @@ export function buildPrintIqPayload(
     CustomerCode: values.customerCode,
     AcceptQuote: false,
     JobDescription: resolvedDescription,
-    JobTitle: values.jobTitle,
+    JobTitle: values.campaignName,
     Notes: values.notes.trim() || null,
     CustomerExpectedDate: null,
     JobDueDate: null,

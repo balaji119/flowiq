@@ -11,7 +11,7 @@ type AuthContextValue = {
   logout: () => Promise<void>;
 };
 
-const STORAGE_KEY = 'flowiq-auth-session';
+const STORAGE_KEY = 'adsconnect-auth-session';
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 

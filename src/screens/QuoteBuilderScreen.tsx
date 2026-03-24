@@ -4,7 +4,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -13,13 +12,14 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { HoverablePressable as Pressable } from '../components/HoverablePressable';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { createCampaignLine, defaultFormValues } from '../constants';
+import { createCampaignAsset, createCampaignMarket, defaultFormValues } from '../constants';
 import { useAuth } from '../context/AuthContext';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { fetchQuoteOptions, operationOptionToChoice, searchProcessOptions, searchStockOptions } from '../services/printiqOptionsApi';
 import { submitQuoteForPricing } from '../services/quoteApi';
-import { CampaignCalculationSummary, CampaignLine, MarketMetadata, OperationOption, OrderFormValues, PrintIqStockOption, QuantityBreakdown, formatKeys } from '../types';
+import { CampaignAsset, CampaignCalculationSummary, CampaignLine, CampaignMarket, MarketMetadata, OperationOption, OrderFormValues, PrintIqStockOption, QuantityBreakdown, formatKeys } from '../types';
 import { buildDefaultJobDescription, buildPrintIqPayload } from '../utils/printiq';
 
 
@@ -29,7 +29,7 @@ const webDateInputStyle: CSSProperties = {
   borderWidth: '1px',
   borderStyle: 'solid',
   borderColor: '#333333',
-  backgroundColor: '#1A1A1A',
+  backgroundColor: '#1C1F26',
   minHeight: '50px',
   padding: '0 14px',
   fontSize: 16,
@@ -172,9 +172,9 @@ function PickerField({
   const triggerRef = useRef<View>(null);
   const { width, height } = useWindowDimensions();
   const isWeb = Platform.OS === 'web';
-  const isSearchablePicker = ['asset', 'market'].includes(label.toLowerCase());
+  const isSearchablePicker = !!label && ['asset', 'market'].includes(label.toLowerCase());
   const selectedLabel = items.find((item) => item.value === selectedValue)?.label || placeholder || 'Select';
-  const sheetTitle = placeholder || `Choose a ${label.toLowerCase()}`;
+  const sheetTitle = placeholder || (label ? `Choose a ${label.toLowerCase()}` : 'Choose an option');
   const filteredItems = useMemo(() => {
     if (!isSearchablePicker || !searchQuery.trim()) {
       return items;
@@ -233,7 +233,7 @@ function PickerField({
 
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
+      {!!label && <Text style={styles.label}>{label}</Text>}
       <Pressable ref={triggerRef} style={[styles.dropdownTrigger, open && styles.dropdownTriggerOpen]} onPress={openPicker}>
         <Text style={[styles.dropdownTriggerText, !selectedValue && styles.dropdownPlaceholder]} numberOfLines={1}>
           {selectedLabel}
@@ -251,7 +251,7 @@ function PickerField({
             onPress={() => undefined}
           >
             <View style={styles.dropdownSheetHeader}>
-              <Text style={styles.dropdownSheetLabel}>{label}</Text>
+              {!!label && <Text style={styles.dropdownSheetLabel}>{label}</Text>}
               <Pressable onPress={() => setOpen(false)} hitSlop={8}>
                 <Text style={styles.dropdownSheetClose}>Close</Text>
               </Pressable>
@@ -419,7 +419,7 @@ function AsyncPickerField({
             </View>
             {loading ? (
               <View style={styles.dropdownEmptyState}>
-                <ActivityIndicator color="#6334D1" />
+                <ActivityIndicator color="#8B5CF6" />
               </View>
             ) : null}
             {error ? (
@@ -480,7 +480,7 @@ function ToggleList({
           return (
             <View key={option.id} style={styles.toggleRow}>
               <Text style={styles.toggleText}>{option.label}</Text>
-               <Switch value={enabled} onValueChange={() => onToggle(option.id)} trackColor={{ false: '#333333', true: '#6334D1' }} />
+              <Switch value={enabled} onValueChange={() => onToggle(option.id)} trackColor={{ false: '#333333', true: '#8B5CF6' }} />
             </View>
           );
         })}
@@ -503,7 +503,13 @@ function WeekSelector({
       {Array.from({ length: weekCount }, (_, index) => index + 1).map((week) => {
         const selected = selectedWeeks.includes(week);
         return (
-          <Pressable key={week} onPress={() => onToggle(week)} style={[styles.pill, selected && styles.pillSelected]}>
+          <Pressable
+            key={week}
+            onPress={() => onToggle(week)}
+            style={[styles.pill, selected && styles.pillSelected]}
+            // @ts-ignore
+            title={`Week ${week}`}
+          >
             <Text style={[styles.pillText, selected && styles.pillTextSelected]}>Week {week}</Text>
           </Pressable>
         );
@@ -512,10 +518,13 @@ function WeekSelector({
   );
 }
 
-function normalizeCampaignLines(campaignLines: CampaignLine[], maxWeeks: number) {
-  return campaignLines.map((line) => ({
-    ...line,
-    selectedWeeks: [...new Set(line.selectedWeeks.filter((week) => week >= 1 && week <= maxWeeks))].sort((a, b) => a - b),
+function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: number): CampaignMarket[] {
+  return campaignMarkets.map((market) => ({
+    ...market,
+    assets: market.assets.map((asset) => ({
+      ...asset,
+      selectedWeeks: [...new Set(asset.selectedWeeks.filter((week) => week >= 1 && week <= maxWeeks))].sort((a, b) => a - b),
+    })),
   }));
 }
 
@@ -617,14 +626,15 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
 
   useEffect(() => {
     setValues((current) => {
-      const normalizedLines = normalizeCampaignLines(current.campaignLines, numberOfWeeks);
-      const changed = normalizedLines.some((line, index) => line.selectedWeeks.join(',') !== current.campaignLines[index]?.selectedWeeks.join(','));
+      const normalizedMarkets = normalizeCampaignMarkets(current.campaignMarkets, numberOfWeeks);
+      const flattenWeeks = (markets: CampaignMarket[]) => markets.flatMap(m => m.assets.flatMap(a => a.selectedWeeks)).join(',');
+      const changed = flattenWeeks(normalizedMarkets) !== flattenWeeks(current.campaignMarkets);
 
       return changed
         ? {
-            ...current,
-            campaignLines: normalizedLines,
-          }
+          ...current,
+          campaignMarkets: normalizedMarkets,
+        }
         : current;
     });
   }, [numberOfWeeks]);
@@ -638,7 +648,14 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
     const timeoutId = setTimeout(async () => {
       try {
         setCalculating(true);
-        const result = await calculateCampaign(values.campaignLines);
+        const flatLines: CampaignLine[] = values.campaignMarkets.flatMap((market) =>
+          market.assets.map((asset) => ({
+            ...asset,
+            market: market.market,
+          }))
+        );
+
+        const result = await calculateCampaign(flatLines);
         if (!active) {
           return;
         }
@@ -666,7 +683,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [loadingMetadata, metadataError, quantityManuallyEdited, values.campaignLines]);
+  }, [loadingMetadata, metadataError, quantityManuallyEdited, values.campaignMarkets]);
 
   function updateField<K extends keyof OrderFormValues>(field: K, value: OrderFormValues[K]) {
     setValues((current) => ({
@@ -694,26 +711,47 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
     }));
   }
 
-  function updateCampaignLine(lineId: string, updater: (line: CampaignLine) => CampaignLine) {
+  function updateCampaignMarket(marketId: string, updater: (market: CampaignMarket) => CampaignMarket) {
     setValues((current) => ({
       ...current,
-      campaignLines: current.campaignLines.map((line) => (line.id === lineId ? updater(line) : line)),
+      campaignMarkets: current.campaignMarkets.map((m) => (m.id === marketId ? updater(m) : m)),
     }));
   }
 
-  function addCampaignLine() {
+  function addCampaignMarket() {
     setValues((current) => ({
       ...current,
-      campaignLines: [...current.campaignLines, createCampaignLine(`line-${Date.now()}`)],
+      campaignMarkets: [...current.campaignMarkets, createCampaignMarket(`market-${Date.now()}`)],
     }));
   }
 
-  function removeCampaignLine(lineId: string) {
+  function removeCampaignMarket(marketId: string) {
     setValues((current) => ({
       ...current,
-      campaignLines: current.campaignLines.length === 1
-        ? current.campaignLines
-        : current.campaignLines.filter((line) => line.id !== lineId),
+      campaignMarkets: current.campaignMarkets.length === 1
+        ? current.campaignMarkets
+        : current.campaignMarkets.filter((m) => m.id !== marketId),
+    }));
+  }
+
+  function addCampaignAsset(marketId: string) {
+    updateCampaignMarket(marketId, (market) => ({
+      ...market,
+      assets: [...market.assets, createCampaignAsset(`asset-${Date.now()}`)],
+    }));
+  }
+
+  function removeCampaignAsset(marketId: string, assetId: string) {
+    updateCampaignMarket(marketId, (market) => ({
+      ...market,
+      assets: market.assets.length === 1 ? market.assets : market.assets.filter((a) => a.id !== assetId),
+    }));
+  }
+
+  function updateCampaignAsset(marketId: string, assetId: string, updater: (asset: CampaignAsset) => CampaignAsset) {
+    updateCampaignMarket(marketId, (market) => ({
+      ...market,
+      assets: market.assets.map((a) => (a.id === assetId ? updater(a) : a)),
     }));
   }
 
@@ -747,7 +785,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <Text style={styles.eyebrow}>Print Workflow Studio</Text>
-          <Text style={styles.title}>FlowIQ</Text>
+          <Text style={styles.title}>ADS CONNECT</Text>
           <Text style={styles.subtitle}>Build campaign schedules, calculate workbook totals, and prepare PrintIQ-ready quotes.</Text>
           <View style={styles.sessionRow}>
             <Text style={styles.sessionText}>
@@ -771,8 +809,10 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
             <View style={styles.card}>
               <View style={styles.panelHeader}>
                 <Text style={styles.cardTitle}>Campaign Planning</Text>
-                <Text style={styles.cardSubtitle}>Set the run window, choose assets by market, and select the active weeks for each line.</Text>
+                {/* <Text style={styles.cardSubtitle}>Set the run window, define markets, and configure assets with their active weeks.</Text> */}
               </View>
+
+              <Field label="Campaign Name" value={values.campaignName} onChangeText={(value) => updateField('campaignName', value)} />
 
               <View style={styles.row}>
                 <View style={styles.rowItem}>
@@ -783,81 +823,99 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
                 </View>
               </View>
 
-              {loadingMetadata && <ActivityIndicator color="#6334D1" />}
+              {loadingMetadata && <ActivityIndicator color="#8B5CF6" />}
               {!!metadataError && <Text style={styles.errorText}>{metadataError}</Text>}
               {!!notice && <Text style={styles.noticeText}>{notice}</Text>}
 
-              {values.campaignLines.map((line, index) => {
-                const assets = assetsForMarket(line.market);
+              {values.campaignMarkets.map((market) => {
+                const availableAssets = assetsForMarket(market.market);
+                const canRemoveMarket = values.campaignMarkets.length > 1;
                 return (
-                  <View key={line.id} style={styles.lineCard}>
+                  <View key={market.id} style={styles.lineCard}>
                     <View style={styles.lineHeader}>
-                      <Text style={styles.lineTitle}>Line {index + 1}</Text>
-                      <Pressable onPress={() => removeCampaignLine(line.id)}>
-                        <Text style={styles.removeText}>Remove</Text>
-                      </Pressable>
+                      <View style={{ flex: 1, marginRight: 12 }}>
+                        <PickerField
+                          label="Market"
+                          selectedValue={market.market}
+                          items={markets.map((m) => ({
+                            label: m.name,
+                            value: m.name,
+                          }))}
+                          onValueChange={(value) =>
+                            updateCampaignMarket(market.id, (m) => ({
+                              ...m,
+                              market: value,
+                              assets: m.assets.map(a => ({ ...a, assetId: '', assetSearch: '' }))
+                            }))
+                          }
+                        />
+                      </View>
+                      {canRemoveMarket && (
+                        <Pressable onPress={() => removeCampaignMarket(market.id)} style={styles.cardCloseBtn}>
+                          <Text style={styles.closeBtnText}>×</Text>
+                        </Pressable>
+                      )}
                     </View>
 
-                    <PickerField
-                      label="Market"
-                      selectedValue={line.market}
-                      items={markets.map((market) => ({
-                        label: market.name,
-                        value: market.name,
-                      }))}
-                      onValueChange={(value) =>
-                        updateCampaignLine(line.id, (current) => ({
-                          ...current,
-                          market: value,
-                          assetId: '',
-                          assetSearch: '',
-                        }))
-                      }
-                    />
-
-                    <PickerField
-                      label="Asset"
-                      selectedValue={line.assetId}
-                      items={[
-                        ...assets.map((asset) => ({
-                          label: asset.label,
-                          value: asset.id,
-                        })),
-                      ]}
-                      placeholder={assets.length ? 'Choose an asset' : 'No assets available'}
-                      onValueChange={(value) =>
-                        updateCampaignLine(line.id, (current) => ({
-                          ...current,
-                          assetId: value,
-                          assetSearch: assets.find((asset) => asset.id === value)?.label ?? '',
-                        }))
-                      }
-                    />
-
-                    <View style={styles.field}>
-                      <Text style={styles.label}>Active weeks</Text>
-                      <WeekSelector
-                        weekCount={numberOfWeeks}
-                        selectedWeeks={line.selectedWeeks}
-                        onToggle={(week) =>
-                          updateCampaignLine(line.id, (current) => ({
-                            ...current,
-                            selectedWeeks: current.selectedWeeks.includes(week)
-                              ? current.selectedWeeks.filter((value) => value !== week)
-                              : [...current.selectedWeeks, week].sort((a, b) => a - b),
-                          }))
-                        }
-                      />
+                    <View style={styles.assetsContainer}>
+                      <Text style={styles.assetGroupLabel}>Assets</Text>
+                      {market.assets.map((asset) => {
+                        const canRemoveAsset = market.assets.length > 1;
+                        return (
+                          <View key={asset.id} style={styles.assetRow}>
+                            <View style={styles.assetPickerWrap}>
+                              <PickerField
+                                label=""
+                                selectedValue={asset.assetId}
+                                items={availableAssets.map((a) => ({
+                                  label: a.label,
+                                  value: a.id,
+                                }))}
+                                placeholder={availableAssets.length ? 'Choose asset' : 'No assets'}
+                                onValueChange={(value) =>
+                                  updateCampaignAsset(market.id, asset.id, (current) => ({
+                                    ...current,
+                                    assetId: value,
+                                    assetSearch: availableAssets.find((a) => a.id === value)?.label ?? '',
+                                  }))
+                                }
+                              />
+                            </View>
+                            <View style={styles.assetWeeksWrap}>
+                              <WeekSelector
+                                weekCount={numberOfWeeks}
+                                selectedWeeks={asset.selectedWeeks}
+                                onToggle={(week) =>
+                                  updateCampaignAsset(market.id, asset.id, (current) => ({
+                                    ...current,
+                                    selectedWeeks: current.selectedWeeks.includes(week)
+                                      ? current.selectedWeeks.filter((v) => v !== week)
+                                      : [...current.selectedWeeks, week].sort((a, b) => a - b),
+                                  }))
+                                }
+                              />
+                            </View>
+                            <View style={{ width: 32, alignItems: 'center' }}>
+                              {canRemoveAsset && (
+                                <Pressable onPress={() => removeCampaignAsset(market.id, asset.id)} style={styles.assetRemoveBtn}>
+                                  <Text style={styles.removeText}>×</Text>
+                                </Pressable>
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
+                      <Pressable style={styles.addAssetBtn} onPress={() => addCampaignAsset(market.id)}>
+                        <Text style={styles.addAssetBtnText}>+ Add Asset</Text>
+                      </Pressable>
                     </View>
                   </View>
                 );
               })}
 
-              <Pressable style={styles.secondaryButton} onPress={addCampaignLine}>
-                <Text style={styles.secondaryButtonText}>Add Line</Text>
+              <Pressable style={styles.secondaryButton} onPress={addCampaignMarket}>
+                <Text style={styles.secondaryButtonText}>Add Market</Text>
               </Pressable>
-
-              <Field label="Job title" value={values.jobTitle} onChangeText={(value) => updateField('jobTitle', value)} />
 
               <Pressable style={[styles.primaryButton, (submitting || calculating) && styles.buttonDisabled]} onPress={handleSubmitQuote} disabled={submitting || calculating}>
                 <Text style={styles.primaryButtonText}>{submitting ? 'Submitting...' : calculating ? 'Calculating...' : 'Create Quote In PrintIQ'}</Text>
@@ -871,7 +929,9 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
             <View style={styles.sideCard}>
               <Text style={styles.sideEyebrow}>Live Summary</Text>
               <Text style={styles.sideTitle}>Campaign Snapshot</Text>
-              <Text style={styles.sideMeta}>{values.campaignLines.length} lines configured</Text>
+              <Text style={styles.sideMeta}>
+                {values.campaignMarkets.reduce((acc, m) => acc + m.assets.length, 0)} assets configured
+              </Text>
 
               {summary ? (
                 <>
@@ -896,12 +956,12 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
                   <BreakdownTable breakdown={summary.grandTotal.breakdown} />
                 </>
               ) : (
-                <Text style={styles.sideMeta}>Configure campaign lines to see totals here.</Text>
+                <Text style={styles.sideMeta}>Configure campaign assets to see totals here.</Text>
               )}
 
               <View style={styles.sideDivider} />
-              <Text style={styles.sideSectionTitle}>Job Title</Text>
-              <Text style={styles.sideBody}>{values.jobTitle || 'Untitled quote'}</Text>
+              <Text style={styles.sideSectionTitle}>Campaign Name</Text>
+              <Text style={styles.sideBody}>{values.campaignName || 'Untitled campaign'}</Text>
             </View>
           </View>
         </View>
@@ -913,7 +973,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#0F172A',
   },
   backgroundGlowTop: {
     position: 'absolute',
@@ -922,7 +982,7 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: '#6334D1',
+    backgroundColor: '#8B5CF6',
     opacity: 0.08,
   },
   backgroundGlowBottom: {
@@ -932,7 +992,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: '#7C4DFF',
+    backgroundColor: '#8B5CF6',
     opacity: 0.06,
   },
   content: {
@@ -948,7 +1008,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   eyebrow: {
-    color: '#A78BFA',
+    color: '#8B5CF6',
     fontSize: 13,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -987,7 +1047,7 @@ const styles = StyleSheet.create({
     borderColor: '#333333',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
   },
   sessionButtonText: {
     color: '#FFFFFF',
@@ -1002,12 +1062,12 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 999,
     overflow: 'hidden',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
   },
   progressFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: '#6334D1',
+    backgroundColor: '#8B5CF6',
   },
   progressText: {
     color: '#888888',
@@ -1024,13 +1084,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 18,
-    backgroundColor: '#111111',
+    backgroundColor: '#0F172A',
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#232733',
   },
   stepItemActive: {
-    backgroundColor: '#1A1125',
-    borderColor: '#6334D1',
+    backgroundColor: '#232733',
+    borderColor: '#8B5CF6',
   },
   stepDot: {
     width: 30,
@@ -1038,13 +1098,13 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2D1B69',
+    backgroundColor: '#232733',
   },
   stepDotActive: {
-    backgroundColor: '#6334D1',
+    backgroundColor: '#8B5CF6',
   },
   stepDotComplete: {
-    backgroundColor: '#7C4DFF',
+    backgroundColor: '#8B5CF6',
   },
   stepDotText: {
     color: '#ffffff',
@@ -1062,7 +1122,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   pageEyebrow: {
-    color: '#A78BFA',
+    color: '#8B5CF6',
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -1091,12 +1151,12 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   card: {
-    backgroundColor: '#111111',
+    backgroundColor: '#0F172A',
     borderRadius: 28,
     padding: 20,
     gap: 14,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#232733',
   },
   panelHeader: {
     gap: 6,
@@ -1111,14 +1171,14 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   lineCard: {
-      borderWidth: 1,
-      borderColor: '#2A2A2A',
-      borderRadius: 20,
-      padding: 14,
-      gap: 10,
-      backgroundColor: '#1A1A1A',
-      overflow: 'visible',
-    },
+    borderWidth: 1,
+    borderColor: '#232733',
+    borderRadius: 20,
+    padding: 14,
+    gap: 10,
+    backgroundColor: '#1C1F26',
+    overflow: 'visible',
+  },
   lineHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1142,23 +1202,23 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   input: {
-      borderRadius: 16,
-      borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: 1,
     borderColor: '#333333',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: '#1A1A1A',
-      color: '#F0F0F0',
-    },
-    dateTriggerText: {
-      color: '#F0F0F0',
-      fontSize: 16,
-    },
+    backgroundColor: '#1C1F26',
+    color: '#F0F0F0',
+  },
+  dateTriggerText: {
+    color: '#F0F0F0',
+    fontSize: 16,
+  },
   dropdownTrigger: {
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#333333',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
     minHeight: 50,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -1166,8 +1226,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   dropdownTriggerOpen: {
-    borderColor: '#6334D1',
-    shadowColor: '#6334D1',
+    borderColor: '#8B5CF6',
+    shadowColor: '#8B5CF6',
     shadowOpacity: 0.2,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -1191,7 +1251,7 @@ const styles = StyleSheet.create({
   },
   dropdownOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     alignItems: 'center',
     padding: 16,
   },
@@ -1202,11 +1262,11 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   dropdownSurface: {
-    backgroundColor: '#111111',
+    backgroundColor: '#0F172A',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    shadowColor: '#000000',
+    borderColor: '#232733',
+    shadowColor: '#0F172A',
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 12 },
@@ -1241,7 +1301,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   dropdownSheetClose: {
-    color: '#A78BFA',
+    color: '#8B5CF6',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1260,7 +1320,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#333333',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
     color: '#F0F0F0',
     paddingHorizontal: 14,
     paddingVertical: 11,
@@ -1273,13 +1333,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#222222',
+    borderBottomColor: '#232733',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   dropdownItemActive: {
-    backgroundColor: '#1A1125',
+    backgroundColor: '#232733',
   },
   dropdownItemLast: {
     borderBottomWidth: 0,
@@ -1299,10 +1359,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   dropdownItemTextActive: {
-    color: '#A78BFA',
+    color: '#8B5CF6',
   },
   dropdownItemCheck: {
-    color: '#6334D1',
+    color: '#8B5CF6',
     fontSize: 16,
     fontWeight: '800',
   },
@@ -1337,7 +1397,7 @@ const styles = StyleSheet.create({
     borderColor: '#333333',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
   },
   pillSelected: {
     backgroundColor: '#FFFFFF',
@@ -1349,14 +1409,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   pillTextSelected: {
-    color: '#000000',
+    color: '#0F172A',
   },
   toggleList: {
     gap: 10,
   },
   toggleRow: {
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#232733',
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -1364,7 +1424,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
   },
   toggleText: {
     flex: 1,
@@ -1384,7 +1444,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: '#000000',
+    color: '#0F172A',
     fontSize: 15,
     fontWeight: '900',
   },
@@ -1395,7 +1455,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
   },
   secondaryButtonText: {
     color: '#FFFFFF',
@@ -1407,17 +1467,17 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     borderRadius: 20,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
     padding: 14,
     gap: 8,
   },
   summaryCardDark: {
     borderRadius: 20,
-    backgroundColor: '#0D0D1A',
+    backgroundColor: '#232733',
     padding: 14,
     gap: 8,
     borderWidth: 1,
-    borderColor: '#2D1B69',
+    borderColor: '#232733',
   },
   summaryTitle: {
     color: '#FFFFFF',
@@ -1433,7 +1493,7 @@ const styles = StyleSheet.create({
     color: '#888888',
   },
   summaryMetaDark: {
-    color: '#A78BFA',
+    color: '#8B5CF6',
   },
   breakdownTable: {
     flexDirection: 'row',
@@ -1443,12 +1503,12 @@ const styles = StyleSheet.create({
   breakdownCell: {
     minWidth: 92,
     borderRadius: 16,
-    backgroundColor: '#222222',
+    backgroundColor: '#232733',
     padding: 10,
     gap: 4,
   },
   breakdownCellInverse: {
-    backgroundColor: '#1A1125',
+    backgroundColor: '#232733',
   },
   breakdownLabel: {
     color: '#888888',
@@ -1456,7 +1516,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   breakdownLabelInverse: {
-    color: '#A78BFA',
+    color: '#8B5CF6',
   },
   breakdownValue: {
     color: '#FFFFFF',
@@ -1467,15 +1527,15 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   sideCard: {
-    backgroundColor: '#111111',
+    backgroundColor: '#0F172A',
     borderRadius: 28,
     padding: 18,
     gap: 12,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#232733',
   },
   sideEyebrow: {
-    color: '#A78BFA',
+    color: '#8B5CF6',
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -1497,13 +1557,13 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     width: '47%',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
     borderRadius: 18,
     padding: 12,
     gap: 4,
   },
   metricLabel: {
-    color: '#A78BFA',
+    color: '#8B5CF6',
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -1515,10 +1575,10 @@ const styles = StyleSheet.create({
   },
   sideDivider: {
     height: 1,
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#232733',
   },
   sideSectionTitle: {
-    color: '#A78BFA',
+    color: '#8B5CF6',
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -1537,13 +1597,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: '#D0D0D0',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
     borderRadius: 18,
     padding: 14,
   },
   emptyState: {
     borderRadius: 20,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
     padding: 20,
     gap: 6,
   },
@@ -1565,10 +1625,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 18,
     paddingVertical: 13,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
   },
   footerButtonDisabled: {
-    backgroundColor: '#111111',
+    backgroundColor: '#0F172A',
     opacity: 0.6,
   },
   footerButtonText: {
@@ -1582,7 +1642,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 18,
     paddingVertical: 13,
-    backgroundColor: '#6334D1',
+    backgroundColor: '#8B5CF6',
   },
   footerButtonPrimaryText: {
     color: '#FFFFFF',
@@ -1594,6 +1654,70 @@ const styles = StyleSheet.create({
   },
   noticeText: {
     color: '#6EE7B7',
+    fontWeight: '800',
+  },
+  assetsContainer: {
+    gap: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#232733',
+    paddingTop: 12,
+    marginTop: 4,
+  },
+  assetGroupLabel: {
+    color: '#A0A0A0',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  assetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    marginBottom: -4,
+  },
+  assetHeaderLabel: {
+    color: '#888888',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  cardCloseBtn: {
+    padding: 8,
+    marginTop: 18,
+  },
+  closeBtnText: {
+    color: '#666666',
+    fontSize: 24,
+    fontWeight: '300',
+  },
+  assetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  assetPickerWrap: {
+    flex: 1.2,
+  },
+  assetWeeksWrap: {
+    flex: 1,
+  },
+  assetRemoveBtn: {
+    padding: 8,
+  },
+  addAssetBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#1C1F26',
+    borderWidth: 1,
+    borderColor: '#232733',
+    marginTop: 4,
+  },
+  addAssetBtnText: {
+    color: '#8B5CF6',
+    fontSize: 13,
     fontWeight: '800',
   },
 });

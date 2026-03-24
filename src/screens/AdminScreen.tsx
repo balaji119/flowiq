@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -11,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { HoverablePressable as Pressable } from '../components/HoverablePressable';
 import { useAuth } from '../context/AuthContext';
 import { createTenant, createUser, fetchPrintIqOptionsStatus, fetchTenants, fetchUsers, refreshPrintIqOptionsCache, updateUser } from '../services/adminApi';
 import { AuthRole, AuthUser, PrintIqOptionsCacheStatus, TenantRecord } from '../types';
@@ -354,7 +354,7 @@ export function AdminScreen({ onBack }: AdminScreenProps) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#0F172A',
   },
   content: {
     padding: 20,
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   eyebrow: {
-    color: '#A78BFA',
+    color: '#8B5CF6',
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -395,19 +395,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderWidth: 1,
     borderColor: '#333333',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
   },
   backButtonText: {
     color: '#FFFFFF',
     fontWeight: '800',
   },
   card: {
-    backgroundColor: '#111111',
+    backgroundColor: '#0F172A',
     borderRadius: 28,
     padding: 20,
     gap: 14,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#232733',
   },
   cardTitle: {
     color: '#FFFFFF',
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
     borderColor: '#333333',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
     color: '#F0F0F0',
   },
   chipWrap: {
@@ -446,11 +446,11 @@ const styles = StyleSheet.create({
     borderColor: '#333333',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
   },
   chipActive: {
-    backgroundColor: '#6334D1',
-    borderColor: '#6334D1',
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
   },
   chipText: {
     color: '#A0A0A0',
@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   primaryButtonText: {
-    color: '#000000',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: '900',
   },
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cacheLabel: {
-    color: '#A78BFA',
+    color: '#8B5CF6',
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -510,7 +510,7 @@ const styles = StyleSheet.create({
   },
   userCard: {
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#232733',
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -518,7 +518,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#1C1F26',
   },
   userMeta: {
     flex: 1,

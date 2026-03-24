@@ -1,19 +1,26 @@
-import { CampaignLine, OrderFormValues } from './types';
+import { CampaignAsset, CampaignMarket, OrderFormValues } from './types';
 
-export function createCampaignLine(id: string): CampaignLine {
+export function createCampaignAsset(id: string): CampaignAsset {
   return {
     id,
-    market: 'Sydney',
     assetId: '',
     assetSearch: '',
     selectedWeeks: [1],
   };
 }
 
+export function createCampaignMarket(id: string): CampaignMarket {
+  return {
+    id,
+    market: 'Sydney',
+    assets: [createCampaignAsset(`asset-${id}-1`)],
+  };
+}
+
 export const defaultFormValues: OrderFormValues = {
   customerCode: 'C00014',
   customerReference: 'Q14259:1.0',
-  jobTitle: 'Campaign Print Order',
+  campaignName: 'Campaign Print Order',
   jobDescription: '',
   notes: '',
   productCategory: '',
@@ -32,7 +39,7 @@ export const defaultFormValues: OrderFormValues = {
   kindName: 'Campaign-01',
   campaignStartDate: new Date().toISOString().slice(0, 10),
   numberOfWeeks: '3',
-  campaignLines: [createCampaignLine('line-1')],
+  campaignMarkets: [createCampaignMarket('market-1')],
   contact: {
     title: 'Accounts Payable',
     firstName: 'Accounts',
