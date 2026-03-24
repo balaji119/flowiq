@@ -33,13 +33,33 @@ const steps = [
 ] as const;
 
 const QUOTE_BUILDER_DRAFT_KEY = 'adsconnect-quote-builder-draft';
+const COLORS = {
+  page: '#313B4D',
+  card: '#242B36',
+  cardStrong: '#1C1F26',
+  panel: '#232733',
+  input: '#38455B',
+  inputBorder: '#4F5C73',
+  cardBorder: '#3F4A5F',
+  panelBorder: '#4B556A',
+  sectionBorder: '#46526A',
+  progressTrack: '#5C6B84',
+  step: '#56647C',
+  stepBorder: '#697892',
+  stepActive: '#2A3548',
+  textMuted: '#A7B0C0',
+  textSoft: '#C3CBD8',
+  textPlaceholder: '#6F7E93',
+  textDim: '#8894A7',
+  accent: '#8B5CF6',
+} as const;
 
 const webDateInputStyle: CSSProperties = {
   borderRadius: 16,
   borderWidth: '1px',
   borderStyle: 'solid',
-  borderColor: '#4F5C73',
-  backgroundColor: '#38455B',
+  borderColor: COLORS.inputBorder,
+  backgroundColor: COLORS.input,
   minHeight: '50px',
   padding: '0 14px',
   fontSize: 16,
@@ -1322,7 +1342,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   subtitle: {
-    color: '#A7B0C0',
+    color: COLORS.textMuted,
     fontSize: 16,
     lineHeight: 24,
     maxWidth: 720,
@@ -1335,7 +1355,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   sessionText: {
-    color: '#A7B0C0',
+    color: COLORS.textMuted,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1346,10 +1366,10 @@ const styles = StyleSheet.create({
   sessionButton: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#445067',
+    borderColor: COLORS.cardBorder,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#1C1F26',
+    backgroundColor: COLORS.cardStrong,
   },
   sessionButtonText: {
     color: '#FFFFFF',
@@ -1364,7 +1384,7 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 999,
     overflow: 'hidden',
-    backgroundColor: '#5C6B84',
+    backgroundColor: COLORS.progressTrack,
   },
   progressFill: {
     height: '100%',
@@ -1379,14 +1399,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: '#56647C',
+    backgroundColor: COLORS.step,
     borderWidth: 1,
-    borderColor: '#697892',
+    borderColor: COLORS.stepBorder,
     alignItems: 'center',
   },
   stepItemActive: {
-    borderColor: '#8B5CF6',
-    backgroundColor: '#2A3548',
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.stepActive,
   },
   stepText: {
     color: '#D2D8E2',
@@ -1413,12 +1433,12 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   card: {
-    backgroundColor: '#242B36',
+    backgroundColor: COLORS.card,
     borderRadius: 28,
     padding: 20,
     gap: 14,
     borderWidth: 1,
-    borderColor: '#3F4A5F',
+    borderColor: COLORS.cardBorder,
   },
   panelHeader: {
     gap: 6,
@@ -1429,16 +1449,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   cardSubtitle: {
-    color: '#A7B0C0',
+    color: COLORS.textMuted,
     lineHeight: 22,
   },
   lineCard: {
     borderWidth: 1,
-    borderColor: '#4B556A',
+    borderColor: COLORS.panelBorder,
     borderRadius: 20,
     padding: 14,
     gap: 10,
-    backgroundColor: '#232733',
+    backgroundColor: COLORS.panel,
     overflow: 'visible',
   },
   lineHeader: {
@@ -1459,17 +1479,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    color: '#C3CBD8',
+    color: COLORS.textSoft,
     fontSize: 14,
     fontWeight: '800',
   },
   input: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#4F5C73',
+    borderColor: COLORS.inputBorder,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: '#38455B',
+    backgroundColor: COLORS.input,
     color: '#F0F0F0',
   },
   dateTriggerText: {
@@ -1477,13 +1497,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   dateTriggerPlaceholder: {
-    color: '#6f7e93',
+    color: COLORS.textPlaceholder,
   },
   dropdownTrigger: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#4F5C73',
-    backgroundColor: '#38455B',
+    borderColor: COLORS.inputBorder,
+    backgroundColor: COLORS.input,
     minHeight: 50,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -1491,8 +1511,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   dropdownTriggerOpen: {
-    borderColor: '#8B5CF6',
-    shadowColor: '#8B5CF6',
+    borderColor: COLORS.accent,
+    shadowColor: COLORS.accent,
     shadowOpacity: 0.2,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -1506,11 +1526,11 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   dropdownPlaceholder: {
-    color: '#666666',
+    color: COLORS.textPlaceholder,
     fontWeight: '500',
   },
   dropdownChevron: {
-    color: '#888888',
+    color: COLORS.textDim,
     fontSize: 11,
     fontWeight: '800',
   },
@@ -1527,10 +1547,10 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   dropdownSurface: {
-    backgroundColor: '#1C1F26',
+    backgroundColor: COLORS.cardStrong,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#3F4A5F',
+    borderColor: COLORS.cardBorder,
     shadowColor: '#0F172A',
     shadowOpacity: 0.4,
     shadowRadius: 18,
@@ -1559,14 +1579,14 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   dropdownSheetLabel: {
-    color: '#C3CBD8',
+    color: COLORS.textSoft,
     fontSize: 13,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   dropdownSheetClose: {
-    color: '#8B5CF6',
+    color: COLORS.accent,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1584,8 +1604,8 @@ const styles = StyleSheet.create({
   dropdownSearchInput: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#4F5C73',
-    backgroundColor: '#2F3A4F',
+    borderColor: COLORS.inputBorder,
+    backgroundColor: COLORS.input,
     color: '#F0F0F0',
     paddingHorizontal: 14,
     paddingVertical: 11,
@@ -1604,7 +1624,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dropdownItemActive: {
-    backgroundColor: '#232733',
+    backgroundColor: COLORS.panel,
   },
   dropdownItemLast: {
     borderBottomWidth: 0,
@@ -1620,14 +1640,14 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   dropdownItemHint: {
-    color: '#666666',
+    color: COLORS.textPlaceholder,
     fontSize: 12,
   },
   dropdownItemTextActive: {
-    color: '#8B5CF6',
+    color: COLORS.accent,
   },
   dropdownItemCheck: {
-    color: '#8B5CF6',
+    color: COLORS.accent,
     fontSize: 16,
     fontWeight: '800',
   },
@@ -1636,7 +1656,7 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
   },
   dropdownEmptyText: {
-    color: '#666666',
+    color: COLORS.textPlaceholder,
     fontSize: 14,
     textAlign: 'center',
   },
@@ -1659,17 +1679,17 @@ const styles = StyleSheet.create({
   pill: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#4B556A',
+    borderColor: COLORS.panelBorder,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#232733',
+    backgroundColor: COLORS.panel,
   },
   pillSelected: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
   },
   pillText: {
-    color: '#D4DAE4',
+    color: COLORS.textSoft,
     fontSize: 13,
     fontWeight: '800',
   },
@@ -1681,7 +1701,7 @@ const styles = StyleSheet.create({
   },
   toggleRow: {
     borderWidth: 1,
-    borderColor: '#4B556A',
+    borderColor: COLORS.panelBorder,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -1689,7 +1709,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#1C1F26',
+    backgroundColor: COLORS.cardStrong,
   },
   toggleText: {
     flex: 1,
@@ -1703,7 +1723,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     borderRadius: 16,
-    backgroundColor: '#8B5CF6',
+    backgroundColor: COLORS.accent,
     paddingHorizontal: 18,
     paddingVertical: 14,
     alignItems: 'center',
@@ -1716,14 +1736,14 @@ const styles = StyleSheet.create({
   secondaryButton: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#4B556A',
+    borderColor: COLORS.panelBorder,
     paddingHorizontal: 14,
     paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: '#232733',
+    backgroundColor: COLORS.panel,
   },
   secondaryButtonText: {
-    color: '#8B5CF6',
+    color: COLORS.accent,
     fontSize: 14,
     fontWeight: '800',
   },
@@ -1732,17 +1752,17 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     borderRadius: 20,
-    backgroundColor: '#232733',
+    backgroundColor: COLORS.panel,
     padding: 14,
     gap: 8,
   },
   summaryCardDark: {
     borderRadius: 20,
-    backgroundColor: '#232733',
+    backgroundColor: COLORS.panel,
     padding: 14,
     gap: 8,
     borderWidth: 1,
-    borderColor: '#4B556A',
+    borderColor: COLORS.panelBorder,
   },
   summaryTitle: {
     color: '#FFFFFF',
@@ -1755,10 +1775,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   summaryMeta: {
-    color: '#A7B0C0',
+    color: COLORS.textMuted,
   },
   summaryMetaDark: {
-    color: '#8B5CF6',
+    color: COLORS.accent,
   },
   breakdownTable: {
     flexDirection: 'row',
@@ -1768,15 +1788,15 @@ const styles = StyleSheet.create({
   breakdownCell: {
     minWidth: 92,
     borderRadius: 16,
-    backgroundColor: '#2F3A4F',
+    backgroundColor: COLORS.input,
     padding: 10,
     gap: 4,
   },
   breakdownCellInverse: {
-    backgroundColor: '#475569',
+    backgroundColor: COLORS.panel,
   },
   breakdownLabel: {
-    color: '#C3CBD8',
+    color: COLORS.textSoft,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -1792,12 +1812,12 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   sideCard: {
-    backgroundColor: '#242B36',
+    backgroundColor: COLORS.card,
     borderRadius: 28,
     padding: 18,
     gap: 12,
     borderWidth: 1,
-    borderColor: '#3F4A5F',
+    borderColor: COLORS.cardBorder,
   },
   sideEyebrow: {
     color: '#8B5CF6',
@@ -1812,7 +1832,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   sideMeta: {
-    color: '#A7B0C0',
+    color: COLORS.textMuted,
     lineHeight: 20,
   },
   metricGrid: {
@@ -1825,9 +1845,9 @@ const styles = StyleSheet.create({
   },
   liveSummarySection: {
     borderWidth: 1,
-    borderColor: '#46526A',
+    borderColor: COLORS.sectionBorder,
     borderRadius: 20,
-    backgroundColor: '#202A3A',
+    backgroundColor: COLORS.cardStrong,
     padding: 12,
   },
   liveSummaryGrid: {
@@ -1837,18 +1857,18 @@ const styles = StyleSheet.create({
   },
   liveSummaryDivider: {
     height: 1,
-    backgroundColor: '#46526A',
+    backgroundColor: COLORS.sectionBorder,
     opacity: 0.9,
   },
   metricCard: {
     width: '47%',
-    backgroundColor: '#2F3A4F',
+    backgroundColor: COLORS.panel,
     borderRadius: 18,
     padding: 12,
     gap: 4,
   },
   metricLabel: {
-    color: '#C3CBD8',
+    color: COLORS.textSoft,
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -1862,7 +1882,7 @@ const styles = StyleSheet.create({
     color: '#8B5CF6',
   },
   helperText: {
-    color: '#666666',
+    color: COLORS.textPlaceholder,
     fontSize: 12,
   },
   previewText: {
@@ -1870,13 +1890,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: '#D0D0D0',
-    backgroundColor: '#232733',
+    backgroundColor: COLORS.panel,
     borderRadius: 18,
     padding: 14,
   },
   emptyState: {
     borderRadius: 20,
-    backgroundColor: '#232733',
+    backgroundColor: COLORS.panel,
     padding: 20,
     gap: 6,
   },
@@ -1886,7 +1906,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   mutedText: {
-    color: '#A7B0C0',
+    color: COLORS.textMuted,
   },
   errorText: {
     color: '#FF6B7A',
@@ -1899,12 +1919,12 @@ const styles = StyleSheet.create({
   assetsContainer: {
     gap: 6,
     borderTopWidth: 1,
-    borderTopColor: '#475569',
+    borderTopColor: COLORS.sectionBorder,
     paddingTop: 12,
     marginTop: 4,
   },
   assetGroupLabel: {
-    color: '#C3CBD8',
+    color: COLORS.textSoft,
     fontSize: 14,
     fontWeight: '800',
   },
@@ -1916,7 +1936,7 @@ const styles = StyleSheet.create({
     marginBottom: -4,
   },
   assetHeaderLabel: {
-    color: '#A7B0C0',
+    color: COLORS.textMuted,
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -1927,7 +1947,7 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
   closeBtnText: {
-    color: '#666666',
+    color: COLORS.textPlaceholder,
     fontSize: 24,
     fontWeight: '300',
   },
@@ -1950,13 +1970,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: '#232733',
+    backgroundColor: COLORS.panel,
     borderWidth: 1,
-    borderColor: '#4B556A',
+    borderColor: COLORS.panelBorder,
     marginTop: 4,
   },
   addAssetBtnText: {
-    color: '#8B5CF6',
+    color: COLORS.accent,
     fontSize: 13,
     fontWeight: '800',
   },
@@ -1966,22 +1986,22 @@ const styles = StyleSheet.create({
   uploadButton: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#8B5CF6',
-    backgroundColor: '#232733',
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.panel,
     paddingHorizontal: 14,
     paddingVertical: 12,
     alignItems: 'center',
   },
   uploadButtonText: {
-    color: '#8B5CF6',
+    color: COLORS.accent,
     fontSize: 14,
     fontWeight: '800',
   },
   uploadFileInfo: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#4B556A',
-    backgroundColor: '#232733',
+    borderColor: COLORS.panelBorder,
+    backgroundColor: COLORS.panel,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
