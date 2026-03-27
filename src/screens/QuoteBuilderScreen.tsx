@@ -1,10 +1,7 @@
 import { createElement, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -14,7 +11,6 @@ import {
   View,
 } from 'react-native';
 import { HoverablePressable as Pressable } from '../components/HoverablePressable';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { createCampaignAsset, createCampaignMarket, createDefaultFormValues } from '../constants';
 import { useAuth } from '../context/AuthContext';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
@@ -140,42 +136,24 @@ function Field({
   );
 }
 
-function parseDateInput(value: string) {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-}
-
 async function setStoredDraft(value: string | null) {
-  if (Platform.OS === 'web') {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    if (value === null) {
-      window.localStorage.removeItem(QUOTE_BUILDER_DRAFT_KEY);
-    } else {
-      window.localStorage.setItem(QUOTE_BUILDER_DRAFT_KEY, value);
-    }
+  if (typeof window === 'undefined') {
     return;
   }
 
   if (value === null) {
-    await AsyncStorage.removeItem(QUOTE_BUILDER_DRAFT_KEY);
+    window.localStorage.removeItem(QUOTE_BUILDER_DRAFT_KEY);
   } else {
-    await AsyncStorage.setItem(QUOTE_BUILDER_DRAFT_KEY, value);
+    window.localStorage.setItem(QUOTE_BUILDER_DRAFT_KEY, value);
   }
 }
 
 async function getStoredDraft() {
-  if (Platform.OS === 'web') {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-
-    return window.localStorage.getItem(QUOTE_BUILDER_DRAFT_KEY);
+  if (typeof window === 'undefined') {
+    return null;
   }
 
-  return AsyncStorage.getItem(QUOTE_BUILDER_DRAFT_KEY);
+  return window.localStorage.getItem(QUOTE_BUILDER_DRAFT_KEY);
 }
 
 function DateField({
@@ -187,8 +165,6 @@ function DateField({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const [showNativePicker, setShowNativePicker] = useState(false);
-  const currentDate = useMemo(() => parseDateInput(value), [value]);
   const webInputRef = useRef<HTMLInputElement | null>(null);
 
   function openWebDatePicker() {
@@ -203,47 +179,21 @@ function DateField({
     }
   }
 
-  if (Platform.OS === 'web') {
-    return (
-      <View style={styles.field}>
-        <Text style={styles.label}>{label}</Text>
-        {createElement('input', {
-          ref: webInputRef,
-          type: 'date',
-          value,
-          onChange: (event: { target: { value: string } }) => onChange(event.target.value),
-          onClick: openWebDatePicker,
-          onFocus: openWebDatePicker,
-          style: {
-            ...webDateInputStyle,
-            color: value ? '#F0F0F0' : '#6f7e93',
-          },
-        })}
-      </View>
-    );
-  }
-
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable style={styles.input} onPress={() => setShowNativePicker(true)}>
-        <Text style={[styles.dateTriggerText, !value && styles.dateTriggerPlaceholder]}>{value || 'Select date'}</Text>
-      </Pressable>
-      {showNativePicker && (
-        <DateTimePicker
-          value={currentDate}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
-            if (Platform.OS !== 'ios') {
-              setShowNativePicker(false);
-            }
-            if (event.type === 'set' && selectedDate) {
-              onChange(selectedDate.toISOString().slice(0, 10));
-            }
-          }}
-        />
-      )}
+      {createElement('input', {
+        ref: webInputRef,
+        type: 'date',
+        value,
+        onChange: (event: { target: { value: string } }) => onChange(event.target.value),
+        onClick: openWebDatePicker,
+        onFocus: openWebDatePicker,
+        style: {
+          ...webDateInputStyle,
+          color: value ? '#F0F0F0' : '#6f7e93',
+        },
+      })}
     </View>
   );
 }
@@ -266,7 +216,6 @@ function PickerField({
   const [anchor, setAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const triggerRef = useRef<View>(null);
   const { width, height } = useWindowDimensions();
-  const isWeb = Platform.OS === 'web';
   const isSearchablePicker = !!label && ['asset', 'market'].includes(label.toLowerCase());
   const selectedLabel = items.find((item) => item.value === selectedValue)?.label || placeholder || 'Select';
   const sheetTitle = placeholder || (label ? `Choose a ${label.toLowerCase()}` : 'Choose an option');
@@ -285,7 +234,7 @@ function PickerField({
       return;
     }
 
-    if (!isWeb || typeof window === 'undefined') {
+    if (typeof window === 'undefined') {
       return;
     }
 
@@ -303,7 +252,7 @@ function PickerField({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [filteredItems, isWeb, onValueChange, open]);
+  }, [filteredItems, onValueChange, open]);
 
   const webPanelWidth = anchor ? Math.min(Math.max(anchor.width, 360), 520, width - 32) : Math.min(width - 32, 520);
   const webPanelLeft = anchor ? Math.max(16, Math.min(anchor.x, width - webPanelWidth - 16)) : 16;
@@ -315,7 +264,7 @@ function PickerField({
   const webPanelBottom = anchor && openAbove ? Math.max(16, height - anchor.y + 8) : undefined;
 
   function openPicker() {
-    if (isWeb && triggerRef.current?.measureInWindow) {
+    if (triggerRef.current?.measureInWindow) {
       triggerRef.current.measureInWindow((x, y, measuredWidth, measuredHeight) => {
         setAnchor({ x, y, width: measuredWidth, height: measuredHeight });
         setOpen(true);
@@ -336,12 +285,12 @@ function PickerField({
         <Text style={styles.dropdownChevron}>{open ? '^' : 'v'}</Text>
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={[styles.dropdownOverlay, isWeb ? styles.dropdownOverlayWeb : styles.dropdownOverlayMobile]} onPress={() => setOpen(false)}>
+        <Pressable style={[styles.dropdownOverlay, styles.dropdownOverlayWeb]} onPress={() => setOpen(false)}>
           <Pressable
             style={[
               styles.dropdownSurface,
-              isWeb ? styles.dropdownSurfaceWeb : styles.dropdownSurfaceMobile,
-              isWeb ? { width: webPanelWidth, left: webPanelLeft, top: openAbove ? undefined : webPanelTop, bottom: webPanelBottom, maxHeight: webPanelMaxHeight } : null,
+              styles.dropdownSurfaceWeb,
+              { width: webPanelWidth, left: webPanelLeft, top: openAbove ? undefined : webPanelTop, bottom: webPanelBottom, maxHeight: webPanelMaxHeight },
             ]}
             onPress={() => undefined}
           >
@@ -360,7 +309,7 @@ function PickerField({
                   placeholder={`Search ${label.toLowerCase()}s`}
                   placeholderTextColor="#6f7e93"
                   style={styles.dropdownSearchInput}
-                  autoFocus={isWeb}
+                  autoFocus
                 />
               </View>
             ) : null}
@@ -417,7 +366,6 @@ function AsyncPickerField({
   const [anchor, setAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const triggerRef = useRef<View>(null);
   const { width, height } = useWindowDimensions();
-  const isWeb = Platform.OS === 'web';
   const displayLabel = selectedLabel || selectedValue || placeholder;
 
   useEffect(() => {
@@ -465,7 +413,7 @@ function AsyncPickerField({
   const webPanelBottom = anchor && openAbove ? Math.max(16, height - anchor.y + 8) : undefined;
 
   function openPicker() {
-    if (isWeb && triggerRef.current?.measureInWindow) {
+    if (triggerRef.current?.measureInWindow) {
       triggerRef.current.measureInWindow((x, y, measuredWidth, measuredHeight) => {
         setAnchor({ x, y, width: measuredWidth, height: measuredHeight });
         setOpen(true);
@@ -486,12 +434,12 @@ function AsyncPickerField({
         <Text style={styles.dropdownChevron}>{open ? '^' : 'v'}</Text>
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={[styles.dropdownOverlay, isWeb ? styles.dropdownOverlayWeb : styles.dropdownOverlayMobile]} onPress={() => setOpen(false)}>
+        <Pressable style={[styles.dropdownOverlay, styles.dropdownOverlayWeb]} onPress={() => setOpen(false)}>
           <Pressable
             style={[
               styles.dropdownSurface,
-              isWeb ? styles.dropdownSurfaceWeb : styles.dropdownSurfaceMobile,
-              isWeb ? { width: webPanelWidth, left: webPanelLeft, top: openAbove ? undefined : webPanelTop, bottom: webPanelBottom, maxHeight: webPanelMaxHeight } : null,
+              styles.dropdownSurfaceWeb,
+              { width: webPanelWidth, left: webPanelLeft, top: openAbove ? undefined : webPanelTop, bottom: webPanelBottom, maxHeight: webPanelMaxHeight },
             ]}
             onPress={() => undefined}
           >
@@ -509,7 +457,7 @@ function AsyncPickerField({
                 placeholder={`Search ${label.toLowerCase()}s`}
                 placeholderTextColor="#6f7e93"
                 style={styles.dropdownSearchInput}
-                autoFocus={isWeb}
+                autoFocus
               />
             </View>
             {loading ? (
@@ -995,7 +943,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.select({ ios: 'padding', default: undefined })}>
+    <View style={styles.screen}>
       <View style={styles.backgroundGlowTop} />
       <View style={styles.backgroundGlowBottom} />
       <ScrollView contentContainerStyle={styles.content}>
@@ -1204,37 +1152,29 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
 
                 <View style={styles.field}>
                   <Text style={styles.label}>Purchase Order File</Text>
-                  {Platform.OS === 'web'
-                    ? (
-                      <View style={styles.uploadShell}>
-                        <Pressable style={styles.uploadButton} onPress={openPurchaseOrderPicker}>
-                          <Text style={styles.uploadButtonText}>{selectedPurchaseOrderFile ? 'Change File' : 'Choose File'}</Text>
-                        </Pressable>
-                        <View style={styles.uploadFileInfo}>
-                          <Text style={styles.uploadFileInfoText} numberOfLines={1}>
-                            {selectedPurchaseOrderFile ? selectedPurchaseOrderFile.name : 'No file selected'}
-                          </Text>
-                        </View>
-                        {createElement('input', {
-                          ref: purchaseOrderInputRef,
-                          type: 'file',
-                          onChange: (event: { target: { files?: FileList | null } }) => {
-                            const nextFile = event.target.files?.[0] ?? null;
-                            setSelectedPurchaseOrderFile(nextFile);
-                          },
-                          style: styles.hiddenFileInput as unknown as CSSProperties,
-                        })}
-                      </View>
-                    )
-                    : (
-                      <View style={styles.input}>
-                        <Text style={styles.helperText}>File upload is available on web in this build.</Text>
-                      </View>
-                    )}
+                  <View style={styles.uploadShell}>
+                    <Pressable style={styles.uploadButton} onPress={openPurchaseOrderPicker}>
+                      <Text style={styles.uploadButtonText}>{selectedPurchaseOrderFile ? 'Change File' : 'Choose File'}</Text>
+                    </Pressable>
+                    <View style={styles.uploadFileInfo}>
+                      <Text style={styles.uploadFileInfoText} numberOfLines={1}>
+                        {selectedPurchaseOrderFile ? selectedPurchaseOrderFile.name : 'No file selected'}
+                      </Text>
+                    </View>
+                    {createElement('input', {
+                      ref: purchaseOrderInputRef,
+                      type: 'file',
+                      onChange: (event: { target: { files?: FileList | null } }) => {
+                        const nextFile = event.target.files?.[0] ?? null;
+                        setSelectedPurchaseOrderFile(nextFile);
+                      },
+                      style: styles.hiddenFileInput as unknown as CSSProperties,
+                    })}
+                  </View>
                   {!!uploadedPurchaseOrderName && <Text style={styles.noticeText}>Uploaded: {uploadedPurchaseOrderName}</Text>}
                 </View>
 
-                <Pressable style={[styles.secondaryButton, uploadingPurchaseOrder && styles.buttonDisabled]} onPress={handleUploadPurchaseOrder} disabled={uploadingPurchaseOrder || Platform.OS !== 'web'}>
+                <Pressable style={[styles.secondaryButton, uploadingPurchaseOrder && styles.buttonDisabled]} onPress={handleUploadPurchaseOrder} disabled={uploadingPurchaseOrder}>
                   <Text style={styles.secondaryButtonText}>{uploadingPurchaseOrder ? 'Uploading...' : 'Upload Purchase Order'}</Text>
                 </Pressable>
 
@@ -1288,7 +1228,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -1392,7 +1332,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#8B5CF6',
   },
   stepRail: {
-    flexDirection: Platform.select({ web: 'row', default: 'column' }),
+    flexDirection: 'row',
     gap: 10,
   },
   stepItem: {
@@ -1492,13 +1432,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.input,
     color: '#F0F0F0',
   },
-  dateTriggerText: {
-    color: '#F0F0F0',
-    fontSize: 16,
-  },
-  dateTriggerPlaceholder: {
-    color: COLORS.textPlaceholder,
-  },
   dropdownTrigger: {
     borderRadius: 16,
     borderWidth: 1,
@@ -1543,9 +1476,6 @@ const styles = StyleSheet.create({
   dropdownOverlayWeb: {
     justifyContent: 'flex-start',
   },
-  dropdownOverlayMobile: {
-    justifyContent: 'flex-end',
-  },
   dropdownSurface: {
     backgroundColor: COLORS.cardStrong,
     overflow: 'hidden',
@@ -1561,14 +1491,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderRadius: 24,
     maxHeight: 520,
-  },
-  dropdownSurfaceMobile: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    maxHeight: '78%',
-    width: '100%',
   },
   dropdownSheetHeader: {
     flexDirection: 'row',
@@ -1665,7 +1587,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   row: {
-    flexDirection: Platform.select({ web: 'row', default: 'column' }),
+    flexDirection: 'row',
     gap: 12,
   },
   rowItem: {
@@ -1718,7 +1640,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   buttonRow: {
-    flexDirection: Platform.select({ web: 'row', default: 'column' }),
+    flexDirection: 'row',
     gap: 10,
   },
   primaryButton: {
@@ -1886,7 +1808,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   previewText: {
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontFamily: 'monospace',
     fontSize: 12,
     lineHeight: 18,
     color: '#D0D0D0',
