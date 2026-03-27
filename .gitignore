@@ -19,6 +19,7 @@ logs/
 apps/api/flowiq-api.exe
 apps/api/flowiq-api
 apps/api/*.exe
+apps/api/apps/
 apps/api/storage/data/
 apps/api/storage/logs/
 apps/api/storage/uploads/
