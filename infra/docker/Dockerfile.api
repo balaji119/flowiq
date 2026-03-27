@@ -1,0 +1,19 @@
+FROM golang:1.25-bookworm AS builder
+
+WORKDIR /workspace/apps/api
+
+COPY apps/api/go.mod apps/api/go.sum ./
+RUN go mod download
+
+COPY apps/api ./
+RUN go build -o /tmp/flowiq-api .
+
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+COPY --from=builder /tmp/flowiq-api ./flowiq-api
+
+EXPOSE 4000
+
+CMD ["./flowiq-api"]

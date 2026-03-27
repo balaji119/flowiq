@@ -1,11 +1,13 @@
 node_modules
 .expo
 .next
+apps/web/.next
 dist
 out
 dist-web
 web-build
 logs
+apps/api/storage
 .git
 .gitignore
 .env
