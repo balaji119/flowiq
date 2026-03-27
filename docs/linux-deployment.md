@@ -1,4 +1,4 @@
-# Linux Mini PC Deployment
+# Linux Deployment
 
 This repository now deploys as two apps:
 
@@ -10,11 +10,15 @@ This repository now deploys as two apps:
 - [docker-compose.yml](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/infra/docker/docker-compose.yml)
 - [Dockerfile.api](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/infra/docker/Dockerfile.api)
 - [.env.production.example](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/infra/docker/.env.production.example)
+- [Caddyfile](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/infra/docker/Caddyfile)
 - [update-duckdns.sh](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/infra/scripts/update-duckdns.sh)
+
+The current checked-in `docker-compose.yml` starts only `web` and `api`.
+`Caddyfile` and `update-duckdns.sh` are kept as optional infrastructure assets if you want to add a reverse proxy or DuckDNS on top of the basic stack.
 
 ## Before You Start
 
-1. Install Docker and Docker Compose on the mini PC.
+1. Install Docker and Docker Compose on the Linux host.
 2. Copy the repo to the server.
 3. Create `infra/docker/.env.production` from `infra/docker/.env.production.example`.
 

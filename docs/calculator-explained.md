@@ -143,7 +143,7 @@ Formula:
 
 `No calculation. User input only.`
 
-## Totals step
+## Review step
 
 These values are calculated using the workbook logic.
 
@@ -224,15 +224,15 @@ Formula:
 
 `Grand total for each format = sum of that format across all markets`
 
-## Quote step
+## Finalise step
 
-Some values here are user-entered. Some can be copied from calculated totals.
+Some values here are user-entered. The app also carries the calculated total units into the quote quantity field when totals are reviewed.
 
 ### Quote quantity
 
 This is the quantity sent to PrintIQ.
 
-If the user clicks `Use Total Units For Quote Quantity`, the app uses:
+When totals are reviewed, the app uses:
 
 Formula:
 
@@ -320,6 +320,14 @@ Formula:
 
 `No calculation. User input only.`
 
+### Purchase order upload
+
+The final step also uploads the purchase order file before the quote is submitted.
+
+Formula:
+
+`No calculation. File upload only.`
+
 ## How the workbook was converted into the app
 
 The Excel workbook hides the logic inside cells and formulas.
@@ -344,7 +352,8 @@ The app converts this into:
 4. Multiplication by number of active weeks
 5. Totalling by market and across all markets
 6. Frame calculations using the same workbook rules
-7. Optional use of the calculated total as the PrintIQ quote quantity
+7. Populate the quote quantity from the calculated total units
+8. Upload the purchase order and submit the PrintIQ quote
 
 ## Very simple example
 
@@ -383,4 +392,4 @@ The workbook does not appear to define full quote pricing logic such as:
 - freight pricing
 - margin pricing
 
-So the app currently automates the quantity side fully, while the PrintIQ job setup still includes manual user inputs.
+So the app currently automates the quantity side fully, while the PrintIQ job setup still includes manual user inputs plus the final purchase-order upload step.

@@ -2,6 +2,24 @@
 
 Monorepo for the FlowIQ quote workflow. The frontend lives in `apps/web` as a Next.js app, and the backend lives in `apps/api` as a Go service.
 
+## Repository Layout
+
+```text
+flowiq/
+├── apps/
+│   ├── web/        # Next.js frontend
+│   └── api/        # Go backend
+├── packages/
+│   ├── shared/     # shared types, constants, utils
+│   └── ui/         # reusable UI components
+├── infra/
+│   ├── docker/     # container assets
+│   └── scripts/    # deployment helper scripts
+├── docs/
+├── .env.example
+└── package.json
+```
+
 ## What is included
 
 - `apps/web`: Next.js frontend with the existing quote, auth, and admin flows.
@@ -24,6 +42,11 @@ Monorepo for the FlowIQ quote workflow. The frontend lives in `apps/web` as a Ne
 3. Install dependencies with `npm install`.
 4. Start the Go API with `npm run start:api`.
 5. Start the frontend with `npm run web` or `npm run dev`.
+
+The default local URLs are:
+
+- web: `http://localhost:3000`
+- API: `http://localhost:4000`
 
 ## Commands
 
@@ -48,7 +71,11 @@ Monorepo for the FlowIQ quote workflow. The frontend lives in `apps/web` as a Ne
 - `apps/api/calculator.go`: workbook parser and quantity calculator
 - `apps/api/main.go`: Go API entry point
 
+## Contributing
+
+Contribution guidelines live in [CONTRIBUTING.md](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/CONTRIBUTING.md).
+
 ## Deployment
 
-- Linux mini PC deployment guide: [linux-mini-pc-deployment.md](/C:/Users/BKanagaraju/Documents/FlowIQ/docs/linux-mini-pc-deployment.md)
-- Deployment update checklist: [deployment-update-checklist.md](/C:/Users/BKanagaraju/Documents/FlowIQ/docs/deployment-update-checklist.md)
+- Linux deployment guide: [linux-deployment.md](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/docs/linux-deployment.md)
+- Deployment update checklist: [deployment-update-checklist.md](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/docs/deployment-update-checklist.md)

@@ -1,6 +1,8 @@
 # Deployment Update Checklist
 
-Use this when a new FlowIQ version is pushed and you need to refresh the mini PC deployment.
+Use this when a new FlowIQ version is pushed and you need to refresh the Linux deployment.
+
+This checklist assumes you are using the current checked-in Docker setup in `infra/docker/docker-compose.yml`, which runs the `web` and `api` services.
 
 ## Standard Update
 
