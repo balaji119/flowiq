@@ -10,8 +10,6 @@ logs
 .env*.local
 bk_live
 bk_live.pub
-android
-ios
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

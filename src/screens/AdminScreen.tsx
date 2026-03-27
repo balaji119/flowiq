@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -204,7 +202,7 @@ export function AdminScreen({ onBack }: AdminScreenProps) {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.select({ ios: 'padding', default: undefined })}>
+    <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
           <View style={styles.headerTextWrap}>
@@ -349,7 +347,7 @@ export function AdminScreen({ onBack }: AdminScreenProps) {
           </>
         )}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -367,9 +365,9 @@ const styles = StyleSheet.create({
     maxWidth: 1080,
   },
   headerRow: {
-    flexDirection: Platform.select({ web: 'row', default: 'column' }),
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: Platform.select({ web: 'center', default: 'flex-start' }),
+    alignItems: 'center',
     gap: 12,
   },
   headerTextWrap: {
@@ -477,7 +475,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   cacheGrid: {
-    flexDirection: Platform.select({ web: 'row', default: 'column' }),
+    flexDirection: 'row',
     gap: 12,
   },
   cacheCard: {

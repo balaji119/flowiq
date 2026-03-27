@@ -1,10 +1,10 @@
 # FlowIQ
 
-Shared React Native + Expo application for web and mobile that captures campaign print schedule inputs, calculates workbook-based poster and frame quantities, and sends a PrintIQ quote request through a secure proxy.
+Web application for capturing campaign print schedule inputs, calculating workbook-based poster and frame quantities, and sending a PrintIQ quote request through a secure proxy.
 
 ## What is included
 
-- Expo app that runs on web, Android, and iOS from one codebase.
+- Browser-based FlowIQ interface built with Expo for web.
 - Shared form for campaign scheduling, quote details, operations, and contact details.
 - Workbook-derived calculator data checked into the repo for runtime use.
 - Node/Express proxy to request the PrintIQ token and submit `GetPrice`.
@@ -23,13 +23,11 @@ Shared React Native + Expo application for web and mobile that captures campaign
 2. Fill in the PrintIQ credentials.
 3. Install dependencies with `npm install`.
 4. Start the proxy with `npm run start:server`.
-5. Start the Expo app with `npm run web` or `npm run start`.
+5. Start the web app with `npm run web` or `npm run start`.
 
 ## Commands
 
 - `npm run web`
-- `npm run android`
-- `npm run ios`
 - `npm run start:server`
 - `npm run start:all`
 - `npm run typecheck`
@@ -48,5 +46,4 @@ Shared React Native + Expo application for web and mobile that captures campaign
 ## Deployment
 
 - Linux mini PC deployment guide: [linux-mini-pc-deployment.md](/C:/Users/BKanagaraju/Documents/FlowIQ/docs/linux-mini-pc-deployment.md)
-- Android APK testing guide: [android-apk-testing.md](/C:/Users/BKanagaraju/Documents/FlowIQ/docs/android-apk-testing.md)
 - Deployment update checklist: [deployment-update-checklist.md](/C:/Users/BKanagaraju/Documents/FlowIQ/docs/deployment-update-checklist.md)

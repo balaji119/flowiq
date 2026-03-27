@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
 import { HoverablePressable as Pressable } from '../components/HoverablePressable';
 import { useAuth } from '../context/AuthContext';
 
@@ -24,7 +24,7 @@ export function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.select({ ios: 'padding', default: undefined })}>
+    <View style={styles.screen}>
       <View style={styles.card}>
         <Text style={styles.eyebrow}>Secure Access</Text>
         <Text style={styles.title}>Sign in to ADS CONNECT</Text>
@@ -63,7 +63,7 @@ export function LoginScreen() {
 
         {!!error && <Text style={styles.errorText}>{error}</Text>}
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

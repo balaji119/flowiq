@@ -1,6 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useState } from 'react';
-import { Platform } from 'react-native';
 import { AuthSession } from '../types';
 import { applyAuthToken, fetchCurrentSession, login as loginRequest } from '../services/authApi';
 
@@ -16,36 +14,23 @@ const STORAGE_KEY = 'adsconnect-auth-session';
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 async function setStoredValue(value: string | null) {
-  if (Platform.OS === 'web') {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    if (value === null) {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } else {
-      window.localStorage.setItem(STORAGE_KEY, value);
-    }
+  if (typeof window === 'undefined') {
     return;
   }
 
   if (value === null) {
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    window.localStorage.removeItem(STORAGE_KEY);
   } else {
-    await AsyncStorage.setItem(STORAGE_KEY, value);
+    window.localStorage.setItem(STORAGE_KEY, value);
   }
 }
 
 async function getStoredValue() {
-  if (Platform.OS === 'web') {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-
-    return window.localStorage.getItem(STORAGE_KEY);
+  if (typeof window === 'undefined') {
+    return null;
   }
 
-  return AsyncStorage.getItem(STORAGE_KEY);
+  return window.localStorage.getItem(STORAGE_KEY);
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {

@@ -1,0 +1,32 @@
+#!/usr/bin/env node
+
+const { spawn } = require('node:child_process');
+
+const script = process.argv[2];
+const args = process.argv.slice(3);
+
+if (!script) {
+  console.error('Usage: node run <script> [...args]');
+  console.error('Available scripts: start, start:server, start:all, web, typecheck');
+  process.exit(1);
+}
+
+const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const child = spawn(npmCommand, ['run', script, '--', ...args], {
+  stdio: 'inherit',
+  shell: false,
+});
+
+child.on('error', (error) => {
+  console.error(`Failed to start ${npmCommand}: ${error.message}`);
+  process.exit(typeof error.code === 'number' ? error.code : 1);
+});
+
+child.on('exit', (code, signal) => {
+  if (signal) {
+    process.kill(process.pid, signal);
+    return;
+  }
+
+  process.exit(code ?? 0);
+});
