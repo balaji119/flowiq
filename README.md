@@ -1,6 +1,6 @@
 # FlowIQ
 
-Monorepo for the FlowIQ quote workflow. The frontend lives in `apps/web` as a Next.js app, and the backend lives in `apps/api` as a Go service.
+Monorepo for the FlowIQ quote workflow. The frontend lives in `apps/web` as a Next.js app, and the backend lives in `apps/api` as a Go service backed by PostgreSQL.
 
 ## Repository Layout
 
@@ -22,8 +22,8 @@ flowiq/
 
 ## What is included
 
-- `apps/web`: Next.js frontend with the existing quote, auth, and admin flows.
-- `apps/api`: Go API for auth, calculator, PrintIQ integration, admin management, and purchase-order uploads.
+- `apps/web`: Next.js frontend with the quote, auth, and admin flows.
+- `apps/api`: Go API for JWT auth, tenant-scoped campaign persistence, calculator logic, PrintIQ integration, admin management, and purchase-order uploads.
 - `packages/shared`: shared types, constants, and payload/calculation utilities.
 - `packages/ui`: reusable UI primitives used by the frontend.
 - `infra`: Docker and script assets for deployment support.
@@ -38,10 +38,12 @@ flowiq/
 ## Setup
 
 1. Copy `.env.example` to `.env`.
-2. Fill in the PrintIQ credentials.
-3. Install dependencies with `npm install`.
-4. Start the Go API with `npm run start:api`.
-5. Start the frontend with `npm run web` or `npm run dev`.
+2. Start PostgreSQL locally and set `DATABASE_URL`.
+3. Fill in the PrintIQ credentials.
+4. Install dependencies with `npm install`.
+5. Run the database setup with `npm run db:setup`.
+6. Start the Go API with `npm run start:api`.
+7. Start the frontend with `npm run web` or `npm run dev`.
 
 The default local URLs are:
 
@@ -58,18 +60,33 @@ The default local URLs are:
 - `npm run serve`
 - `npm run start:all`
 - `npm run typecheck`
+- `npm run db:migrate`
+- `npm run db:seed`
+- `npm run db:setup`
 
 ## Architecture
 
 - `apps/web/app/page.tsx`: Next.js route entry point
 - `apps/web/App.tsx`: client-side application shell
 - `apps/web/src/screens/QuoteBuilderScreen.tsx`: primary shared UI
+- `apps/web/src/services/campaignApi.ts`: persisted campaign workflow client
 - `packages/shared/src/campaign.ts`: workbook-total helpers
 - `packages/shared/src/printiq.ts`: form-to-PrintIQ payload mapper
-- `apps/web/src/services/calculatorApi.ts`: workbook calculator API wrapper
-- `apps/web/src/services/quoteApi.ts`: client API wrapper
+- `apps/api/db/migrations/001_initial.sql`: initial PostgreSQL schema
 - `apps/api/calculator.go`: workbook parser and quantity calculator
 - `apps/api/main.go`: Go API entry point
+
+## Workflow Persistence
+
+- Campaigns are now stored in PostgreSQL with `draft`, `calculated`, and `submitted` states.
+- Every core table is tenant-scoped through `tenant_id`.
+- Users authenticate with JWT and only see data for their tenant.
+- The main persisted workflow endpoints are:
+  - `POST /api/campaigns`
+  - `GET /api/campaigns/{id}`
+  - `PUT /api/campaigns/{id}`
+  - `POST /api/campaigns/{id}/calculate`
+  - `POST /api/campaigns/{id}/submit-to-printiq`
 
 ## Contributing
 

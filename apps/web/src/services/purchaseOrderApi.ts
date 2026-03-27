@@ -9,9 +9,12 @@ export type PurchaseOrderUploadResponse = {
   uploadedAt: string;
 };
 
-export async function uploadPurchaseOrderFile(file: File): Promise<PurchaseOrderUploadResponse> {
+export async function uploadPurchaseOrderFile(file: File, campaignId?: string): Promise<PurchaseOrderUploadResponse> {
   const formData = new FormData();
   formData.append('file', file);
+  if (campaignId) {
+    formData.append('campaignId', campaignId);
+  }
 
   const headers = new Headers();
   const token = getApiAuthToken();

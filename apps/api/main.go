@@ -23,6 +23,7 @@ const authUserKey contextKey = "authUser"
 
 type app struct {
 	authStore      *authStore
+	campaignStore  *campaignStore
 	calculator     *calculatorService
 	optionService  *optionService
 	jwtSecret      []byte
@@ -43,6 +44,22 @@ type authClaims struct {
 func main() {
 	loadEnvFiles()
 
+	if len(os.Args) > 1 {
+		runCLI(os.Args[1:])
+		return
+	}
+
+	ctx := context.Background()
+	pool, err := connectDatabase(ctx)
+	if err != nil {
+		log.Fatalf("database init failed: %v", err)
+	}
+	defer pool.Close()
+
+	if err := runMigrations(ctx, pool); err != nil {
+		log.Fatalf("database migration failed: %v", err)
+	}
+
 	calculator, err := newCalculatorService()
 	if err != nil {
 		log.Fatalf("calculator init failed: %v", err)
@@ -50,7 +67,8 @@ func main() {
 
 	baseDir := "."
 	api := &app{
-		authStore:      newAuthStore(filepath.Join(baseDir, "storage", "data", "auth-store.json")),
+		authStore:      newAuthStore(pool),
+		campaignStore:  newCampaignStore(pool),
 		calculator:     calculator,
 		optionService:  newOptionService(envOrDefault("PRINTIQ_BASE_URL", "https://adsaust.printiq.com"), filepath.Join(baseDir, "storage", "data")),
 		jwtSecret:      []byte(envOrDefault("JWT_SECRET", "flowiq-dev-secret")),
@@ -71,6 +89,37 @@ func main() {
 	log.Printf("FlowIQ API listening on http://localhost%s", address)
 	if err := http.ListenAndServe(address, api.withCORS(api.routes())); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func runCLI(args []string) {
+	if len(args) == 0 {
+		log.Fatal("missing command")
+	}
+
+	ctx := context.Background()
+	pool, err := connectDatabase(ctx)
+	if err != nil {
+		log.Fatalf("database init failed: %v", err)
+	}
+	defer pool.Close()
+
+	switch args[0] {
+	case "migrate":
+		if err := runMigrations(ctx, pool); err != nil {
+			log.Fatalf("database migration failed: %v", err)
+		}
+		log.Println("Database migrations applied successfully")
+	case "seed":
+		if err := runMigrations(ctx, pool); err != nil {
+			log.Fatalf("database migration failed: %v", err)
+		}
+		if err := seedDatabase(ctx, pool); err != nil {
+			log.Fatalf("database seed failed: %v", err)
+		}
+		log.Println("Database seed completed successfully")
+	default:
+		log.Fatalf("unsupported command: %s", args[0])
 	}
 }
 
@@ -159,6 +208,11 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/health", a.handleHealth)
 	mux.HandleFunc("POST /api/auth/login", a.handleLogin)
 	mux.Handle("GET /api/auth/me", a.withAuth(http.HandlerFunc(a.handleCurrentSession)))
+	mux.Handle("POST /api/campaigns", a.withAuth(http.HandlerFunc(a.handleCreateCampaign)))
+	mux.Handle("GET /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleGetCampaign)))
+	mux.Handle("PUT /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleUpdateCampaign)))
+	mux.Handle("POST /api/campaigns/{campaignId}/calculate", a.withAuth(http.HandlerFunc(a.handleCalculatePersistedCampaign)))
+	mux.Handle("POST /api/campaigns/{campaignId}/submit-to-printiq", a.withAuth(http.HandlerFunc(a.handleSubmitCampaign)))
 	mux.Handle("GET /api/calculator/metadata", a.withAuth(http.HandlerFunc(a.handleCalculatorMetadata)))
 	mux.Handle("POST /api/calculator/calculate", a.withAuth(http.HandlerFunc(a.handleCalculateCampaign)))
 	mux.Handle("GET /api/printiq/options/quote-form", a.withAuth(http.HandlerFunc(a.handleQuoteFormOptions)))
@@ -182,7 +236,7 @@ func (a *app) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -230,24 +284,17 @@ func (a *app) withAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		store, err := a.authStore.load()
+		user, err := a.authStore.userByID(r.Context(), claims.Subject)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-
-		user := findUserByID(store, claims.Subject)
 		if user == nil || !user.Active {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Session is no longer valid"})
 			return
 		}
 
-		tenant := (*TenantRecord)(nil)
-		if user.TenantID != nil {
-			tenant = findTenantByID(store, *user.TenantID)
-		}
-		authUser := sanitizeUser(*user, tenant)
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), authUserKey, authUser)))
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), authUserKey, *user)))
 	})
 }
 
@@ -345,6 +392,74 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) handleCurrentSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, currentUser(r.Context()))
+}
+
+func (a *app) handleCreateCampaign(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	var payload struct {
+		Values orderFormValues `json:"values"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	campaign, err := a.campaignStore.createCampaign(r.Context(), *user, payload.Values)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"campaign": campaign})
+}
+
+func (a *app) handleGetCampaign(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	campaign, err := a.campaignStore.getCampaign(r.Context(), *user, r.PathValue("campaignId"))
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"campaign": campaign})
+}
+
+func (a *app) handleUpdateCampaign(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	var payload struct {
+		Values orderFormValues `json:"values"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	campaign, err := a.campaignStore.updateCampaign(r.Context(), *user, r.PathValue("campaignId"), payload.Values)
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"campaign": campaign})
+}
+
+func (a *app) handleCalculatePersistedCampaign(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	campaign, summary, err := a.campaignStore.calculateCampaign(r.Context(), *user, r.PathValue("campaignId"), a.calculator)
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"campaign": campaign, "summary": summary})
 }
 
 func (a *app) handleCalculatorMetadata(w http.ResponseWriter, _ *http.Request) {
@@ -476,9 +591,112 @@ func (a *app) handleQuotePrice(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"amount": extractQuoteAmount(parsed)})
 }
 
+func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	campaign, err := a.campaignStore.getCampaign(r.Context(), *user, r.PathValue("campaignId"))
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	if campaign.Summary == nil {
+		campaign, _, err = a.campaignStore.calculateCampaign(r.Context(), *user, campaign.ID, a.calculator)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	payload := buildPrintIQPayload(campaign.Values, campaign.Summary)
+	requestID := createRequestID()
+	a.appendPrintIQLog(map[string]any{
+		"requestId":  requestID,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"type":       "request",
+		"tenantId":   campaign.TenantID,
+		"userId":     user.ID,
+		"campaignId": campaign.ID,
+		"payload":    payload,
+	})
+
+	parsed, status, err := a.optionService.requestQuotePrice(payload)
+	if err != nil {
+		a.appendPrintIQLog(map[string]any{
+			"requestId":  requestID,
+			"timestamp":  time.Now().UTC().Format(time.RFC3339),
+			"type":       "error",
+			"tenantId":   campaign.TenantID,
+			"userId":     user.ID,
+			"campaignId": campaign.ID,
+			"response":   err.Error(),
+			"status":     500,
+		})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if status < 200 || status >= 300 {
+		a.appendPrintIQLog(map[string]any{
+			"requestId":  requestID,
+			"timestamp":  time.Now().UTC().Format(time.RFC3339),
+			"type":       "error",
+			"tenantId":   campaign.TenantID,
+			"userId":     user.ID,
+			"campaignId": campaign.ID,
+			"response":   parsed,
+			"status":     status,
+		})
+		writeJSON(w, status, map[string]any{"error": "PrintIQ quote request failed", "details": parsed})
+		return
+	}
+	if payloadMap, ok := parsed.(map[string]any); ok {
+		if isError, ok := payloadMap["IsError"].(bool); ok && isError {
+			message := "PrintIQ returned an error"
+			if rawMessage, ok := payloadMap["ErrorMessage"].(string); ok && strings.TrimSpace(rawMessage) != "" {
+				message = strings.TrimSpace(rawMessage)
+			}
+			a.appendPrintIQLog(map[string]any{
+				"requestId":  requestID,
+				"timestamp":  time.Now().UTC().Format(time.RFC3339),
+				"type":       "error",
+				"tenantId":   campaign.TenantID,
+				"userId":     user.ID,
+				"campaignId": campaign.ID,
+				"response":   parsed,
+				"status":     status,
+			})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": message})
+			return
+		}
+	}
+
+	a.appendPrintIQLog(map[string]any{
+		"requestId":  requestID,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"type":       "response",
+		"tenantId":   campaign.TenantID,
+		"userId":     user.ID,
+		"campaignId": campaign.ID,
+		"response":   parsed,
+		"status":     status,
+	})
+
+	amount := extractQuoteAmount(parsed)
+	updatedCampaign, err := a.campaignStore.recordSubmission(r.Context(), *user, campaign.ID, payload, parsed, amount)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"campaign": updatedCampaign, "amount": amount})
+}
+
 var unsafeFilenamePattern = regexp.MustCompile(`[^a-zA-Z0-9-_]`)
 
 func (a *app) handlePurchaseOrderUpload(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
 	if err := r.ParseMultipartForm(25 << 20); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "No file uploaded"})
 		return
@@ -516,13 +734,22 @@ func (a *app) handlePurchaseOrderUpload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, uploadResponse{
+	response := uploadResponse{
 		OriginalName: header.Filename,
 		StoredName:   storedName,
 		Size:         size,
 		MimeType:     header.Header.Get("Content-Type"),
 		UploadedAt:   time.Now().UTC().Format(time.RFC3339),
-	})
+	}
+
+	if campaignID := strings.TrimSpace(r.FormValue("campaignId")); campaignID != "" && user != nil {
+		if _, err := a.campaignStore.setPurchaseOrder(r.Context(), *user, campaignID, response); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusCreated, response)
 }
 
 func (a *app) handleListTenants(w http.ResponseWriter, _ *http.Request) {
@@ -602,7 +829,7 @@ func (a *app) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	if user.Role != "super_admin" {
 		targetTenantID = user.TenantID
 	}
-	if !canManageTargetTenant(user, targetTenantID) && payload.Role != "super_admin" {
+	if !canManageTargetTenant(user, targetTenantID) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "You cannot create users for another tenant"})
 		return
 	}

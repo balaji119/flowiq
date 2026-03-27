@@ -1,49 +1,30 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/scrypt"
 )
 
-type storedUser struct {
-	ID           string  `json:"id"`
-	TenantID     *string `json:"tenantId"`
-	Email        string  `json:"email"`
-	Name         string  `json:"name"`
-	Role         string  `json:"role"`
-	PasswordSalt string  `json:"passwordSalt"`
-	PasswordHash string  `json:"passwordHash"`
-	Active       bool    `json:"active"`
-	CreatedAt    string  `json:"createdAt"`
-}
-
-type authStoreFile struct {
-	Tenants []TenantRecord `json:"tenants"`
-	Users   []storedUser   `json:"users"`
-}
-
 type authStore struct {
-	path string
-	mu   sync.Mutex
+	pool *pgxpool.Pool
 }
 
 var slugPattern = regexp.MustCompile(`[^a-z0-9]+`)
 
-func newAuthStore(path string) *authStore {
-	return &authStore{path: path}
+func newAuthStore(pool *pgxpool.Pool) *authStore {
+	return &authStore{pool: pool}
 }
 
 func slugify(value string) string {
@@ -85,7 +66,6 @@ func verifyPassword(password, salt, expectedHash string) bool {
 	if err != nil {
 		return false
 	}
-
 	hashBytes, err := hex.DecodeString(hash)
 	if err != nil {
 		return false
@@ -100,238 +80,175 @@ func verifyPassword(password, salt, expectedHash string) bool {
 	return subtle.ConstantTimeCompare(hashBytes, expectedBytes) == 1
 }
 
-func (s *authStore) ensureDir() error {
-	return os.MkdirAll(filepath.Dir(s.path), 0o755)
+func sanitizeUser(row dbUserRow) AuthUser {
+	return AuthUser{
+		ID:         row.ID,
+		Email:      row.Email,
+		Name:       row.Name,
+		Role:       row.Role,
+		TenantID:   stringPtr(row.TenantID),
+		TenantName: stringPtr(row.TenantName),
+		Active:     row.Active,
+	}
 }
 
-func (s *authStore) createSeedStore() (authStoreFile, error) {
-	tenantName := envOrDefault("DEFAULT_TENANT_NAME", "ADS")
-	tenant := TenantRecord{
-		ID:        uuid.NewString(),
-		Name:      tenantName,
-		Slug:      slugify(tenantName),
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-	}
-
-	salt, hash, err := newPasswordHash(envOrDefault("SUPER_ADMIN_PASSWORD", "admin"))
-	if err != nil {
-		return authStoreFile{}, err
-	}
-
-	return authStoreFile{
-		Tenants: []TenantRecord{tenant},
-		Users: []storedUser{
-			{
-				ID:           uuid.NewString(),
-				TenantID:     nil,
-				Email:        strings.ToLower(envOrDefault("SUPER_ADMIN_EMAIL", "admin")),
-				Name:         envOrDefault("SUPER_ADMIN_NAME", "FlowIQ Administrator"),
-				Role:         "super_admin",
-				PasswordSalt: salt,
-				PasswordHash: hash,
-				Active:       true,
-				CreatedAt:    time.Now().UTC().Format(time.RFC3339),
-			},
-		},
-	}, nil
+type dbUserRow struct {
+	ID         string
+	TenantID   string
+	TenantName string
+	Email      string
+	Name       string
+	Role       string
+	Active     bool
 }
 
-func (s *authStore) load() (authStoreFile, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if err := s.ensureDir(); err != nil {
-		return authStoreFile{}, err
-	}
-	if _, err := os.Stat(s.path); errors.Is(err, os.ErrNotExist) {
-		seed, createErr := s.createSeedStore()
-		if createErr != nil {
-			return authStoreFile{}, createErr
-		}
-		if err := s.writeLocked(seed); err != nil {
-			return authStoreFile{}, err
-		}
-		return seed, nil
-	}
-
-	bytes, err := os.ReadFile(s.path)
-	if err != nil {
-		return authStoreFile{}, err
-	}
-
-	var store authStoreFile
-	if err := json.Unmarshal(bytes, &store); err != nil {
-		return authStoreFile{}, err
-	}
-	if store.Tenants == nil {
-		store.Tenants = []TenantRecord{}
-	}
-	if store.Users == nil {
-		store.Users = []storedUser{}
-	}
-	return store, nil
-}
-
-func (s *authStore) save(store authStoreFile) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.writeLocked(store)
-}
-
-func (s *authStore) writeLocked(store authStoreFile) error {
-	if err := s.ensureDir(); err != nil {
-		return err
-	}
-	bytes, err := json.MarshalIndent(store, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(s.path, bytes, 0o644)
-}
-
-func sanitizeUser(user storedUser, tenant *TenantRecord) AuthUser {
-	result := AuthUser{
-		ID:     user.ID,
-		Email:  user.Email,
-		Name:   user.Name,
-		Role:   user.Role,
-		Active: user.Active,
-	}
-	if user.TenantID != nil && *user.TenantID != "" {
-		tenantID := *user.TenantID
-		result.TenantID = &tenantID
-	}
-	if tenant != nil {
-		name := tenant.Name
-		result.TenantName = &name
-	}
-	return result
-}
-
-func findTenantByID(store authStoreFile, tenantID string) *TenantRecord {
-	for _, tenant := range store.Tenants {
-		if tenant.ID == tenantID {
-			copy := tenant
-			return &copy
-		}
-	}
-	return nil
-}
-
-func findUserByID(store authStoreFile, userID string) *storedUser {
-	for _, user := range store.Users {
-		if user.ID == userID {
-			copy := user
-			return &copy
-		}
-	}
-	return nil
+func scanUserRow(scanner interface {
+	Scan(dest ...any) error
+}) (dbUserRow, string, string, error) {
+	var row dbUserRow
+	var passwordSalt string
+	var passwordHash string
+	err := scanner.Scan(
+		&row.ID,
+		&row.TenantID,
+		&row.TenantName,
+		&row.Email,
+		&row.Name,
+		&row.Role,
+		&passwordSalt,
+		&passwordHash,
+		&row.Active,
+	)
+	return row, passwordSalt, passwordHash, err
 }
 
 func (s *authStore) authenticate(email, password string) (*AuthUser, error) {
-	store, err := s.load()
+	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
+	row, passwordSalt, passwordHash, err := scanUserRow(s.pool.QueryRow(context.Background(), `
+		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
+		FROM users u
+		INNER JOIN tenants t ON t.id = u.tenant_id
+		WHERE u.email = $1
+		LIMIT 1
+	`, normalizedEmail))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
-
-	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
-	for _, user := range store.Users {
-		if user.Email != normalizedEmail || !user.Active {
-			continue
-		}
-		if !verifyPassword(password, user.PasswordSalt, user.PasswordHash) {
-			return nil, nil
-		}
-
-		tenant := (*TenantRecord)(nil)
-		if user.TenantID != nil {
-			tenant = findTenantByID(store, *user.TenantID)
-		}
-		sanitized := sanitizeUser(user, tenant)
-		return &sanitized, nil
+	if !row.Active || !verifyPassword(password, passwordSalt, passwordHash) {
+		return nil, nil
 	}
-	return nil, nil
+	user := sanitizeUser(row)
+	return &user, nil
+}
+
+func (s *authStore) userByID(ctx context.Context, userID string) (*AuthUser, error) {
+	row, _, _, err := scanUserRow(s.pool.QueryRow(ctx, `
+		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
+		FROM users u
+		INNER JOIN tenants t ON t.id = u.tenant_id
+		WHERE u.id = $1
+		LIMIT 1
+	`, userID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	user := sanitizeUser(row)
+	return &user, nil
 }
 
 func (s *authStore) listTenants() ([]TenantRecord, error) {
-	store, err := s.load()
+	rows, err := s.pool.Query(context.Background(), `
+		SELECT id, name, slug, created_at
+		FROM tenants
+		ORDER BY name ASC
+	`)
 	if err != nil {
 		return nil, err
 	}
-	return store.Tenants, nil
+	defer rows.Close()
+
+	tenants := make([]TenantRecord, 0)
+	for rows.Next() {
+		var tenant TenantRecord
+		if err := rows.Scan(&tenant.ID, &tenant.Name, &tenant.Slug, &tenant.CreatedAt); err != nil {
+			return nil, err
+		}
+		tenants = append(tenants, tenant)
+	}
+	return tenants, rows.Err()
 }
 
 func (s *authStore) createTenant(name, slug string) (*TenantRecord, error) {
-	store, err := s.load()
-	if err != nil {
-		return nil, err
-	}
-
+	tenantName := strings.TrimSpace(name)
 	tenantSlug := slugify(firstNonEmpty(slug, name))
-	if strings.TrimSpace(name) == "" || tenantSlug == "" {
+	if tenantName == "" || tenantSlug == "" {
 		return nil, errors.New("Tenant name is required")
-	}
-	for _, tenant := range store.Tenants {
-		if tenant.Slug == tenantSlug {
-			return nil, errors.New("Tenant slug already exists")
-		}
 	}
 
 	tenant := TenantRecord{
 		ID:        uuid.NewString(),
-		Name:      strings.TrimSpace(name),
+		Name:      tenantName,
 		Slug:      tenantSlug,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	store.Tenants = append(store.Tenants, tenant)
-	if err := s.save(store); err != nil {
+	if _, err := s.pool.Exec(context.Background(), `
+		INSERT INTO tenants (id, tenant_id, name, slug, created_at, updated_at)
+		VALUES ($1, $1, $2, $3, NOW(), NOW())
+	`, tenant.ID, tenant.Name, tenant.Slug); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return nil, errors.New("Tenant slug already exists")
+		}
 		return nil, err
 	}
 	return &tenant, nil
 }
 
 func (s *authStore) listUsers(tenantID *string) ([]AuthUser, error) {
-	store, err := s.load()
+	baseQuery := `
+		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
+		FROM users u
+		INNER JOIN tenants t ON t.id = u.tenant_id
+	`
+	args := []any{}
+	if tenantID != nil && strings.TrimSpace(*tenantID) != "" {
+		baseQuery += ` WHERE u.tenant_id = $1`
+		args = append(args, *tenantID)
+	}
+	baseQuery += ` ORDER BY u.name ASC`
+
+	rows, err := s.pool.Query(context.Background(), baseQuery, args...)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	users := make([]AuthUser, 0)
-	for _, user := range store.Users {
-		if tenantID != nil && (user.TenantID == nil || *user.TenantID != *tenantID) {
-			continue
+	for rows.Next() {
+		row, _, _, err := scanUserRow(rows)
+		if err != nil {
+			return nil, err
 		}
-		tenant := (*TenantRecord)(nil)
-		if user.TenantID != nil {
-			tenant = findTenantByID(store, *user.TenantID)
-		}
-		users = append(users, sanitizeUser(user, tenant))
+		users = append(users, sanitizeUser(row))
 	}
-	return users, nil
+	return users, rows.Err()
 }
 
 func (s *authStore) createUser(name, email, password, role string, tenantID *string) (*AuthUser, error) {
-	store, err := s.load()
-	if err != nil {
-		return nil, err
-	}
-
 	normalizedRole := strings.ToLower(strings.TrimSpace(role))
 	if normalizedRole != "super_admin" && normalizedRole != "admin" && normalizedRole != "user" {
 		return nil, errors.New("Invalid role")
 	}
-	if normalizedRole != "super_admin" && (tenantID == nil || *tenantID == "") {
-		return nil, errors.New("tenantId is required for admin and user roles")
+	if tenantID == nil || strings.TrimSpace(*tenantID) == "" {
+		return nil, errors.New("tenantId is required")
 	}
 	if strings.TrimSpace(name) == "" || strings.TrimSpace(email) == "" || password == "" {
 		return nil, errors.New("name, email, and password are required")
-	}
-
-	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
-	for _, user := range store.Users {
-		if user.Email == normalizedEmail {
-			return nil, errors.New("Email already exists")
-		}
 	}
 
 	salt, hash, err := newPasswordHash(password)
@@ -339,102 +256,97 @@ func (s *authStore) createUser(name, email, password, role string, tenantID *str
 		return nil, err
 	}
 
-	var storedTenantID *string
-	if normalizedRole != "super_admin" && tenantID != nil && *tenantID != "" {
-		copy := *tenantID
-		storedTenantID = &copy
-	}
-
-	user := storedUser{
-		ID:           uuid.NewString(),
-		TenantID:     storedTenantID,
-		Email:        normalizedEmail,
-		Name:         strings.TrimSpace(name),
-		Role:         normalizedRole,
-		PasswordSalt: salt,
-		PasswordHash: hash,
-		Active:       true,
-		CreatedAt:    time.Now().UTC().Format(time.RFC3339),
-	}
-
-	store.Users = append(store.Users, user)
-	if err := s.save(store); err != nil {
+	userID := uuid.NewString()
+	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
+	if _, err := s.pool.Exec(context.Background(), `
+		INSERT INTO users (id, tenant_id, email, name, role, password_salt, password_hash, active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(), NOW())
+	`, userID, strings.TrimSpace(*tenantID), normalizedEmail, strings.TrimSpace(name), normalizedRole, salt, hash); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "users_email_key") || strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return nil, errors.New("Email already exists")
+		}
 		return nil, err
 	}
 
-	tenant := (*TenantRecord)(nil)
-	if storedTenantID != nil {
-		tenant = findTenantByID(store, *storedTenantID)
-	}
-	sanitized := sanitizeUser(user, tenant)
-	return &sanitized, nil
+	return s.userByID(context.Background(), userID)
 }
 
 func (s *authStore) updateUser(userID string, updates map[string]any) (*AuthUser, error) {
-	store, err := s.load()
+	ctx := context.Background()
+	row, salt, hash, err := scanUserRow(s.pool.QueryRow(ctx, `
+		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
+		FROM users u
+		INNER JOIN tenants t ON t.id = u.tenant_id
+		WHERE u.id = $1
+		LIMIT 1
+	`, userID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errors.New("User not found")
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	index := -1
-	for i, user := range store.Users {
-		if user.ID == userID {
-			index = i
-			break
-		}
-	}
-	if index < 0 {
-		return nil, errors.New("User not found")
-	}
+	nextName := row.Name
+	nextRole := row.Role
+	nextActive := row.Active
+	nextTenantID := row.TenantID
+	nextSalt := salt
+	nextHash := hash
 
-	user := store.Users[index]
 	if name, ok := updates["name"].(string); ok && strings.TrimSpace(name) != "" {
-		user.Name = strings.TrimSpace(name)
-	}
-	if active, ok := updates["active"].(bool); ok {
-		user.Active = active
+		nextName = strings.TrimSpace(name)
 	}
 	if role, ok := updates["role"].(string); ok && strings.TrimSpace(role) != "" {
 		normalizedRole := strings.ToLower(strings.TrimSpace(role))
 		if normalizedRole != "super_admin" && normalizedRole != "admin" && normalizedRole != "user" {
 			return nil, errors.New("Invalid role")
 		}
-		user.Role = normalizedRole
+		nextRole = normalizedRole
+	}
+	if active, ok := updates["active"].(bool); ok {
+		nextActive = active
 	}
 	if password, ok := updates["password"].(string); ok && password != "" {
 		salt, hash, hashErr := newPasswordHash(password)
 		if hashErr != nil {
 			return nil, hashErr
 		}
-		user.PasswordSalt = salt
-		user.PasswordHash = hash
+		nextSalt = salt
+		nextHash = hash
 	}
 	if tenantID, exists := updates["tenantId"]; exists {
 		switch value := tenantID.(type) {
-		case nil:
-			user.TenantID = nil
 		case string:
-			trimmed := strings.TrimSpace(value)
-			if trimmed == "" {
-				user.TenantID = nil
-			} else {
-				copy := trimmed
-				user.TenantID = &copy
+			if strings.TrimSpace(value) == "" {
+				return nil, fmt.Errorf("tenantId is required")
 			}
+			nextTenantID = strings.TrimSpace(value)
+		case *string:
+			if value == nil || strings.TrimSpace(*value) == "" {
+				return nil, fmt.Errorf("tenantId is required")
+			}
+			nextTenantID = strings.TrimSpace(*value)
+		case nil:
+			return nil, fmt.Errorf("tenantId is required")
 		default:
 			return nil, fmt.Errorf("invalid tenantId")
 		}
 	}
 
-	store.Users[index] = user
-	if err := s.save(store); err != nil {
+	if _, err := s.pool.Exec(ctx, `
+		UPDATE users
+		SET tenant_id = $2,
+			name = $3,
+			role = $4,
+			password_salt = $5,
+			password_hash = $6,
+			active = $7,
+			updated_at = NOW()
+		WHERE id = $1
+	`, userID, nextTenantID, nextName, nextRole, nextSalt, nextHash, nextActive); err != nil {
 		return nil, err
 	}
 
-	tenant := (*TenantRecord)(nil)
-	if user.TenantID != nil {
-		tenant = findTenantByID(store, *user.TenantID)
-	}
-	sanitized := sanitizeUser(user, tenant)
-	return &sanitized, nil
+	return s.userByID(ctx, userID)
 }

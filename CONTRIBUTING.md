@@ -5,8 +5,10 @@ Thanks for contributing to FlowIQ.
 ## Before You Start
 
 - Use Node.js 22+ and Go 1.25+.
+- Use PostgreSQL 16+ locally, or point `DATABASE_URL` at an existing Postgres instance.
 - Copy `.env.example` to `.env` if you need to run the app locally.
 - Install dependencies with `npm install`.
+- Run `npm run db:setup` before starting the API for the first time.
 
 ## Local Development
 
@@ -28,6 +30,14 @@ Run both together:
 npm run start:all
 ```
 
+Database helpers:
+
+```bash
+npm run db:migrate
+npm run db:seed
+npm run db:setup
+```
+
 ## Validation
 
 Before opening a pull request, run:
@@ -41,6 +51,7 @@ npm run build
 
 - `apps/web`: Next.js frontend
 - `apps/api`: Go backend
+- `apps/api/db/migrations`: PostgreSQL schema migrations
 - `packages/shared`: shared types and business logic helpers
 - `packages/ui`: reusable frontend UI primitives
 - `docs`: project and deployment documentation

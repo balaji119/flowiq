@@ -16,7 +16,10 @@
     "start:all": "concurrently \"npm run web\" \"npm run dev:api\"",
     "build": "npm run build --workspace @flowiq/web && go -C apps/api build .",
     "serve": "npm run serve --workspace @flowiq/web",
-    "typecheck": "npm run typecheck --workspace @flowiq/web"
+    "typecheck": "npm run typecheck --workspace @flowiq/web",
+    "db:migrate": "go -C apps/api run . migrate",
+    "db:seed": "go -C apps/api run . seed",
+    "db:setup": "npm run db:migrate && npm run db:seed"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

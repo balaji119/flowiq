@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, Check, ChevronRight, CircleAlert, LayoutGrid, LoaderCircle, LogOut, Plus, Shield, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
+  CampaignRecord,
   CampaignCalculationSummary,
   CampaignLine,
   CampaignMarket,
@@ -16,10 +17,10 @@ import {
 } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, Input, Label, Separator, cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
+import { calculatePersistedCampaign, createCampaign, fetchCampaign, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
-import { submitQuoteForPricing } from '../services/quoteApi';
 
 const steps = [
   { key: 'schedule', title: 'Schedule' },
@@ -27,7 +28,7 @@ const steps = [
   { key: 'finalize', title: 'Finalise' },
 ] as const;
 
-const QUOTE_BUILDER_DRAFT_KEY = 'adsconnect-quote-builder-draft';
+const ACTIVE_CAMPAIGN_ID_KEY = 'adsconnect-active-campaign-id';
 const liveSummarySecondaryKeys = [
   { key: 'posters', label: 'Posters' },
   { key: 'frames', label: 'Frames' },
@@ -35,15 +36,30 @@ const liveSummarySecondaryKeys = [
   { key: 'quoteQty', label: 'Quote Qty' },
 ] as const;
 
-async function setStoredDraft(value: string | null) {
+async function setStoredCampaignId(value: string | null) {
   if (typeof window === 'undefined') return;
-  if (value === null) window.localStorage.removeItem(QUOTE_BUILDER_DRAFT_KEY);
-  else window.localStorage.setItem(QUOTE_BUILDER_DRAFT_KEY, value);
+  if (value === null) window.localStorage.removeItem(ACTIVE_CAMPAIGN_ID_KEY);
+  else window.localStorage.setItem(ACTIVE_CAMPAIGN_ID_KEY, value);
 }
 
-async function getStoredDraft() {
+async function getStoredCampaignId() {
   if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(QUOTE_BUILDER_DRAFT_KEY);
+  return window.localStorage.getItem(ACTIVE_CAMPAIGN_ID_KEY);
+}
+
+function applyCampaignToScreen(
+  campaign: CampaignRecord,
+  setValues: Dispatch<SetStateAction<OrderFormValues>>,
+  setSummary: Dispatch<SetStateAction<CampaignCalculationSummary | null>>,
+  setUploadedPurchaseOrderName: Dispatch<SetStateAction<string>>,
+  setCampaignId: Dispatch<SetStateAction<string | null>>,
+  setCampaignStatus: Dispatch<SetStateAction<CampaignRecord['status']>>,
+) {
+  setValues(campaign.values);
+  setSummary(campaign.summary);
+  setUploadedPurchaseOrderName(campaign.purchaseOrder?.originalName || '');
+  setCampaignId(campaign.id);
+  setCampaignStatus(campaign.status);
 }
 
 function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBreakdown; inverse?: boolean }) {
@@ -208,10 +224,13 @@ function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: n
 export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const { session, logout } = useAuth();
   const [values, setValues] = useState<OrderFormValues>(() => createDefaultFormValues());
-  const [draftReady, setDraftReady] = useState(false);
+  const [campaignId, setCampaignId] = useState<string | null>(null);
+  const [campaignStatus, setCampaignStatus] = useState<CampaignRecord['status']>('draft');
   const [markets, setMarkets] = useState<MarketMetadata[]>([]);
   const [metadataError, setMetadataError] = useState('');
   const [loadingMetadata, setLoadingMetadata] = useState(true);
+  const [loadingCampaign, setLoadingCampaign] = useState(true);
+  const [savingCampaign, setSavingCampaign] = useState(false);
   const [summary, setSummary] = useState<CampaignCalculationSummary | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -222,36 +241,45 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
   const [uploadedPurchaseOrderName, setUploadedPurchaseOrderName] = useState('');
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
+  const campaignHydratedRef = useRef(false);
+  const lastPersistedValuesRef = useRef('');
 
   useEffect(() => {
     let active = true;
 
-    async function hydrateDraft() {
+    async function bootstrapCampaign() {
       try {
-        const stored = await getStoredDraft();
-        if (!stored || !active) return;
+        const storedCampaignId = await getStoredCampaignId();
+        if (!active) return;
 
-        const parsed = JSON.parse(stored) as { values?: Partial<OrderFormValues> };
-        const defaults = createDefaultFormValues();
-        const nextValues = {
-          ...defaults,
-          ...parsed.values,
-          contact: { ...defaults.contact, ...(parsed.values?.contact || {}) },
-          campaignMarkets:
-            Array.isArray(parsed.values?.campaignMarkets) && parsed.values.campaignMarkets.length > 0 ? parsed.values.campaignMarkets : defaults.campaignMarkets,
-          selectedJobOperations: Array.isArray(parsed.values?.selectedJobOperations) ? parsed.values.selectedJobOperations : defaults.selectedJobOperations,
-          selectedSectionOperations: Array.isArray(parsed.values?.selectedSectionOperations) ? parsed.values.selectedSectionOperations : defaults.selectedSectionOperations,
-        };
+        if (storedCampaignId) {
+          try {
+            const response = await fetchCampaign(storedCampaignId);
+            if (!active) return;
+            applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
+            lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
+            campaignHydratedRef.current = true;
+            await setStoredCampaignId(response.campaign.id);
+            return;
+          } catch {
+            await setStoredCampaignId(null);
+          }
+        }
 
-        setValues(nextValues);
+        const response = await createCampaign({ values: createDefaultFormValues() });
+        if (!active) return;
+        applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
+        lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
+        campaignHydratedRef.current = true;
+        await setStoredCampaignId(response.campaign.id);
       } catch {
-        await setStoredDraft(null);
+        if (active) setError('Unable to load campaign draft');
       } finally {
-        if (active) setDraftReady(true);
+        if (active) setLoadingCampaign(false);
       }
     }
 
-    void hydrateDraft();
+    void bootstrapCampaign();
     return () => {
       active = false;
     };
@@ -279,7 +307,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
   }, []);
 
   useEffect(() => {
-    if (!draftReady) return;
+    if (loadingCampaign) return;
 
     let active = true;
 
@@ -308,7 +336,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
     return () => {
       active = false;
     };
-  }, [draftReady]);
+  }, [loadingCampaign]);
 
   const payload = useMemo(() => buildPrintIqPayload(values, summary), [summary, values]);
   const activeMarketSummaries = useMemo(() => (summary ? summary.perMarket.filter((market) => market.activeAssets > 0 || market.activeRuns > 0 || market.totalUnits > 0) : []), [summary]);
@@ -317,7 +345,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
   const progressPercent = ((stepIndex + 1) / steps.length) * 100;
 
   useEffect(() => {
-    if (!draftReady) return;
+    if (loadingCampaign) return;
 
     setValues((current) => {
       const normalizedMarkets = normalizeCampaignMarkets(current.campaignMarkets, numberOfWeeks);
@@ -326,10 +354,10 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
 
       return changed ? { ...current, campaignMarkets: normalizedMarkets } : current;
     });
-  }, [draftReady, numberOfWeeks]);
+  }, [loadingCampaign, numberOfWeeks]);
 
   useEffect(() => {
-    if (!draftReady || loadingMetadata || metadataError) return;
+    if (loadingCampaign || loadingMetadata || metadataError) return;
 
     let active = true;
     const timeoutId = setTimeout(async () => {
@@ -352,12 +380,36 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [draftReady, loadingMetadata, metadataError, values.campaignMarkets]);
+  }, [loadingCampaign, loadingMetadata, metadataError, values.campaignMarkets]);
 
   useEffect(() => {
-    if (!draftReady) return;
-    void setStoredDraft(JSON.stringify({ values }));
-  }, [draftReady, values]);
+    if (loadingCampaign || !campaignId || !campaignHydratedRef.current) return;
+
+    const serializedValues = JSON.stringify(values);
+    if (serializedValues === lastPersistedValuesRef.current) return;
+
+    let active = true;
+    setSavingCampaign(true);
+    const timeoutId = setTimeout(async () => {
+      try {
+        const response = await updateStoredCampaign(campaignId, { values });
+        if (!active) return;
+        setCampaignStatus(response.campaign.status);
+        setUploadedPurchaseOrderName(response.campaign.purchaseOrder?.originalName || '');
+        lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
+      } catch (saveError) {
+        if (active) setError(saveError instanceof Error ? saveError.message : 'Unable to save campaign draft');
+      } finally {
+        if (active) setSavingCampaign(false);
+      }
+    }, 400);
+
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+      setSavingCampaign(false);
+    };
+  }, [campaignId, loadingCampaign, values]);
 
   function updateField<K extends keyof OrderFormValues>(field: K, value: OrderFormValues[K]) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -395,13 +447,20 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
   }
 
   async function handleSubmitQuote() {
+    if (!campaignId) {
+      setError('Campaign draft is not ready yet');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
     setQuoteResponseMessage('');
 
     try {
-      const response = await submitQuoteForPricing(payload);
+      const response = await submitCampaignToPrintIQ(campaignId);
       const amount = response.amount === null || response.amount === undefined || response.amount === '' ? 'N/A' : String(response.amount);
+      applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
+      lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
       setQuoteResponseMessage(`Quote created successfully. Amount: ${amount}`);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Unable to create quote');
@@ -415,11 +474,15 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
       setError('Please choose a purchase order file to upload');
       return;
     }
+    if (!campaignId) {
+      setError('Campaign draft is not ready yet');
+      return;
+    }
 
     setUploadingPurchaseOrder(true);
     setError('');
     try {
-      const response = await uploadPurchaseOrderFile(selectedPurchaseOrderFile);
+      const response = await uploadPurchaseOrderFile(selectedPurchaseOrderFile, campaignId);
       setUploadedPurchaseOrderName(response.originalName);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload purchase order');
@@ -428,18 +491,44 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
     }
   }
 
-  function reviewTotals() {
-    setStepIndex(1);
+  async function reviewTotals() {
+    if (!campaignId) {
+      setError('Campaign draft is not ready yet');
+      return;
+    }
+
+    setCalculating(true);
+    setError('');
+    try {
+      const saved = await updateStoredCampaign(campaignId, { values });
+      lastPersistedValuesRef.current = JSON.stringify(saved.campaign.values);
+      const response = await calculatePersistedCampaign(campaignId);
+      applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
+      lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
+      setStepIndex(1);
+    } catch (calculationError) {
+      setError(calculationError instanceof Error ? calculationError.message : 'Unable to calculate campaign');
+    } finally {
+      setCalculating(false);
+    }
   }
 
-  function handleStartNewSchedule() {
-    setValues(createDefaultFormValues());
-    setSummary(null);
+  async function handleStartNewSchedule() {
+    setLoadingCampaign(true);
     setError('');
     setQuoteResponseMessage('');
     setSelectedPurchaseOrderFile(null);
-    setUploadedPurchaseOrderName('');
-    setStepIndex(0);
+    try {
+      const response = await createCampaign({ values: createDefaultFormValues() });
+      applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
+      lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
+      await setStoredCampaignId(response.campaign.id);
+      setStepIndex(0);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Unable to create a new campaign');
+    } finally {
+      setLoadingCampaign(false);
+    }
   }
 
   function openPurchaseOrderPicker() {
@@ -461,6 +550,9 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
                 <h1 className="text-4xl font-black tracking-tight text-white sm:text-5xl">ADS CONNECT</h1>
                 <p className="max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
                   Build campaign schedules, review workbook totals, and create PrintIQ-ready quotes with a cleaner browser-first workflow.
+                </p>
+                <p className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-500">
+                  {loadingCampaign ? 'Loading draft' : savingCampaign ? 'Saving draft' : `Status: ${campaignStatus.replace('_', ' ')}`}
                 </p>
               </div>
             </div>

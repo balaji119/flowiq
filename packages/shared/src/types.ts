@@ -23,6 +23,7 @@ export type PrintIqQuoteOptionsResponse = {
 };
 
 export type AuthRole = 'super_admin' | 'admin' | 'user';
+export type CampaignStatus = 'draft' | 'calculated' | 'submitted';
 
 export type AuthUser = {
   id: string;
@@ -151,6 +152,40 @@ export type OrderFormValues = {
   contact: ContactDetails;
   selectedJobOperations: string[];
   selectedSectionOperations: string[];
+};
+
+export type CampaignRecord = {
+  id: string;
+  tenantId: string;
+  createdByUserId: string;
+  updatedByUserId: string;
+  status: CampaignStatus;
+  values: OrderFormValues;
+  summary: CampaignCalculationSummary | null;
+  purchaseOrder: {
+    originalName: string;
+    storedName: string;
+    mimeType: string;
+    size: number;
+    uploadedAt: string;
+  } | null;
+  latestQuoteAmount: number | string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CampaignUpsertPayload = {
+  values: OrderFormValues;
+};
+
+export type CampaignCalculationResponse = {
+  campaign: CampaignRecord;
+  summary: CampaignCalculationSummary;
+};
+
+export type CampaignSubmitResponse = {
+  campaign: CampaignRecord;
+  amount: number | string | null;
 };
 
 export type PrintIqQuotePayload = {

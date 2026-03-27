@@ -27,6 +27,8 @@ The app has three steps:
 2. `Review`
 3. `Finalise`
 
+Campaign drafts are saved automatically to the backend, so you can refresh the browser and continue from the same draft.
+
 ## Step 1: Schedule
 
 Use this step to define the campaign run plan.
@@ -52,7 +54,7 @@ Repeat for every asset in the campaign.
 
 When the schedule is complete, click:
 
-`Calculate Campaign Totals`
+`Review Totals`
 
 The app will use the workbook logic to calculate required poster quantities and frame counts.
 
@@ -104,14 +106,6 @@ Click:
 
 The file is sent to the FlowIQ API and stored in the backend upload area before the quote is submitted.
 
-### Generate description if needed
-
-Click:
-
-`Generate Description`
-
-This creates a description using the campaign timing and calculated totals.
-
 ### Create the quote
 
 Click:
@@ -123,7 +117,8 @@ The app will:
 1. build the PrintIQ payload
 2. get a PrintIQ login token through the backend
 3. send the quote request to PrintIQ
-4. display the response in the app
+4. save the quote and job response against the campaign
+5. display the response in the app
 
 ## Live summary panel
 
