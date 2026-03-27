@@ -1,0 +1,23 @@
+{
+  "tenants": [
+    {
+      "id": "ba52cdef-fdce-4072-8d7d-3886ed20e2f8",
+      "name": "Default Tenant",
+      "slug": "default-tenant",
+      "createdAt": "2026-03-27T08:47:31Z"
+    }
+  ],
+  "users": [
+    {
+      "id": "d71e96f3-4fe5-44a1-8653-345dd2f10ab7",
+      "tenantId": null,
+      "email": "superadmin@flowiq.local",
+      "name": "FlowIQ Super Admin",
+      "role": "super_admin",
+      "passwordSalt": "6f5b6891b40b220897495fad1059c6da",
+      "passwordHash": "1f33349c1e7deaa2a53640b7c9197f2f6e933d76f8170c975955b90e39aac2aab32bff004016ca7d77e5ecb551faf4461d7b1a64acd16fd90e7b95db007c4998",
+      "active": true,
+      "createdAt": "2026-03-27T08:47:31Z"
+    }
+  ]
+}

@@ -7,7 +7,7 @@ const args = process.argv.slice(3);
 
 if (!script) {
   console.error('Usage: node run <script> [...args]');
-  console.error('Available scripts: start, start:server, start:all, web, typecheck');
+  console.error('Available scripts: dev, web, dev:api, start:api, start:all, build, serve, typecheck');
   process.exit(1);
 }
 

@@ -1,0 +1,28 @@
+services:
+  web:
+    image: node:22-bookworm-slim
+    working_dir: /workspace
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://api:4000
+    command: >
+      bash -lc "npm ci && npm run serve --workspace @flowiq/web"
+    volumes:
+      - ../..:/workspace
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    env_file:
+      - ./.env.production
+    environment:
+      PORT: 4000
+    volumes:
+      - ../../apps/api/storage:/app/storage
+    ports:
+      - "4000:4000"
+    restart: unless-stopped

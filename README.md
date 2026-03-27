@@ -1,14 +1,14 @@
 # FlowIQ
 
-Web application for capturing campaign print schedule inputs, calculating workbook-based poster and frame quantities, and sending a PrintIQ quote request through a secure proxy.
+Monorepo for the FlowIQ quote workflow. The frontend lives in `apps/web` as a Next.js app, and the backend lives in `apps/api` as a Go service.
 
 ## What is included
 
-- Browser-based FlowIQ interface built with Next.js, Tailwind CSS, and shadcn-style UI components.
-- Shared form for campaign scheduling, quote details, operations, and contact details.
-- Workbook-derived calculator data checked into the repo for runtime use.
-- Node/Express proxy to request the PrintIQ token and submit `GetPrice`.
-- PrintIQ payload preview so the business mapping is visible before submission.
+- `apps/web`: Next.js frontend with the existing quote, auth, and admin flows.
+- `apps/api`: Go API for auth, calculator, PrintIQ integration, admin management, and purchase-order uploads.
+- `packages/shared`: shared types, constants, and payload/calculation utilities.
+- `packages/ui`: reusable UI primitives used by the frontend.
+- `infra`: Docker and script assets for deployment support.
 
 ## Calculation source
 
@@ -22,30 +22,31 @@ Web application for capturing campaign print schedule inputs, calculating workbo
 1. Copy `.env.example` to `.env`.
 2. Fill in the PrintIQ credentials.
 3. Install dependencies with `npm install`.
-4. Start the proxy with `npm run start:server`.
-5. Start the Next.js frontend with `npm run web` or `npm run dev`.
+4. Start the Go API with `npm run start:api`.
+5. Start the frontend with `npm run web` or `npm run dev`.
 
 ## Commands
 
 - `npm run dev`
 - `npm run web`
+- `npm run dev:api`
+- `npm run start:api`
 - `npm run build`
 - `npm run serve`
-- `npm run start:server`
 - `npm run start:all`
 - `npm run typecheck`
 
 ## Architecture
 
-- `app/page.tsx`: Next.js route entry point
-- `App.tsx`: client-side application shell
-- `src/screens/QuoteBuilderScreen.tsx`: primary shared UI
-- `src/utils/campaign.ts`: workbook-total helpers
-- `src/utils/printiq.ts`: form-to-PrintIQ payload mapper
-- `src/services/calculatorApi.ts`: workbook calculator API wrapper
-- `src/services/quoteApi.ts`: client API wrapper
-- `server/workbookCalculator.js`: workbook parser and quantity calculator
-- `server/index.js`: calculator and PrintIQ proxy
+- `apps/web/app/page.tsx`: Next.js route entry point
+- `apps/web/App.tsx`: client-side application shell
+- `apps/web/src/screens/QuoteBuilderScreen.tsx`: primary shared UI
+- `packages/shared/src/campaign.ts`: workbook-total helpers
+- `packages/shared/src/printiq.ts`: form-to-PrintIQ payload mapper
+- `apps/web/src/services/calculatorApi.ts`: workbook calculator API wrapper
+- `apps/web/src/services/quoteApi.ts`: client API wrapper
+- `apps/api/calculator.go`: workbook parser and quantity calculator
+- `apps/api/main.go`: Go API entry point
 
 ## Deployment
 

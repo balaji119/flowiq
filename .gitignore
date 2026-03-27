@@ -6,6 +6,7 @@ node_modules/
 # Next.js
 .expo/
 .next/
+apps/web/.next/
 out/
 dist/
 web-build/
@@ -15,6 +16,12 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 logs/
+apps/api/flowiq-api.exe
+apps/api/flowiq-api
+apps/api/*.exe
+apps/api/storage/data/
+apps/api/storage/logs/
+apps/api/storage/uploads/
 
 # macOS
 .DS_Store
@@ -29,7 +36,6 @@ Print Orders + Install Calculator.xlsx
 ~$*.xlsx
 bk_live
 bk_live.pub
-server/data/
 __azurite_db_blob__.json
 __azurite_db_blob_extent__.json
 
