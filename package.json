@@ -1,28 +1,30 @@
 {
   "name": "flowiq",
   "version": "1.0.0",
-  "main": "index.ts",
   "scripts": {
-    "start": "expo start",
+    "dev": "next dev",
+    "start": "next dev",
     "start:server": "node server/index.js",
     "start:all": "concurrently \"npm run start\" \"npm run start:server\"",
-    "web": "expo start --web",
+    "web": "next dev",
+    "build": "next build",
+    "serve": "next start",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
-    "expo": "~55.0.8",
-    "expo-status-bar": "~55.0.4",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
+    "next": "^15.3.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.2",
     "react-native-web": "^0.21.0"
   },
   "devDependencies": {
+    "@types/node": "^24.5.2",
     "@types/react": "~19.2.2",
     "concurrently": "^9.2.1",
     "typescript": "~5.9.2"

@@ -2,7 +2,7 @@
 
 This deployment setup is designed for a Linux mini PC hosting:
 
-- the Expo web build
+- the Next.js web build
 - the Node/Express API
 - Caddy as the public HTTPS reverse proxy
 - optionally DuckDNS for direct public DNS
@@ -11,7 +11,7 @@ This deployment setup is designed for a Linux mini PC hosting:
 ## What Gets Deployed
 
 - `web-builder`
-  - builds the Expo web app into `dist-web`
+  - builds the Next.js frontend into `dist-web`
 - `api`
   - runs the backend from `server/index.js`
 - `caddy`
@@ -135,7 +135,7 @@ Application quote request logs are written to:
 
 ## Notes
 
-- The web build uses `EXPO_PUBLIC_API_BASE_URL=/api`, so browser requests go through Caddy to the backend on the same domain.
+- The web build uses `NEXT_PUBLIC_API_BASE_URL=/api`, so browser requests go through Caddy to the backend on the same domain.
 - The calculator now uses the checked-in JSON snapshot in `server/workbookMetadata.json`, so the Excel workbook is not required at runtime.
 - If you want to change the public hostname later, update `DOMAIN` and DuckDNS settings, then restart the stack.
 - If you are using Cloudflare Tunnel, make sure `cloudflared` is configured as a system service and that Caddy is recreated with `docker compose up -d --force-recreate caddy` after frontend deployments.

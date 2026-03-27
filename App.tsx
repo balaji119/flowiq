@@ -1,4 +1,5 @@
-import { StatusBar } from 'expo-status-bar';
+'use client';
+
 import { useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -20,7 +21,6 @@ function AppShell() {
 
   return (
     <>
-      <StatusBar style="light" />
       {session ? (
         view === 'admin' ? (
           <AdminScreen onBack={() => setView('quote')} />

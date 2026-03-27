@@ -4,7 +4,7 @@ Web application for capturing campaign print schedule inputs, calculating workbo
 
 ## What is included
 
-- Browser-based FlowIQ interface built with Expo for web.
+- Browser-based FlowIQ interface built with Next.js and `react-native-web`.
 - Shared form for campaign scheduling, quote details, operations, and contact details.
 - Workbook-derived calculator data checked into the repo for runtime use.
 - Node/Express proxy to request the PrintIQ token and submit `GetPrice`.
@@ -23,18 +23,22 @@ Web application for capturing campaign print schedule inputs, calculating workbo
 2. Fill in the PrintIQ credentials.
 3. Install dependencies with `npm install`.
 4. Start the proxy with `npm run start:server`.
-5. Start the web app with `npm run web` or `npm run start`.
+5. Start the Next.js frontend with `npm run web` or `npm run dev`.
 
 ## Commands
 
+- `npm run dev`
 - `npm run web`
+- `npm run build`
+- `npm run serve`
 - `npm run start:server`
 - `npm run start:all`
 - `npm run typecheck`
 
 ## Architecture
 
-- `App.tsx`: app entry point
+- `app/page.tsx`: Next.js route entry point
+- `App.tsx`: client-side application shell
 - `src/screens/QuoteBuilderScreen.tsx`: primary shared UI
 - `src/utils/campaign.ts`: workbook-total helpers
 - `src/utils/printiq.ts`: form-to-PrintIQ payload mapper

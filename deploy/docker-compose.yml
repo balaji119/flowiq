@@ -3,9 +3,9 @@ services:
     image: node:22-bookworm-slim
     working_dir: /workspace
     environment:
-      EXPO_PUBLIC_API_BASE_URL: /api
+      NEXT_PUBLIC_API_BASE_URL: /api
     command: >
-      bash -lc "npm ci && npx expo export --platform web --output-dir dist-web"
+      bash -lc "npm ci && npx next build && rm -rf dist-web && cp -R out dist-web"
     volumes:
       - ..:/workspace
 

@@ -1,6 +1,8 @@
 node_modules
 .expo
+.next
 dist
+out
 dist-web
 web-build
 logs
