@@ -1,5 +1,5 @@
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, Check, ChevronRight, CircleAlert, LayoutGrid, LoaderCircle, LogOut, Plus, Shield, Upload, X } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Check, ChevronRight, CircleAlert, LayoutGrid, LoaderCircle, LogOut, Plus, Shield, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignRecord,
@@ -221,10 +221,10 @@ function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: n
   }));
 }
 
-export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
+export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onOpenAdmin }: { campaignId?: string | null; onBack?: () => void; onOpenAdmin?: () => void }) {
   const { session, logout } = useAuth();
   const [values, setValues] = useState<OrderFormValues>(() => createDefaultFormValues());
-  const [campaignId, setCampaignId] = useState<string | null>(null);
+  const [campaignId, setCampaignId] = useState<string | null>(selectedCampaignId ?? null);
   const [campaignStatus, setCampaignStatus] = useState<CampaignRecord['status']>('draft');
   const [markets, setMarkets] = useState<MarketMetadata[]>([]);
   const [metadataError, setMetadataError] = useState('');
@@ -249,7 +249,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
 
     async function bootstrapCampaign() {
       try {
-        const storedCampaignId = await getStoredCampaignId();
+        const storedCampaignId = selectedCampaignId || (await getStoredCampaignId());
         if (!active) return;
 
         if (storedCampaignId) {
@@ -283,7 +283,7 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
     return () => {
       active = false;
     };
-  }, []);
+  }, [selectedCampaignId]);
 
   useEffect(() => {
     let active = true;
@@ -564,6 +564,12 @@ export function QuoteBuilderScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
+                {onBack ? (
+                  <Button onClick={onBack} size="sm" variant="ghost">
+                    <ArrowLeft className="h-4 w-4" />
+                    Campaigns
+                  </Button>
+                ) : null}
                 {onOpenAdmin ? (
                   <Button onClick={onOpenAdmin} size="sm" variant="secondary">
                     <Shield className="h-4 w-4" />

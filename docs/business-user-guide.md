@@ -21,7 +21,9 @@ You should know:
 
 ## App flow
 
-The app has three steps:
+After sign-in, the landing page shows saved campaign schedules for your tenant and lets you create a new campaign.
+
+When you open a campaign, the app has three steps:
 
 1. `Schedule`
 2. `Review`

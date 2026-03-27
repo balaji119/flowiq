@@ -23,6 +23,7 @@ flowiq/
 ## What is included
 
 - `apps/web`: Next.js frontend with the quote, auth, and admin flows.
+- `apps/web`: Next.js frontend with the campaign landing page, quote, auth, and admin flows.
 - `apps/api`: Go API for JWT auth, tenant-scoped campaign persistence, calculator logic, PrintIQ integration, admin management, and purchase-order uploads.
 - `packages/shared`: shared types, constants, and payload/calculation utilities.
 - `packages/ui`: reusable UI primitives used by the frontend.
@@ -81,12 +82,19 @@ The default local URLs are:
 - Campaigns are now stored in PostgreSQL with `draft`, `calculated`, and `submitted` states.
 - Every core table is tenant-scoped through `tenant_id`.
 - Users authenticate with JWT and only see data for their tenant.
+- Supported user roles are `super_admin`, `admin`, and `user`.
 - The main persisted workflow endpoints are:
   - `POST /api/campaigns`
   - `GET /api/campaigns/{id}`
   - `PUT /api/campaigns/{id}`
   - `POST /api/campaigns/{id}/calculate`
   - `POST /api/campaigns/{id}/submit-to-printiq`
+
+## Seed Data
+
+- `npm run db:seed` always creates the default tenant plus the `super_admin` account from `SUPER_ADMIN_*`.
+- If `DEFAULT_ADMIN_EMAIL` and `DEFAULT_ADMIN_PASSWORD` are set, it also seeds a tenant `admin`.
+- If `DEFAULT_USER_EMAIL` and `DEFAULT_USER_PASSWORD` are set, it also seeds a tenant `user`.
 
 ## Contributing
 

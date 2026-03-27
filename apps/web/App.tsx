@@ -4,12 +4,14 @@ import { useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AdminScreen } from './src/screens/AdminScreen';
+import { CampaignLandingScreen } from './src/screens/CampaignLandingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { QuoteBuilderScreen } from './src/screens/QuoteBuilderScreen';
 
 function AppShell() {
   const { loading, session } = useAuth();
-  const [view, setView] = useState<'quote' | 'admin'>('quote');
+  const [view, setView] = useState<'landing' | 'quote' | 'admin'>('landing');
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -26,10 +28,28 @@ function AppShell() {
     return <LoginScreen />;
   }
 
-  return view === 'admin' ? (
-    <AdminScreen onBack={() => setView('quote')} />
-  ) : (
-    <QuoteBuilderScreen onOpenAdmin={session.user.role !== 'user' ? () => setView('admin') : undefined} />
+  if (view === 'admin') {
+    return <AdminScreen onBack={() => setView('landing')} />;
+  }
+
+  if (view === 'quote') {
+    return (
+      <QuoteBuilderScreen
+        campaignId={selectedCampaignId}
+        onBack={() => setView('landing')}
+        onOpenAdmin={session.user.role !== 'user' ? () => setView('admin') : undefined}
+      />
+    );
+  }
+
+  return (
+    <CampaignLandingScreen
+      onOpenAdmin={session.user.role !== 'user' ? () => setView('admin') : undefined}
+      onOpenCampaign={(campaignId) => {
+        setSelectedCampaignId(campaignId);
+        setView('quote');
+      }}
+    />
   );
 }
 

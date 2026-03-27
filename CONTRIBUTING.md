@@ -38,6 +38,8 @@ npm run db:seed
 npm run db:setup
 ```
 
+The seed command creates the default `super_admin` account and can also create optional tenant `admin` and `user` accounts if the matching `DEFAULT_*` environment variables are set.
+
 ## Validation
 
 Before opening a pull request, run:

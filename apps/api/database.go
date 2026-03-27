@@ -173,5 +173,40 @@ func seedDatabase(ctx context.Context, pool *pgxpool.Pool) error {
 		}
 	}
 
+	if err := seedTenantUser(ctx, tx, existingTenantID, "admin", "DEFAULT_ADMIN_EMAIL", "DEFAULT_ADMIN_PASSWORD", "DEFAULT_ADMIN_NAME", "Tenant Administrator"); err != nil {
+		return err
+	}
+	if err := seedTenantUser(ctx, tx, existingTenantID, "user", "DEFAULT_USER_EMAIL", "DEFAULT_USER_PASSWORD", "DEFAULT_USER_NAME", "Tenant User"); err != nil {
+		return err
+	}
+
 	return tx.Commit(ctx)
+}
+
+func seedTenantUser(ctx context.Context, tx pgx.Tx, tenantID, role, emailEnvKey, passwordEnvKey, nameEnvKey, fallbackName string) error {
+	email := strings.ToLower(strings.TrimSpace(os.Getenv(emailEnvKey)))
+	password := strings.TrimSpace(os.Getenv(passwordEnvKey))
+	if email == "" || password == "" {
+		return nil
+	}
+
+	var existingUserID string
+	err := tx.QueryRow(ctx, `SELECT id FROM users WHERE email = $1 LIMIT 1`, email).Scan(&existingUserID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+
+	salt, hash, err := newPasswordHash(password)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO users (id, tenant_id, email, name, role, password_salt, password_hash, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+	`, uuid.NewString(), tenantID, email, envOrDefault(nameEnvKey, fallbackName), role, salt, hash)
+	return err
 }

@@ -119,6 +119,21 @@ func decodeCampaignRow(row campaignRow) (*campaignRecord, error) {
 	}, nil
 }
 
+type campaignListItem struct {
+	ID                string `json:"id"`
+	TenantID          string `json:"tenantId"`
+	Status            string `json:"status"`
+	CampaignName      string `json:"campaignName"`
+	CampaignStartDate string `json:"campaignStartDate"`
+	DueDate           string `json:"dueDate"`
+	NumberOfWeeks     string `json:"numberOfWeeks"`
+	MarketCount       int    `json:"marketCount"`
+	AssetCount        int    `json:"assetCount"`
+	LatestQuoteAmount any    `json:"latestQuoteAmount"`
+	UpdatedAt         string `json:"updatedAt"`
+	CreatedAt         string `json:"createdAt"`
+}
+
 func scanCampaignRow(scanner interface {
 	Scan(dest ...any) error
 }) (campaignRow, error) {
@@ -216,6 +231,72 @@ func (s *campaignStore) createCampaign(ctx context.Context, user AuthUser, value
 		return nil, err
 	}
 	return s.getCampaign(ctx, user, campaignID)
+}
+
+func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]campaignListItem, error) {
+	if user.TenantID == nil {
+		return nil, errors.New("current user is not assigned to a tenant")
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, tenant_id, status, form_data, latest_quote_amount::text, updated_at, created_at
+		FROM campaigns
+		WHERE tenant_id = $1
+		ORDER BY updated_at DESC, created_at DESC
+	`, *user.TenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]campaignListItem, 0)
+	for rows.Next() {
+		var id string
+		var tenantID string
+		var status string
+		var formData []byte
+		var latestQuoteAmount *string
+		var updatedAt time.Time
+		var createdAt time.Time
+		if err := rows.Scan(&id, &tenantID, &status, &formData, &latestQuoteAmount, &updatedAt, &createdAt); err != nil {
+			return nil, err
+		}
+
+		values := orderFormValues{}
+		if len(formData) > 0 {
+			if err := json.Unmarshal(formData, &values); err != nil {
+				return nil, err
+			}
+		}
+
+		var quoteAmount any
+		if latestQuoteAmount != nil {
+			quoteAmount = *latestQuoteAmount
+		}
+
+		marketCount := len(values.CampaignMarkets)
+		assetCount := 0
+		for _, market := range values.CampaignMarkets {
+			assetCount += len(market.Assets)
+		}
+
+		items = append(items, campaignListItem{
+			ID:                id,
+			TenantID:          tenantID,
+			Status:            status,
+			CampaignName:      strings.TrimSpace(values.CampaignName),
+			CampaignStartDate: strings.TrimSpace(values.CampaignStartDate),
+			DueDate:           strings.TrimSpace(values.DueDate),
+			NumberOfWeeks:     strings.TrimSpace(values.NumberOfWeeks),
+			MarketCount:       marketCount,
+			AssetCount:        assetCount,
+			LatestQuoteAmount: quoteAmount,
+			UpdatedAt:         updatedAt.UTC().Format(time.RFC3339),
+			CreatedAt:         createdAt.UTC().Format(time.RFC3339),
+		})
+	}
+
+	return items, rows.Err()
 }
 
 func (s *campaignStore) getCampaign(ctx context.Context, user AuthUser, campaignID string) (*campaignRecord, error) {

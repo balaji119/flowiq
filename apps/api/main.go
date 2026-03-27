@@ -208,6 +208,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/health", a.handleHealth)
 	mux.HandleFunc("POST /api/auth/login", a.handleLogin)
 	mux.Handle("GET /api/auth/me", a.withAuth(http.HandlerFunc(a.handleCurrentSession)))
+	mux.Handle("GET /api/campaigns", a.withAuth(http.HandlerFunc(a.handleListCampaigns)))
 	mux.Handle("POST /api/campaigns", a.withAuth(http.HandlerFunc(a.handleCreateCampaign)))
 	mux.Handle("GET /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleGetCampaign)))
 	mux.Handle("PUT /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleUpdateCampaign)))
@@ -410,6 +411,16 @@ func (a *app) handleCreateCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"campaign": campaign})
+}
+
+func (a *app) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	campaigns, err := a.campaignStore.listCampaigns(r.Context(), *user)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"campaigns": campaigns})
 }
 
 func (a *app) handleGetCampaign(w http.ResponseWriter, r *http.Request) {

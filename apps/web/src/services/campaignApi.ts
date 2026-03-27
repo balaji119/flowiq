@@ -1,10 +1,15 @@
 import {
   CampaignCalculationResponse,
+  CampaignListItem,
   CampaignRecord,
   CampaignSubmitResponse,
   CampaignUpsertPayload,
 } from '@flowiq/shared';
 import { apiFetchJson } from './apiClient';
+
+export async function fetchCampaigns() {
+  return apiFetchJson<{ campaigns: CampaignListItem[] }>('/api/campaigns');
+}
 
 export async function createCampaign(payload: CampaignUpsertPayload) {
   return apiFetchJson<{ campaign: CampaignRecord }>('/api/campaigns', {

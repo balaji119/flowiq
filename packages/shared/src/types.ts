@@ -174,6 +174,21 @@ export type CampaignRecord = {
   updatedAt: string;
 };
 
+export type CampaignListItem = {
+  id: string;
+  tenantId: string;
+  status: CampaignStatus;
+  campaignName: string;
+  campaignStartDate: string;
+  dueDate: string;
+  numberOfWeeks: string;
+  marketCount: number;
+  assetCount: number;
+  latestQuoteAmount: number | string | null;
+  updatedAt: string;
+  createdAt: string;
+};
+
 export type CampaignUpsertPayload = {
   values: OrderFormValues;
 };
