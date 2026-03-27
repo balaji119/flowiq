@@ -7,11 +7,11 @@ This repository now deploys as two apps:
 
 ## Key Files
 
-- [docker-compose.yml](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/infra/docker/docker-compose.yml)
-- [Dockerfile.api](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/infra/docker/Dockerfile.api)
-- [.env.production.example](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/infra/docker/.env.production.example)
-- [Caddyfile](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/infra/docker/Caddyfile)
-- [update-duckdns.sh](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/infra/scripts/update-duckdns.sh)
+- [docker-compose.yml](../infra/docker/docker-compose.yml)
+- [Dockerfile.api](../infra/docker/Dockerfile.api)
+- [.env.production.example](../infra/docker/.env.production.example)
+- [Caddyfile](../infra/docker/Caddyfile)
+- [update-duckdns.sh](../infra/scripts/update-duckdns.sh)
 
 The current checked-in `docker-compose.yml` starts only `web` and `api`.
 `Caddyfile` and `update-duckdns.sh` are kept as optional infrastructure assets if you want to add a reverse proxy or DuckDNS on top of the basic stack.

@@ -144,7 +144,7 @@ Every PrintIQ quote request is logged on the server side for troubleshooting.
 
 Log file location:
 
-[printiq-payloads.log](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/apps/api/storage/logs/printiq-payloads.log)
+`apps/api/storage/logs/printiq-payloads.log`
 
 The log includes:
 

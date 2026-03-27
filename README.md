@@ -6,18 +6,18 @@ Monorepo for the FlowIQ quote workflow. The frontend lives in `apps/web` as a Ne
 
 ```text
 flowiq/
-├── apps/
-│   ├── web/        # Next.js frontend
-│   └── api/        # Go backend
-├── packages/
-│   ├── shared/     # shared types, constants, utils
-│   └── ui/         # reusable UI components
-├── infra/
-│   ├── docker/     # container assets
-│   └── scripts/    # deployment helper scripts
-├── docs/
-├── .env.example
-└── package.json
+|-- apps/
+|   |-- web/        # Next.js frontend
+|   `-- api/        # Go backend
+|-- packages/
+|   |-- shared/     # shared types, constants, utils
+|   `-- ui/         # reusable UI components
+|-- infra/
+|   |-- docker/     # container assets
+|   `-- scripts/    # deployment helper scripts
+|-- docs/
+|-- .env.example
+`-- package.json
 ```
 
 ## What is included
@@ -73,9 +73,9 @@ The default local URLs are:
 
 ## Contributing
 
-Contribution guidelines live in [CONTRIBUTING.md](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/CONTRIBUTING.md).
+Contribution guidelines live in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Deployment
 
-- Linux deployment guide: [linux-deployment.md](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/docs/linux-deployment.md)
-- Deployment update checklist: [deployment-update-checklist.md](/C:/Users/BKanagaraju/.codex/worktrees/1cf3/FlowIQ/docs/deployment-update-checklist.md)
+- Linux deployment guide: [linux-deployment.md](docs/linux-deployment.md)
+- Deployment update checklist: [deployment-update-checklist.md](docs/deployment-update-checklist.md)
