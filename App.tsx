@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { LoaderCircle } from 'lucide-react';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AdminScreen } from './src/screens/AdminScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
@@ -13,24 +13,23 @@ function AppShell() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0F172A' }}>
-        <ActivityIndicator size="large" color="#8B5CF6" />
-      </View>
+      <div className="flex min-h-screen items-center justify-center px-6">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-950/80 px-5 py-4 text-slate-100 shadow-2xl shadow-slate-950/40">
+          <LoaderCircle className="h-5 w-5 animate-spin text-violet-300" />
+          <span className="text-sm font-medium">Loading your workspace…</span>
+        </div>
+      </div>
     );
   }
 
-  return (
-    <>
-      {session ? (
-        view === 'admin' ? (
-          <AdminScreen onBack={() => setView('quote')} />
-        ) : (
-          <QuoteBuilderScreen onOpenAdmin={session.user.role !== 'user' ? () => setView('admin') : undefined} />
-        )
-      ) : (
-        <LoginScreen />
-      )}
-    </>
+  if (!session) {
+    return <LoginScreen />;
+  }
+
+  return view === 'admin' ? (
+    <AdminScreen onBack={() => setView('quote')} />
+  ) : (
+    <QuoteBuilderScreen onOpenAdmin={session.user.role !== 'user' ? () => setView('admin') : undefined} />
   );
 }
 

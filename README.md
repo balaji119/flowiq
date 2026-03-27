@@ -4,7 +4,7 @@ Web application for capturing campaign print schedule inputs, calculating workbo
 
 ## What is included
 
-- Browser-based FlowIQ interface built with Next.js and `react-native-web`.
+- Browser-based FlowIQ interface built with Next.js, Tailwind CSS, and shadcn-style UI components.
 - Shared form for campaign scheduling, quote details, operations, and contact details.
 - Workbook-derived calculator data checked into the repo for runtime use.
 - Node/Express proxy to request the PrintIQ token and submit `GetPrice`.

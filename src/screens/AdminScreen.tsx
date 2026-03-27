@@ -1,17 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { HoverablePressable as Pressable } from '../components/HoverablePressable';
+import { Building2, LoaderCircle, RefreshCw, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { createTenant, createUser, fetchPrintIqOptionsStatus, fetchTenants, fetchUsers, refreshPrintIqOptionsCache, updateUser } from '../services/adminApi';
 import { AuthRole, AuthUser, PrintIqOptionsCacheStatus, TenantRecord } from '../types';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Switch } from '../components/ui/switch';
 
 const roles: AuthRole[] = ['super_admin', 'admin', 'user'];
 
@@ -19,19 +16,30 @@ type AdminScreenProps = {
   onBack: () => void;
 };
 
-function PickerChip({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
+function PickerChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
-      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
-    </Pressable>
+    <button
+      className={[
+        'rounded-full border px-4 py-2 text-sm font-semibold capitalize transition',
+        active
+          ? 'border-violet-400 bg-violet-500 text-white shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)]'
+          : 'border-slate-600 bg-slate-800 text-slate-200 hover:border-slate-500 hover:bg-slate-700',
+      ].join(' ')}
+      onClick={onPress}
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}
+
+function MetricCard({ label, value, meta }: { label: string; value: number; meta: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-700 bg-slate-800/80 p-4">
+      <p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-200">{label}</p>
+      <p className="mt-3 text-3xl font-black text-white">{value}</p>
+      <p className="mt-2 text-sm text-slate-400">{meta}</p>
+    </div>
   );
 }
 
@@ -109,7 +117,7 @@ export function AdminScreen({ onBack }: AdminScreenProps) {
       }
     }
 
-    loadAdminData();
+    void loadAdminData();
 
     return () => {
       active = false;
@@ -182,16 +190,8 @@ export function AdminScreen({ onBack }: AdminScreenProps) {
     try {
       const result = await refreshPrintIqOptionsCache();
       setOptionsStatus({
-        stocks: {
-          cached: true,
-          count: result.stocks.count,
-          updatedAt: result.stocks.updatedAt,
-        },
-        processes: {
-          cached: true,
-          count: result.processes.count,
-          updatedAt: result.processes.updatedAt,
-        },
+        stocks: { cached: true, count: result.stocks.count, updatedAt: result.stocks.updatedAt },
+        processes: { cached: true, count: result.processes.count, updatedAt: result.processes.updatedAt },
       });
       setNotice(result.message);
     } catch (refreshError) {
@@ -202,352 +202,159 @@ export function AdminScreen({ onBack }: AdminScreenProps) {
   }
 
   return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerTextWrap}>
-            <Text style={styles.eyebrow}>Admin Workspace</Text>
-            <Text style={styles.title}>Tenant and user setup</Text>
-            <Text style={styles.subtitle}>Use this once to create tenants and everyday to manage access for admins and users.</Text>
-          </View>
-          <Pressable onPress={onBack} style={styles.backButton}>
-            <Text style={styles.backButtonText}>Back to Schedule</Text>
-          </Pressable>
-        </View>
+    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-3">
+          <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
+            <Users className="h-3.5 w-3.5" />
+            Admin Workspace
+          </Badge>
+          <div className="space-y-2">
+            <h1 className="text-4xl font-black tracking-tight text-white">Tenant and user setup</h1>
+            <p className="max-w-2xl text-sm leading-6 text-slate-400">
+              Manage tenant onboarding, user access, and cached PrintIQ configuration without leaving the browser workflow.
+            </p>
+          </div>
+        </div>
+        <Button onClick={onBack} variant="secondary">
+          Back to Schedule
+        </Button>
+      </header>
 
-        {!!error && <Text style={styles.errorText}>{error}</Text>}
-        {!!notice && <Text style={styles.noticeText}>{notice}</Text>}
+      {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
+      {notice ? <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
-        {loading ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator color="#5d96bf" size="large" />
-          </View>
-        ) : (
-          <>
-            {canManageTenants ? (
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>Tenants</Text>
-                <Text style={styles.cardSubtitle}>Create a tenant before you add tenant-specific admins and users.</Text>
-
-                <View style={styles.field}>
-                  <Text style={styles.label}>Tenant name</Text>
-                  <TextInput value={tenantName} onChangeText={setTenantName} style={styles.input} placeholder="Acme Print" placeholderTextColor="#6f7e93" />
-                </View>
-                <View style={styles.field}>
-                  <Text style={styles.label}>Slug</Text>
-                  <TextInput value={tenantSlug} onChangeText={setTenantSlug} style={styles.input} placeholder="acme-print" placeholderTextColor="#6f7e93" />
-                </View>
-                <Pressable style={[styles.primaryButton, creatingTenant && styles.buttonDisabled]} onPress={handleCreateTenant} disabled={creatingTenant}>
-                  <Text style={styles.primaryButtonText}>{creatingTenant ? 'Creating...' : 'Create Tenant'}</Text>
-                </Pressable>
-
+      {loading ? (
+        <div className="flex items-center justify-center rounded-[28px] border border-slate-700 bg-slate-900/90 px-6 py-20">
+          <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
+        </div>
+      ) : (
+        <div className="grid gap-6">
+          {canManageTenants ? (
+            <Card>
+              <CardHeader className="p-5 pb-0">
+                <CardTitle className="flex items-center gap-3">
+                  <Building2 className="h-5 w-5 text-violet-300" />
+                  Tenants
+                </CardTitle>
+                <CardDescription>Create a tenant before adding tenant-specific admins and users.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="tenant-name">Tenant name</Label>
+                    <Input id="tenant-name" value={tenantName} onChange={(event) => setTenantName(event.target.value)} placeholder="Acme Print" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="tenant-slug">Slug</Label>
+                    <Input id="tenant-slug" value={tenantSlug} onChange={(event) => setTenantSlug(event.target.value)} placeholder="acme-print" />
+                  </div>
+                </div>
+                <Button disabled={creatingTenant} onClick={() => void handleCreateTenant()}>
+                  {creatingTenant ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                  {creatingTenant ? 'Creating…' : 'Create Tenant'}
+                </Button>
                 {tenants.length > 1 ? (
-                  <View style={styles.chipWrap}>
+                  <div className="flex flex-wrap gap-2">
                     {tenants.map((tenant) => (
-                      <PickerChip
-                        key={tenant.id}
-                        label={tenant.name}
-                        active={selectedTenantId === tenant.id}
-                        onPress={() => setSelectedTenantId(tenant.id)}
-                      />
+                      <PickerChip key={tenant.id} label={tenant.name} active={selectedTenantId === tenant.id} onPress={() => setSelectedTenantId(tenant.id)} />
                     ))}
-                  </View>
+                  </div>
                 ) : null}
-              </View>
-            ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
 
-            {canManageTenants ? (
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>PrintIQ Option Cache</Text>
-                <Text style={styles.cardSubtitle}>
-                  Import stock and process options once, then reuse the cached values in the quote screen. Refresh again whenever new options are added in PrintIQ.
-                </Text>
-
-                <View style={styles.cacheGrid}>
-                  <View style={styles.cacheCard}>
-                    <Text style={styles.cacheLabel}>Stocks</Text>
-                    <Text style={styles.cacheValue}>{optionsStatus?.stocks.count ?? 0}</Text>
-                    <Text style={styles.cacheMeta}>
-                      {optionsStatus?.stocks.updatedAt ? `Updated ${new Date(optionsStatus.stocks.updatedAt).toLocaleString()}` : 'Not imported yet'}
-                    </Text>
-                  </View>
-                  <View style={styles.cacheCard}>
-                    <Text style={styles.cacheLabel}>Processes</Text>
-                    <Text style={styles.cacheValue}>{optionsStatus?.processes.count ?? 0}</Text>
-                    <Text style={styles.cacheMeta}>
-                      {optionsStatus?.processes.updatedAt ? `Updated ${new Date(optionsStatus.processes.updatedAt).toLocaleString()}` : 'Not imported yet'}
-                    </Text>
-                  </View>
-                </View>
-
-                <Pressable style={[styles.primaryButton, refreshingOptions && styles.buttonDisabled]} onPress={handleRefreshPrintIqOptions} disabled={refreshingOptions}>
-                  <Text style={styles.primaryButtonText}>{refreshingOptions ? 'Importing...' : 'Import / Refresh PrintIQ Options'}</Text>
-                </Pressable>
-              </View>
-            ) : null}
-
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Users</Text>
-              <Text style={styles.cardSubtitle}>
-                {canManageTenants ? 'Create admins or users for the selected tenant.' : 'Manage users for your tenant.'}
-              </Text>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Name</Text>
-                <TextInput value={userName} onChangeText={setUserName} style={styles.input} placeholder="Jane Doe" placeholderTextColor="#6f7e93" />
-              </View>
-              <View style={styles.field}>
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                  value={userEmail}
-                  onChangeText={setUserEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  style={styles.input}
-                  placeholder="jane@company.com"
-                  placeholderTextColor="#6f7e93"
-                />
-              </View>
-              <View style={styles.field}>
-                <Text style={styles.label}>Temporary password</Text>
-                <TextInput value={userPassword} onChangeText={setUserPassword} secureTextEntry style={styles.input} placeholder="Temporary password" placeholderTextColor="#6f7e93" />
-              </View>
-
-              <Text style={styles.label}>Role</Text>
-              <View style={styles.chipWrap}>
-                {availableRoles.map((role) => (
-                  <PickerChip
-                    key={role}
-                    label={role.replace('_', ' ')}
-                    active={userRole === role}
-                    onPress={() => setUserRole(role)}
+          {canManageTenants ? (
+            <Card>
+              <CardHeader className="p-5 pb-0">
+                <CardTitle className="flex items-center gap-3">
+                  <RefreshCw className="h-5 w-5 text-violet-300" />
+                  PrintIQ Option Cache
+                </CardTitle>
+                <CardDescription>Refresh the cached stock and process options whenever PrintIQ configuration changes.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <MetricCard
+                    label="Stocks"
+                    value={optionsStatus?.stocks.count ?? 0}
+                    meta={optionsStatus?.stocks.updatedAt ? `Updated ${new Date(optionsStatus.stocks.updatedAt).toLocaleString()}` : 'Not imported yet'}
                   />
-                ))}
-              </View>
+                  <MetricCard
+                    label="Processes"
+                    value={optionsStatus?.processes.count ?? 0}
+                    meta={optionsStatus?.processes.updatedAt ? `Updated ${new Date(optionsStatus.processes.updatedAt).toLocaleString()}` : 'Not imported yet'}
+                  />
+                </div>
+                <Button disabled={refreshingOptions} onClick={() => void handleRefreshPrintIqOptions()}>
+                  {refreshingOptions ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                  {refreshingOptions ? 'Importing…' : 'Import / Refresh PrintIQ Options'}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
 
-              <Pressable style={[styles.primaryButton, creatingUser && styles.buttonDisabled]} onPress={handleCreateUser} disabled={creatingUser}>
-                <Text style={styles.primaryButtonText}>{creatingUser ? 'Creating...' : 'Create User'}</Text>
-              </Pressable>
+          <Card>
+            <CardHeader className="p-5 pb-0">
+              <CardTitle>Users</CardTitle>
+              <CardDescription>
+                {canManageTenants ? 'Create admins or users for the selected tenant.' : 'Manage users for your tenant.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="user-name">Name</Label>
+                  <Input id="user-name" value={userName} onChange={(event) => setUserName(event.target.value)} placeholder="Jane Doe" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="user-email">Email</Label>
+                  <Input id="user-email" type="email" value={userEmail} onChange={(event) => setUserEmail(event.target.value)} placeholder="jane@company.com" />
+                </div>
+              </div>
 
-              <View style={styles.userList}>
+              <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                <div className="space-y-2">
+                  <Label htmlFor="user-password">Temporary password</Label>
+                  <Input id="user-password" type="password" value={userPassword} onChange={(event) => setUserPassword(event.target.value)} placeholder="Temporary password" />
+                </div>
+                <Button disabled={creatingUser} onClick={() => void handleCreateUser()}>
+                  {creatingUser ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                  {creatingUser ? 'Creating…' : 'Create User'}
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <div className="flex flex-wrap gap-2">
+                  {availableRoles.map((role) => (
+                    <PickerChip key={role} label={role.replace('_', ' ')} active={userRole === role} onPress={() => setUserRole(role)} />
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
                 {users.map((user) => (
-                  <View key={user.id} style={styles.userCard}>
-                    <View style={styles.userMeta}>
-                      <Text style={styles.userName}>{user.name}</Text>
-                      <Text style={styles.userSubtext}>
-                        {user.email} · {user.role.replace('_', ' ')} · {user.tenantName || 'Global'}
-                      </Text>
-                    </View>
-                    <Switch value={user.active} onValueChange={(value) => void handleToggleUser(user, value)} trackColor={{ false: '#c8d1de', true: '#34c3ff' }} />
-                  </View>
+                  <div key={user.id} className="flex flex-col gap-4 rounded-2xl border border-slate-700 bg-slate-800/80 p-4 md:flex-row md:items-center md:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-base font-bold text-white">{user.name}</p>
+                      <p className="text-sm text-slate-400">
+                        {user.email} • {user.role.replace('_', ' ')} • {user.tenantName || 'Global'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-slate-300">{user.active ? 'Active' : 'Inactive'}</span>
+                      <Switch checked={user.active} onCheckedChange={(value) => void handleToggleUser(user, value)} />
+                    </div>
+                  </div>
                 ))}
-                {users.length === 0 ? <Text style={styles.emptyText}>No users found for this scope yet.</Text> : null}
-              </View>
-            </View>
-          </>
-        )}
-      </ScrollView>
-    </View>
+                {users.length === 0 ? <p className="text-sm text-slate-400">No users found for this scope yet.</p> : null}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </main>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#313B4D',
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 48,
-    gap: 16,
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: 1080,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-  },
-  headerTextWrap: {
-    gap: 4,
-  },
-  eyebrow: {
-    color: '#8B5CF6',
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 30,
-    fontWeight: '900',
-  },
-  subtitle: {
-    color: '#A7B0C0',
-    lineHeight: 22,
-  },
-  backButton: {
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#445067',
-    backgroundColor: '#1C1F26',
-  },
-  backButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-  },
-  card: {
-    backgroundColor: '#1C1F26',
-    borderRadius: 28,
-    padding: 20,
-    gap: 14,
-    borderWidth: 1,
-    borderColor: '#3F4A5F',
-  },
-  cardTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  cardSubtitle: {
-    color: '#A7B0C0',
-    lineHeight: 22,
-  },
-  field: {
-    gap: 6,
-  },
-  label: {
-    color: '#C3CBD8',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  input: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#4F5C73',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: '#38455B',
-    color: '#F0F0F0',
-  },
-  chipWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#4B556A',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#232733',
-  },
-  chipActive: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
-  },
-  chipText: {
-    color: '#D4DAE4',
-    fontSize: 13,
-    fontWeight: '800',
-    textTransform: 'capitalize',
-  },
-  chipTextActive: {
-    color: '#ffffff',
-  },
-  primaryButton: {
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    alignItems: 'center',
-    flex: 1,
-  },
-  primaryButtonText: {
-    color: '#0F172A',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  cacheGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  cacheCard: {
-    flex: 1,
-    borderRadius: 18,
-    backgroundColor: '#232733',
-    opacity: 1,
-    padding: 14,
-    gap: 4,
-  },
-  cacheLabel: {
-    color: '#8B5CF6',
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  cacheValue: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: '900',
-  },
-  cacheMeta: {
-    color: '#A7B0C0',
-    lineHeight: 20,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  userList: {
-    gap: 10,
-  },
-  userCard: {
-    borderWidth: 1,
-    borderColor: '#4B556A',
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#232733',
-  },
-  userMeta: {
-    flex: 1,
-    gap: 2,
-  },
-  userName: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  userSubtext: {
-    color: '#A7B0C0',
-    lineHeight: 20,
-    textTransform: 'capitalize',
-  },
-  loadingWrap: {
-    paddingVertical: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  errorText: {
-    color: '#FF6B7A',
-    fontWeight: '800',
-  },
-  noticeText: {
-    color: '#6EE7B7',
-    fontWeight: '800',
-  },
-  emptyText: {
-    color: '#A7B0C0',
-  },
-});
