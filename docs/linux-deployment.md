@@ -1,7 +1,8 @@
 # Linux Deployment
 
-This repository deploys as three services in the main app stack:
+This repository deploys as four services in the main app stack:
 
+- `caddy`: reverse proxy
 - `apps/web`: Next.js frontend
 - `apps/api`: Go backend
 - `postgres`: PostgreSQL database
@@ -14,7 +15,7 @@ This repository deploys as three services in the main app stack:
 - [Caddyfile](../infra/docker/Caddyfile)
 - [update-duckdns.sh](../infra/scripts/update-duckdns.sh)
 
-The checked-in `docker-compose.yml` starts `postgres`, `api`, and `web`.
+The checked-in `docker-compose.yml` starts `caddy`, `postgres`, `api`, and `web`.
 The checked-in `Caddyfile` is for a reverse proxy that fronts those services and routes:
 
 - `/` to `web:3000`
@@ -29,7 +30,7 @@ The frontend is built inside the `web` container before `next start`, and produc
 3. Create `infra/docker/.env.production` from `infra/docker/.env.production.example`.
 4. Set `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `DATABASE_URL` in that file.
 5. Set a real `JWT_SECRET`.
-6. If you are using Caddy, set `DOMAIN`.
+6. Set `DOMAIN` for Caddy.
 
 ## Run The Stack
 
@@ -40,6 +41,7 @@ docker compose -f infra/docker/docker-compose.yml up -d --build
 
 This starts:
 
+- `caddy` on ports `80` and `443`
 - `postgres` on the internal Docker network only
 - `web` on port `3000`
 - `api` on port `4000`
@@ -48,15 +50,28 @@ The PostgreSQL port is intentionally not published on the host. The `api` contai
 
 ## Reverse Proxy
 
-If you want to serve the app on a domain instead of hitting `:3000` and `:4000` directly, run a reverse proxy with the checked-in [Caddyfile](../infra/docker/Caddyfile).
+The main stack now includes Caddy directly. The checked-in [Caddyfile](../infra/docker/Caddyfile) proxies:
 
-That Caddy config expects:
+- `/` to `web:3000`
+- `/api/*` to `api:4000`
 
-- the frontend container to be reachable as `web:3000`
-- the backend container to be reachable as `api:4000`
-- browser requests to call `/api/*` on the same origin
+Production browser requests should call same-origin `/api/*`.
 
-If you are using a legacy or separate proxy stack, make sure that stack proxies to the current frontend and backend containers. Do not keep serving static files from an old `dist-web` folder, or you will keep seeing stale UI changes after deploys.
+## One-Time Migration From An Older Separate Caddy Stack
+
+If your server still has an older standalone Caddy container such as `deploy-caddy-1`, stop and remove it before starting the checked-in stack with Caddy enabled. Otherwise ports `80` and `443` will already be in use.
+
+```bash
+docker stop deploy-caddy-1
+docker rm deploy-caddy-1
+```
+
+If that older stack also has a legacy API container, remove that too after confirming the new `infra/docker` stack is healthy:
+
+```bash
+docker stop deploy-api-1
+docker rm deploy-api-1
+```
 
 ## Update The Stack
 
@@ -76,6 +91,7 @@ cd ~/flowiq
 docker compose -f infra/docker/docker-compose.yml logs -f api
 docker compose -f infra/docker/docker-compose.yml logs -f web
 docker compose -f infra/docker/docker-compose.yml logs -f postgres
+docker compose -f infra/docker/docker-compose.yml logs -f caddy
 ```
 
 API runtime files are stored under `apps/api/storage/`.
@@ -89,8 +105,9 @@ After a deploy, verify:
 docker compose -f infra/docker/docker-compose.yml ps
 docker compose -f infra/docker/docker-compose.yml logs --tail=100 api
 docker compose -f infra/docker/docker-compose.yml logs --tail=100 web
+docker compose -f infra/docker/docker-compose.yml logs --tail=100 caddy
 curl http://localhost:4000/api/health
 curl -I http://localhost:3000
 ```
 
-If you are using a separate Caddy container or service, also verify that it is proxying to the live app stack and not to an old static site.
+Also verify that the public domain now resolves through the checked-in Caddy service, not through an older standalone proxy container.
