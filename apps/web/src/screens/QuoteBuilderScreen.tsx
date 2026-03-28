@@ -813,8 +813,9 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                             <p className="text-sm font-semibold text-white">Assets</p>
                             <p className="text-xs text-slate-400">Attach the assets you want to run in this market and choose their active weeks.</p>
                           </div>
-                          <div className="overflow-x-auto rounded-2xl border border-slate-700/80 bg-slate-900/45">
-                            <table className="min-w-[980px] w-full border-collapse">
+                          <div className="rounded-2xl border border-slate-700/80 bg-slate-900/45 lg:overflow-visible">
+                            <div className="overflow-x-auto lg:overflow-visible">
+                              <table className="min-w-[980px] w-full border-collapse">
                               <colgroup>
                                 <col />
                                 <col className="w-[1%]" />
@@ -881,7 +882,8 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                                   );
                                 })}
                               </tbody>
-                            </table>
+                              </table>
+                            </div>
                           </div>
 
                           <div title={canAddAssetForMarket(market) ? 'Add another asset' : addAssetDisabledReasonForMarket(market)}>
