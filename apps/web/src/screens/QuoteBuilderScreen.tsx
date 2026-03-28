@@ -235,20 +235,26 @@ function WeekSelector({
   selectedWeeks,
   onToggle,
   startDate,
+  compact = false,
 }: {
   weekCount: number;
   selectedWeeks: number[];
   onToggle: (week: number) => void;
   startDate: string;
+  compact?: boolean;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className={cn('flex gap-2', compact ? 'flex-nowrap whitespace-nowrap' : 'flex-wrap')}>
       {Array.from({ length: weekCount }, (_, index) => index + 1).map((week) => {
         const selected = selectedWeeks.includes(week);
         return (
           <button
             key={week}
-            className={cn('rounded-full border px-3 py-1.5 text-xs font-semibold transition', selected ? 'border-violet-400 bg-violet-500 text-white' : 'border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500')}
+            className={cn(
+              'rounded-full border font-semibold transition',
+              compact ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs',
+              selected ? 'border-violet-400 bg-violet-500 text-white' : 'border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500',
+            )}
             onClick={() => onToggle(week)}
             type="button"
           >
@@ -652,7 +658,7 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+    <main className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
       <section className="relative overflow-hidden rounded-[32px] border border-slate-700/70 bg-slate-950/70 px-6 py-8 shadow-2xl shadow-slate-950/40">
         <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.2),transparent_52%)]" />
         <div className="relative flex flex-col gap-5">
@@ -807,54 +813,76 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                             <p className="text-sm font-semibold text-white">Assets</p>
                             <p className="text-xs text-slate-400">Attach the assets you want to run in this market and choose their active weeks.</p>
                           </div>
-                          {market.assets.map((asset, assetIndex) => {
-                            const canRemoveAsset = market.assets.length > 1;
-                            const availableAssetOptions = assetOptionsFor(market, asset.id, asset.assetId);
-                            return (
-                              <div key={asset.id} className="space-y-3 rounded-2xl border border-slate-700/80 bg-slate-900/70 p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex-1">
-                                    <SearchableSelect
-                                      emptyMessage={availableAssets.length ? 'No assets available for this row.' : 'No assets available for this market.'}
-                                      items={availableAssetOptions}
-                                      label={`Asset ${assetIndex + 1}`}
-                                      onValueChange={(value) =>
-                                        updateCampaignAsset(market.id, asset.id, (current) => ({
-                                          ...current,
-                                          assetId: value,
-                                          assetSearch: availableAssets.find((entry) => entry.id === value)?.label ?? '',
-                                        }))
-                                      }
-                                      placeholder={availableAssets.length ? 'Choose an asset' : 'No assets available'}
-                                      selectedLabel={asset.assetSearch}
-                                      selectedValue={asset.assetId}
-                                    />
-                                  </div>
-                                  {canRemoveAsset ? (
-                                    <Button onClick={() => removeCampaignAsset(market.id, asset.id)} size="icon" type="button" variant="ghost">
-                                      <X className="h-4 w-4 text-rose-300" />
-                                    </Button>
-                                  ) : null}
-                                </div>
-                                <div className="space-y-2">
-                                  <Label>Active weeks</Label>
-                                  <WeekSelector
-                                    weekCount={numberOfWeeks}
-                                    startDate={values.campaignStartDate}
-                                    onToggle={(week) =>
-                                      updateCampaignAsset(market.id, asset.id, (current) => ({
-                                        ...current,
-                                        selectedWeeks: current.selectedWeeks.includes(week)
-                                          ? current.selectedWeeks.filter((value) => value !== week)
-                                          : [...current.selectedWeeks, week].sort((a, b) => a - b),
-                                      }))
-                                    }
-                                    selectedWeeks={asset.selectedWeeks}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
+                          <div className="overflow-x-auto rounded-2xl border border-slate-700/80 bg-slate-900/45">
+                            <table className="min-w-[980px] w-full border-collapse">
+                              <colgroup>
+                                <col />
+                                <col className="w-[1%]" />
+                                <col className="w-[24px]" />
+                              </colgroup>
+                              <thead>
+                                <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                                  <th className="px-4 py-3 text-left">Asset</th>
+                                  <th className="px-4 py-3 text-left">Active Weeks</th>
+                                  <th className="px-3 py-3 text-center">
+                                    <span className="sr-only">Actions</span>
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {market.assets.map((asset) => {
+                                  const canRemoveAsset = market.assets.length > 1;
+                                  const availableAssetOptions = assetOptionsFor(market, asset.id, asset.assetId);
+                                  return (
+                                    <tr key={asset.id} className="border-b border-slate-700/70 align-top last:border-b-0">
+                                      <td className="px-4 py-3">
+                                        <SearchableSelect
+                                          emptyMessage={availableAssets.length ? 'No assets available for this row.' : 'No assets available for this market.'}
+                                          items={availableAssetOptions}
+                                          label=""
+                                          onValueChange={(value) =>
+                                            updateCampaignAsset(market.id, asset.id, (current) => ({
+                                              ...current,
+                                              assetId: value,
+                                              assetSearch: availableAssets.find((entry) => entry.id === value)?.label ?? '',
+                                            }))
+                                          }
+                                          placeholder={availableAssets.length ? 'Choose an asset' : 'No assets available'}
+                                          selectedLabel={asset.assetSearch}
+                                          selectedValue={asset.assetId}
+                                        />
+                                      </td>
+                                      <td className="px-2 py-3">
+                                        <div className="flex justify-end">
+                                          <WeekSelector
+                                            compact
+                                            weekCount={numberOfWeeks}
+                                            startDate={values.campaignStartDate}
+                                            onToggle={(week) =>
+                                              updateCampaignAsset(market.id, asset.id, (current) => ({
+                                                ...current,
+                                                selectedWeeks: current.selectedWeeks.includes(week)
+                                                  ? current.selectedWeeks.filter((value) => value !== week)
+                                                  : [...current.selectedWeeks, week].sort((a, b) => a - b),
+                                              }))
+                                            }
+                                            selectedWeeks={asset.selectedWeeks}
+                                          />
+                                        </div>
+                                      </td>
+                                      <td className="px-1 py-3 text-center">
+                                        {canRemoveAsset ? (
+                                          <Button className="h-7 w-7" onClick={() => removeCampaignAsset(market.id, asset.id)} size="icon" type="button" variant="ghost">
+                                            <X className="h-3.5 w-3.5 text-rose-300" />
+                                          </Button>
+                                        ) : null}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
 
                           <div title={canAddAssetForMarket(market) ? 'Add another asset' : addAssetDisabledReasonForMarket(market)}>
                             <Button disabled={!canAddAssetForMarket(market)} onClick={() => addCampaignAsset(market.id)} type="button" variant="outline">
