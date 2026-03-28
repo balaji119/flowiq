@@ -1,5 +1,9 @@
 import { CampaignAsset, CampaignMarket, OrderFormValues } from './types';
 
+function getTodayDateInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function createCampaignAsset(id: string): CampaignAsset {
   return {
     id,
@@ -38,7 +42,7 @@ export function createDefaultFormValues(): OrderFormValues {
     sectionHeight: '420',
     pages: '2',
     kindName: 'Campaign-01',
-    campaignStartDate: '',
+    campaignStartDate: getTodayDateInputValue(),
     dueDate: '',
     numberOfWeeks: '3',
     campaignMarkets: [createCampaignMarket('market-1')],

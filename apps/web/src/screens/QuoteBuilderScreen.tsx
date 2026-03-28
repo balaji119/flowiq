@@ -75,6 +75,28 @@ function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBre
   );
 }
 
+function parseDateOnly(value: string) {
+  if (!value) return null;
+  const parts = value.split('-').map((part) => Number(part));
+  if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) return null;
+  const [year, month, day] = parts;
+  const parsed = new Date(year, month - 1, day);
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return null;
+  return parsed;
+}
+
+function formatWeekLabel(week: number, startDate: string) {
+  const parsedStartDate = parseDateOnly(startDate);
+  if (!parsedStartDate) return `Week ${week}`;
+  const weekDate = new Date(parsedStartDate);
+  weekDate.setDate(parsedStartDate.getDate() + (week - 1) * 7);
+  return weekDate.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 function LiveSummarySection({
   items,
   highlightValues = false,
@@ -85,9 +107,9 @@ function LiveSummarySection({
   return (
     <div className="grid grid-cols-2 gap-3">
       {items.map((item) => (
-        <div key={item.key} className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4">
+        <div key={item.key} className="rounded-xl border border-slate-700 bg-slate-900/80 p-3">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
-          <p className={cn('mt-2 text-2xl font-black', highlightValues ? 'text-violet-300' : 'text-white')}>{item.value}</p>
+          <p className={cn('mt-2 text-xl font-black leading-none sm:text-2xl', highlightValues ? 'text-violet-300' : 'text-white')}>{item.value}</p>
         </div>
       ))}
     </div>
@@ -203,7 +225,17 @@ function SearchableSelect({
   );
 }
 
-function WeekSelector({ weekCount, selectedWeeks, onToggle }: { weekCount: number; selectedWeeks: number[]; onToggle: (week: number) => void }) {
+function WeekSelector({
+  weekCount,
+  selectedWeeks,
+  onToggle,
+  startDate,
+}: {
+  weekCount: number;
+  selectedWeeks: number[];
+  onToggle: (week: number) => void;
+  startDate: string;
+}) {
   return (
     <div className="flex flex-wrap gap-2">
       {Array.from({ length: weekCount }, (_, index) => index + 1).map((week) => {
@@ -215,7 +247,7 @@ function WeekSelector({ weekCount, selectedWeeks, onToggle }: { weekCount: numbe
             onClick={() => onToggle(week)}
             type="button"
           >
-            Week {week}
+            {formatWeekLabel(week, startDate)}
           </button>
         );
       })}
@@ -355,6 +387,17 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
   const numberOfWeeks = Math.max(1, Math.min(20, Number(values.numberOfWeeks) || 1));
   const currentStep = steps[stepIndex];
   const progressPercent = ((stepIndex + 1) / steps.length) * 100;
+  const marketNames = useMemo(() => markets.map((market) => market.name), [markets]);
+  const remainingMarketNames = useMemo(() => {
+    const selectedMarketNames = new Set(values.campaignMarkets.map((market) => market.market));
+    return marketNames.filter((marketName) => !selectedMarketNames.has(marketName));
+  }, [marketNames, values.campaignMarkets]);
+  const canAddMarket = remainingMarketNames.length > 0;
+  const addMarketDisabledReason = loadingMetadata
+    ? 'Market options are still loading.'
+    : markets.length === 0
+      ? 'No markets are available.'
+      : 'All available markets have already been added.';
 
   useEffect(() => {
     if (loadingCampaign) return;
@@ -432,7 +475,19 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
   }
 
   function addCampaignMarket() {
-    setValues((current) => ({ ...current, campaignMarkets: [...current.campaignMarkets, createCampaignMarket(`market-${Date.now()}`)] }));
+    if (!canAddMarket) return;
+
+    setValues((current) => {
+      const selectedMarketNames = new Set(current.campaignMarkets.map((market) => market.market));
+      const nextMarketName = marketNames.find((marketName) => !selectedMarketNames.has(marketName));
+      if (!nextMarketName) return current;
+
+      const nextMarket = createCampaignMarket(`market-${Date.now()}`);
+      return {
+        ...current,
+        campaignMarkets: [...current.campaignMarkets, { ...nextMarket, market: nextMarketName }],
+      };
+    });
   }
 
   function removeCampaignMarket(marketId: string) {
@@ -443,7 +498,24 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
   }
 
   function addCampaignAsset(marketId: string) {
-    updateCampaignMarket(marketId, (market) => ({ ...market, assets: [...market.assets, createCampaignAsset(`asset-${Date.now()}`)] }));
+    updateCampaignMarket(marketId, (market) => {
+      const availableAssets = assetsForMarket(market.market);
+      const selectedAssetIds = new Set(market.assets.map((asset) => asset.assetId).filter(Boolean));
+      const nextAsset = availableAssets.find((asset) => !selectedAssetIds.has(asset.id));
+      if (!nextAsset) return market;
+
+      return {
+        ...market,
+        assets: [
+          ...market.assets,
+          {
+            ...createCampaignAsset(`asset-${Date.now()}`),
+            assetId: nextAsset.id,
+            assetSearch: nextAsset.label,
+          },
+        ],
+      };
+    });
   }
 
   function removeCampaignAsset(marketId: string, assetId: string) {
@@ -456,6 +528,31 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
 
   function assetsForMarket(marketName: string) {
     return markets.find((market) => market.name === marketName)?.assets ?? [];
+  }
+
+  function assetOptionsFor(market: CampaignMarket, assetId: string, selectedAssetId: string) {
+    const selectedInOtherRows = new Set(market.assets.filter((asset) => asset.id !== assetId).map((asset) => asset.assetId).filter(Boolean));
+    return assetsForMarket(market.market)
+      .filter((asset) => asset.id === selectedAssetId || !selectedInOtherRows.has(asset.id))
+      .map((asset) => ({ label: asset.label, value: asset.id }));
+  }
+
+  function canAddAssetForMarket(market: CampaignMarket) {
+    const availableAssets = assetsForMarket(market.market);
+    const selectedAssetIds = new Set(market.assets.map((asset) => asset.assetId).filter(Boolean));
+    return availableAssets.some((asset) => !selectedAssetIds.has(asset.id));
+  }
+
+  function addAssetDisabledReasonForMarket(market: CampaignMarket) {
+    const availableAssets = assetsForMarket(market.market);
+    if (!market.market) return 'Choose a market before adding assets.';
+    if (availableAssets.length === 0) return 'No assets are available for this market.';
+    return 'All available assets for this market have already been added.';
+  }
+
+  function marketOptionsFor(marketId: string, selectedMarket: string) {
+    const selectedInOtherRows = new Set(values.campaignMarkets.filter((market) => market.id !== marketId).map((market) => market.market));
+    return marketNames.filter((marketName) => marketName === selectedMarket || !selectedInOtherRows.has(marketName)).map((marketName) => ({ label: marketName, value: marketName }));
   }
 
   async function handleSubmitQuote() {
@@ -607,7 +704,7 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
       ) : null}
       {quoteResponseMessage ? <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{quoteResponseMessage}</div> : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="space-y-6">
           {currentStep.key === 'schedule' ? (
             <Card>
@@ -647,13 +744,14 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                   {values.campaignMarkets.map((market, marketIndex) => {
                     const availableAssets = assetsForMarket(market.market);
                     const canRemoveMarket = values.campaignMarkets.length > 1;
+                    const availableMarkets = marketOptionsFor(market.id, market.market);
                     return (
                       <div key={market.id} className="rounded-[24px] border border-slate-700 bg-slate-800/60 p-4 sm:p-5">
                         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                           <div className="flex-1">
                             <SearchableSelect
-                              emptyMessage="No markets found."
-                              items={markets.map((entry) => ({ label: entry.name, value: entry.name }))}
+                              emptyMessage="No markets available for this row."
+                              items={availableMarkets}
                               label={`Market ${marketIndex + 1}`}
                               onValueChange={(value) =>
                                 updateCampaignMarket(market.id, (current) => ({
@@ -680,13 +778,14 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                           </div>
                           {market.assets.map((asset, assetIndex) => {
                             const canRemoveAsset = market.assets.length > 1;
+                            const availableAssetOptions = assetOptionsFor(market, asset.id, asset.assetId);
                             return (
                               <div key={asset.id} className="space-y-3 rounded-2xl border border-slate-700/80 bg-slate-900/70 p-4">
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="flex-1">
                                     <SearchableSelect
-                                      emptyMessage={availableAssets.length ? 'No matching assets.' : 'No assets available for this market.'}
-                                      items={availableAssets.map((entry) => ({ label: entry.label, value: entry.id }))}
+                                      emptyMessage={availableAssets.length ? 'No assets available for this row.' : 'No assets available for this market.'}
+                                      items={availableAssetOptions}
                                       label={`Asset ${assetIndex + 1}`}
                                       onValueChange={(value) =>
                                         updateCampaignAsset(market.id, asset.id, (current) => ({
@@ -710,6 +809,7 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                                   <Label>Active weeks</Label>
                                   <WeekSelector
                                     weekCount={numberOfWeeks}
+                                    startDate={values.campaignStartDate}
                                     onToggle={(week) =>
                                       updateCampaignAsset(market.id, asset.id, (current) => ({
                                         ...current,
@@ -725,10 +825,12 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                             );
                           })}
 
-                          <Button onClick={() => addCampaignAsset(market.id)} type="button" variant="outline">
-                            <Plus className="h-4 w-4" />
-                            Add Asset
-                          </Button>
+                          <div title={canAddAssetForMarket(market) ? 'Add another asset' : addAssetDisabledReasonForMarket(market)}>
+                            <Button disabled={!canAddAssetForMarket(market)} onClick={() => addCampaignAsset(market.id)} type="button" variant="outline">
+                              <Plus className="h-4 w-4" />
+                              Add Asset
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -736,10 +838,12 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button onClick={addCampaignMarket} type="button" variant="secondary">
-                    <Plus className="h-4 w-4" />
-                    Add Market
-                  </Button>
+                  <div title={canAddMarket ? 'Add another market' : addMarketDisabledReason}>
+                    <Button disabled={!canAddMarket} onClick={addCampaignMarket} type="button" variant="secondary">
+                      <Plus className="h-4 w-4" />
+                      Add Market
+                    </Button>
+                  </div>
                   <Button disabled={calculating} onClick={reviewTotals} type="button">
                     {calculating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                     {calculating ? 'Calculating…' : 'Review Totals'}
@@ -858,12 +962,12 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
 
         <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
           <Card>
-            <CardHeader className="p-6 pb-0">
+            <CardHeader className="p-5 pb-0">
               <Badge className="w-fit text-[11px] uppercase tracking-[0.22em]">Live Summary</Badge>
-              <CardTitle className="text-3xl">Campaign Snapshot</CardTitle>
+              <CardTitle className="text-2xl leading-tight">Campaign Snapshot</CardTitle>
               <CardDescription>{values.campaignMarkets.reduce((acc, market) => acc + market.assets.length, 0)} assets configured</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5 p-6">
+            <CardContent className="space-y-4 p-5">
               {summary ? (
                 <>
                   <LiveSummarySection
