@@ -13,6 +13,7 @@ FROM debian:bookworm-slim
 WORKDIR /app
 
 COPY --from=builder /tmp/flowiq-api ./flowiq-api
+COPY apps/api/db ./db
 
 EXPOSE 4000
 
