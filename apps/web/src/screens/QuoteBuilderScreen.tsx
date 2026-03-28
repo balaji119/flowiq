@@ -736,9 +736,114 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button onClick={addCampaignMarket} type="button" variant="secondary">
+                    <Plus className="h-4 w-4" />
+                    Add Market
+                  </Button>
+                  <Button disabled={calculating} onClick={reviewTotals} type="button">
+                    {calculating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                    {calculating ? 'Calculating…' : 'Review Totals'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {currentStep.key === 'review' ? (
+            <Card>
+              <CardHeader className="p-6 pb-0">
+                <CardTitle>Review Totals</CardTitle>
+                <CardDescription>Confirm the calculated totals before creating the quote.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5 p-6">
+                {summary ? (
+                  <>
+                    {activeMarketSummaries.map((marketSummary) => (
+                      <div key={marketSummary.market} className="space-y-4 rounded-[24px] border border-slate-700 bg-slate-800/70 p-5">
+                        <div>
+                          <h3 className="text-xl font-black text-white">{marketSummary.market}</h3>
+                          <p className="mt-1 text-sm text-slate-400">
+                            {marketSummary.activeAssets} active assets, {marketSummary.activeRuns} runs, {marketSummary.posterTotal} posters, {marketSummary.frameTotal} frames
+                          </p>
+                        </div>
+                        <BreakdownTable breakdown={marketSummary.breakdown} />
+                      </div>
+                    ))}
+
+                    <div className="space-y-4 rounded-[24px] border border-violet-400/30 bg-violet-500/10 p-5">
+                      <div>
+                        <h3 className="text-xl font-black text-white">All Markets</h3>
+                        <p className="mt-1 text-sm text-violet-100/80">
+                          {summary.grandTotal.posterTotal} posters, {summary.grandTotal.frameTotal} frames, {summary.grandTotal.specialFormatTotal} special-format units
+                        </p>
+                      </div>
+                      <BreakdownTable breakdown={summary.grandTotal.breakdown} inverse />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <Button onClick={() => setStepIndex(2)} type="button">
+                        Continue To Finalise
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-[24px] border border-slate-700 bg-slate-800/70 p-6">
+                    <div className="flex items-start gap-3">
+                      <CircleAlert className="mt-0.5 h-5 w-5 text-amber-300" />
+                      <div>
+                        <p className="font-semibold text-white">No totals yet</p>
+                        <p className="mt-1 text-sm text-slate-400">Go back to Schedule and configure campaign assets first.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {currentStep.key === 'finalize' ? (
+            <Card>
+              <CardHeader className="p-6 pb-0">
+                <CardTitle>Finalise Quote</CardTitle>
+                <CardDescription>Upload the purchase order and create the PrintIQ quote without leaving this screen.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 p-6">
+                <div className="space-y-3">
+                  <Label>Purchase Order File</Label>
+                  <div className="rounded-[24px] border border-dashed border-slate-600 bg-slate-800/60 p-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-white">{selectedPurchaseOrderFile ? selectedPurchaseOrderFile.name : 'No file selected'}</p>
+                        <p className="mt-1 text-sm text-slate-400">PDF upload stays unchanged. This only refreshes the interaction and layout.</p>
+                      </div>
+                      <div className="flex flex-col gap-3 sm:flex-row">
+                        <Button onClick={openPurchaseOrderPicker} type="button" variant="secondary">
+                          <Upload className="h-4 w-4" />
+                          {selectedPurchaseOrderFile ? 'Change File' : 'Choose File'}
+                        </Button>
+                        <Button disabled={uploadingPurchaseOrder} onClick={() => void handleUploadPurchaseOrder()} type="button" variant="outline">
+                          {uploadingPurchaseOrder ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                          {uploadingPurchaseOrder ? 'Uploading…' : 'Upload Purchase Order'}
+                        </Button>
+                      </div>
+                    </div>
+                    <input
+                      ref={purchaseOrderInputRef}
+                      className="hidden"
+                      onChange={(event) => {
+                        const nextFile = event.target.files?.[0] ?? null;
+                        setSelectedPurchaseOrderFile(nextFile);
+                      }}
+                      type="file"
+                    />
+                  </div>
+                  {uploadedPurchaseOrderName ? <p className="text-sm font-medium text-emerald-300">Uploaded: {uploadedPurchaseOrderName}</p> : null}
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row">
                   <Button disabled={submitting || calculating || !summary} onClick={() => void handleSubmitQuote()} type="button">
                     {submitting || calculating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                    {submitting ? 'Submitting...' : calculating ? 'Calculating...' : 'Create Quote In PrintIQ'}
+                    {submitting ? 'Submitting…' : calculating ? 'Calculating…' : 'Create Quote In PrintIQ'}
                   </Button>
                   {onBack ? (
                     <Button onClick={onBack} type="button" variant="outline">
