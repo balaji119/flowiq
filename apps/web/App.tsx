@@ -6,11 +6,12 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AdminScreen } from './src/screens/AdminScreen';
 import { CampaignLandingScreen } from './src/screens/CampaignLandingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
+import { MappingAdminScreen } from './src/screens/MappingAdminScreen';
 import { QuoteBuilderScreen } from './src/screens/QuoteBuilderScreen';
 
 function AppShell() {
   const { loading, session } = useAuth();
-  const [view, setView] = useState<'landing' | 'quote' | 'admin'>('landing');
+  const [view, setView] = useState<'landing' | 'quote' | 'admin' | 'mappings'>('landing');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   if (loading) {
@@ -29,7 +30,11 @@ function AppShell() {
   }
 
   if (view === 'admin') {
-    return <AdminScreen onBack={() => setView('landing')} />;
+    return <AdminScreen onBack={() => setView('landing')} onOpenMappings={() => setView('mappings')} />;
+  }
+
+  if (view === 'mappings') {
+    return <MappingAdminScreen onBack={() => setView('admin')} />;
   }
 
   if (view === 'quote') {

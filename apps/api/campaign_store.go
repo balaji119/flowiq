@@ -405,7 +405,10 @@ func (s *campaignStore) calculateCampaign(ctx context.Context, user AuthUser, ca
 	}
 
 	lines := normalizeCampaignLines(campaign.Values)
-	summary := calculator.calculateCampaign(lines)
+	summary, err := calculator.calculateCampaign(campaign.TenantID, lines)
+	if err != nil {
+		return nil, campaignSummary{}, err
+	}
 	campaign.Values.Quantity = strconv.Itoa(summary.GrandTotal.TotalUnits)
 
 	formData, err := marshalJSON(campaign.Values)

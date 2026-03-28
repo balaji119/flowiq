@@ -549,7 +549,7 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
               <div className="space-y-2">
                 <h1 className="text-4xl font-black tracking-tight text-white sm:text-5xl">ADS CONNECT</h1>
                 <p className="max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                  Build campaign schedules, review workbook totals, and create PrintIQ-ready quotes with a cleaner browser-first workflow.
+                  Build campaign schedules, review calculated totals, and create PrintIQ-ready quotes with a cleaner browser-first workflow.
                 </p>
                 <p className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-500">
                   {loadingCampaign ? 'Loading draft' : savingCampaign ? 'Saving draft' : `Status: ${campaignStatus.replace('_', ' ')}`}
@@ -619,7 +619,7 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
             <Card>
               <CardHeader className="p-6 pb-0">
                 <CardTitle>Campaign Planning</CardTitle>
-                <CardDescription>Configure the campaign dates, select markets and assets, and let the workbook totals update automatically.</CardDescription>
+                <CardDescription>Configure the campaign dates, select markets and assets, and let the quantity mappings update totals automatically.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 p-6">
                 <TextField id="campaign-name" label="Campaign Name" value={values.campaignName} onChange={(value) => updateField('campaignName', value)} />
@@ -645,7 +645,7 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                 {loadingMetadata ? (
                   <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
                     <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
-                    Loading campaign metadata…
+                    Loading campaign mappings…
                   </div>
                 ) : null}
 
@@ -759,7 +759,7 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
             <Card>
               <CardHeader className="p-6 pb-0">
                 <CardTitle>Review Totals</CardTitle>
-                <CardDescription>Confirm the workbook totals before creating the quote.</CardDescription>
+                <CardDescription>Confirm the calculated totals before creating the quote.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5 p-6">
                 {summary ? (

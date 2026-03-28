@@ -138,6 +138,26 @@ type marketMetadata struct {
 	Assets []marketAssetOption `json:"assets"`
 }
 
+type calculatorMappingInput struct {
+	Market     string            `json:"market"`
+	Asset      string            `json:"asset"`
+	Label      string            `json:"label"`
+	State      string            `json:"state"`
+	Quantities quantityBreakdown `json:"quantities"`
+}
+
+type calculatorMappingRecord struct {
+	ID         string            `json:"id"`
+	TenantID   string            `json:"tenantId"`
+	Market     string            `json:"market"`
+	Asset      string            `json:"asset"`
+	Label      string            `json:"label"`
+	State      string            `json:"state"`
+	Quantities quantityBreakdown `json:"quantities"`
+	CreatedAt  string            `json:"createdAt"`
+	UpdatedAt  string            `json:"updatedAt"`
+}
+
 type campaignLine struct {
 	ID            string `json:"id"`
 	AssetID       string `json:"assetId"`

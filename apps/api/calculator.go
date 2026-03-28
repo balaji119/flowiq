@@ -1,38 +1,25 @@
 package main
 
-import (
-	_ "embed"
-	"encoding/json"
-	"fmt"
-)
+import "context"
 
 var formatKeys = []string{"8-sheet", "6-sheet", "4-sheet", "2-sheet", "QA0", "Mega", "DOT M", "MP"}
 
-//go:embed workbookMetadata.json
-var workbookMetadataBytes []byte
-
 type calculatorService struct {
-	markets     []marketMetadata
-	assetLookup map[string]marketAssetOption
+	mappings *mappingStore
 }
 
-func newCalculatorService() (*calculatorService, error) {
-	var markets []marketMetadata
-	if err := json.Unmarshal(workbookMetadataBytes, &markets); err != nil {
-		return nil, fmt.Errorf("parse workbook metadata: %w", err)
-	}
+func newCalculatorService(mappings *mappingStore) *calculatorService {
+	return &calculatorService{mappings: mappings}
+}
 
+func createAssetLookup(markets []marketMetadata) map[string]marketAssetOption {
 	lookup := make(map[string]marketAssetOption)
 	for _, market := range markets {
 		for _, asset := range market.Assets {
 			lookup[asset.ID] = asset
 		}
 	}
-
-	return &calculatorService{
-		markets:     markets,
-		assetLookup: lookup,
-	}, nil
+	return lookup
 }
 
 func createEmptyBreakdown() quantityBreakdown {
@@ -65,11 +52,21 @@ func totalUnits(breakdown quantityBreakdown) int {
 	return posterTotal(breakdown) + specialFormatTotal(breakdown)
 }
 
-func (c *calculatorService) calculateCampaign(lines []campaignLine) campaignSummary {
-	lineResults := make([]campaignLineResult, 0)
-	perMarketMap := make(map[string]*campaignTotals, len(c.markets))
+func (c *calculatorService) loadMarkets(tenantID string) ([]marketMetadata, error) {
+	return c.mappings.listMarketMetadata(context.Background(), tenantID)
+}
 
-	for _, market := range c.markets {
+func (c *calculatorService) calculateCampaign(tenantID string, lines []campaignLine) (campaignSummary, error) {
+	markets, err := c.loadMarkets(tenantID)
+	if err != nil {
+		return campaignSummary{}, err
+	}
+
+	lineResults := make([]campaignLineResult, 0)
+	perMarketMap := make(map[string]*campaignTotals, len(markets))
+	assetLookup := createAssetLookup(markets)
+
+	for _, market := range markets {
 		perMarketMap[market.Name] = &campaignTotals{
 			Market:    market.Name,
 			Breakdown: createEmptyBreakdown(),
@@ -77,7 +74,7 @@ func (c *calculatorService) calculateCampaign(lines []campaignLine) campaignSumm
 	}
 
 	for _, line := range lines {
-		asset, ok := c.assetLookup[line.AssetID]
+		asset, ok := assetLookup[line.AssetID]
 		if !ok {
 			continue
 		}
@@ -112,12 +109,12 @@ func (c *calculatorService) calculateCampaign(lines []campaignLine) campaignSumm
 		totals.ActiveRuns += runCount
 	}
 
-	perMarket := make([]campaignTotals, 0, len(c.markets))
+	perMarket := make([]campaignTotals, 0, len(markets))
 	grandBreakdown := createEmptyBreakdown()
 	totalAssets := 0
 	totalRuns := 0
 
-	for _, market := range c.markets {
+	for _, market := range markets {
 		entry := perMarketMap[market.Name]
 		entry.PosterTotal = posterTotal(entry.Breakdown)
 		entry.FrameTotal = frameTotal(entry.Breakdown)
@@ -142,5 +139,5 @@ func (c *calculatorService) calculateCampaign(lines []campaignLine) campaignSumm
 			ActiveAssets:       totalAssets,
 			ActiveRuns:         totalRuns,
 		},
-	}
+	}, nil
 }

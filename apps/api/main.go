@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -24,6 +25,7 @@ const authUserKey contextKey = "authUser"
 type app struct {
 	authStore      *authStore
 	campaignStore  *campaignStore
+	mappingStore   *mappingStore
 	calculator     *calculatorService
 	optionService  *optionService
 	jwtSecret      []byte
@@ -60,16 +62,13 @@ func main() {
 		log.Fatalf("database migration failed: %v", err)
 	}
 
-	calculator, err := newCalculatorService()
-	if err != nil {
-		log.Fatalf("calculator init failed: %v", err)
-	}
-
 	baseDir := "."
+	mappingStore := newMappingStore(pool)
 	api := &app{
 		authStore:      newAuthStore(pool),
 		campaignStore:  newCampaignStore(pool),
-		calculator:     calculator,
+		mappingStore:   mappingStore,
+		calculator:     newCalculatorService(mappingStore),
 		optionService:  newOptionService(envOrDefault("PRINTIQ_BASE_URL", "https://adsaust.printiq.com"), filepath.Join(baseDir, "storage", "data")),
 		jwtSecret:      []byte(envOrDefault("JWT_SECRET", "flowiq-dev-secret")),
 		jwtExpiry:      parseDurationOrDefault(envOrDefault("JWT_EXPIRES_IN", "8h"), 8*time.Hour),
@@ -227,6 +226,11 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/admin/users", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListUsers), "super_admin", "admin")))
 	mux.Handle("POST /api/admin/users", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleCreateUser), "super_admin", "admin")))
 	mux.Handle("PATCH /api/admin/users/{userId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpdateUser), "super_admin", "admin")))
+	mux.Handle("GET /api/admin/calculator-mappings", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListCalculatorMappings), "super_admin", "admin")))
+	mux.Handle("POST /api/admin/calculator-mappings", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleCreateCalculatorMapping), "super_admin", "admin")))
+	mux.Handle("PATCH /api/admin/calculator-mappings/{mappingId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpdateCalculatorMapping), "super_admin", "admin")))
+	mux.Handle("DELETE /api/admin/calculator-mappings/{mappingId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleDeleteCalculatorMapping), "super_admin", "admin")))
+	mux.Handle("POST /api/admin/calculator-mappings/import", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleImportCalculatorMappings), "super_admin", "admin")))
 	mux.Handle("GET /api/admin/printiq-options/status", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleOptionsStatus), "super_admin")))
 	mux.Handle("POST /api/admin/printiq-options/refresh", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleRefreshOptions), "super_admin")))
 
@@ -237,7 +241,7 @@ func (a *app) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -473,14 +477,32 @@ func (a *app) handleCalculatePersistedCampaign(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, map[string]any{"campaign": campaign, "summary": summary})
 }
 
-func (a *app) handleCalculatorMetadata(w http.ResponseWriter, _ *http.Request) {
+func (a *app) handleCalculatorMetadata(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	if user == nil || user.TenantID == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Authentication required"})
+		return
+	}
+
+	markets, err := a.calculator.loadMarkets(*user.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"markets":    a.calculator.markets,
+		"markets":    markets,
 		"formatKeys": formatKeys,
 	})
 }
 
 func (a *app) handleCalculateCampaign(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	if user == nil || user.TenantID == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Authentication required"})
+		return
+	}
+
 	var payload struct {
 		CampaignLines []campaignLine `json:"campaignLines"`
 	}
@@ -488,7 +510,12 @@ func (a *app) handleCalculateCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
-	writeJSON(w, http.StatusOK, a.calculator.calculateCampaign(payload.CampaignLines))
+	summary, err := a.calculator.calculateCampaign(*user.TenantID, payload.CampaignLines)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
 }
 
 func (a *app) handleQuoteFormOptions(w http.ResponseWriter, _ *http.Request) {
@@ -803,6 +830,22 @@ func canManageTargetTenant(user *AuthUser, targetTenantID *string) bool {
 	return *user.TenantID == *targetTenantID
 }
 
+func (a *app) managedTenantID(r *http.Request) (*string, error) {
+	user := currentUser(r.Context())
+	if user == nil {
+		return nil, errors.New("authentication required")
+	}
+	if user.Role == "super_admin" {
+		if raw := strings.TrimSpace(r.URL.Query().Get("tenantId")); raw != "" {
+			return &raw, nil
+		}
+	}
+	if user.TenantID == nil || strings.TrimSpace(*user.TenantID) == "" {
+		return nil, errors.New("tenantId is required")
+	}
+	return user.TenantID, nil
+}
+
 func (a *app) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r.Context())
 	var tenantID *string
@@ -901,5 +944,115 @@ func (a *app) handleRefreshOptions(w http.ResponseWriter, _ *http.Request) {
 		"message":   "PrintIQ option cache refreshed successfully",
 		"stocks":    stocks,
 		"processes": processes,
+	})
+}
+
+func (a *app) handleListCalculatorMappings(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	records, err := a.mappingStore.listRecords(r.Context(), *tenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mappings": records})
+}
+
+func (a *app) handleCreateCalculatorMapping(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var payload calculatorMappingInput
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	record, err := a.mappingStore.createMapping(r.Context(), *tenantID, payload)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"mapping": record})
+}
+
+func (a *app) handleUpdateCalculatorMapping(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var payload calculatorMappingInput
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	record, err := a.mappingStore.updateMapping(r.Context(), *tenantID, r.PathValue("mappingId"), payload)
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mapping": record})
+}
+
+func (a *app) handleDeleteCalculatorMapping(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := a.mappingStore.deleteMapping(r.Context(), *tenantID, r.PathValue("mappingId")); err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+}
+
+func (a *app) handleImportCalculatorMappings(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var payload struct {
+		Markets []marketMetadata `json:"markets"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	if len(payload.Markets) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "markets is required"})
+		return
+	}
+
+	count, err := a.mappingStore.replaceMappingsFromImport(r.Context(), *tenantID, payload.Markets)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message": fmt.Sprintf("Imported %d mappings successfully", count),
+		"count":   count,
 	})
 }

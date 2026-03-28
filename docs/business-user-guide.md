@@ -7,7 +7,7 @@ This guide is for business users who already understand print campaign operation
 FlowIQ helps you:
 
 1. Build a campaign schedule by market, asset, and week
-2. Review required poster quantities and frame totals using the workbook logic
+2. Review required poster quantities and frame totals using the saved quantity mappings
 3. Upload the purchase order and submit a PrintIQ quote
 
 ## Before you start
@@ -58,7 +58,7 @@ When the schedule is complete, click:
 
 `Review Totals`
 
-The app will use the workbook logic to calculate required poster quantities and frame counts.
+The app will use the saved quantity mappings to calculate required poster quantities and frame counts.
 
 ## Step 2: Review
 
@@ -163,7 +163,7 @@ For clean operation:
 
 ## Notes
 
-- The app uses workbook logic for quantity calculation.
-- The `Installs` sheet is not currently used.
+- The app uses database-backed quantity mappings for schedule calculation.
+- Admin and `super_admin` users can import and maintain mappings in the Mapping Admin page.
 - PrintIQ job configuration fields are still controlled in the app.
 - If a quote fails, review the response shown in the app and check the server log.

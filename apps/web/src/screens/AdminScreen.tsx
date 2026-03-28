@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Building2, LoaderCircle, RefreshCw, Users } from 'lucide-react';
+import { Building2, Database, LoaderCircle, RefreshCw, Users } from 'lucide-react';
 import { AuthRole, AuthUser, PrintIqOptionsCacheStatus, TenantRecord } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Switch } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,7 @@ const roles: AuthRole[] = ['super_admin', 'admin', 'user'];
 
 type AdminScreenProps = {
   onBack: () => void;
+  onOpenMappings?: () => void;
 };
 
 function PickerChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
@@ -38,7 +39,7 @@ function MetricCard({ label, value, meta }: { label: string; value: number; meta
   );
 }
 
-export function AdminScreen({ onBack }: AdminScreenProps) {
+export function AdminScreen({ onBack, onOpenMappings }: AdminScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
@@ -215,6 +216,15 @@ export function AdminScreen({ onBack }: AdminScreenProps) {
           Back to Schedule
         </Button>
       </header>
+
+      {onOpenMappings ? (
+        <div className="flex justify-end">
+          <Button onClick={onOpenMappings} variant="outline">
+            <Database className="h-4 w-4" />
+            Manage Quantity Mappings
+          </Button>
+        </div>
+      ) : null}
 
       {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
       {notice ? <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}

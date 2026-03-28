@@ -1,4 +1,4 @@
-import { AuthRole, AuthUser, PrintIqOptionsCacheStatus, TenantRecord } from '@flowiq/shared';
+import { AuthRole, AuthUser, CalculatorMappingInput, CalculatorMappingRecord, MarketMetadata, PrintIqOptionsCacheStatus, TenantRecord } from '@flowiq/shared';
 import { apiFetchJson } from './apiClient';
 
 export async function fetchTenants() {
@@ -59,5 +59,41 @@ export async function refreshPrintIqOptionsCache() {
     }
   >('/api/admin/printiq-options/refresh', {
     method: 'POST',
+  });
+}
+
+export async function fetchCalculatorMappings(tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ mappings: CalculatorMappingRecord[] }>(`/api/admin/calculator-mappings${query}`);
+}
+
+export async function createCalculatorMapping(payload: CalculatorMappingInput, tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ mapping: CalculatorMappingRecord }>(`/api/admin/calculator-mappings${query}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateCalculatorMapping(mappingId: string, payload: CalculatorMappingInput, tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ mapping: CalculatorMappingRecord }>(`/api/admin/calculator-mappings/${encodeURIComponent(mappingId)}${query}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCalculatorMapping(mappingId: string, tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ deleted: boolean }>(`/api/admin/calculator-mappings/${encodeURIComponent(mappingId)}${query}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function importCalculatorMappings(markets: MarketMetadata[], tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ message: string; count: number }>(`/api/admin/calculator-mappings/import${query}`, {
+    method: 'POST',
+    body: JSON.stringify({ markets }),
   });
 }

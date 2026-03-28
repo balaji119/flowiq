@@ -31,10 +31,10 @@ flowiq/
 
 ## Calculation source
 
-- The app now reads quantity data from the checked-in workbook metadata snapshot.
-- The active calculation comes from the workbook `V-LOOKUP` ranges and the schedule-style run selection.
-- The `Installs` sheet is still ignored.
-- PrintIQ product setup fields are still configurable in the app because the workbook only covers the schedule quantity logic.
+- Quantity mappings are now stored in PostgreSQL per tenant.
+- The schedule calculator reads market and asset quantity mappings from the database at runtime.
+- Admin and `super_admin` users can manage mappings in the app and can import a JSON file to load the initial dataset.
+- PrintIQ product setup fields are still configurable in the app because the mapping dataset only covers schedule quantity logic.
 
 ## Setup
 
@@ -71,10 +71,12 @@ The default local URLs are:
 - `apps/web/App.tsx`: client-side application shell
 - `apps/web/src/screens/QuoteBuilderScreen.tsx`: primary shared UI
 - `apps/web/src/services/campaignApi.ts`: persisted campaign workflow client
-- `packages/shared/src/campaign.ts`: workbook-total helpers
+- `packages/shared/src/campaign.ts`: quantity-total helpers
 - `packages/shared/src/printiq.ts`: form-to-PrintIQ payload mapper
 - `apps/api/db/migrations/001_initial.sql`: initial PostgreSQL schema
-- `apps/api/calculator.go`: workbook parser and quantity calculator
+- `apps/api/db/migrations/002_calculator_mappings.sql`: calculator mapping schema
+- `apps/api/calculator.go`: database-backed quantity calculator
+- `apps/api/mapping_store.go`: calculator mapping persistence and JSON import support
 - `apps/api/main.go`: Go API entry point
 
 ## Workflow Persistence
@@ -83,6 +85,7 @@ The default local URLs are:
 - Every core table is tenant-scoped through `tenant_id`.
 - Users authenticate with JWT and only see data for their tenant.
 - Supported user roles are `super_admin`, `admin`, and `user`.
+- Calculator mappings are tenant-scoped and are loaded through admin-managed database records instead of local files.
 - The main persisted workflow endpoints are:
   - `POST /api/campaigns`
   - `GET /api/campaigns/{id}`
@@ -95,6 +98,7 @@ The default local URLs are:
 - `npm run db:seed` always creates the default tenant plus the `super_admin` account from `SUPER_ADMIN_*`.
 - If `DEFAULT_ADMIN_EMAIL` and `DEFAULT_ADMIN_PASSWORD` are set, it also seeds a tenant `admin`.
 - If `DEFAULT_USER_EMAIL` and `DEFAULT_USER_PASSWORD` are set, it also seeds a tenant `user`.
+- Calculator mappings are not seeded. Use the admin mapping import flow to load your starting JSON data.
 
 ## Contributing
 

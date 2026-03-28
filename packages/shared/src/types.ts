@@ -93,6 +93,21 @@ export type MarketMetadata = {
   assets: MarketAssetOption[];
 };
 
+export type CalculatorMappingInput = {
+  market: string;
+  asset: string;
+  label: string;
+  state: string;
+  quantities: QuantityBreakdown;
+};
+
+export type CalculatorMappingRecord = CalculatorMappingInput & {
+  id: string;
+  tenantId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CampaignLineResult = {
   id: string;
   market: string;
