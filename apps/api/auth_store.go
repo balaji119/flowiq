@@ -135,6 +135,26 @@ func (s *authStore) authenticate(email, password string) (*AuthUser, error) {
 	return &user, nil
 }
 
+func (s *authStore) userByEmail(ctx context.Context, email string) (*AuthUser, error) {
+	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
+	row, _, _, err := scanUserRow(s.pool.QueryRow(ctx, `
+		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
+		FROM users u
+		LEFT JOIN tenants t ON t.id = u.tenant_id
+		WHERE u.email = $1
+		LIMIT 1
+	`, normalizedEmail))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	user := sanitizeUser(row)
+	return &user, nil
+}
+
 func (s *authStore) userByID(ctx context.Context, userID string) (*AuthUser, error) {
 	row, _, _, err := scanUserRow(s.pool.QueryRow(ctx, `
 		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active

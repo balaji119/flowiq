@@ -1,24 +1,27 @@
-import { useState } from 'react';
-import { LoaderCircle, ShieldCheck } from 'lucide-react';
-import { Button, Card, CardContent, Input, Label } from '@flowiq/ui';
-import { useAuth } from '../context/AuthContext';
+'use client';
 
-export function LoginScreen() {
-  const { login } = useAuth();
+import { useState } from 'react';
+import { ArrowLeft, LoaderCircle, Mail } from 'lucide-react';
+import { Button, Card, CardContent, Input, Label } from '@flowiq/ui';
+import { requestPasswordReset } from '../services/authApi';
+
+export function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
   async function handleSubmit(event?: React.FormEvent) {
     event?.preventDefault();
     setSubmitting(true);
+    setMessage('');
     setError('');
 
     try {
-      await login(email.trim(), password);
-    } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : 'Unable to sign in');
+      const response = await requestPasswordReset(email.trim());
+      setMessage(response.message);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to send password reset email');
     } finally {
       setSubmitting(false);
     }
@@ -31,52 +34,42 @@ export function LoginScreen() {
         <CardContent className="space-y-6 p-8">
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-violet-200">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Secure Access
+              <Mail className="h-3.5 w-3.5" />
+              Password Reset
             </div>
             <div className="space-y-2">
-              <h1 className="text-3xl font-black tracking-tight text-white">ADS Connect</h1>
+              <h1 className="text-3xl font-black tracking-tight text-white">Reset your password</h1>
               <p className="text-sm leading-6 text-slate-400">
-                Access the campaign scheduling and PrintIQ workflow from a single browser workspace.
+                Enter the email address for your ADS Connect account and we&apos;ll send you a reset link.
               </p>
             </div>
           </div>
 
           <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="reset-email">Email</Label>
               <Input
-                id="email"
-                type="text"
-                autoComplete="username"
+                id="reset-email"
+                type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@company.com"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Password"
-              />
-            </div>
-
             <Button className="w-full" size="lg" disabled={submitting} type="submit">
               {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-              {submitting ? 'Signing in…' : 'Sign In'}
+              {submitting ? 'Sending link...' : 'Send Reset Link'}
             </Button>
           </form>
 
-          <a className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 transition hover:text-white" href="/forgot-password">
-            Forgot your password?
+          <a className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 transition hover:text-white" href="/">
+            <ArrowLeft className="h-4 w-4" />
+            Back to sign in
           </a>
 
+          {message ? <p className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{message}</p> : null}
           {error ? <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</p> : null}
         </CardContent>
       </Card>

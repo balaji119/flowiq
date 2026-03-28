@@ -206,6 +206,8 @@ func (a *app) routes() http.Handler {
 
 	mux.HandleFunc("GET /api/health", a.handleHealth)
 	mux.HandleFunc("POST /api/auth/login", a.handleLogin)
+	mux.HandleFunc("POST /api/auth/password-reset/request", a.handleRequestPasswordReset)
+	mux.HandleFunc("POST /api/auth/password-reset/confirm", a.handleConfirmPasswordReset)
 	mux.Handle("GET /api/auth/me", a.withAuth(http.HandlerFunc(a.handleCurrentSession)))
 	mux.Handle("GET /api/campaigns", a.withAuth(http.HandlerFunc(a.handleListCampaigns)))
 	mux.Handle("POST /api/campaigns", a.withAuth(http.HandlerFunc(a.handleCreateCampaign)))
@@ -398,6 +400,65 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) handleCurrentSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, currentUser(r.Context()))
+}
+
+func (a *app) handleRequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Email string `json:"email"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	cfg, err := loadSMTPConfig()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Password reset email is not configured"})
+		return
+	}
+
+	user, err := a.authStore.userByEmail(r.Context(), payload.Email)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if user != nil && user.Active {
+		token, err := a.authStore.createPasswordResetToken(r.Context(), user.ID, time.Now().Add(cfg.resetTokenTTL))
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		resetURL := buildPasswordResetURL(cfg.appBaseURL, token)
+		if err := sendPasswordResetEmail(cfg, user.Email, user.Name, resetURL); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to send password reset email"})
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "If an account exists for that email, a password reset link has been sent.",
+	})
+}
+
+func (a *app) handleConfirmPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Token    string `json:"token"`
+		Password string `json:"password"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	if len(strings.TrimSpace(payload.Password)) < 8 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Password must be at least 8 characters"})
+		return
+	}
+	if err := a.authStore.resetPasswordWithToken(r.Context(), payload.Token, payload.Password); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Your password has been updated. You can sign in now."})
 }
 
 func (a *app) handleCreateCampaign(w http.ResponseWriter, r *http.Request) {
