@@ -1,4 +1,4 @@
-http://{$DOMAIN} {
+:80 {
   encode zstd gzip
 
   @api path /api/*
