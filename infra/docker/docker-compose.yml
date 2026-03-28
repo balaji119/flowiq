@@ -9,8 +9,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     restart: unless-stopped
 
   web:
@@ -19,7 +17,7 @@ services:
     environment:
       NEXT_PUBLIC_API_BASE_URL: http://api:4000
     command: >
-      bash -lc "npm ci && npm run serve --workspace @flowiq/web"
+      bash -lc "npm ci && npm run build --workspace @flowiq/web && npm run serve --workspace @flowiq/web"
     volumes:
       - ../..:/workspace
     depends_on:
