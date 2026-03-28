@@ -126,7 +126,6 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 
 func seedDatabase(ctx context.Context, pool *pgxpool.Pool) error {
 	tenantName := envOrDefault("DEFAULT_TENANT_NAME", "ADS")
-	tenantSlug := slugify(tenantName)
 	tenantID := uuid.NewString()
 	adminUserID := uuid.NewString()
 	adminEmail := strings.ToLower(envOrDefault("SUPER_ADMIN_EMAIL", "admin"))
@@ -145,15 +144,15 @@ func seedDatabase(ctx context.Context, pool *pgxpool.Pool) error {
 	defer tx.Rollback(ctx)
 
 	var existingTenantID string
-	err = tx.QueryRow(ctx, `SELECT id FROM tenants WHERE slug = $1 LIMIT 1`, tenantSlug).Scan(&existingTenantID)
+	err = tx.QueryRow(ctx, `SELECT id FROM tenants WHERE name = $1 LIMIT 1`, tenantName).Scan(&existingTenantID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO tenants (id, tenant_id, name, slug)
-			VALUES ($1, $1, $2, $3)
-		`, tenantID, tenantName, tenantSlug); err != nil {
+			INSERT INTO tenants (id, tenant_id, name)
+			VALUES ($1, $1, $2)
+		`, tenantID, tenantName); err != nil {
 			return err
 		}
 		existingTenantID = tenantID

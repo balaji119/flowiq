@@ -49,6 +49,7 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
 
   const canSwitchTenant = session?.user.role === 'super_admin';
   const effectiveTenantId = canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined;
+  const selectedTenant = useMemo(() => tenants.find((tenant) => tenant.id === selectedTenantId) ?? null, [selectedTenantId, tenants]);
 
   useEffect(() => {
     let active = true;
@@ -261,24 +262,41 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
         <Card>
           <CardHeader className="p-5 pb-0">
             <CardTitle>Tenant scope</CardTitle>
-            <CardDescription>Choose which tenant owns the mapping set you want to manage.</CardDescription>
+            <CardDescription>Super admins must choose a tenant before they can add or import quantity mappings.</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {tenants.map((tenant) => (
-              <button
-                key={tenant.id}
-                className={[
-                  'rounded-full border px-4 py-2 text-sm font-semibold transition',
-                  selectedTenantId === tenant.id
-                    ? 'border-violet-400 bg-violet-500 text-white shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)]'
-                    : 'border-slate-600 bg-slate-800 text-slate-200 hover:border-slate-500 hover:bg-slate-700',
-                ].join(' ')}
-                onClick={() => setSelectedTenantId(tenant.id)}
-                type="button"
-              >
-                {tenant.name}
-              </button>
-            ))}
+          <CardContent className="space-y-4">
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/70 p-4">
+              <p className="text-sm font-semibold text-white">
+                {selectedTenant ? `Managing mappings for ${selectedTenant.name}` : 'No tenant selected'}
+              </p>
+              <p className="mt-1 text-sm text-slate-400">
+                {selectedTenant ? selectedTenant.id : 'Select a tenant below. Mapping records are always owned by a tenant and cannot be global.'}
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {tenants.map((tenant) => {
+                const active = selectedTenantId === tenant.id;
+                return (
+                  <button
+                    key={tenant.id}
+                    className={active
+                      ? 'rounded-2xl border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)] transition'
+                      : 'rounded-2xl border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
+                    onClick={() => setSelectedTenantId(tenant.id)}
+                    type="button"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-base font-bold text-white">{tenant.name}</p>
+                        <p className="mt-2 break-all text-xs text-slate-400">{tenant.id}</p>
+                      </div>
+                      {active ? <Badge>Selected</Badge> : null}
+                    </div>
+                    {tenant.createdAt ? <p className="mt-3 text-xs text-slate-500">Created {new Date(tenant.createdAt).toLocaleString()}</p> : null}
+                  </button>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
       ) : null}
@@ -287,7 +305,13 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
         <Card>
           <CardHeader className="p-5 pb-0">
             <CardTitle>{editingId ? 'Edit mapping' : 'Add mapping'}</CardTitle>
-            <CardDescription>These values drive the schedule quantity calculator for the selected tenant.</CardDescription>
+            <CardDescription>
+              {canSwitchTenant
+                ? selectedTenant
+                  ? `These values will be saved for ${selectedTenant.name}.`
+                  : 'Select a tenant before adding or importing quantity mappings.'
+                : 'These values drive the schedule quantity calculator for your tenant.'}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">

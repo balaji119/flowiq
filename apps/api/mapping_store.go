@@ -50,6 +50,22 @@ func sanitizeMappingText(value, field string) (string, error) {
 	return trimmed, nil
 }
 
+func (s *mappingStore) ensureTenantExists(ctx context.Context, tenantID string) error {
+	trimmedTenantID := strings.TrimSpace(tenantID)
+	if trimmedTenantID == "" {
+		return errors.New("tenantId is required")
+	}
+
+	var exists bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tenants WHERE id = $1)`, trimmedTenantID).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return errors.New("Tenant not found")
+	}
+	return nil
+}
+
 func scanCalculatorMappingRow(scanner interface {
 	Scan(dest ...any) error
 }) (calculatorMappingRow, error) {
@@ -109,6 +125,10 @@ func normalizeMappingID(value string) string {
 }
 
 func (s *mappingStore) listRecords(ctx context.Context, tenantID string) ([]calculatorMappingRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, tenant_id, market, asset, label, state, quantities, created_at, updated_at
 		FROM calculator_mappings
@@ -177,6 +197,10 @@ func (s *mappingStore) listMarketMetadata(ctx context.Context, tenantID string) 
 }
 
 func (s *mappingStore) createMapping(ctx context.Context, tenantID string, payload calculatorMappingInput) (*calculatorMappingRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
 	market, err := sanitizeMappingText(payload.Market, "market")
 	if err != nil {
 		return nil, err
@@ -215,6 +239,10 @@ func (s *mappingStore) createMapping(ctx context.Context, tenantID string, paylo
 }
 
 func (s *mappingStore) updateMapping(ctx context.Context, tenantID, mappingID string, payload calculatorMappingInput) (*calculatorMappingRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
 	market, err := sanitizeMappingText(payload.Market, "market")
 	if err != nil {
 		return nil, err
@@ -262,6 +290,10 @@ func (s *mappingStore) updateMapping(ctx context.Context, tenantID, mappingID st
 }
 
 func (s *mappingStore) deleteMapping(ctx context.Context, tenantID, mappingID string) error {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return err
+	}
+
 	commandTag, err := s.pool.Exec(ctx, `
 		DELETE FROM calculator_mappings
 		WHERE id = $1 AND tenant_id = $2
@@ -276,6 +308,10 @@ func (s *mappingStore) deleteMapping(ctx context.Context, tenantID, mappingID st
 }
 
 func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID string, metadata []marketMetadata) (int, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return 0, err
+	}
+
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return 0, err

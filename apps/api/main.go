@@ -226,6 +226,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/admin/users", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListUsers), "super_admin", "admin")))
 	mux.Handle("POST /api/admin/users", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleCreateUser), "super_admin", "admin")))
 	mux.Handle("PATCH /api/admin/users/{userId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpdateUser), "super_admin", "admin")))
+	mux.Handle("DELETE /api/admin/users/{userId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleDeleteUser), "super_admin", "admin")))
 	mux.Handle("GET /api/admin/calculator-mappings", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListCalculatorMappings), "super_admin", "admin")))
 	mux.Handle("POST /api/admin/calculator-mappings", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleCreateCalculatorMapping), "super_admin", "admin")))
 	mux.Handle("PATCH /api/admin/calculator-mappings/{mappingId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpdateCalculatorMapping), "super_admin", "admin")))
@@ -802,14 +803,13 @@ func (a *app) handleListTenants(w http.ResponseWriter, _ *http.Request) {
 func (a *app) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		Name string `json:"name"`
-		Slug string `json:"slug"`
 	}
 	if err := decodeJSONBody(r, &payload); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
 
-	tenant, err := a.authStore.createTenant(payload.Name, payload.Slug)
+	tenant, err := a.authStore.createTenant(payload.Name)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -830,6 +830,25 @@ func canManageTargetTenant(user *AuthUser, targetTenantID *string) bool {
 	return *user.TenantID == *targetTenantID
 }
 
+func canManageUser(actor *AuthUser, target *AuthUser) bool {
+	if actor == nil || target == nil {
+		return false
+	}
+	if actor.Role == "super_admin" {
+		return target.Role == "admin" || target.Role == "user"
+	}
+	if actor.Role == "admin" {
+		if target.Role != "user" {
+			return false
+		}
+		if actor.TenantID == nil || target.TenantID == nil {
+			return false
+		}
+		return *actor.TenantID == *target.TenantID
+	}
+	return false
+}
+
 func (a *app) managedTenantID(r *http.Request) (*string, error) {
 	user := currentUser(r.Context())
 	if user == nil {
@@ -839,6 +858,7 @@ func (a *app) managedTenantID(r *http.Request) (*string, error) {
 		if raw := strings.TrimSpace(r.URL.Query().Get("tenantId")); raw != "" {
 			return &raw, nil
 		}
+		return nil, errors.New("super admin must select a tenant")
 	}
 	if user.TenantID == nil || strings.TrimSpace(*user.TenantID) == "" {
 		return nil, errors.New("tenantId is required")
@@ -902,6 +922,20 @@ func (a *app) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r.Context())
+	targetUser, err := a.authStore.userByID(r.Context(), r.PathValue("userId"))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if targetUser == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "User not found"})
+		return
+	}
+	if !canManageUser(user, targetUser) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "You do not have permission to edit this user"})
+		return
+	}
+
 	var payload map[string]any
 	if err := decodeJSONBody(r, &payload); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
@@ -928,6 +962,28 @@ func (a *app) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": updatedUser})
+}
+
+func (a *app) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	targetUser, err := a.authStore.userByID(r.Context(), r.PathValue("userId"))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if targetUser == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "User not found"})
+		return
+	}
+	if !canManageUser(user, targetUser) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "You do not have permission to delete this user"})
+		return
+	}
+	if err := a.authStore.deleteUser(r.PathValue("userId")); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 func (a *app) handleOptionsStatus(w http.ResponseWriter, _ *http.Request) {

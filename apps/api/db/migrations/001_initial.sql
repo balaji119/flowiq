@@ -2,14 +2,13 @@ CREATE TABLE IF NOT EXISTS tenants (
   id UUID PRIMARY KEY,
   tenant_id UUID NOT NULL UNIQUE,
   name TEXT NOT NULL,
-  slug TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY,
-  tenant_id UUID NOT NULL REFERENCES tenants(id),
+  tenant_id UUID REFERENCES tenants(id),
   email TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('super_admin', 'admin', 'user')),

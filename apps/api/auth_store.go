@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -21,16 +20,8 @@ type authStore struct {
 	pool *pgxpool.Pool
 }
 
-var slugPattern = regexp.MustCompile(`[^a-z0-9]+`)
-
 func newAuthStore(pool *pgxpool.Pool) *authStore {
 	return &authStore{pool: pool}
-}
-
-func slugify(value string) string {
-	normalized := strings.TrimSpace(strings.ToLower(value))
-	normalized = slugPattern.ReplaceAllString(normalized, "-")
-	return strings.Trim(normalized, "-")
 }
 
 func randomHex(size int) (string, error) {
@@ -86,16 +77,16 @@ func sanitizeUser(row dbUserRow) AuthUser {
 		Email:      row.Email,
 		Name:       row.Name,
 		Role:       row.Role,
-		TenantID:   stringPtr(row.TenantID),
-		TenantName: stringPtr(row.TenantName),
+		TenantID:   row.TenantID,
+		TenantName: row.TenantName,
 		Active:     row.Active,
 	}
 }
 
 type dbUserRow struct {
 	ID         string
-	TenantID   string
-	TenantName string
+	TenantID   *string
+	TenantName *string
 	Email      string
 	Name       string
 	Role       string
@@ -127,7 +118,7 @@ func (s *authStore) authenticate(email, password string) (*AuthUser, error) {
 	row, passwordSalt, passwordHash, err := scanUserRow(s.pool.QueryRow(context.Background(), `
 		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
 		FROM users u
-		INNER JOIN tenants t ON t.id = u.tenant_id
+		LEFT JOIN tenants t ON t.id = u.tenant_id
 		WHERE u.email = $1
 		LIMIT 1
 	`, normalizedEmail))
@@ -148,7 +139,7 @@ func (s *authStore) userByID(ctx context.Context, userID string) (*AuthUser, err
 	row, _, _, err := scanUserRow(s.pool.QueryRow(ctx, `
 		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
 		FROM users u
-		INNER JOIN tenants t ON t.id = u.tenant_id
+		LEFT JOIN tenants t ON t.id = u.tenant_id
 		WHERE u.id = $1
 		LIMIT 1
 	`, userID))
@@ -164,7 +155,7 @@ func (s *authStore) userByID(ctx context.Context, userID string) (*AuthUser, err
 
 func (s *authStore) listTenants() ([]TenantRecord, error) {
 	rows, err := s.pool.Query(context.Background(), `
-		SELECT id, name, slug, created_at
+		SELECT id, name, created_at
 		FROM tenants
 		ORDER BY name ASC
 	`)
@@ -177,7 +168,7 @@ func (s *authStore) listTenants() ([]TenantRecord, error) {
 	for rows.Next() {
 		var tenant TenantRecord
 		var createdAt time.Time
-		if err := rows.Scan(&tenant.ID, &tenant.Name, &tenant.Slug, &createdAt); err != nil {
+		if err := rows.Scan(&tenant.ID, &tenant.Name, &createdAt); err != nil {
 			return nil, err
 		}
 		tenant.CreatedAt = createdAt.UTC().Format(time.RFC3339)
@@ -186,26 +177,21 @@ func (s *authStore) listTenants() ([]TenantRecord, error) {
 	return tenants, rows.Err()
 }
 
-func (s *authStore) createTenant(name, slug string) (*TenantRecord, error) {
+func (s *authStore) createTenant(name string) (*TenantRecord, error) {
 	tenantName := strings.TrimSpace(name)
-	tenantSlug := slugify(firstNonEmpty(slug, name))
-	if tenantName == "" || tenantSlug == "" {
+	if tenantName == "" {
 		return nil, errors.New("Tenant name is required")
 	}
 
 	tenant := TenantRecord{
 		ID:        uuid.NewString(),
 		Name:      tenantName,
-		Slug:      tenantSlug,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	if _, err := s.pool.Exec(context.Background(), `
-		INSERT INTO tenants (id, tenant_id, name, slug, created_at, updated_at)
-		VALUES ($1, $1, $2, $3, NOW(), NOW())
-	`, tenant.ID, tenant.Name, tenant.Slug); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
-			return nil, errors.New("Tenant slug already exists")
-		}
+		INSERT INTO tenants (id, tenant_id, name, created_at, updated_at)
+		VALUES ($1, $1, $2, NOW(), NOW())
+	`, tenant.ID, tenant.Name); err != nil {
 		return nil, err
 	}
 	return &tenant, nil
@@ -215,7 +201,7 @@ func (s *authStore) listUsers(tenantID *string) ([]AuthUser, error) {
 	baseQuery := `
 		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
 		FROM users u
-		INNER JOIN tenants t ON t.id = u.tenant_id
+		LEFT JOIN tenants t ON t.id = u.tenant_id
 	`
 	args := []any{}
 	if tenantID != nil && strings.TrimSpace(*tenantID) != "" {
@@ -246,11 +232,19 @@ func (s *authStore) createUser(name, email, password, role string, tenantID *str
 	if normalizedRole != "super_admin" && normalizedRole != "admin" && normalizedRole != "user" {
 		return nil, errors.New("Invalid role")
 	}
-	if tenantID == nil || strings.TrimSpace(*tenantID) == "" {
-		return nil, errors.New("tenantId is required")
-	}
 	if strings.TrimSpace(name) == "" || strings.TrimSpace(email) == "" || password == "" {
 		return nil, errors.New("name, email, and password are required")
+	}
+
+	var normalizedTenantID *string
+	if tenantID != nil && strings.TrimSpace(*tenantID) != "" {
+		value := strings.TrimSpace(*tenantID)
+		normalizedTenantID = &value
+	}
+	if normalizedRole == "super_admin" {
+		normalizedTenantID = nil
+	} else if normalizedTenantID == nil {
+		return nil, errors.New("tenantId is required for admin and user roles")
 	}
 
 	salt, hash, err := newPasswordHash(password)
@@ -263,7 +257,7 @@ func (s *authStore) createUser(name, email, password, role string, tenantID *str
 	if _, err := s.pool.Exec(context.Background(), `
 		INSERT INTO users (id, tenant_id, email, name, role, password_salt, password_hash, active, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(), NOW())
-	`, userID, strings.TrimSpace(*tenantID), normalizedEmail, strings.TrimSpace(name), normalizedRole, salt, hash); err != nil {
+	`, userID, normalizedTenantID, normalizedEmail, strings.TrimSpace(name), normalizedRole, salt, hash); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "users_email_key") || strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return nil, errors.New("Email already exists")
 		}
@@ -278,7 +272,7 @@ func (s *authStore) updateUser(userID string, updates map[string]any) (*AuthUser
 	row, salt, hash, err := scanUserRow(s.pool.QueryRow(ctx, `
 		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
 		FROM users u
-		INNER JOIN tenants t ON t.id = u.tenant_id
+		LEFT JOIN tenants t ON t.id = u.tenant_id
 		WHERE u.id = $1
 		LIMIT 1
 	`, userID))
@@ -320,20 +314,29 @@ func (s *authStore) updateUser(userID string, updates map[string]any) (*AuthUser
 	if tenantID, exists := updates["tenantId"]; exists {
 		switch value := tenantID.(type) {
 		case string:
-			if strings.TrimSpace(value) == "" {
-				return nil, fmt.Errorf("tenantId is required")
+			trimmed := strings.TrimSpace(value)
+			if trimmed == "" {
+				nextTenantID = nil
+			} else {
+				nextTenantID = &trimmed
 			}
-			nextTenantID = strings.TrimSpace(value)
 		case *string:
 			if value == nil || strings.TrimSpace(*value) == "" {
-				return nil, fmt.Errorf("tenantId is required")
+				nextTenantID = nil
+			} else {
+				trimmed := strings.TrimSpace(*value)
+				nextTenantID = &trimmed
 			}
-			nextTenantID = strings.TrimSpace(*value)
 		case nil:
-			return nil, fmt.Errorf("tenantId is required")
+			nextTenantID = nil
 		default:
 			return nil, fmt.Errorf("invalid tenantId")
 		}
+	}
+	if nextRole == "super_admin" {
+		nextTenantID = nil
+	} else if nextTenantID == nil {
+		return nil, errors.New("tenantId is required for admin and user roles")
 	}
 
 	if _, err := s.pool.Exec(ctx, `
@@ -351,4 +354,18 @@ func (s *authStore) updateUser(userID string, updates map[string]any) (*AuthUser
 	}
 
 	return s.userByID(ctx, userID)
+}
+
+func (s *authStore) deleteUser(userID string) error {
+	commandTag, err := s.pool.Exec(context.Background(), `
+		DELETE FROM users
+		WHERE id = $1
+	`, userID)
+	if err != nil {
+		return err
+	}
+	if commandTag.RowsAffected() == 0 {
+		return errors.New("User not found")
+	}
+	return nil
 }

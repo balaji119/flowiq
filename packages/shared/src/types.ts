@@ -43,7 +43,7 @@ export type AuthSession = {
 export type TenantRecord = {
   id: string;
   name: string;
-  slug: string;
+  createdAt?: string;
 };
 
 export type PrintIqOptionsCacheBucket = {

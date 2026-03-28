@@ -5,7 +5,7 @@ export async function fetchTenants() {
   return apiFetchJson<{ tenants: TenantRecord[] }>('/api/admin/tenants');
 }
 
-export async function createTenant(payload: { name: string; slug?: string }) {
+export async function createTenant(payload: { name: string }) {
   return apiFetchJson<{ tenant: TenantRecord }>('/api/admin/tenants', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -43,6 +43,12 @@ export async function updateUser(
   return apiFetchJson<{ user: AuthUser }>(`/api/admin/users/${encodeURIComponent(userId)}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteUser(userId: string) {
+  return apiFetchJson<{ deleted: boolean }>(`/api/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
   });
 }
 

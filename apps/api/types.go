@@ -16,7 +16,6 @@ type PrintIQStockOption struct {
 type TenantRecord struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
-	Slug      string `json:"slug"`
 	CreatedAt string `json:"createdAt,omitempty"`
 }
 
