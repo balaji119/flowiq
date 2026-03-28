@@ -1,5 +1,5 @@
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, CalendarDays, Check, ChevronRight, CircleAlert, LayoutGrid, LoaderCircle, LogOut, Plus, Shield, Upload, X } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Check, ChevronDown, CircleAlert, LayoutGrid, LoaderCircle, LogOut, Plus, Shield, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignRecord,
@@ -15,7 +15,7 @@ import {
   createDefaultFormValues,
   formatKeys,
 } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, Input, Label, Separator, cn } from '@flowiq/ui';
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Separator, cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import { calculatePersistedCampaign, createCampaign, fetchCampaign, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
@@ -136,6 +136,7 @@ function SearchableSelect({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const displayLabel = selectedLabel || items.find((item) => item.value === selectedValue)?.label || placeholder;
   const filteredItems = useMemo(() => {
     const nextQuery = query.trim().toLowerCase();
@@ -147,21 +148,32 @@ function SearchableSelect({
     if (!open) setQuery('');
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [open]);
+
   return (
-    <div className="space-y-2">
+    <div ref={containerRef} className="relative space-y-2">
       {label ? <Label>{label}</Label> : null}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <button className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-600 bg-slate-800 px-3 text-left text-sm text-slate-100 transition hover:border-slate-500" type="button">
-            <span className={cn('truncate', !selectedValue && !selectedLabel ? 'text-slate-500' : 'text-slate-50')}>{displayLabel}</span>
-            <ChevronRight className="h-4 w-4 text-slate-400" />
-          </button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{placeholder}</DialogTitle>
-            <DialogDescription>Search and choose a value.</DialogDescription>
-          </DialogHeader>
+      <button
+        className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-600 bg-slate-800 px-3 text-left text-sm text-slate-100 transition hover:border-slate-500"
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <span className={cn('truncate', !selectedValue && !selectedLabel ? 'text-slate-500' : 'text-slate-50')}>{displayLabel}</span>
+        <ChevronDown className={cn('h-4 w-4 text-slate-400 transition-transform', open ? 'rotate-180' : '')} />
+      </button>
+      {open ? (
+        <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-3xl border border-slate-700 bg-slate-950 p-4 shadow-2xl shadow-slate-950/60">
           <div className="space-y-3">
             <Input autoFocus placeholder={`Search ${label || 'items'}`} value={query} onChange={(event) => setQuery(event.target.value)} />
             <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
@@ -185,8 +197,8 @@ function SearchableSelect({
               {filteredItems.length === 0 ? <p className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-6 text-center text-sm text-slate-400">{emptyMessage}</p> : null}
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -513,24 +525,6 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
     }
   }
 
-  async function handleStartNewSchedule() {
-    setLoadingCampaign(true);
-    setError('');
-    setQuoteResponseMessage('');
-    setSelectedPurchaseOrderFile(null);
-    try {
-      const response = await createCampaign({ values: createDefaultFormValues() });
-      applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
-      lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
-      await setStoredCampaignId(response.campaign.id);
-      setStepIndex(0);
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'Unable to create a new campaign');
-    } finally {
-      setLoadingCampaign(false);
-    }
-  }
-
   function openPurchaseOrderPicker() {
     purchaseOrderInputRef.current?.click();
   }
@@ -742,115 +736,15 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button onClick={addCampaignMarket} type="button" variant="secondary">
-                    <Plus className="h-4 w-4" />
-                    Add Market
-                  </Button>
-                  <Button disabled={calculating} onClick={reviewTotals} type="button">
-                    {calculating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                    {calculating ? 'Calculating…' : 'Review Totals'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {currentStep.key === 'review' ? (
-            <Card>
-              <CardHeader className="p-6 pb-0">
-                <CardTitle>Review Totals</CardTitle>
-                <CardDescription>Confirm the calculated totals before creating the quote.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5 p-6">
-                {summary ? (
-                  <>
-                    {activeMarketSummaries.map((marketSummary) => (
-                      <div key={marketSummary.market} className="space-y-4 rounded-[24px] border border-slate-700 bg-slate-800/70 p-5">
-                        <div>
-                          <h3 className="text-xl font-black text-white">{marketSummary.market}</h3>
-                          <p className="mt-1 text-sm text-slate-400">
-                            {marketSummary.activeAssets} active assets, {marketSummary.activeRuns} runs, {marketSummary.posterTotal} posters, {marketSummary.frameTotal} frames
-                          </p>
-                        </div>
-                        <BreakdownTable breakdown={marketSummary.breakdown} />
-                      </div>
-                    ))}
-
-                    <div className="space-y-4 rounded-[24px] border border-violet-400/30 bg-violet-500/10 p-5">
-                      <div>
-                        <h3 className="text-xl font-black text-white">All Markets</h3>
-                        <p className="mt-1 text-sm text-violet-100/80">
-                          {summary.grandTotal.posterTotal} posters, {summary.grandTotal.frameTotal} frames, {summary.grandTotal.specialFormatTotal} special-format units
-                        </p>
-                      </div>
-                      <BreakdownTable breakdown={summary.grandTotal.breakdown} inverse />
-                    </div>
-
-                    <div className="flex gap-3">
-                      <Button onClick={() => setStepIndex(2)} type="button">
-                        Continue To Finalise
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="rounded-[24px] border border-slate-700 bg-slate-800/70 p-6">
-                    <div className="flex items-start gap-3">
-                      <CircleAlert className="mt-0.5 h-5 w-5 text-amber-300" />
-                      <div>
-                        <p className="font-semibold text-white">No totals yet</p>
-                        <p className="mt-1 text-sm text-slate-400">Go back to Schedule and configure campaign assets first.</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ) : null}
-          {currentStep.key === 'finalize' ? (
-            <Card>
-              <CardHeader className="p-6 pb-0">
-                <CardTitle>Finalise Quote</CardTitle>
-                <CardDescription>Upload the purchase order and create the PrintIQ quote without leaving this screen.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6 p-6">
-                <div className="space-y-2">
-                  <Label>Purchase Order File</Label>
-                  <div className="rounded-[24px] border border-dashed border-slate-600 bg-slate-800/60 p-4">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-white">{selectedPurchaseOrderFile ? selectedPurchaseOrderFile.name : 'No file selected'}</p>
-                        <p className="mt-1 text-sm text-slate-400">PDF upload stays unchanged. This only refreshes the interaction and layout.</p>
-                      </div>
-                      <Button onClick={openPurchaseOrderPicker} type="button" variant="secondary">
-                        <Upload className="h-4 w-4" />
-                        {selectedPurchaseOrderFile ? 'Change File' : 'Choose File'}
-                      </Button>
-                    </div>
-                    <input
-                      ref={purchaseOrderInputRef}
-                      className="hidden"
-                      onChange={(event) => {
-                        const nextFile = event.target.files?.[0] ?? null;
-                        setSelectedPurchaseOrderFile(nextFile);
-                      }}
-                      type="file"
-                    />
-                  </div>
-                  {uploadedPurchaseOrderName ? <p className="text-sm font-medium text-emerald-300">Uploaded: {uploadedPurchaseOrderName}</p> : null}
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button disabled={uploadingPurchaseOrder} onClick={() => void handleUploadPurchaseOrder()} type="button" variant="secondary">
-                    {uploadingPurchaseOrder ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                    {uploadingPurchaseOrder ? 'Uploading…' : 'Upload Purchase Order'}
-                  </Button>
                   <Button disabled={submitting || calculating || !summary} onClick={() => void handleSubmitQuote()} type="button">
                     {submitting || calculating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                    {submitting ? 'Submitting…' : calculating ? 'Calculating…' : 'Create Quote In PrintIQ'}
+                    {submitting ? 'Submitting...' : calculating ? 'Calculating...' : 'Create Quote In PrintIQ'}
                   </Button>
-                  <Button onClick={handleStartNewSchedule} type="button" variant="outline">
-                    Start New Schedule
-                  </Button>
+                  {onBack ? (
+                    <Button onClick={onBack} type="button" variant="outline">
+                      Go To Dashboard
+                    </Button>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>

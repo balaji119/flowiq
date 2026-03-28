@@ -170,6 +170,17 @@ func normalizeCampaignLines(values orderFormValues) []campaignLine {
 	return lines
 }
 
+func normalizeCampaignLineID(value string) string {
+	lineID := strings.TrimSpace(value)
+	if lineID == "" {
+		return uuid.NewString()
+	}
+	if _, err := uuid.Parse(lineID); err != nil {
+		return uuid.NewString()
+	}
+	return lineID
+}
+
 func (s *campaignStore) replaceCampaignLines(ctx context.Context, tx pgx.Tx, campaignID, tenantID string, values orderFormValues) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM campaign_lines WHERE campaign_id = $1 AND tenant_id = $2`, campaignID, tenantID); err != nil {
 		return err
@@ -182,10 +193,7 @@ func (s *campaignStore) replaceCampaignLines(ctx context.Context, tx pgx.Tx, cam
 			if err != nil {
 				return err
 			}
-			lineID := strings.TrimSpace(asset.ID)
-			if lineID == "" {
-				lineID = uuid.NewString()
-			}
+			lineID := normalizeCampaignLineID(asset.ID)
 			if _, err := tx.Exec(ctx, `
 				INSERT INTO campaign_lines (id, tenant_id, campaign_id, market, asset_id, asset_label, selected_weeks, sort_order, created_at, updated_at)
 				VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NOW(), NOW())

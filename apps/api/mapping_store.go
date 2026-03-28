@@ -97,6 +97,17 @@ func encodeQuantities(quantities quantityBreakdown) (string, error) {
 	return string(bytes), nil
 }
 
+func normalizeMappingID(value string) string {
+	mappingID := strings.TrimSpace(value)
+	if mappingID == "" {
+		return uuid.NewString()
+	}
+	if _, err := uuid.Parse(mappingID); err != nil {
+		return uuid.NewString()
+	}
+	return mappingID
+}
+
 func (s *mappingStore) listRecords(ctx context.Context, tenantID string) ([]calculatorMappingRecord, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, tenant_id, market, asset, label, state, quantities, created_at, updated_at
@@ -275,6 +286,18 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 		return 0, err
 	}
 
+	type normalizedImportRow struct {
+		id         string
+		market     string
+		asset      string
+		label      string
+		state      string
+		quantities string
+	}
+
+	uniqueRows := make(map[string]normalizedImportRow)
+	order := make([]string, 0)
+
 	count := 0
 	for _, market := range metadata {
 		marketName, err := sanitizeMappingText(market.Name, "market")
@@ -295,19 +318,30 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 				return 0, err
 			}
 
-			mappingID := strings.TrimSpace(asset.ID)
-			if mappingID == "" {
-				mappingID = uuid.NewString()
+			key := marketName + "\x00" + assetName
+			if _, exists := uniqueRows[key]; !exists {
+				order = append(order, key)
 			}
-
-			if _, err := tx.Exec(ctx, `
-				INSERT INTO calculator_mappings (id, tenant_id, market, asset, label, state, quantities, created_at, updated_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
-			`, mappingID, tenantID, marketName, assetName, label, strings.TrimSpace(asset.State), quantitiesJSON); err != nil {
-				return 0, err
+			uniqueRows[key] = normalizedImportRow{
+				id:         normalizeMappingID(asset.ID),
+				market:     marketName,
+				asset:      assetName,
+				label:      label,
+				state:      strings.TrimSpace(asset.State),
+				quantities: quantitiesJSON,
 			}
-			count++
 		}
+	}
+
+	for _, key := range order {
+		row := uniqueRows[key]
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO calculator_mappings (id, tenant_id, market, asset, label, state, quantities, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
+		`, row.id, tenantID, row.market, row.asset, row.label, row.state, row.quantities); err != nil {
+			return 0, err
+		}
+		count++
 	}
 
 	if err := tx.Commit(ctx); err != nil {

@@ -176,9 +176,11 @@ func (s *authStore) listTenants() ([]TenantRecord, error) {
 	tenants := make([]TenantRecord, 0)
 	for rows.Next() {
 		var tenant TenantRecord
-		if err := rows.Scan(&tenant.ID, &tenant.Name, &tenant.Slug, &tenant.CreatedAt); err != nil {
+		var createdAt time.Time
+		if err := rows.Scan(&tenant.ID, &tenant.Name, &tenant.Slug, &createdAt); err != nil {
 			return nil, err
 		}
+		tenant.CreatedAt = createdAt.UTC().Format(time.RFC3339)
 		tenants = append(tenants, tenant)
 	}
 	return tenants, rows.Err()
