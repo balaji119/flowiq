@@ -669,7 +669,7 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                 Print Workflow Studio
               </Badge>
               <div className="space-y-2">
-                <h1 className="text-4xl font-black tracking-tight text-white sm:text-5xl">ADS CONNECT</h1>
+                <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">ADS CONNECT</h1>
                 <p className="max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
                   Build campaign schedules, review calculated totals, and create PrintIQ-ready quotes with a cleaner browser-first workflow.
                 </p>
@@ -716,12 +716,11 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                 return (
                   <button
                     key={step.key}
-                    className={cn('rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition', active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-500')}
+                    className={cn('rounded-2xl border px-4 py-2.5 text-left text-sm font-semibold transition', active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-500')}
                     onClick={() => setStepIndex(index)}
                     type="button"
                   >
-                    <span className="block text-xs uppercase tracking-[0.18em] text-slate-400">Step {index + 1}</span>
-                    <span className="mt-1 block text-base">{step.title}</span>
+                    <span className="block text-base leading-tight">{step.title}</span>
                   </button>
                 );
               })}
