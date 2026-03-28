@@ -6,6 +6,7 @@ import {
   CampaignCalculationSummary,
   CampaignLine,
   CampaignMarket,
+  CampaignTotals,
   MarketMetadata,
   OrderFormValues,
   QuantityBreakdown,
@@ -100,16 +101,20 @@ function formatWeekLabel(week: number, startDate: string) {
 function LiveSummarySection({
   items,
   highlightValues = false,
+  compact = false,
 }: {
   items: ReadonlyArray<{ key: string; label: string; value: number | string }>;
   highlightValues?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className={cn('grid gap-2', compact ? 'grid-cols-2' : 'grid-cols-2')}>
       {items.map((item) => (
-        <div key={item.key} className="rounded-xl border border-slate-700 bg-slate-900/80 p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
-          <p className={cn('mt-2 text-xl font-black leading-none sm:text-2xl', highlightValues ? 'text-violet-300' : 'text-white')}>{item.value}</p>
+        <div key={item.key} className={cn('rounded-xl border border-slate-700 bg-slate-900/80', compact ? 'flex items-center justify-between gap-3 px-3 py-2' : 'p-3')}>
+          <p className={cn('font-bold uppercase tracking-[0.18em] text-slate-400', compact ? 'text-[11px]' : 'text-xs')}>{item.label}</p>
+          <p className={cn(compact ? 'text-base font-black leading-none' : 'mt-2 text-xl font-black leading-none sm:text-2xl', highlightValues ? 'text-violet-300' : 'text-white')}>
+            {item.value}
+          </p>
         </div>
       ))}
     </div>
@@ -276,6 +281,7 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
   const [loadingCampaign, setLoadingCampaign] = useState(true);
   const [savingCampaign, setSavingCampaign] = useState(false);
   const [summary, setSummary] = useState<CampaignCalculationSummary | null>(null);
+  const [activeMarketId, setActiveMarketId] = useState<string | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [quoteResponseMessage, setQuoteResponseMessage] = useState('');
@@ -398,6 +404,14 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
     : markets.length === 0
       ? 'No markets are available.'
       : 'All available markets have already been added.';
+  const activeMarket = useMemo(() => {
+    if (values.campaignMarkets.length === 0) return null;
+    return values.campaignMarkets.find((market) => market.id === activeMarketId) ?? values.campaignMarkets[0];
+  }, [activeMarketId, values.campaignMarkets]);
+  const activeMarketSummary = useMemo(() => {
+    if (!summary || !activeMarket) return null;
+    return summary.perMarket.find((entry) => entry.market === activeMarket.market) ?? null;
+  }, [activeMarket, summary]);
 
   useEffect(() => {
     if (loadingCampaign) return;
@@ -410,6 +424,17 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
       return changed ? { ...current, campaignMarkets: normalizedMarkets } : current;
     });
   }, [loadingCampaign, numberOfWeeks]);
+
+  useEffect(() => {
+    if (values.campaignMarkets.length === 0) {
+      setActiveMarketId(null);
+      return;
+    }
+
+    if (!activeMarketId || !values.campaignMarkets.some((market) => market.id === activeMarketId)) {
+      setActiveMarketId(values.campaignMarkets[0].id);
+    }
+  }, [activeMarketId, values.campaignMarkets]);
 
   useEffect(() => {
     if (loadingCampaign || loadingMetadata || metadataError) return;
@@ -745,8 +770,14 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                     const availableAssets = assetsForMarket(market.market);
                     const canRemoveMarket = values.campaignMarkets.length > 1;
                     const availableMarkets = marketOptionsFor(market.id, market.market);
+                    const isActiveMarket = market.id === activeMarket?.id;
                     return (
-                      <div key={market.id} className="rounded-[24px] border border-slate-700 bg-slate-800/60 p-4 sm:p-5">
+                      <div
+                        key={market.id}
+                        className={cn('rounded-[24px] border bg-slate-800/60 p-4 sm:p-5', isActiveMarket ? 'border-violet-400/60 shadow-[0_0_0_1px_rgba(167,139,250,0.25)]' : 'border-slate-700')}
+                        onClick={() => setActiveMarketId(market.id)}
+                        onFocusCapture={() => setActiveMarketId(market.id)}
+                      >
                         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                           <div className="flex-1">
                             <SearchableSelect
@@ -962,23 +993,69 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
 
         <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
           <Card>
-            <CardHeader className="p-5 pb-0">
-              <Badge className="w-fit text-[11px] uppercase tracking-[0.22em]">Live Summary</Badge>
-              <CardTitle className="text-2xl leading-tight">Campaign Snapshot</CardTitle>
-              <CardDescription>{values.campaignMarkets.reduce((acc, market) => acc + market.assets.length, 0)} assets configured</CardDescription>
+            <CardHeader className="space-y-2 p-5 pb-0">
+              <Badge className="w-fit text-[10px] uppercase tracking-[0.22em]">Market Snapshot</Badge>
+              <CardTitle className="text-xl leading-tight">
+                {activeMarketSummary ? (
+                  <>
+                    {activeMarketSummary.market} <span className="text-sm font-medium text-slate-400">({activeMarketSummary.activeAssets} assets)</span>
+                  </>
+                ) : (
+                  activeMarket?.market || 'Selected Market'
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 p-5">
+              {activeMarketSummary ? (
+                <>
+                  <LiveSummarySection
+                    compact
+                    items={formatKeys.map((key) => ({
+                      key: `market-${key}`,
+                      label: key,
+                      value: activeMarketSummary.breakdown[key],
+                    }))}
+                  />
+                  <Separator />
+                  <LiveSummarySection
+                    compact
+                    highlightValues
+                    items={[
+                      { key: 'market-posters', label: 'Posters', value: activeMarketSummary.posterTotal },
+                      { key: 'market-frames', label: 'Frames', value: activeMarketSummary.frameTotal },
+                      { key: 'market-special', label: 'Special', value: activeMarketSummary.specialFormatTotal },
+                      { key: 'market-total-units', label: 'Total Units', value: activeMarketSummary.totalUnits },
+                    ]}
+                  />
+                </>
+              ) : (
+                <p className="text-sm leading-6 text-slate-400">Configure assets in the active market to see its sheet-level mix and totals here.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="space-y-2 p-5 pb-0">
+              <Badge className="w-fit text-[10px] uppercase tracking-[0.22em]">Campaign Snapshot</Badge>
+              <CardTitle className="text-xl leading-tight">
+                All Markets{' '}
+                <span className="text-sm font-medium text-slate-400">({values.campaignMarkets.reduce((acc, market) => acc + market.assets.length, 0)} assets)</span>
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 p-5">
               {summary ? (
                 <>
                   <LiveSummarySection
+                    compact
                     items={formatKeys.map((key) => ({
-                      key,
+                      key: `campaign-${key}`,
                       label: key,
                       value: summary.grandTotal.breakdown[key],
                     }))}
                   />
                   <Separator />
                   <LiveSummarySection
+                    compact
                     highlightValues
                     items={[
                       { key: liveSummarySecondaryKeys[0].key, label: liveSummarySecondaryKeys[0].label, value: summary.grandTotal.posterTotal },
@@ -989,7 +1066,7 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                   />
                 </>
               ) : (
-                <p className="text-sm leading-6 text-slate-400">Configure campaign assets to see totals here. We keep this panel live so users always have context before they submit.</p>
+                <p className="text-sm leading-6 text-slate-400">Configure campaign assets to see overall totals here.</p>
               )}
             </CardContent>
           </Card>
