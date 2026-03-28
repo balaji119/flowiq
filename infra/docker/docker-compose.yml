@@ -14,8 +14,6 @@ services:
   web:
     image: node:22-bookworm-slim
     working_dir: /workspace
-    environment:
-      NEXT_PUBLIC_API_BASE_URL: http://api:4000
     command: >
       bash -lc "npm ci && npm run build --workspace @flowiq/web && npm run serve --workspace @flowiq/web"
     volumes:

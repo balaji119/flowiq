@@ -108,3 +108,9 @@ Contribution guidelines live in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - Linux deployment guide: [linux-deployment.md](docs/linux-deployment.md)
 - Deployment update checklist: [deployment-update-checklist.md](docs/deployment-update-checklist.md)
+
+Production note:
+
+- The frontend should call same-origin `/api/*` routes behind the reverse proxy.
+- The main Docker app stack lives in `infra/docker/docker-compose.yml`.
+- PostgreSQL is internal to the Docker network in the checked-in compose file.
