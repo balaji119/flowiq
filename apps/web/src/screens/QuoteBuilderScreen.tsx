@@ -9,6 +9,7 @@ import {
   CampaignMarket,
   CampaignTotals,
   MarketMetadata,
+  MarketDeliveryAddressRecord,
   OrderFormValues,
   QuantityBreakdown,
   buildPrintIqPayload,
@@ -23,6 +24,7 @@ import { buildApiUrl } from '../services/apiBase';
 import { createCampaign, fetchCampaign, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
+import { fetchCampaignMarketDeliveryAddresses } from '../services/marketDeliveryApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 
@@ -140,6 +142,30 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
           : image.imageUrl,
     })),
   };
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function formatDocumentDate(value: string) {
+  const parsed = parseDateOnly(value);
+  if (!parsed) return 'TBC';
+  return parsed.toLocaleDateString('en-AU');
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(new Error('Unable to read image blob'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function TextField({
@@ -317,6 +343,7 @@ export function QuoteBuilderScreen({
   const [campaignId, setCampaignId] = useState<string | null>(selectedCampaignId ?? null);
   const [campaignStatus, setCampaignStatus] = useState<CampaignRecord['status']>('draft');
   const [markets, setMarkets] = useState<MarketMetadata[]>([]);
+  const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<MarketDeliveryAddressRecord[]>([]);
   const [metadataError, setMetadataError] = useState('');
   const [loadingMetadata, setLoadingMetadata] = useState(true);
   const [loadingCampaign, setLoadingCampaign] = useState(true);
@@ -403,6 +430,24 @@ export function QuoteBuilderScreen({
   }, []);
 
   useEffect(() => {
+    let active = true;
+    async function loadMarketAddresses() {
+      try {
+        const response = await fetchCampaignMarketDeliveryAddresses();
+        if (!active) return;
+        setMarketDeliveryAddresses(response.addresses);
+      } catch {
+        if (!active) return;
+        setMarketDeliveryAddresses([]);
+      }
+    }
+    void loadMarketAddresses();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (loadingCampaign) return;
 
     let active = true;
@@ -462,6 +507,7 @@ export function QuoteBuilderScreen({
     return new Map(summary.perMarket.map((entry) => [entry.market, entry]));
   }, [summary]);
   const hasUnsavedChanges = !loadingCampaign && JSON.stringify(values) !== lastPersistedValuesRef.current;
+  const hasMappedCreatives = values.campaignMarkets.some((market) => market.assets.some((asset) => Boolean(asset.creativeImageId)));
   const saveDraftButtonClass = !hasUnsavedChanges && !savingCampaign ? 'border-slate-700 bg-slate-900/45 text-slate-500 disabled:opacity-100' : '';
 
   useEffect(() => {
@@ -794,6 +840,187 @@ export function QuoteBuilderScreen({
     }
     setError('');
     setStepIndex(2);
+  }
+
+  async function downloadArtworkWordDocument() {
+    const deliveryAddressByMarket = new Map(marketDeliveryAddresses.map((entry) => [entry.market, entry.deliveryAddress]));
+    const lineByAssetId = new Map((summary?.lines ?? []).map((line) => [line.id, line]));
+    const posterDivisors: Record<string, number> = {
+      '8-sheet': 4,
+      '6-sheet': 3,
+      '4-sheet': 2,
+      '2-sheet': 1,
+      QA0: 4,
+      Mega: 1,
+      'DOT M': 1,
+      MP: 1,
+    };
+    const posterLabels: Record<string, string> = {
+      '8-sheet': 'posters',
+      '6-sheet': 'posters',
+      '4-sheet': 'posters',
+      '2-sheet': 'posters',
+      QA0: 'A0 sized posters',
+      Mega: 'Mega',
+      'DOT M': 'DOT Mega',
+      MP: 'Mega Portrait',
+    };
+
+    function emptyBreakdown(): QuantityBreakdown {
+      return { '8-sheet': 0, '6-sheet': 0, '4-sheet': 0, '2-sheet': 0, QA0: 0, Mega: 0, 'DOT M': 0, MP: 0 };
+    }
+
+    function addBreakdown(target: QuantityBreakdown, source: QuantityBreakdown) {
+      formatKeys.forEach((key) => {
+        target[key] += source[key] || 0;
+      });
+    }
+
+    function breakdownToEmailText(breakdown: QuantityBreakdown) {
+      const parts: string[] = [];
+      formatKeys.forEach((key) => {
+        const qty = breakdown[key];
+        if (!qty) return;
+        if (key === 'Mega' || key === 'DOT M' || key === 'MP') {
+          parts.push(`${qty} x ${posterLabels[key]}`);
+          return;
+        }
+        const sheetRuns = qty / posterDivisors[key];
+        parts.push(`${qty} ${posterLabels[key]} (${sheetRuns} x ${key})`);
+      });
+      return parts.join(' & ');
+    }
+
+    function creativeTypeLabel(breakdown: QuantityBreakdown) {
+      if (breakdown.MP > 0) return 'Mega Portrait';
+      if (breakdown.Mega > 0 || breakdown['DOT M'] > 0) return 'Mega';
+      if (breakdown['8-sheet'] > 0) return '8 sheet';
+      if (breakdown['6-sheet'] > 0) return '6 sheet';
+      if (breakdown['4-sheet'] > 0) return '4 sheet';
+      if (breakdown['2-sheet'] > 0) return '2 sheet';
+      if (breakdown.QA0 > 0) return 'QA0';
+      return 'Artwork';
+    }
+
+    const creativeBreakdowns = new Map<string, QuantityBreakdown>();
+    const creativeBreakdownsByMarket = new Map<string, Map<string, QuantityBreakdown>>();
+
+    values.campaignMarkets.forEach((market) => {
+      market.assets.forEach((asset) => {
+        if (!asset.creativeImageId) return;
+        const line = lineByAssetId.get(asset.id);
+        if (!line) return;
+
+        const totalBucket = creativeBreakdowns.get(asset.creativeImageId) ?? emptyBreakdown();
+        addBreakdown(totalBucket, line.breakdown);
+        creativeBreakdowns.set(asset.creativeImageId, totalBucket);
+
+        const marketMap = creativeBreakdownsByMarket.get(market.market) ?? new Map<string, QuantityBreakdown>();
+        const marketBucket = marketMap.get(asset.creativeImageId) ?? emptyBreakdown();
+        addBreakdown(marketBucket, line.breakdown);
+        marketMap.set(asset.creativeImageId, marketBucket);
+        creativeBreakdownsByMarket.set(market.market, marketMap);
+      });
+    });
+
+    const mappedCreatives = values.printImages
+      .map((image, index) => {
+        const breakdown = creativeBreakdowns.get(image.id);
+        if (!breakdown) return null;
+        const quantitiesText = breakdownToEmailText(breakdown);
+        if (!quantitiesText) return null;
+        return { image, creativeNumber: index + 1, breakdown, quantitiesText };
+      })
+      .filter((entry): entry is { image: (typeof values.printImages)[number]; creativeNumber: number; breakdown: QuantityBreakdown; quantitiesText: string } => Boolean(entry));
+
+    const creativeCountText = mappedCreatives.length
+      ? `${mappedCreatives.length} creatives attached`
+      : 'No creatives attached';
+
+    const postersToPrintLines = mappedCreatives
+      .map((entry) => `Creative ${entry.creativeNumber} (${creativeTypeLabel(entry.breakdown)}): ${entry.quantitiesText}`)
+      .join('<br/>');
+
+    const creativeImageDataUrls = new Map<string, string>();
+    await Promise.all(
+      mappedCreatives.map(async (entry) => {
+        const image = entry.image;
+        if (!image.imageUrl) return;
+        try {
+          const response = await fetch(buildApiUrl(image.imageUrl));
+          if (!response.ok) return;
+          const dataUrl = await blobToDataUrl(await response.blob());
+          if (dataUrl) creativeImageDataUrls.set(image.id, dataUrl);
+        } catch {
+          // Skip preview embedding when image fetch fails.
+        }
+      }),
+    );
+
+    const artworkNameLines = mappedCreatives
+      .map((entry) => {
+        const image = entry.image;
+        const index = entry.creativeNumber;
+        const embedded = creativeImageDataUrls.get(image.id);
+        return `Creative ${index}: ${escapeHtml(image.name)}${
+          embedded ? `<br/><img src="${embedded}" alt="${escapeHtml(image.name)}" style="max-width:560px;max-height:320px;border:1px solid #d1d5db;margin:6px 0 12px 0;display:block;" />` : ''
+        }`;
+      })
+      .join('<br/>');
+
+    const deliverySection = values.campaignMarkets
+      .map((market) => {
+        const marketCreativeMap = creativeBreakdownsByMarket.get(market.market) ?? new Map<string, QuantityBreakdown>();
+        const creativeLines = mappedCreatives
+          .map((entry) => {
+            const image = entry.image;
+            const index = entry.creativeNumber;
+            const breakdown = marketCreativeMap.get(image.id);
+            if (!breakdown) return '';
+            const quantitiesText = breakdownToEmailText(breakdown);
+            if (!quantitiesText) return '';
+            return `Creative ${index} (${creativeTypeLabel(breakdown)}): ${quantitiesText}`;
+          })
+          .filter(Boolean)
+          .join('<br/>');
+        const address = deliveryAddressByMarket.get(market.market) || 'No delivery address mapping found';
+        return `
+          <p><strong>Please deliver for ${escapeHtml(market.market)} by COB:</strong><br/>
+          ${creativeLines || 'No creative quantities linked for this market.'}<br/><br/>
+          Deliver address - ${escapeHtml(address)}</p>
+        `;
+      })
+      .join('');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Artwork Brief</title>
+</head>
+<body style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#111827;">
+  <p><strong>Creative -</strong> ${escapeHtml(creativeCountText)}</p>
+
+  <p><strong>No. of posters to print -</strong><br/>
+  ${postersToPrintLines || 'No creative quantities linked yet.'}</p>
+
+  <p>${artworkNameLines || 'No artwork names available.'}</p>
+
+  <p><strong>Delivery -</strong></p>
+  ${deliverySection || '<p>No delivery details available.</p>'}
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'application/msword' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const safeName = (values.campaignName || 'campaign').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
+    anchor.href = url;
+    anchor.download = `${safeName || 'campaign'}-artwork-brief.doc`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    window.URL.revokeObjectURL(url);
   }
 
   function openPurchaseOrderPicker() {
@@ -1340,6 +1567,25 @@ export function QuoteBuilderScreen({
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {currentStep.key === 'finalize' ? (
+            <Card>
+              <CardHeader className="p-6 pb-0">
+                <CardTitle>Export For ADS</CardTitle>
+                <CardDescription>Export the details to send to ADS.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3 p-6 sm:flex-row">
+                <Button disabled={!hasMappedCreatives} onClick={() => void downloadArtworkWordDocument()} type="button" variant="outline">
+                  Download Artwork Word
+                </Button>
+                <div className="cursor-not-allowed" title="Under construction">
+                  <Button className="border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100" disabled type="button" variant="secondary">
+                    Send Email To ADS
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ) : null}
