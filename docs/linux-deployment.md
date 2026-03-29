@@ -48,6 +48,27 @@ This starts:
 
 The PostgreSQL port is intentionally not published on the host. The `api` container connects to it internally using `DATABASE_URL=postgres://...@postgres:5432/...`.
 
+## Required DB Bootstrap (Highlight)
+
+After first deploy (or after clearing DB), run migration and seed from inside the `api` container.
+Do not run `go run` inside the container because Go toolchain is not installed in the runtime image.
+
+```bash
+cd ~/flowiq
+docker compose -f infra/docker/docker-compose.yml exec -T api ./flowiq-api migrate
+docker compose -f infra/docker/docker-compose.yml exec -T api ./flowiq-api seed
+```
+
+Verify seeded users exist:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml exec -T postgres \
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -c "select email, role, active from users order by role, email;"
+```
+
+If this query returns `(0 rows)`, you likely seeded a different database/stack.
+
 ## Reverse Proxy
 
 The main stack now includes Caddy directly. The checked-in [Caddyfile](../infra/docker/Caddyfile) proxies:

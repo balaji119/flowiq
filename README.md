@@ -114,3 +114,6 @@ Production note:
 - The frontend should call same-origin `/api/*` routes behind the reverse proxy.
 - The main Docker app stack lives in `infra/docker/docker-compose.yml`.
 - PostgreSQL is internal to the Docker network in the checked-in compose file.
+- After Linux deploy/reset, run DB bootstrap inside the `api` container:
+  - `docker compose -f infra/docker/docker-compose.yml exec -T api ./flowiq-api migrate`
+  - `docker compose -f infra/docker/docker-compose.yml exec -T api ./flowiq-api seed`

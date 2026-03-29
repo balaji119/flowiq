@@ -31,6 +31,21 @@ Also verify that:
 - `/api/*` proxies to `api:4000`
 - the checked-in Caddy service owns ports `80` and `443`
 
+## If You Reset DB / Need Fresh Seed
+
+Run these inside the running `api` container:
+
+```bash
+cd ~/flowiq
+docker compose -f infra/docker/docker-compose.yml exec -T api ./flowiq-api migrate
+docker compose -f infra/docker/docker-compose.yml exec -T api ./flowiq-api seed
+docker compose -f infra/docker/docker-compose.yml exec -T postgres \
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -c "select email, role, active from users order by role, email;"
+```
+
+Do not use `go run` inside the `api` container runtime image (Go is not installed there).
+
 ## If Frontend Changes Are Missing
 
 ```bash
