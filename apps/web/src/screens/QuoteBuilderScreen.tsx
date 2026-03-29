@@ -30,12 +30,6 @@ const steps = [
 ] as const;
 
 const ACTIVE_CAMPAIGN_ID_KEY = 'adsconnect-active-campaign-id';
-const liveSummarySecondaryKeys = [
-  { key: 'posters', label: 'Posters' },
-  { key: 'frames', label: 'Frames' },
-  { key: 'special', label: 'Special' },
-  { key: 'quoteQty', label: 'Quote Qty' },
-] as const;
 
 async function setStoredCampaignId(value: string | null) {
   if (typeof window === 'undefined') return;
@@ -414,10 +408,10 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
     if (values.campaignMarkets.length === 0) return null;
     return values.campaignMarkets.find((market) => market.id === activeMarketId) ?? values.campaignMarkets[0];
   }, [activeMarketId, values.campaignMarkets]);
-  const activeMarketSummary = useMemo(() => {
-    if (!summary || !activeMarket) return null;
-    return summary.perMarket.find((entry) => entry.market === activeMarket.market) ?? null;
-  }, [activeMarket, summary]);
+  const marketSummaryByName = useMemo(() => {
+    if (!summary) return new Map<string, CampaignCalculationSummary['perMarket'][number]>();
+    return new Map(summary.perMarket.map((entry) => [entry.market, entry]));
+  }, [summary]);
 
   useEffect(() => {
     if (loadingCampaign) return;
@@ -734,7 +728,7 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
       ) : null}
       {quoteResponseMessage ? <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{quoteResponseMessage}</div> : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className={cn('grid gap-6', currentStep.key === 'schedule' ? 'xl:grid-cols-[minmax(0,1fr)_320px]' : 'xl:grid-cols-1')}>
         <section className="space-y-6">
           {currentStep.key === 'schedule' ? (
             <Card>
@@ -931,6 +925,15 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                           </p>
                         </div>
                         <BreakdownTable breakdown={marketSummary.breakdown} />
+                        <LiveSummarySection
+                          highlightValues
+                          items={[
+                            { key: `review-market-posters-${marketSummary.market}`, label: 'Posters', value: marketSummary.posterTotal },
+                            { key: `review-market-frames-${marketSummary.market}`, label: 'Frames', value: marketSummary.frameTotal },
+                            { key: `review-market-special-${marketSummary.market}`, label: 'Special', value: marketSummary.specialFormatTotal },
+                            { key: `review-market-total-units-${marketSummary.market}`, label: 'Total Units', value: marketSummary.totalUnits },
+                          ]}
+                        />
                       </div>
                     ))}
 
@@ -942,6 +945,15 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
                         </p>
                       </div>
                       <BreakdownTable breakdown={summary.grandTotal.breakdown} inverse />
+                      <LiveSummarySection
+                        highlightValues
+                        items={[
+                          { key: 'review-all-posters', label: 'Posters', value: summary.grandTotal.posterTotal },
+                          { key: 'review-all-frames', label: 'Frames', value: summary.grandTotal.frameTotal },
+                          { key: 'review-all-special', label: 'Special', value: summary.grandTotal.specialFormatTotal },
+                          { key: 'review-all-total-units', label: 'Total Units', value: summary.grandTotal.totalUnits },
+                        ]}
+                      />
                     </div>
 
                     <div className="flex gap-3">
@@ -1020,86 +1032,51 @@ export function QuoteBuilderScreen({ campaignId: selectedCampaignId, onBack, onO
           ) : null}
         </section>
 
-        <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
-          <Card>
-            <CardHeader className="space-y-2 p-5 pb-0">
-              <Badge className="w-fit text-[10px] uppercase tracking-[0.22em]">Market Snapshot</Badge>
-              <CardTitle className="text-xl leading-tight">
-                {activeMarketSummary ? (
-                  <>
-                    {activeMarketSummary.market} <span className="text-sm font-medium text-slate-400">({activeMarketSummary.activeAssets} assets)</span>
-                  </>
-                ) : (
-                  activeMarket?.market || 'Selected Market'
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 p-5">
-              {activeMarketSummary ? (
-                <>
-                  <LiveSummarySection
-                    compact
-                    items={formatKeys.map((key) => ({
-                      key: `market-${key}`,
-                      label: key,
-                      value: activeMarketSummary.breakdown[key],
-                    }))}
-                  />
-                  <Separator />
-                  <LiveSummarySection
-                    compact
-                    highlightValues
-                    items={[
-                      { key: 'market-posters', label: 'Posters', value: activeMarketSummary.posterTotal },
-                      { key: 'market-frames', label: 'Frames', value: activeMarketSummary.frameTotal },
-                      { key: 'market-special', label: 'Special', value: activeMarketSummary.specialFormatTotal },
-                      { key: 'market-total-units', label: 'Total Units', value: activeMarketSummary.totalUnits },
-                    ]}
-                  />
-                </>
-              ) : (
-                <p className="text-sm leading-6 text-slate-400">Configure assets in the active market to see its sheet-level mix and totals here.</p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="space-y-2 p-5 pb-0">
-              <Badge className="w-fit text-[10px] uppercase tracking-[0.22em]">Campaign Snapshot</Badge>
-              <CardTitle className="text-xl leading-tight">
-                All Markets{' '}
-                <span className="text-sm font-medium text-slate-400">({values.campaignMarkets.reduce((acc, market) => acc + market.assets.length, 0)} assets)</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 p-5">
-              {summary ? (
-                <>
-                  <LiveSummarySection
-                    compact
-                    items={formatKeys.map((key) => ({
-                      key: `campaign-${key}`,
-                      label: key,
-                      value: summary.grandTotal.breakdown[key],
-                    }))}
-                  />
-                  <Separator />
-                  <LiveSummarySection
-                    compact
-                    highlightValues
-                    items={[
-                      { key: liveSummarySecondaryKeys[0].key, label: liveSummarySecondaryKeys[0].label, value: summary.grandTotal.posterTotal },
-                      { key: liveSummarySecondaryKeys[1].key, label: liveSummarySecondaryKeys[1].label, value: summary.grandTotal.frameTotal },
-                      { key: liveSummarySecondaryKeys[2].key, label: liveSummarySecondaryKeys[2].label, value: summary.grandTotal.specialFormatTotal },
-                      { key: liveSummarySecondaryKeys[3].key, label: liveSummarySecondaryKeys[3].label, value: values.quantity || summary.grandTotal.totalUnits },
-                    ]}
-                  />
-                </>
-              ) : (
-                <p className="text-sm leading-6 text-slate-400">Configure campaign assets to see overall totals here.</p>
-              )}
-            </CardContent>
-          </Card>
-        </aside>
+        {currentStep.key === 'schedule' ? (
+          <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
+            {values.campaignMarkets.map((market) => {
+              const marketSummary = marketSummaryByName.get(market.market);
+              return (
+                <Card key={`market-snapshot-${market.id}`}>
+                  <CardHeader className="space-y-2 p-5 pb-0">
+                    <Badge className="w-fit text-[10px] uppercase tracking-[0.22em]">Market Snapshot</Badge>
+                    <CardTitle className="text-xl leading-tight">
+                      {market.market || 'Selected Market'}{' '}
+                      <span className="text-sm font-medium text-slate-400">({market.assets.length} assets)</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 p-5">
+                    {marketSummary ? (
+                      <>
+                        <LiveSummarySection
+                          compact
+                          items={formatKeys.map((key) => ({
+                            key: `market-${market.id}-${key}`,
+                            label: key,
+                            value: marketSummary.breakdown[key],
+                          }))}
+                        />
+                        <Separator />
+                        <LiveSummarySection
+                          compact
+                          highlightValues
+                          items={[
+                            { key: `market-posters-${market.id}`, label: 'Posters', value: marketSummary.posterTotal },
+                            { key: `market-frames-${market.id}`, label: 'Frames', value: marketSummary.frameTotal },
+                            { key: `market-special-${market.id}`, label: 'Special', value: marketSummary.specialFormatTotal },
+                            { key: `market-total-units-${market.id}`, label: 'Total Units', value: marketSummary.totalUnits },
+                          ]}
+                        />
+                      </>
+                    ) : (
+                      <p className="text-sm leading-6 text-slate-400">Configure assets in this market to see its sheet-level mix and totals here.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </aside>
+        ) : null}
       </div>
     </main>
   );
