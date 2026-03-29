@@ -457,6 +457,7 @@ export function QuoteBuilderScreen({
     return new Map(summary.perMarket.map((entry) => [entry.market, entry]));
   }, [summary]);
   const hasUnsavedChanges = !loadingCampaign && JSON.stringify(values) !== lastPersistedValuesRef.current;
+  const saveDraftButtonClass = !hasUnsavedChanges && !savingCampaign ? 'border-slate-700 bg-slate-900/45 text-slate-500 disabled:opacity-100' : '';
 
   useEffect(() => {
     if (loadingCampaign) return;
@@ -1014,7 +1015,7 @@ export function QuoteBuilderScreen({
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
+                  <Button className={saveDraftButtonClass} disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
                     {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                     {savingCampaign ? 'Saving…' : 'Save Draft'}
                   </Button>
@@ -1219,7 +1220,7 @@ export function QuoteBuilderScreen({
                       Add Market
                     </Button>
                   </div>
-                  <Button disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
+                  <Button className={saveDraftButtonClass} disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
                     {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                     {savingCampaign ? 'Saving…' : 'Save Draft'}
                   </Button>
@@ -1295,7 +1296,7 @@ export function QuoteBuilderScreen({
                     </div>
 
                     <div className="flex gap-3">
-                      <Button disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
+                      <Button className={saveDraftButtonClass} disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
                         {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                         {savingCampaign ? 'Saving…' : 'Save Draft'}
                       </Button>
@@ -1359,7 +1360,7 @@ export function QuoteBuilderScreen({
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
+                  <Button className={saveDraftButtonClass} disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
                     {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                     {savingCampaign ? 'Saving…' : 'Save Draft'}
                   </Button>
