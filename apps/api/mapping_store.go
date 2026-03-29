@@ -30,6 +30,14 @@ type calculatorMappingRow struct {
 	UpdatedAt  time.Time
 }
 
+type marketDeliveryAddressRow struct {
+	TenantID        string
+	Market          string
+	DeliveryAddress string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
 func newMappingStore(pool *pgxpool.Pool) *mappingStore {
 	return &mappingStore{pool: pool}
 }
@@ -124,16 +132,96 @@ func normalizeMappingID(value string) string {
 	return mappingID
 }
 
+func scanMarketDeliveryAddressRow(scanner interface {
+	Scan(dest ...any) error
+}) (marketDeliveryAddressRow, error) {
+	var row marketDeliveryAddressRow
+	err := scanner.Scan(
+		&row.TenantID,
+		&row.Market,
+		&row.DeliveryAddress,
+		&row.CreatedAt,
+		&row.UpdatedAt,
+	)
+	return row, err
+}
+
+func decodeMarketDeliveryAddressRow(row marketDeliveryAddressRow) marketDeliveryAddressRecord {
+	return marketDeliveryAddressRecord{
+		TenantID:        row.TenantID,
+		Market:          row.Market,
+		DeliveryAddress: row.DeliveryAddress,
+		CreatedAt:       row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:       row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func (s *mappingStore) ensureMarket(ctx context.Context, tenantID, marketName string) (string, error) {
+	var marketID string
+	err := s.pool.QueryRow(ctx, `
+		SELECT id
+		FROM markets
+		WHERE tenant_id = $1 AND name = $2
+	`, tenantID, marketName).Scan(&marketID)
+	if err == nil {
+		return marketID, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+
+	marketID = uuid.NewString()
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO markets (id, tenant_id, name, created_at, updated_at)
+		VALUES ($1, $2, $3, NOW(), NOW())
+		ON CONFLICT (tenant_id, name) DO NOTHING
+	`, marketID, tenantID, marketName)
+	if err != nil {
+		return "", err
+	}
+
+	err = s.pool.QueryRow(ctx, `
+		SELECT id
+		FROM markets
+		WHERE tenant_id = $1 AND name = $2
+	`, tenantID, marketName).Scan(&marketID)
+	if err != nil {
+		return "", err
+	}
+	return marketID, nil
+}
+
+func (s *mappingStore) getRecordByID(ctx context.Context, tenantID, mappingID string) (*calculatorMappingRecord, error) {
+	row, err := scanCalculatorMappingRow(s.pool.QueryRow(ctx, `
+		SELECT ma.id, m.tenant_id, m.name AS market, ma.asset, ma.label, ma.state, ma.quantities, ma.created_at, ma.updated_at
+		FROM market_assets ma
+		JOIN markets m ON m.id = ma.market_id
+		WHERE ma.id = $1 AND m.tenant_id = $2
+	`, mappingID, tenantID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errors.New("Mapping not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	record, err := decodeCalculatorMappingRow(row)
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
 func (s *mappingStore) listRecords(ctx context.Context, tenantID string) ([]calculatorMappingRecord, error) {
 	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
 		return nil, err
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, tenant_id, market, asset, label, state, quantities, created_at, updated_at
-		FROM calculator_mappings
-		WHERE tenant_id = $1
-		ORDER BY market ASC, label ASC, asset ASC
+		SELECT ma.id, m.tenant_id, m.name AS market, ma.asset, ma.label, ma.state, ma.quantities, ma.created_at, ma.updated_at
+		FROM market_assets ma
+		JOIN markets m ON m.id = ma.market_id
+		WHERE m.tenant_id = $1
+		ORDER BY m.name ASC, ma.label ASC, ma.asset ASC
 	`, tenantID)
 	if err != nil {
 		return nil, err
@@ -214,16 +302,21 @@ func (s *mappingStore) createMapping(ctx context.Context, tenantID string, paylo
 		return nil, err
 	}
 
+	marketID, err := s.ensureMarket(ctx, tenantID, market)
+	if err != nil {
+		return nil, err
+	}
+
 	quantitiesJSON, err := encodeQuantities(payload.Quantities)
 	if err != nil {
 		return nil, err
 	}
 
-	row, err := scanCalculatorMappingRow(s.pool.QueryRow(ctx, `
-		INSERT INTO calculator_mappings (id, tenant_id, market, asset, label, state, quantities, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
-		RETURNING id, tenant_id, market, asset, label, state, quantities, created_at, updated_at
-	`, uuid.NewString(), tenantID, market, asset, label, strings.TrimSpace(payload.State), quantitiesJSON))
+	mappingID := uuid.NewString()
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO market_assets (id, market_id, asset, label, state, quantities, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW(), NOW())
+	`, mappingID, marketID, asset, label, strings.TrimSpace(payload.State), quantitiesJSON)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return nil, errors.New("A mapping for this market and asset already exists")
@@ -231,11 +324,11 @@ func (s *mappingStore) createMapping(ctx context.Context, tenantID string, paylo
 		return nil, err
 	}
 
-	record, err := decodeCalculatorMappingRow(row)
+	record, err := s.getRecordByID(ctx, tenantID, mappingID)
 	if err != nil {
 		return nil, err
 	}
-	return &record, nil
+	return record, nil
 }
 
 func (s *mappingStore) updateMapping(ctx context.Context, tenantID, mappingID string, payload calculatorMappingInput) (*calculatorMappingRecord, error) {
@@ -256,37 +349,44 @@ func (s *mappingStore) updateMapping(ctx context.Context, tenantID, mappingID st
 		return nil, err
 	}
 
+	marketID, err := s.ensureMarket(ctx, tenantID, market)
+	if err != nil {
+		return nil, err
+	}
+
 	quantitiesJSON, err := encodeQuantities(payload.Quantities)
 	if err != nil {
 		return nil, err
 	}
 
-	row, err := scanCalculatorMappingRow(s.pool.QueryRow(ctx, `
-		UPDATE calculator_mappings
-		SET market = $3,
+	commandTag, err := s.pool.Exec(ctx, `
+		UPDATE market_assets ma
+		SET market_id = $3,
 			asset = $4,
 			label = $5,
 			state = $6,
 			quantities = $7::jsonb,
 			updated_at = NOW()
-		WHERE id = $1 AND tenant_id = $2
-		RETURNING id, tenant_id, market, asset, label, state, quantities, created_at, updated_at
-	`, mappingID, tenantID, market, asset, label, strings.TrimSpace(payload.State), quantitiesJSON))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, errors.New("Mapping not found")
-	}
+		FROM markets current_market
+		WHERE ma.id = $1
+		  AND ma.market_id = current_market.id
+		  AND current_market.tenant_id = $2
+	`, mappingID, tenantID, marketID, asset, label, strings.TrimSpace(payload.State), quantitiesJSON)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return nil, errors.New("A mapping for this market and asset already exists")
 		}
 		return nil, err
 	}
+	if commandTag.RowsAffected() == 0 {
+		return nil, errors.New("Mapping not found")
+	}
 
-	record, err := decodeCalculatorMappingRow(row)
+	record, err := s.getRecordByID(ctx, tenantID, mappingID)
 	if err != nil {
 		return nil, err
 	}
-	return &record, nil
+	return record, nil
 }
 
 func (s *mappingStore) deleteMapping(ctx context.Context, tenantID, mappingID string) error {
@@ -295,8 +395,11 @@ func (s *mappingStore) deleteMapping(ctx context.Context, tenantID, mappingID st
 	}
 
 	commandTag, err := s.pool.Exec(ctx, `
-		DELETE FROM calculator_mappings
-		WHERE id = $1 AND tenant_id = $2
+		DELETE FROM market_assets ma
+		USING markets m
+		WHERE ma.id = $1
+		  AND ma.market_id = m.id
+		  AND m.tenant_id = $2
 	`, mappingID, tenantID)
 	if err != nil {
 		return err
@@ -318,12 +421,16 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 	}
 	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx, `DELETE FROM calculator_mappings WHERE tenant_id = $1`, tenantID); err != nil {
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM market_assets
+		WHERE market_id IN (SELECT id FROM markets WHERE tenant_id = $1)
+	`, tenantID); err != nil {
 		return 0, err
 	}
 
 	type normalizedImportRow struct {
 		id         string
+		marketID   string
 		market     string
 		asset      string
 		label      string
@@ -334,11 +441,40 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 	uniqueRows := make(map[string]normalizedImportRow)
 	order := make([]string, 0)
 
+	marketIDs := make(map[string]string)
 	count := 0
 	for _, market := range metadata {
 		marketName, err := sanitizeMappingText(market.Name, "market")
 		if err != nil {
 			return 0, err
+		}
+		marketID, exists := marketIDs[marketName]
+		if !exists {
+			err = tx.QueryRow(ctx, `
+				SELECT id
+				FROM markets
+				WHERE tenant_id = $1 AND name = $2
+			`, tenantID, marketName).Scan(&marketID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				marketID = uuid.NewString()
+				if _, err := tx.Exec(ctx, `
+					INSERT INTO markets (id, tenant_id, name, created_at, updated_at)
+					VALUES ($1, $2, $3, NOW(), NOW())
+					ON CONFLICT (tenant_id, name) DO NOTHING
+				`, marketID, tenantID, marketName); err != nil {
+					return 0, err
+				}
+				if err := tx.QueryRow(ctx, `
+					SELECT id
+					FROM markets
+					WHERE tenant_id = $1 AND name = $2
+				`, tenantID, marketName).Scan(&marketID); err != nil {
+					return 0, err
+				}
+			} else if err != nil {
+				return 0, err
+			}
+			marketIDs[marketName] = marketID
 		}
 		for _, asset := range market.Assets {
 			assetName, err := sanitizeMappingText(asset.Asset, "asset")
@@ -360,6 +496,7 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 			}
 			uniqueRows[key] = normalizedImportRow{
 				id:         normalizeMappingID(asset.ID),
+				marketID:   marketID,
 				market:     marketName,
 				asset:      assetName,
 				label:      label,
@@ -372,9 +509,9 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 	for _, key := range order {
 		row := uniqueRows[key]
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO calculator_mappings (id, tenant_id, market, asset, label, state, quantities, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
-		`, row.id, tenantID, row.market, row.asset, row.label, row.state, row.quantities); err != nil {
+			INSERT INTO market_assets (id, market_id, asset, label, state, quantities, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW(), NOW())
+		`, row.id, row.marketID, row.asset, row.label, row.state, row.quantities); err != nil {
 			return 0, err
 		}
 		count++
@@ -384,4 +521,65 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 		return 0, err
 	}
 	return count, nil
+}
+
+func (s *mappingStore) listMarketDeliveryAddresses(ctx context.Context, tenantID string) ([]marketDeliveryAddressRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT mda.tenant_id, m.name, mda.delivery_address, mda.created_at, mda.updated_at
+		FROM market_delivery_addresses mda
+		JOIN markets m ON m.id = mda.market_id
+		WHERE mda.tenant_id = $1
+		ORDER BY m.name ASC
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]marketDeliveryAddressRecord, 0)
+	for rows.Next() {
+		row, err := scanMarketDeliveryAddressRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, decodeMarketDeliveryAddressRow(row))
+	}
+	return records, rows.Err()
+}
+
+func (s *mappingStore) upsertMarketDeliveryAddress(ctx context.Context, tenantID string, payload marketDeliveryAddressInput) (*marketDeliveryAddressRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
+	market, err := sanitizeMappingText(payload.Market, "market")
+	if err != nil {
+		return nil, err
+	}
+	deliveryAddress, err := sanitizeMappingText(payload.DeliveryAddress, "deliveryAddress")
+	if err != nil {
+		return nil, err
+	}
+	marketID, err := s.ensureMarket(ctx, tenantID, market)
+	if err != nil {
+		return nil, err
+	}
+
+	row, err := scanMarketDeliveryAddressRow(s.pool.QueryRow(ctx, `
+		INSERT INTO market_delivery_addresses (tenant_id, market_id, delivery_address, created_at, updated_at)
+		VALUES ($1, $2, $3, NOW(), NOW())
+		ON CONFLICT (tenant_id, market_id)
+		DO UPDATE SET delivery_address = EXCLUDED.delivery_address, updated_at = NOW()
+		RETURNING tenant_id, $4::text, delivery_address, created_at, updated_at
+	`, tenantID, marketID, deliveryAddress, market))
+	if err != nil {
+		return nil, err
+	}
+
+	record := decodeMarketDeliveryAddressRow(row)
+	return &record, nil
 }

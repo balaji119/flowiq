@@ -157,6 +157,19 @@ type calculatorMappingRecord struct {
 	UpdatedAt  string            `json:"updatedAt"`
 }
 
+type marketDeliveryAddressInput struct {
+	Market          string `json:"market"`
+	DeliveryAddress string `json:"deliveryAddress"`
+}
+
+type marketDeliveryAddressRecord struct {
+	TenantID        string `json:"tenantId"`
+	Market          string `json:"market"`
+	DeliveryAddress string `json:"deliveryAddress"`
+	CreatedAt       string `json:"createdAt"`
+	UpdatedAt       string `json:"updatedAt"`
+}
+
 type campaignLine struct {
 	ID            string `json:"id"`
 	AssetID       string `json:"assetId"`

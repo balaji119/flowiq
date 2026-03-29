@@ -507,3 +507,38 @@ func (s *campaignStore) recordSubmission(ctx context.Context, user AuthUser, cam
 
 	return s.getCampaign(ctx, user, campaign.ID)
 }
+
+func (s *campaignStore) deleteCampaign(ctx context.Context, user AuthUser, campaignID string) error {
+	if user.TenantID == nil {
+		return errors.New("current user is not assigned to a tenant")
+	}
+
+	var status string
+	err := s.pool.QueryRow(ctx, `
+		SELECT status
+		FROM campaigns
+		WHERE id = $1 AND tenant_id = $2
+		LIMIT 1
+	`, campaignID, *user.TenantID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errors.New("Campaign not found")
+	}
+	if err != nil {
+		return err
+	}
+	if strings.EqualFold(strings.TrimSpace(status), "submitted") {
+		return errors.New("Submitted campaigns cannot be deleted")
+	}
+
+	commandTag, err := s.pool.Exec(ctx, `
+		DELETE FROM campaigns
+		WHERE id = $1 AND tenant_id = $2
+	`, campaignID, *user.TenantID)
+	if err != nil {
+		return err
+	}
+	if commandTag.RowsAffected() == 0 {
+		return errors.New("Campaign not found")
+	}
+	return nil
+}

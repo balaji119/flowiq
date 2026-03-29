@@ -1,14 +1,16 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Database, FileJson, LoaderCircle, Pencil, Plus, Shield, Trash2, Upload } from 'lucide-react';
-import { CalculatorMappingInput, CalculatorMappingRecord, MarketMetadata, TenantRecord, createEmptyBreakdown, formatKeys } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from '@flowiq/ui';
+import { CalculatorMappingInput, CalculatorMappingRecord, MarketDeliveryAddressRecord, MarketMetadata, TenantRecord, createEmptyBreakdown, formatKeys } from '@flowiq/shared';
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import {
   createCalculatorMapping,
   deleteCalculatorMapping,
+  fetchMarketDeliveryAddresses,
   fetchCalculatorMappings,
   fetchTenants,
   importCalculatorMappings,
+  upsertMarketDeliveryAddress,
   updateCalculatorMapping,
 } from '../services/adminApi';
 
@@ -33,6 +35,10 @@ function parseImportedMarkets(raw: unknown): MarketMetadata[] {
   return raw as MarketMetadata[];
 }
 
+function formatSheetHeader(key: (typeof formatKeys)[number]) {
+  return key.includes('-sheet') ? key.replace('-', ' ') : key;
+}
+
 export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -43,8 +49,13 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(session?.user.tenantId ?? null);
   const [mappings, setMappings] = useState<CalculatorMappingRecord[]>([]);
+  const [marketAddresses, setMarketAddresses] = useState<MarketDeliveryAddressRecord[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<CalculatorMappingInput>(emptyForm);
+  const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
+  const [selectedMarketFilter, setSelectedMarketFilter] = useState('');
+  const [deliveryAddressDraft, setDeliveryAddressDraft] = useState('');
+  const [savingDeliveryAddress, setSavingDeliveryAddress] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const canSwitchTenant = session?.user.role === 'super_admin';
@@ -88,6 +99,7 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
     let active = true;
     if (!effectiveTenantId) {
       setMappings([]);
+      setMarketAddresses([]);
       setLoading(false);
       return;
     }
@@ -96,9 +108,13 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
       try {
         setLoading(true);
         setError('');
-        const response = await fetchCalculatorMappings(effectiveTenantId);
+        const [mappingResponse, addressResponse] = await Promise.all([
+          fetchCalculatorMappings(effectiveTenantId),
+          fetchMarketDeliveryAddresses(effectiveTenantId),
+        ]);
         if (!active) return;
-        setMappings(response.mappings);
+        setMappings(mappingResponse.mappings);
+        setMarketAddresses(addressResponse.addresses);
       } catch (loadError) {
         if (active) {
           setError(loadError instanceof Error ? loadError.message : 'Unable to load mappings');
@@ -116,15 +132,33 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
     };
   }, [effectiveTenantId]);
 
-  const groupedMappings = useMemo(() => {
-    const grouped = new Map<string, CalculatorMappingRecord[]>();
-    for (const mapping of mappings) {
-      const current = grouped.get(mapping.market) ?? [];
-      current.push(mapping);
-      grouped.set(mapping.market, current);
+  const marketOptions = useMemo(() => [...new Set(mappings.map((mapping) => mapping.market))].sort((left, right) => left.localeCompare(right)), [mappings]);
+
+  const filteredMappings = useMemo(() => {
+    if (!selectedMarketFilter) return [];
+    return mappings
+      .filter((mapping) => mapping.market === selectedMarketFilter)
+      .sort((left, right) => left.asset.localeCompare(right.asset) || left.label.localeCompare(right.label));
+  }, [mappings, selectedMarketFilter]);
+
+  useEffect(() => {
+    if (marketOptions.length === 0) {
+      setSelectedMarketFilter('');
+      return;
     }
-    return [...grouped.entries()].sort(([left], [right]) => left.localeCompare(right));
-  }, [mappings]);
+    if (!selectedMarketFilter || !marketOptions.includes(selectedMarketFilter)) {
+      setSelectedMarketFilter(marketOptions[0]);
+    }
+  }, [marketOptions, selectedMarketFilter]);
+
+  const selectedMarketAddress = useMemo(
+    () => marketAddresses.find((address) => address.market === selectedMarketFilter)?.deliveryAddress ?? '',
+    [marketAddresses, selectedMarketFilter],
+  );
+
+  useEffect(() => {
+    setDeliveryAddressDraft(selectedMarketAddress);
+  }, [selectedMarketAddress]);
 
   function resetForm() {
     setEditingId(null);
@@ -161,6 +195,7 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
         setMappings((current) => [...current, response.mapping].sort((left, right) => left.market.localeCompare(right.market) || left.label.localeCompare(right.label)));
         setNotice(`Added mapping ${response.mapping.label}.`);
       }
+      setMappingDialogOpen(false);
       resetForm();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Unable to save mapping');
@@ -201,14 +236,68 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
       const parsed = JSON.parse(await file.text()) as unknown;
       const markets = parseImportedMarkets(parsed);
       const response = await importCalculatorMappings(markets, effectiveTenantId);
-      const nextMappings = await fetchCalculatorMappings(effectiveTenantId);
+      const [nextMappings, nextAddresses] = await Promise.all([
+        fetchCalculatorMappings(effectiveTenantId),
+        fetchMarketDeliveryAddresses(effectiveTenantId),
+      ]);
       setMappings(nextMappings.mappings);
+      setMarketAddresses(nextAddresses.addresses);
       resetForm();
       setNotice(response.message);
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : 'Unable to import mapping JSON');
     } finally {
       setImporting(false);
+    }
+  }
+
+  function openAddMappingDialog() {
+    setEditingId(null);
+    setForm({
+      ...emptyForm(),
+      market: selectedMarketFilter || '',
+    });
+    setMappingDialogOpen(true);
+  }
+
+  function openEditMappingDialog(mapping: CalculatorMappingRecord) {
+    setEditingId(mapping.id);
+    setForm({
+      market: mapping.market,
+      asset: mapping.asset,
+      label: mapping.label,
+      state: mapping.state,
+      quantities: { ...mapping.quantities },
+    });
+    setMappingDialogOpen(true);
+  }
+
+  async function handleSaveDeliveryAddress() {
+    if (!effectiveTenantId || !selectedMarketFilter) return;
+
+    setSavingDeliveryAddress(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await upsertMarketDeliveryAddress(
+        {
+          market: selectedMarketFilter,
+          deliveryAddress: deliveryAddressDraft,
+        },
+        effectiveTenantId,
+      );
+      setMarketAddresses((current) => {
+        const existing = current.some((item) => item.market === response.address.market);
+        if (existing) {
+          return current.map((item) => (item.market === response.address.market ? response.address : item));
+        }
+        return [...current, response.address].sort((left, right) => left.market.localeCompare(right.market));
+      });
+      setNotice(`Saved delivery address for ${response.address.market}.`);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save delivery address');
+    } finally {
+      setSavingDeliveryAddress(false);
     }
   }
 
@@ -301,20 +390,149 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
         </Card>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-        <Card>
-          <CardHeader className="p-5 pb-0">
-            <CardTitle>{editingId ? 'Edit mapping' : 'Add mapping'}</CardTitle>
-            <CardDescription>
+      <Card>
+        <CardHeader className="p-5 pb-0">
+          <CardTitle>Current mappings</CardTitle>
+          <CardDescription>
+            {mappings.length > 0
+              ? `${mappings.length} mapping${mappings.length === 1 ? '' : 's'} loaded${effectiveTenantId ? ' for this tenant' : ''}.`
+              : 'No mappings loaded yet. Import a JSON file to start.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="w-full sm:max-w-sm space-y-2">
+              <Label htmlFor="market-filter">Market</Label>
+              <select
+                id="market-filter"
+                className="h-11 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+                onChange={(event) => setSelectedMarketFilter(event.target.value)}
+                value={selectedMarketFilter}
+              >
+                {marketOptions.length === 0 ? <option value="">No markets available</option> : null}
+                {marketOptions.map((market) => (
+                  <option key={`market-filter-${market}`} value={market}>
+                    {market}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button disabled={!effectiveTenantId || !selectedMarketFilter} onClick={openAddMappingDialog} type="button">
+              <Plus className="h-4 w-4" />
+              Add Mapping
+            </Button>
+          </div>
+
+          {selectedMarketFilter ? (
+            <div className="space-y-2 rounded-2xl border border-slate-700 bg-slate-900/50 p-4">
+              <Label htmlFor="delivery-address">Delivery Address ({selectedMarketFilter})</Label>
+              <Input
+                id="delivery-address"
+                onChange={(event) => setDeliveryAddressDraft(event.target.value)}
+                placeholder="Enter delivery address for this market"
+                value={deliveryAddressDraft}
+              />
+              <div className="flex justify-end">
+                <Button disabled={savingDeliveryAddress || !deliveryAddressDraft.trim()} onClick={() => void handleSaveDeliveryAddress()} type="button" variant="outline">
+                  {savingDeliveryAddress ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                  {savingDeliveryAddress ? 'Saving...' : 'Save Address'}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {loading ? (
+            <div className="flex items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/60 px-6 py-14">
+              <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
+            </div>
+          ) : marketOptions.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
+              <FileJson className="mx-auto h-8 w-8 text-slate-400" />
+              <p className="mt-4 text-base font-semibold text-white">No mapping data yet</p>
+              <p className="mt-2 text-sm text-slate-400">Import the checked-in JSON template or add records one by one.</p>
+            </div>
+          ) : filteredMappings.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
+              <p className="text-base font-semibold text-white">No assets for this market yet</p>
+              <p className="mt-2 text-sm text-slate-400">Choose Add Mapping to create the first asset mapping for {selectedMarketFilter}.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-[24px] border border-slate-700 bg-slate-900/70">
+              <table className="min-w-[1180px] w-full border-collapse text-sm">
+                <thead>
+                  <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
+                    <th className="border border-slate-700 px-4 py-3 text-left">Asset</th>
+                    <th className="border border-slate-700 px-4 py-3 text-left">Label</th>
+                    <th className="border border-slate-700 px-4 py-3 text-left">State</th>
+                    {formatKeys.map((key) => (
+                      <th key={`mapping-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatSheetHeader(key)}</th>
+                    ))}
+                    <th className="sticky right-0 z-20 border border-slate-700 bg-slate-950 px-4 py-3 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredMappings.map((mapping) => (
+                    <tr key={`mapping-row-${mapping.id}`} className="bg-slate-800/70 border-t border-slate-700/70">
+                      <td className="border border-slate-700 px-4 py-3 font-semibold text-white">{mapping.asset}</td>
+                      <td className="border border-slate-700 px-4 py-3 text-slate-200">{mapping.label}</td>
+                      <td className="border border-slate-700 px-4 py-3 text-slate-300">{mapping.state || '-'}</td>
+                      {formatKeys.map((key) => (
+                        <td key={`mapping-cell-${mapping.id}-${key}`} className="border border-slate-700 px-4 py-3 text-center font-semibold text-white">
+                          {mapping.quantities[key]}
+                        </td>
+                      ))}
+                      <td className="sticky right-0 z-10 border border-slate-700 bg-slate-800/95 px-3 py-3">
+                        <div className="flex justify-center gap-2">
+                          <Button
+                            aria-label="Edit mapping"
+                            className="h-7 w-7 rounded-md border-0 p-0 hover:bg-slate-700/70"
+                            onClick={() => openEditMappingDialog(mapping)}
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            aria-label="Delete mapping"
+                            className="h-7 w-7 rounded-md border-0 p-0 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200"
+                            onClick={() => void handleDelete(mapping)}
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={mappingDialogOpen}
+        onOpenChange={(open) => {
+          setMappingDialogOpen(open);
+          if (!open) resetForm();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingId ? 'Edit mapping' : 'Add mapping'}</DialogTitle>
+            <DialogDescription>
               {canSwitchTenant
                 ? selectedTenant
                   ? `These values will be saved for ${selectedTenant.name}.`
                   : 'Select a tenant before adding or importing quantity mappings.'
                 : 'These values drive the schedule quantity calculator for your tenant.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="mapping-market">Market</Label>
                 <Input id="mapping-market" onChange={(event) => setForm((current) => ({ ...current, market: event.target.value }))} value={form.market} />
@@ -347,95 +565,25 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
               ))}
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap justify-end gap-3">
+              <Button
+                onClick={() => {
+                  setMappingDialogOpen(false);
+                  resetForm();
+                }}
+                type="button"
+                variant="ghost"
+              >
+                Cancel
+              </Button>
               <Button disabled={saving || !effectiveTenantId} onClick={() => void handleSubmit()}>
                 {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : editingId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                 {saving ? 'Saving...' : editingId ? 'Update Mapping' : 'Add Mapping'}
               </Button>
-              <Button onClick={resetForm} type="button" variant="ghost">Clear</Button>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="p-5 pb-0">
-            <CardTitle>Current mappings</CardTitle>
-            <CardDescription>
-              {mappings.length > 0
-                ? `${mappings.length} mapping${mappings.length === 1 ? '' : 's'} loaded${effectiveTenantId ? ' for this tenant' : ''}.`
-                : 'No mappings loaded yet. Import a JSON file to start.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {loading ? (
-              <div className="flex items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/60 px-6 py-14">
-                <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
-              </div>
-            ) : groupedMappings.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
-                <FileJson className="mx-auto h-8 w-8 text-slate-400" />
-                <p className="mt-4 text-base font-semibold text-white">No mapping data yet</p>
-                <p className="mt-2 text-sm text-slate-400">Import the checked-in JSON template or add records one by one.</p>
-              </div>
-            ) : (
-              groupedMappings.map(([market, marketMappings]) => (
-                <section key={market} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-black text-white">{market}</h2>
-                    <Badge variant="secondary">{marketMappings.length} assets</Badge>
-                  </div>
-                  <div className="space-y-3">
-                    {marketMappings.map((mapping) => (
-                      <div key={mapping.id} className="rounded-2xl border border-slate-700 bg-slate-800/70 p-4">
-                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                          <div>
-                            <p className="text-base font-bold text-white">{mapping.label}</p>
-                            <p className="text-sm text-slate-400">
-                              {mapping.asset}
-                              {mapping.state ? ` • ${mapping.state}` : ''}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={() => {
-                                setEditingId(mapping.id);
-                                setForm({
-                                  market: mapping.market,
-                                  asset: mapping.asset,
-                                  label: mapping.label,
-                                  state: mapping.state,
-                                  quantities: { ...mapping.quantities },
-                                });
-                              }}
-                              size="sm"
-                              variant="secondary"
-                            >
-                              <Pencil className="h-4 w-4" />
-                              Edit
-                            </Button>
-                            <Button onClick={() => void handleDelete(mapping)} size="sm" variant="destructive">
-                              <Trash2 className="h-4 w-4" />
-                              Delete
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                          {formatKeys.map((key) => (
-                            <div key={key} className="rounded-xl border border-slate-700/80 bg-slate-900/80 px-3 py-2">
-                              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{key}</p>
-                              <p className="mt-1 text-lg font-black text-white">{mapping.quantities[key]}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

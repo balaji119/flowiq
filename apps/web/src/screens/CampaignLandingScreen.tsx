@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, FolderKanban, LayoutGrid, LoaderCircle, LogOut, Plus, Rows3, Shield } from 'lucide-react';
+import { CalendarDays, FolderKanban, LayoutGrid, LoaderCircle, LogOut, Pencil, Plus, Rows3, Shield, Trash2 } from 'lucide-react';
 import { CampaignListItem } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@flowiq/ui';
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
-import { fetchCampaigns } from '../services/campaignApi';
+import { deleteCampaign, fetchCampaigns } from '../services/campaignApi';
 
 type CampaignLandingScreenProps = {
   onOpenCampaign: (campaignId: string | null) => void;
@@ -34,6 +34,9 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'thumbnail' | 'table'>('table');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [campaignPendingDelete, setCampaignPendingDelete] = useState<CampaignListItem | null>(null);
+  const [deletingCampaign, setDeletingCampaign] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -62,6 +65,28 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
   function handleCreateCampaign() {
     setError('');
     onOpenCampaign(null);
+  }
+
+  function openDeleteDialog(campaign: CampaignListItem) {
+    if (campaign.status === 'submitted') return;
+    setCampaignPendingDelete(campaign);
+    setDeleteDialogOpen(true);
+  }
+
+  async function handleConfirmDeleteCampaign() {
+    if (!campaignPendingDelete) return;
+    setDeletingCampaign(true);
+    setError('');
+    try {
+      await deleteCampaign(campaignPendingDelete.id);
+      setCampaigns((current) => current.filter((item) => item.id !== campaignPendingDelete.id));
+      setDeleteDialogOpen(false);
+      setCampaignPendingDelete(null);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete campaign');
+    } finally {
+      setDeletingCampaign(false);
+    }
   }
 
   const filteredCampaigns = useMemo(() => {
@@ -228,9 +253,30 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
                       <p>Latest quote: {campaign.latestQuoteAmount ?? 'N/A'}</p>
                     </div>
 
-                    <Button className="w-full" onClick={() => onOpenCampaign(campaign.id)}>
-                      Open Campaign
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        aria-label="Edit campaign"
+                        className="h-7 w-7 rounded-md border-0 p-0 hover:bg-slate-700/70"
+                        onClick={() => onOpenCampaign(campaign.id)}
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        aria-label="Delete campaign"
+                        className={campaign.status === 'submitted'
+                          ? 'h-7 w-7 rounded-md border-0 p-0 text-slate-600 opacity-60 cursor-not-allowed'
+                          : 'h-7 w-7 rounded-md border-0 p-0 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200'}
+                        disabled={campaign.status === 'submitted'}
+                        onClick={() => openDeleteDialog(campaign)}
+                        title={campaign.status === 'submitted' ? 'Submitted campaigns cannot be deleted' : 'Delete campaign'}
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -270,10 +316,31 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
                       <td className="border border-slate-700 px-4 py-3 text-slate-300">{formatCampaignDate(campaign.dueDate)}</td>
                       <td className="border border-slate-700 px-4 py-3 text-center text-slate-300">{campaign.numberOfWeeks || '0'}</td>
                       <td className="border border-slate-700 px-4 py-3 text-center text-slate-300">{campaign.latestQuoteAmount ?? 'N/A'}</td>
-                      <td className="border border-slate-700 px-4 py-3 text-center">
-                        <Button onClick={() => onOpenCampaign(campaign.id)} size="sm">
-                          Open
-                        </Button>
+                      <td className="border border-slate-700 px-4 py-3">
+                        <div className="flex justify-center gap-2">
+                          <Button
+                            aria-label="Edit campaign"
+                            className="h-7 w-7 rounded-md border-0 p-0 hover:bg-slate-700/70"
+                            onClick={() => onOpenCampaign(campaign.id)}
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            aria-label="Delete campaign"
+                            className={campaign.status === 'submitted'
+                              ? 'h-7 w-7 rounded-md border-0 p-0 text-slate-600 opacity-60 cursor-not-allowed'
+                              : 'h-7 w-7 rounded-md border-0 p-0 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200'}
+                            disabled={campaign.status === 'submitted'}
+                            onClick={() => openDeleteDialog(campaign)}
+                            title={campaign.status === 'submitted' ? 'Submitted campaigns cannot be deleted' : 'Delete campaign'}
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -283,6 +350,45 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
           )}
         </>
       )}
+
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          if (deletingCampaign) return;
+          setDeleteDialogOpen(open);
+          if (!open) setCampaignPendingDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader className="pb-2">
+            <DialogTitle>Delete Campaign</DialogTitle>
+            <DialogDescription className="pt-1 leading-6">
+              {campaignPendingDelete
+                ? `Delete "${campaignPendingDelete.campaignName || `Untitled Campaign ${campaignPendingDelete.id.slice(0, 6)}`}"? This action cannot be undone.`
+                : 'Delete this campaign? This action cannot be undone.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="pt-2">
+            <div className="flex justify-end gap-3">
+              <Button
+                disabled={deletingCampaign}
+                onClick={() => {
+                  setDeleteDialogOpen(false);
+                  setCampaignPendingDelete(null);
+                }}
+                type="button"
+                variant="ghost"
+              >
+                Cancel
+              </Button>
+              <Button disabled={deletingCampaign} onClick={() => void handleConfirmDeleteCampaign()}>
+                {deletingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {deletingCampaign ? 'Deleting...' : 'Delete Campaign'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

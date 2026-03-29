@@ -1,4 +1,4 @@
-import { AuthRole, AuthUser, CalculatorMappingInput, CalculatorMappingRecord, MarketMetadata, PrintIqOptionsCacheStatus, TenantRecord } from '@flowiq/shared';
+import { AuthRole, AuthUser, CalculatorMappingInput, CalculatorMappingRecord, MarketDeliveryAddressInput, MarketDeliveryAddressRecord, MarketMetadata, PrintIqOptionsCacheStatus, TenantRecord } from '@flowiq/shared';
 import { apiFetchJson } from './apiClient';
 
 export async function fetchTenants() {
@@ -101,5 +101,18 @@ export async function importCalculatorMappings(markets: MarketMetadata[], tenant
   return apiFetchJson<{ message: string; count: number }>(`/api/admin/calculator-mappings/import${query}`, {
     method: 'POST',
     body: JSON.stringify({ markets }),
+  });
+}
+
+export async function fetchMarketDeliveryAddresses(tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ addresses: MarketDeliveryAddressRecord[] }>(`/api/admin/market-delivery-addresses${query}`);
+}
+
+export async function upsertMarketDeliveryAddress(payload: MarketDeliveryAddressInput, tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ address: MarketDeliveryAddressRecord }>(`/api/admin/market-delivery-addresses${query}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
   });
 }

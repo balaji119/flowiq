@@ -213,6 +213,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("POST /api/campaigns", a.withAuth(http.HandlerFunc(a.handleCreateCampaign)))
 	mux.Handle("GET /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleGetCampaign)))
 	mux.Handle("PUT /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleUpdateCampaign)))
+	mux.Handle("DELETE /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleDeleteCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/calculate", a.withAuth(http.HandlerFunc(a.handleCalculatePersistedCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/submit-to-printiq", a.withAuth(http.HandlerFunc(a.handleSubmitCampaign)))
 	mux.Handle("GET /api/calculator/metadata", a.withAuth(http.HandlerFunc(a.handleCalculatorMetadata)))
@@ -234,6 +235,8 @@ func (a *app) routes() http.Handler {
 	mux.Handle("PATCH /api/admin/calculator-mappings/{mappingId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpdateCalculatorMapping), "super_admin", "admin")))
 	mux.Handle("DELETE /api/admin/calculator-mappings/{mappingId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleDeleteCalculatorMapping), "super_admin", "admin")))
 	mux.Handle("POST /api/admin/calculator-mappings/import", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleImportCalculatorMappings), "super_admin", "admin")))
+	mux.Handle("GET /api/admin/market-delivery-addresses", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListMarketDeliveryAddresses), "super_admin", "admin")))
+	mux.Handle("PUT /api/admin/market-delivery-addresses", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMarketDeliveryAddress), "super_admin", "admin")))
 	mux.Handle("GET /api/admin/printiq-options/status", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleOptionsStatus), "super_admin")))
 	mux.Handle("POST /api/admin/printiq-options/refresh", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleRefreshOptions), "super_admin")))
 
@@ -523,6 +526,20 @@ func (a *app) handleUpdateCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"campaign": campaign})
+}
+
+func (a *app) handleDeleteCampaign(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	err := a.campaignStore.deleteCampaign(r.Context(), *user, r.PathValue("campaignId"))
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 func (a *app) handleCalculatePersistedCampaign(w http.ResponseWriter, r *http.Request) {
@@ -1172,4 +1189,40 @@ func (a *app) handleImportCalculatorMappings(w http.ResponseWriter, r *http.Requ
 		"message": fmt.Sprintf("Imported %d mappings successfully", count),
 		"count":   count,
 	})
+}
+
+func (a *app) handleListMarketDeliveryAddresses(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	records, err := a.mappingStore.listMarketDeliveryAddresses(r.Context(), *tenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"addresses": records})
+}
+
+func (a *app) handleUpsertMarketDeliveryAddress(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var payload marketDeliveryAddressInput
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	record, err := a.mappingStore.upsertMarketDeliveryAddress(r.Context(), *tenantID, payload)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"address": record})
 }

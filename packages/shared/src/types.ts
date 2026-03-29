@@ -108,6 +108,17 @@ export type CalculatorMappingRecord = CalculatorMappingInput & {
   updatedAt: string;
 };
 
+export type MarketDeliveryAddressInput = {
+  market: string;
+  deliveryAddress: string;
+};
+
+export type MarketDeliveryAddressRecord = MarketDeliveryAddressInput & {
+  tenantId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CampaignLineResult = {
   id: string;
   market: string;
