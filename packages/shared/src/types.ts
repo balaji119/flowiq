@@ -77,6 +77,15 @@ export type CampaignMarket = {
   assets: CampaignAsset[];
 };
 
+export type CampaignPrintImage = {
+  id: string;
+  name: string;
+  fileName: string;
+  mimeType: string;
+  storedName?: string;
+  imageUrl?: string;
+};
+
 export type CampaignLine = CampaignAsset & { market: string };
 
 export type MarketAssetOption = {
@@ -174,6 +183,7 @@ export type OrderFormValues = {
   campaignStartDate: string;
   dueDate: string;
   numberOfWeeks: string;
+  printImages: CampaignPrintImage[];
   campaignMarkets: CampaignMarket[];
   contact: ContactDetails;
   selectedJobOperations: string[];

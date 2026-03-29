@@ -45,6 +45,7 @@ export function createDefaultFormValues(): OrderFormValues {
     campaignStartDate: getTodayDateInputValue(),
     dueDate: '',
     numberOfWeeks: '3',
+    printImages: [],
     campaignMarkets: [createCampaignMarket('market-1')],
     contact: {
       title: 'Accounts Payable',

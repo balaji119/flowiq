@@ -23,16 +23,17 @@ type contextKey string
 const authUserKey contextKey = "authUser"
 
 type app struct {
-	authStore      *authStore
-	campaignStore  *campaignStore
-	mappingStore   *mappingStore
-	calculator     *calculatorService
-	optionService  *optionService
-	jwtSecret      []byte
-	jwtExpiry      time.Duration
-	logPath        string
-	uploadDir      string
-	printIQBaseURL string
+	authStore        *authStore
+	campaignStore    *campaignStore
+	mappingStore     *mappingStore
+	calculator       *calculatorService
+	optionService    *optionService
+	jwtSecret        []byte
+	jwtExpiry        time.Duration
+	logPath          string
+	uploadDir        string
+	campaignImageDir string
+	printIQBaseURL   string
 }
 
 type authClaims struct {
@@ -65,16 +66,17 @@ func main() {
 	baseDir := "."
 	mappingStore := newMappingStore(pool)
 	api := &app{
-		authStore:      newAuthStore(pool),
-		campaignStore:  newCampaignStore(pool),
-		mappingStore:   mappingStore,
-		calculator:     newCalculatorService(mappingStore),
-		optionService:  newOptionService(envOrDefault("PRINTIQ_BASE_URL", "https://adsaust.printiq.com"), filepath.Join(baseDir, "storage", "data")),
-		jwtSecret:      []byte(envOrDefault("JWT_SECRET", "flowiq-dev-secret")),
-		jwtExpiry:      parseDurationOrDefault(envOrDefault("JWT_EXPIRES_IN", "8h"), 8*time.Hour),
-		logPath:        filepath.Join(baseDir, "storage", "logs", "printiq-payloads.log"),
-		uploadDir:      filepath.Join(baseDir, "storage", "uploads", "purchase-orders"),
-		printIQBaseURL: envOrDefault("PRINTIQ_BASE_URL", "https://adsaust.printiq.com"),
+		authStore:        newAuthStore(pool),
+		campaignStore:    newCampaignStore(pool),
+		mappingStore:     mappingStore,
+		calculator:       newCalculatorService(mappingStore),
+		optionService:    newOptionService(envOrDefault("PRINTIQ_BASE_URL", "https://adsaust.printiq.com"), filepath.Join(baseDir, "storage", "data")),
+		jwtSecret:        []byte(envOrDefault("JWT_SECRET", "flowiq-dev-secret")),
+		jwtExpiry:        parseDurationOrDefault(envOrDefault("JWT_EXPIRES_IN", "8h"), 8*time.Hour),
+		logPath:          filepath.Join(baseDir, "storage", "logs", "printiq-payloads.log"),
+		uploadDir:        filepath.Join(baseDir, "storage", "uploads", "purchase-orders"),
+		campaignImageDir: filepath.Join(baseDir, "storage", "uploads", "campaign-images"),
+		printIQBaseURL:   envOrDefault("PRINTIQ_BASE_URL", "https://adsaust.printiq.com"),
 	}
 
 	if err := os.MkdirAll(filepath.Dir(api.logPath), 0o755); err != nil {
@@ -82,6 +84,9 @@ func main() {
 	}
 	if err := os.MkdirAll(api.uploadDir, 0o755); err != nil {
 		log.Fatalf("failed to create upload directory: %v", err)
+	}
+	if err := os.MkdirAll(api.campaignImageDir, 0o755); err != nil {
+		log.Fatalf("failed to create campaign image directory: %v", err)
 	}
 
 	address := fmt.Sprintf(":%s", envOrDefault("PORT", "4000"))
@@ -224,6 +229,9 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/printiq/token", a.withAuth(http.HandlerFunc(a.handlePrintIQToken)))
 	mux.Handle("POST /api/quotes/price", a.withAuth(http.HandlerFunc(a.handleQuotePrice)))
 	mux.Handle("POST /api/purchase-orders/upload", a.withAuth(http.HandlerFunc(a.handlePurchaseOrderUpload)))
+	mux.Handle("POST /api/campaign-images/upload", a.withAuth(http.HandlerFunc(a.handleCampaignImageUpload)))
+	mux.Handle("GET /api/campaign-images/{storedName}", http.HandlerFunc(a.handleCampaignImageGet))
+	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(filepath.Join(".", "storage", "uploads")))))
 	mux.Handle("GET /api/admin/tenants", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListTenants), "super_admin")))
 	mux.Handle("POST /api/admin/tenants", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleCreateTenant), "super_admin")))
 	mux.Handle("GET /api/admin/users", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListUsers), "super_admin", "admin")))
@@ -867,6 +875,89 @@ func (a *app) handlePurchaseOrderUpload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusCreated, response)
+}
+
+func (a *app) handleCampaignImageUpload(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(25 << 20); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "No file uploaded"})
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "No file uploaded"})
+		return
+	}
+	defer file.Close()
+
+	contentType := strings.TrimSpace(header.Header.Get("Content-Type"))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	if !strings.HasPrefix(strings.ToLower(contentType), "image/") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Only image files are allowed"})
+		return
+	}
+
+	extension := filepath.Ext(header.Filename)
+	baseName := strings.TrimSuffix(header.Filename, extension)
+	safeBaseName := unsafeFilenamePattern.ReplaceAllString(baseName, "_")
+	safeBaseName = strings.TrimSpace(safeBaseName)
+	if safeBaseName == "" {
+		safeBaseName = "campaign-image"
+	}
+	if len(safeBaseName) > 64 {
+		safeBaseName = safeBaseName[:64]
+	}
+
+	storedName := fmt.Sprintf("%d-%s%s", time.Now().UnixMilli(), safeBaseName, extension)
+	targetPath := filepath.Join(a.campaignImageDir, storedName)
+	out, err := os.Create(targetPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer out.Close()
+
+	size, err := io.Copy(out, file)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	response := uploadResponse{
+		OriginalName: header.Filename,
+		StoredName:   storedName,
+		Size:         size,
+		MimeType:     contentType,
+		UploadedAt:   time.Now().UTC().Format(time.RFC3339),
+		URL:          "/api/campaign-images/" + storedName,
+	}
+	writeJSON(w, http.StatusCreated, response)
+}
+
+func (a *app) handleCampaignImageGet(w http.ResponseWriter, r *http.Request) {
+	storedName := strings.TrimSpace(r.PathValue("storedName"))
+	if storedName == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Prevent path traversal by requiring a plain file name.
+	if filepath.Base(storedName) != storedName || strings.Contains(storedName, "..") {
+		http.NotFound(w, r)
+		return
+	}
+
+	targetPath := filepath.Join(a.campaignImageDir, storedName)
+	if _, err := os.Stat(targetPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read campaign image"})
+		return
+	}
+	http.ServeFile(w, r, targetPath)
 }
 
 func (a *app) handleListTenants(w http.ResponseWriter, _ *http.Request) {

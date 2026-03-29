@@ -36,33 +36,43 @@ type contactDetails struct {
 	Email     string `json:"email"`
 }
 
+type campaignPrintImage struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	FileName   string `json:"fileName"`
+	MimeType   string `json:"mimeType"`
+	StoredName string `json:"storedName,omitempty"`
+	ImageURL   string `json:"imageUrl,omitempty"`
+}
+
 type orderFormValues struct {
-	CustomerCode              string           `json:"customerCode"`
-	CustomerReference         string           `json:"customerReference"`
-	CampaignName              string           `json:"campaignName"`
-	JobDescription            string           `json:"jobDescription"`
-	Notes                     string           `json:"notes"`
-	ProductCategory           string           `json:"productCategory"`
-	SectionType               string           `json:"sectionType"`
-	FoldCatalog               string           `json:"foldCatalog"`
-	StockCode                 string           `json:"stockCode"`
-	ProcessFront              string           `json:"processFront"`
-	ProcessReverse            string           `json:"processReverse"`
-	TargetFreightPrice        string           `json:"targetFreightPrice"`
-	Quantity                  string           `json:"quantity"`
-	FinishWidth               string           `json:"finishWidth"`
-	FinishHeight              string           `json:"finishHeight"`
-	SectionWidth              string           `json:"sectionWidth"`
-	SectionHeight             string           `json:"sectionHeight"`
-	Pages                     string           `json:"pages"`
-	KindName                  string           `json:"kindName"`
-	CampaignStartDate         string           `json:"campaignStartDate"`
-	DueDate                   string           `json:"dueDate"`
-	NumberOfWeeks             string           `json:"numberOfWeeks"`
-	CampaignMarkets           []campaignMarket `json:"campaignMarkets"`
-	Contact                   contactDetails   `json:"contact"`
-	SelectedJobOperations     []string         `json:"selectedJobOperations"`
-	SelectedSectionOperations []string         `json:"selectedSectionOperations"`
+	CustomerCode              string               `json:"customerCode"`
+	CustomerReference         string               `json:"customerReference"`
+	CampaignName              string               `json:"campaignName"`
+	JobDescription            string               `json:"jobDescription"`
+	Notes                     string               `json:"notes"`
+	ProductCategory           string               `json:"productCategory"`
+	SectionType               string               `json:"sectionType"`
+	FoldCatalog               string               `json:"foldCatalog"`
+	StockCode                 string               `json:"stockCode"`
+	ProcessFront              string               `json:"processFront"`
+	ProcessReverse            string               `json:"processReverse"`
+	TargetFreightPrice        string               `json:"targetFreightPrice"`
+	Quantity                  string               `json:"quantity"`
+	FinishWidth               string               `json:"finishWidth"`
+	FinishHeight              string               `json:"finishHeight"`
+	SectionWidth              string               `json:"sectionWidth"`
+	SectionHeight             string               `json:"sectionHeight"`
+	Pages                     string               `json:"pages"`
+	KindName                  string               `json:"kindName"`
+	CampaignStartDate         string               `json:"campaignStartDate"`
+	DueDate                   string               `json:"dueDate"`
+	NumberOfWeeks             string               `json:"numberOfWeeks"`
+	PrintImages               []campaignPrintImage `json:"printImages"`
+	CampaignMarkets           []campaignMarket     `json:"campaignMarkets"`
+	Contact                   contactDetails       `json:"contact"`
+	SelectedJobOperations     []string             `json:"selectedJobOperations"`
+	SelectedSectionOperations []string             `json:"selectedSectionOperations"`
 }
 
 type campaignAsset struct {
@@ -211,4 +221,5 @@ type uploadResponse struct {
 	Size         int64  `json:"size"`
 	MimeType     string `json:"mimeType"`
 	UploadedAt   string `json:"uploadedAt"`
+	URL          string `json:"url,omitempty"`
 }

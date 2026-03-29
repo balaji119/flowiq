@@ -1,7 +1,8 @@
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LayoutGrid, LoaderCircle, LogOut, Plus, Shield, Upload, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LayoutGrid, LoaderCircle, LogOut, Pencil, Plus, Shield, Trash2, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
+  CampaignPrintImage,
   CampaignRecord,
   CampaignCalculationSummary,
   CampaignLine,
@@ -18,12 +19,15 @@ import {
 } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
+import { buildApiUrl } from '../services/apiBase';
 import { createCampaign, fetchCampaign, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
+import { uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 
 const steps = [
+  { key: 'creative', title: 'Creative' },
   { key: 'schedule', title: 'Schedule' },
   { key: 'review', title: 'Review' },
   { key: 'finalize', title: 'Finalise' },
@@ -50,7 +54,7 @@ function applyCampaignToScreen(
   setCampaignId: Dispatch<SetStateAction<string | null>>,
   setCampaignStatus: Dispatch<SetStateAction<CampaignRecord['status']>>,
 ) {
-  setValues(campaign.values);
+  setValues(normalizeFormValues(campaign.values));
   setSummary(campaign.summary);
   setUploadedPurchaseOrderName(campaign.purchaseOrder?.originalName || '');
   setCampaignId(campaign.id);
@@ -115,6 +119,27 @@ function formatWeekLabel(week: number, startDate: string) {
     month: 'short',
     year: 'numeric',
   });
+}
+
+function toFileBaseName(fileName: string) {
+  return fileName.replace(/\.[^.]+$/, '');
+}
+
+function normalizeFormValues(values: OrderFormValues): OrderFormValues {
+  return {
+    ...values,
+    printImages: (values.printImages ?? []).map((image) => ({
+      id: image.id,
+      name: image.name,
+      fileName: image.fileName,
+      mimeType: image.mimeType,
+      storedName: image.storedName,
+      imageUrl:
+        image.imageUrl && image.imageUrl.startsWith('/uploads/campaign-images/')
+          ? image.imageUrl.replace('/uploads/campaign-images/', '/api/campaign-images/')
+          : image.imageUrl,
+    })),
+  };
 }
 
 function TextField({
@@ -306,6 +331,9 @@ export function QuoteBuilderScreen({
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
   const [uploadedPurchaseOrderName, setUploadedPurchaseOrderName] = useState('');
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
+  const [replacingImageId, setReplacingImageId] = useState<string | null>(null);
+  const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const replaceImageInputRef = useRef<HTMLInputElement | null>(null);
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
   const campaignHydratedRef = useRef(false);
   const lastPersistedValuesRef = useRef('');
@@ -573,6 +601,96 @@ export function QuoteBuilderScreen({
     return marketNames.filter((marketName) => marketName === selectedMarket || !selectedInOtherRows.has(marketName)).map((marketName) => ({ label: marketName, value: marketName }));
   }
 
+  async function appendPrintImages(files: File[]) {
+    const imageFiles = files.filter((file) => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) {
+      setError('Please choose at least one valid image file');
+      return;
+    }
+
+    try {
+      const uploadedImages: CampaignPrintImage[] = [];
+      for (const [index, file] of imageFiles.entries()) {
+        const uploadResult = await uploadCampaignImage(file);
+        uploadedImages.push({
+          id: `print-image-${Date.now()}-${index}`,
+          name: toFileBaseName(file.name),
+          fileName: uploadResult.originalName || file.name,
+          mimeType: uploadResult.mimeType || file.type || 'application/octet-stream',
+          storedName: uploadResult.storedName,
+          imageUrl: uploadResult.url,
+        });
+      }
+      setValues((current) => ({ ...current, printImages: [...current.printImages, ...uploadedImages] }));
+      setError('');
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload image(s)');
+    }
+  }
+
+  function handlePickPrintImages() {
+    imageUploadInputRef.current?.click();
+  }
+
+  async function handlePrintImageSelection(event: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFiles = event.target.files ? Array.from(event.target.files) : [];
+    if (selectedFiles.length > 0) await appendPrintImages(selectedFiles);
+    event.target.value = '';
+  }
+
+  function updatePrintImage(imageId: string, updater: (image: CampaignPrintImage) => CampaignPrintImage) {
+    setValues((current) => ({
+      ...current,
+      printImages: current.printImages.map((image) => (image.id === imageId ? updater(image) : image)),
+    }));
+  }
+
+  function removePrintImage(imageId: string) {
+    setValues((current) => ({
+      ...current,
+      printImages: current.printImages.filter((image) => image.id !== imageId),
+    }));
+  }
+
+  function beginReplacePrintImage(imageId: string) {
+    setReplacingImageId(imageId);
+    replaceImageInputRef.current?.click();
+  }
+
+  async function handleReplacePrintImage(event: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile || !replacingImageId) {
+      setReplacingImageId(null);
+      event.target.value = '';
+      return;
+    }
+
+    if (!selectedFile.type.startsWith('image/')) {
+      setError('Please choose a valid image file');
+      setReplacingImageId(null);
+      event.target.value = '';
+      return;
+    }
+
+    try {
+      const uploadResult = await uploadCampaignImage(selectedFile);
+      updatePrintImage(replacingImageId, (current) => ({
+        ...current,
+        fileName: uploadResult.originalName || selectedFile.name,
+        mimeType: uploadResult.mimeType || selectedFile.type || current.mimeType,
+        name: current.name.trim() ? current.name : toFileBaseName(selectedFile.name),
+        storedName: uploadResult.storedName,
+        imageUrl: uploadResult.url,
+      }));
+      setError('');
+    } catch (replaceError) {
+      setError(replaceError instanceof Error ? replaceError.message : 'Unable to replace image');
+    } finally {
+      setReplacingImageId(null);
+      event.target.value = '';
+    }
+  }
+
   async function saveCampaignDraft() {
     if (campaignId && !hasUnsavedChanges) return campaignId;
 
@@ -669,7 +787,7 @@ export function QuoteBuilderScreen({
       return;
     }
     setError('');
-    setStepIndex(1);
+    setStepIndex(2);
   }
 
   function openPurchaseOrderPicker() {
@@ -729,7 +847,7 @@ export function QuoteBuilderScreen({
             <div className="h-2 overflow-hidden rounded-full bg-slate-800">
               <div className="h-full rounded-full bg-violet-500 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
             </div>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-4">
               {steps.map((step, index) => {
                 const active = index === stepIndex;
                 return (
@@ -755,11 +873,11 @@ export function QuoteBuilderScreen({
 
       <div className="grid gap-6">
         <section className="space-y-6">
-          {currentStep.key === 'schedule' ? (
+          {currentStep.key === 'creative' ? (
             <Card>
               <CardHeader className="p-6 pb-0">
-                <CardTitle>Campaign Planning</CardTitle>
-                <CardDescription>Configure the campaign dates, select markets and assets, and let the quantity mappings update totals automatically.</CardDescription>
+                <CardTitle>Campaign Setup</CardTitle>
+                <CardDescription>Set campaign details and upload one or more print images before planning markets.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 p-6">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(320px,1.4fr)_220px_220px_160px]">
@@ -823,6 +941,98 @@ export function QuoteBuilderScreen({
                   </div>
                 </div>
 
+                <div className="space-y-4 rounded-[24px] border border-slate-700 bg-slate-900/50 p-4 sm:p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-base font-semibold text-white">Print Images</p>
+                      <p className="text-sm text-slate-400">Upload one or multiple image files. You can edit the name, replace the image, or remove rows.</p>
+                    </div>
+                    <Button onClick={handlePickPrintImages} type="button" variant="secondary">
+                      <Upload className="h-4 w-4" />
+                      Upload Images
+                    </Button>
+                  </div>
+                  <input
+                    ref={imageUploadInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    multiple
+                    onChange={(event) => void handlePrintImageSelection(event)}
+                    type="file"
+                  />
+                  <input ref={replaceImageInputRef} className="hidden" accept="image/*" onChange={(event) => void handleReplacePrintImage(event)} type="file" />
+
+                  {values.printImages.length > 0 ? (
+                    <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-950/70">
+                      <table className="min-w-[860px] w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
+                            <th className="border border-slate-700 px-4 py-3 text-left">Image</th>
+                            <th className="border border-slate-700 px-4 py-3 text-left">Name</th>
+                            <th className="border border-slate-700 px-4 py-3 text-left">File</th>
+                            <th className="border border-slate-700 px-4 py-3 text-center">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {values.printImages.map((image) => (
+                            <tr key={image.id} className="border-t border-slate-700/70 bg-slate-800/60">
+                              <td className="border border-slate-700 px-4 py-3">
+                                <div className="h-14 w-20 overflow-hidden rounded-lg border border-slate-600 bg-slate-900">
+                                  {image.imageUrl ? (
+                                    <img alt={image.name} className="h-full w-full object-cover" src={buildApiUrl(image.imageUrl)} />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                      No preview
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="border border-slate-700 px-4 py-3">
+                                <Input value={image.name} onChange={(event) => updatePrintImage(image.id, (current) => ({ ...current, name: event.target.value }))} />
+                              </td>
+                              <td className="border border-slate-700 px-4 py-3 text-slate-200">{image.fileName}</td>
+                              <td className="border border-slate-700 px-4 py-3">
+                                <div className="flex items-center justify-center gap-1">
+                                  <Button className="h-8 w-8" onClick={() => beginReplacePrintImage(image.id)} size="icon" type="button" variant="ghost">
+                                    <Pencil className="h-4 w-4 text-slate-200" />
+                                  </Button>
+                                  <Button className="h-8 w-8" onClick={() => removePrintImage(image.id)} size="icon" type="button" variant="ghost">
+                                    <Trash2 className="h-4 w-4 text-rose-300" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-6 text-center text-sm text-slate-400">
+                      No images uploaded yet.
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
+                    {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                    {savingCampaign ? 'Saving…' : 'Save Draft'}
+                  </Button>
+                  <Button onClick={() => setStepIndex(1)} type="button">
+                    Continue To Schedule
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {currentStep.key === 'schedule' ? (
+            <Card>
+              <CardHeader className="p-6 pb-0">
+                <CardTitle>Market Planning</CardTitle>
+                <CardDescription>Select markets and assets, then let quantity mappings update totals automatically.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 p-6">
                 {loadingMetadata ? (
                   <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
                     <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
@@ -1089,7 +1299,7 @@ export function QuoteBuilderScreen({
                         {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                         {savingCampaign ? 'Saving…' : 'Save Draft'}
                       </Button>
-                      <Button onClick={() => setStepIndex(2)} type="button">
+                      <Button onClick={() => setStepIndex(3)} type="button">
                         Continue To Finalise
                       </Button>
                     </div>
