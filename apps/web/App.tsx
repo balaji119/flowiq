@@ -13,6 +13,7 @@ function AppShell() {
   const { loading, session } = useAuth();
   const [view, setView] = useState<'landing' | 'quote' | 'admin' | 'mappings'>('landing');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [startFreshCampaign, setStartFreshCampaign] = useState(false);
 
   if (loading) {
     return (
@@ -41,6 +42,7 @@ function AppShell() {
     return (
       <QuoteBuilderScreen
         campaignId={selectedCampaignId}
+        startFresh={startFreshCampaign}
         onBack={() => setView('landing')}
         onOpenAdmin={session.user.role !== 'user' ? () => setView('admin') : undefined}
       />
@@ -52,6 +54,7 @@ function AppShell() {
       onOpenAdmin={session.user.role !== 'user' ? () => setView('admin') : undefined}
       onOpenCampaign={(campaignId) => {
         setSelectedCampaignId(campaignId);
+        setStartFreshCampaign(campaignId === null);
         setView('quote');
       }}
     />

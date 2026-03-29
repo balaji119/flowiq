@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { CalendarDays, FolderKanban, LayoutGrid, LoaderCircle, LogOut, Plus, Shield } from 'lucide-react';
-import { CampaignListItem, createDefaultFormValues } from '@flowiq/shared';
+import { CampaignListItem } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
-import { createCampaign, fetchCampaigns } from '../services/campaignApi';
+import { fetchCampaigns } from '../services/campaignApi';
 
 type CampaignLandingScreenProps = {
-  onOpenCampaign: (campaignId: string) => void;
+  onOpenCampaign: (campaignId: string | null) => void;
   onOpenAdmin?: () => void;
 };
 
@@ -31,7 +31,6 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
   const { session, logout } = useAuth();
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -58,17 +57,9 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
     };
   }, []);
 
-  async function handleCreateCampaign() {
-    setCreating(true);
+  function handleCreateCampaign() {
     setError('');
-    try {
-      const response = await createCampaign({ values: createDefaultFormValues() });
-      onOpenCampaign(response.campaign.id);
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'Unable to create campaign');
-    } finally {
-      setCreating(false);
-    }
+    onOpenCampaign(null);
   }
 
   return (
@@ -114,9 +105,9 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-slate-400">{campaigns.length} campaign schedule{campaigns.length === 1 ? '' : 's'} available</div>
-            <Button disabled={creating} onClick={() => void handleCreateCampaign()} size="lg">
-              {creating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              {creating ? 'Creating…' : 'Create Campaign'}
+            <Button onClick={handleCreateCampaign} size="lg">
+              <Plus className="h-4 w-4" />
+              Create Campaign
             </Button>
           </div>
         </div>
@@ -138,8 +129,8 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
                 Create your first campaign to start building a schedule, calculate totals, and submit it to PrintIQ.
               </p>
             </div>
-            <Button disabled={creating} onClick={() => void handleCreateCampaign()}>
-              {creating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            <Button onClick={handleCreateCampaign}>
+              <Plus className="h-4 w-4" />
               Create Campaign
             </Button>
           </CardContent>
