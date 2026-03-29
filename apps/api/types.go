@@ -76,10 +76,11 @@ type orderFormValues struct {
 }
 
 type campaignAsset struct {
-	ID            string `json:"id"`
-	AssetID       string `json:"assetId"`
-	AssetSearch   string `json:"assetSearch"`
-	SelectedWeeks []int  `json:"selectedWeeks"`
+	ID              string `json:"id"`
+	AssetID         string `json:"assetId"`
+	AssetSearch     string `json:"assetSearch"`
+	SelectedWeeks   []int  `json:"selectedWeeks"`
+	CreativeImageID string `json:"creativeImageId"`
 }
 
 type campaignMarket struct {

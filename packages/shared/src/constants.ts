@@ -10,6 +10,7 @@ export function createCampaignAsset(id: string): CampaignAsset {
     assetId: '',
     assetSearch: '',
     selectedWeeks: [1],
+    creativeImageId: '',
   };
 }
 

@@ -69,6 +69,7 @@ export type CampaignAsset = {
   assetId: string;
   assetSearch: string;
   selectedWeeks: number[];
+  creativeImageId: string;
 };
 
 export type CampaignMarket = {

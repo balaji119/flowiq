@@ -292,6 +292,7 @@ function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: n
     ...market,
     assets: market.assets.map((asset) => ({
       ...asset,
+      creativeImageId: asset.creativeImageId || '',
       selectedWeeks: [...new Set(asset.selectedWeeks.filter((week) => week >= 1 && week <= maxWeeks))].sort((a, b) => a - b),
     })),
   }));
@@ -438,6 +439,10 @@ export function QuoteBuilderScreen({
   const currentStep = steps[stepIndex];
   const progressPercent = ((stepIndex + 1) / steps.length) * 100;
   const marketNames = useMemo(() => markets.map((market) => market.name), [markets]);
+  const creativeImageOptions = useMemo(
+    () => [{ label: 'No image attached', value: '' }, ...values.printImages.map((image) => ({ label: image.name, value: image.id }))],
+    [values.printImages],
+  );
   const remainingMarketNames = useMemo(() => {
     const selectedMarketNames = new Set(values.campaignMarkets.map((market) => market.market));
     return marketNames.filter((marketName) => !selectedMarketNames.has(marketName));
@@ -1083,18 +1088,21 @@ export function QuoteBuilderScreen({
                           <div>
                             <p className="text-sm font-semibold text-white">Assets</p>
                             <p className="text-xs text-slate-400">Attach the assets you want to run in this market and choose their active weeks.</p>
+                            {values.printImages.length === 0 ? <p className="mt-1 text-xs text-slate-500">Upload images in Creative step to attach them to assets.</p> : null}
                           </div>
                           <div className="rounded-2xl border border-slate-700/80 bg-slate-900/45 lg:overflow-visible">
                             <div className="overflow-x-auto lg:overflow-visible">
-                              <table className="min-w-[980px] w-full border-collapse">
+                              <table className="min-w-[1160px] w-full border-collapse">
                               <colgroup>
                                 <col />
+                                <col className="w-[280px]" />
                                 <col className="w-[1%]" />
                                 <col className="w-[24px]" />
                               </colgroup>
                               <thead>
                                 <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                                   <th className="px-4 py-3 text-left">Asset</th>
+                                  <th className="px-4 py-3 text-left">Creative</th>
                                   <th className="px-4 py-3 text-left">Active Weeks</th>
                                   <th className="px-3 py-3 text-center">
                                     <span className="sr-only">Actions</span>
@@ -1122,6 +1130,22 @@ export function QuoteBuilderScreen({
                                           placeholder={availableAssets.length ? 'Choose an asset' : 'No assets available'}
                                           selectedLabel={asset.assetSearch}
                                           selectedValue={asset.assetId}
+                                        />
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <SearchableSelect
+                                          emptyMessage={values.printImages.length ? 'No matching images found.' : 'No images uploaded in Creative step.'}
+                                          items={creativeImageOptions}
+                                          label=""
+                                          onValueChange={(value) =>
+                                            updateCampaignAsset(market.id, asset.id, (current) => ({
+                                              ...current,
+                                              creativeImageId: value,
+                                            }))
+                                          }
+                                          placeholder={values.printImages.length ? 'Attach creative image' : 'No images available'}
+                                          selectedLabel={values.printImages.find((image) => image.id === asset.creativeImageId)?.name}
+                                          selectedValue={asset.creativeImageId || ''}
                                         />
                                       </td>
                                       <td className="px-2 py-3">
