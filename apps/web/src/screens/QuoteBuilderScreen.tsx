@@ -10,6 +10,7 @@ import {
   CampaignTotals,
   MarketMetadata,
   MarketDeliveryAddressRecord,
+  MarketShippingRateRecord,
   OrderFormValues,
   QuantityBreakdown,
   buildPrintIqPayload,
@@ -24,7 +25,7 @@ import { buildApiUrl } from '../services/apiBase';
 import { createCampaign, fetchCampaign, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
-import { fetchCampaignMarketDeliveryAddresses } from '../services/marketDeliveryApi';
+import { fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 
@@ -89,9 +90,13 @@ function buildReviewRows(totals: CampaignTotals) {
   };
 
   return [
-    { label: 'Posters', breakdown: totals.breakdown, total: totals.posterTotal },
-    { label: 'Frames', breakdown: frameBreakdown, total: totals.frameTotal },
+    { label: 'Posters', breakdown: totals.breakdown, total: totals.posterTotal, shippingCost: 0 },
+    { label: 'Frames', breakdown: frameBreakdown, total: totals.frameTotal, shippingCost: null },
   ] as const;
+}
+
+function calculateShippingCost(posters: number, shippingRate: number) {
+  return (posters / 60) * shippingRate;
 }
 
 function formatKeyLabel(key: (typeof formatKeys)[number]) {
@@ -344,6 +349,7 @@ export function QuoteBuilderScreen({
   const [campaignStatus, setCampaignStatus] = useState<CampaignRecord['status']>('draft');
   const [markets, setMarkets] = useState<MarketMetadata[]>([]);
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<MarketDeliveryAddressRecord[]>([]);
+  const [marketShippingRates, setMarketShippingRates] = useState<MarketShippingRateRecord[]>([]);
   const [metadataError, setMetadataError] = useState('');
   const [loadingMetadata, setLoadingMetadata] = useState(true);
   const [loadingCampaign, setLoadingCampaign] = useState(true);
@@ -448,6 +454,24 @@ export function QuoteBuilderScreen({
   }, []);
 
   useEffect(() => {
+    let active = true;
+    async function loadMarketShippingRates() {
+      try {
+        const response = await fetchCampaignMarketShippingRates();
+        if (!active) return;
+        setMarketShippingRates(response.rates);
+      } catch {
+        if (!active) return;
+        setMarketShippingRates([]);
+      }
+    }
+    void loadMarketShippingRates();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (loadingCampaign) return;
 
     let active = true;
@@ -506,6 +530,10 @@ export function QuoteBuilderScreen({
     if (!summary) return new Map<string, CampaignCalculationSummary['perMarket'][number]>();
     return new Map(summary.perMarket.map((entry) => [entry.market, entry]));
   }, [summary]);
+  const shippingRateByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.shippingRate])),
+    [marketShippingRates],
+  );
   const hasUnsavedChanges = !loadingCampaign && JSON.stringify(values) !== lastPersistedValuesRef.current;
   const hasMappedCreatives = values.campaignMarkets.some((market) => market.assets.some((asset) => Boolean(asset.creativeImageId)));
   const saveDraftButtonClass = !hasUnsavedChanges && !savingCampaign ? 'border-slate-700 bg-slate-900/45 text-slate-500 disabled:opacity-100' : '';
@@ -1512,11 +1540,17 @@ export function QuoteBuilderScreen({
                               <th key={`review-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatKeyLabel(key)}</th>
                             ))}
                             <th className="border border-slate-700 px-4 py-3 text-center">Total</th>
+                            <th className="border border-slate-700 px-4 py-3 text-center">Shipping Cost</th>
                           </tr>
                         </thead>
                         <tbody>
                           {summary.perMarket.map((marketSummary) => {
-                            const rows = buildReviewRows(marketSummary);
+                            const shippingRate = shippingRateByMarket.get(marketSummary.market) ?? 0;
+                            const rows = buildReviewRows(marketSummary).map((row) =>
+                              row.label === 'Posters'
+                                ? { ...row, shippingCost: calculateShippingCost(row.total, shippingRate) }
+                                : row,
+                            );
                             return rows.map((row, rowIndex) => (
                               <tr key={`review-row-${marketSummary.market}-${row.label}`} className={cn('bg-slate-800/70', rowIndex > 0 ? 'border-t border-slate-700/70' : 'border-t-2 border-slate-600')}>
                                 {rowIndex === 0 ? (
@@ -1531,26 +1565,42 @@ export function QuoteBuilderScreen({
                                   </td>
                                 ))}
                                 <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">{row.total}</td>
+                                <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">
+                                  {row.shippingCost === null ? '—' : row.shippingCost.toFixed(2)}
+                                </td>
                               </tr>
                             ));
                           })}
 
-                          {buildReviewRows(summary.grandTotal).map((row, rowIndex, allRows) => (
-                            <tr key={`review-grand-${row.label}`} className={cn('bg-violet-500/10', rowIndex === 0 ? 'border-t-4 border-violet-400/40' : 'border-t border-violet-400/20')}>
-                              {rowIndex === 0 ? (
-                                <th rowSpan={allRows.length} className="border border-violet-300/30 px-4 py-3 text-left text-base font-black text-violet-100">
-                                  All Markets
-                                </th>
-                              ) : null}
-                              <th className="border border-violet-300/30 px-4 py-3 text-left font-semibold text-violet-100">{row.label}</th>
-                              {formatKeys.map((key) => (
-                                <td key={`review-grand-cell-${row.label}-${key}`} className="border border-violet-300/30 px-4 py-3 text-center font-semibold text-violet-100">
-                                  {row.breakdown[key]}
+                          {(() => {
+                            const grandPosterShippingCost = summary.perMarket.reduce(
+                              (total, marketSummary) => total + calculateShippingCost(marketSummary.posterTotal, shippingRateByMarket.get(marketSummary.market) ?? 0),
+                              0,
+                            );
+                            const grandRows = buildReviewRows(summary.grandTotal).map((row) =>
+                              row.label === 'Posters' ? { ...row, shippingCost: grandPosterShippingCost } : row,
+                            );
+
+                            return grandRows.map((row, rowIndex, allRows) => (
+                              <tr key={`review-grand-${row.label}`} className={cn('bg-violet-500/10', rowIndex === 0 ? 'border-t-4 border-violet-400/40' : 'border-t border-violet-400/20')}>
+                                {rowIndex === 0 ? (
+                                  <th rowSpan={allRows.length} className="border border-violet-300/30 px-4 py-3 text-left text-base font-black text-violet-100">
+                                    All Markets
+                                  </th>
+                                ) : null}
+                                <th className="border border-violet-300/30 px-4 py-3 text-left font-semibold text-violet-100">{row.label}</th>
+                                {formatKeys.map((key) => (
+                                  <td key={`review-grand-cell-${row.label}-${key}`} className="border border-violet-300/30 px-4 py-3 text-center font-semibold text-violet-100">
+                                    {row.breakdown[key]}
+                                  </td>
+                                ))}
+                                <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">{row.total}</td>
+                                <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
+                                  {row.shippingCost === null ? '—' : row.shippingCost.toFixed(2)}
                                 </td>
-                              ))}
-                              <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">{row.total}</td>
-                            </tr>
-                          ))}
+                              </tr>
+                            ));
+                          })()}
                         </tbody>
                       </table>
                     </div>

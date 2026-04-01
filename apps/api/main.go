@@ -222,6 +222,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("POST /api/campaigns/{campaignId}/calculate", a.withAuth(http.HandlerFunc(a.handleCalculatePersistedCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/submit-to-printiq", a.withAuth(http.HandlerFunc(a.handleSubmitCampaign)))
 	mux.Handle("GET /api/market-delivery-addresses", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketDeliveryAddresses)))
+	mux.Handle("GET /api/market-shipping-rates", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketShippingRates)))
 	mux.Handle("GET /api/calculator/metadata", a.withAuth(http.HandlerFunc(a.handleCalculatorMetadata)))
 	mux.Handle("POST /api/calculator/calculate", a.withAuth(http.HandlerFunc(a.handleCalculateCampaign)))
 	mux.Handle("GET /api/printiq/options/quote-form", a.withAuth(http.HandlerFunc(a.handleQuoteFormOptions)))
@@ -834,6 +835,21 @@ func (a *app) handleListCampaignMarketDeliveryAddresses(w http.ResponseWriter, r
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"addresses": records})
+}
+
+func (a *app) handleListCampaignMarketShippingRates(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	if user == nil || user.TenantID == nil || strings.TrimSpace(*user.TenantID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenantId is required"})
+		return
+	}
+
+	records, err := a.mappingStore.listMarketShippingRates(r.Context(), *user.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rates": records})
 }
 
 var unsafeFilenamePattern = regexp.MustCompile(`[^a-zA-Z0-9-_]`)
