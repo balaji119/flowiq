@@ -909,17 +909,13 @@ func (a *app) handleCampaignImageUpload(w http.ResponseWriter, r *http.Request) 
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
-	if !strings.HasPrefix(strings.ToLower(contentType), "image/") {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Only image files are allowed"})
-		return
-	}
 
 	extension := filepath.Ext(header.Filename)
 	baseName := strings.TrimSuffix(header.Filename, extension)
 	safeBaseName := unsafeFilenamePattern.ReplaceAllString(baseName, "_")
 	safeBaseName = strings.TrimSpace(safeBaseName)
 	if safeBaseName == "" {
-		safeBaseName = "campaign-image"
+		safeBaseName = "campaign-artwork"
 	}
 	if len(safeBaseName) > 64 {
 		safeBaseName = safeBaseName[:64]

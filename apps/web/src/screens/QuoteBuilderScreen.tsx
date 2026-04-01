@@ -485,7 +485,7 @@ export function QuoteBuilderScreen({
   const progressPercent = ((stepIndex + 1) / steps.length) * 100;
   const marketNames = useMemo(() => markets.map((market) => market.name), [markets]);
   const creativeImageOptions = useMemo(
-    () => [{ label: 'No image attached', value: '' }, ...values.printImages.map((image) => ({ label: image.name, value: image.id }))],
+    () => [{ label: 'No artwork attached', value: '' }, ...values.printImages.map((image) => ({ label: image.name, value: image.id }))],
     [values.printImages],
   );
   const remainingMarketNames = useMemo(() => {
@@ -654,15 +654,14 @@ export function QuoteBuilderScreen({
   }
 
   async function appendPrintImages(files: File[]) {
-    const imageFiles = files.filter((file) => file.type.startsWith('image/'));
-    if (imageFiles.length === 0) {
-      setError('Please choose at least one valid image file');
+    if (files.length === 0) {
+      setError('Please choose at least one valid file');
       return;
     }
 
     try {
       const uploadedImages: CampaignPrintImage[] = [];
-      for (const [index, file] of imageFiles.entries()) {
+      for (const [index, file] of files.entries()) {
         const uploadResult = await uploadCampaignImage(file);
         uploadedImages.push({
           id: `print-image-${Date.now()}-${index}`,
@@ -676,7 +675,7 @@ export function QuoteBuilderScreen({
       setValues((current) => ({ ...current, printImages: [...current.printImages, ...uploadedImages] }));
       setError('');
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload image(s)');
+      setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload file(s)');
     }
   }
 
@@ -717,13 +716,6 @@ export function QuoteBuilderScreen({
       return;
     }
 
-    if (!selectedFile.type.startsWith('image/')) {
-      setError('Please choose a valid image file');
-      setReplacingImageId(null);
-      event.target.value = '';
-      return;
-    }
-
     try {
       const uploadResult = await uploadCampaignImage(selectedFile);
       updatePrintImage(replacingImageId, (current) => ({
@@ -736,7 +728,7 @@ export function QuoteBuilderScreen({
       }));
       setError('');
     } catch (replaceError) {
-      setError(replaceError instanceof Error ? replaceError.message : 'Unable to replace image');
+      setError(replaceError instanceof Error ? replaceError.message : 'Unable to replace file');
     } finally {
       setReplacingImageId(null);
       event.target.value = '';
@@ -945,14 +937,17 @@ export function QuoteBuilderScreen({
     await Promise.all(
       mappedCreatives.map(async (entry) => {
         const image = entry.image;
-        if (!image.imageUrl) return;
+        const mimeType = image.mimeType.toLowerCase();
+        if (!image.imageUrl || !mimeType.startsWith('image/')) {
+          return;
+        }
         try {
           const response = await fetch(buildApiUrl(image.imageUrl));
           if (!response.ok) return;
           const dataUrl = await blobToDataUrl(await response.blob());
           if (dataUrl) creativeImageDataUrls.set(image.id, dataUrl);
         } catch {
-          // Skip preview embedding when image fetch fails.
+          // Skip image embedding when image fetch fails.
         }
       }),
     );
@@ -962,9 +957,13 @@ export function QuoteBuilderScreen({
         const image = entry.image;
         const index = entry.creativeNumber;
         const embedded = creativeImageDataUrls.get(image.id);
+        const artworkUrl = image.imageUrl ? buildApiUrl(image.imageUrl) : '';
+        const linkLine = artworkUrl
+          ? `<br/><a href="${escapeHtml(artworkUrl)}" style="color:#1d4ed8;text-decoration:underline;">Open artwork file (${escapeHtml(image.fileName || image.name)})</a>`
+          : '<br/><span style="color:#6b7280;">Artwork file link unavailable</span>';
         return `Creative ${index}: ${escapeHtml(image.name)}${
           embedded ? `<br/><img src="${embedded}" alt="${escapeHtml(image.name)}" style="max-width:560px;max-height:320px;border:1px solid #d1d5db;margin:6px 0 12px 0;display:block;" />` : ''
-        }`;
+        }${linkLine}`;
       })
       .join('<br/>');
 
@@ -1110,7 +1109,7 @@ export function QuoteBuilderScreen({
             <Card>
               <CardHeader className="p-6 pb-0">
                 <CardTitle>Campaign Setup</CardTitle>
-                <CardDescription>Set campaign details and upload one or more print images before planning markets.</CardDescription>
+                <CardDescription>Set campaign details and upload one or more campaign artworks before planning markets.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 p-6">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(320px,1.4fr)_220px_220px_160px]">
@@ -1126,7 +1125,7 @@ export function QuoteBuilderScreen({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="due-date">Due Date</Label>
+                    <Label htmlFor="due-date">Delivery Due Date</Label>
                     <Input
                       className="pr-1 [&::-webkit-calendar-picker-indicator]:-mr-0.5 [&::-webkit-calendar-picker-indicator]:ml-auto"
                       id="due-date"
@@ -1177,30 +1176,29 @@ export function QuoteBuilderScreen({
                 <div className="space-y-4 rounded-[24px] border border-slate-700 bg-slate-900/50 p-4 sm:p-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-base font-semibold text-white">Print Images</p>
-                      <p className="text-sm text-slate-400">Upload one or multiple image files. You can edit the name, replace the image, or remove rows.</p>
+                      <p className="text-base font-semibold text-white">Campaign Artworks</p>
+                      <p className="text-sm text-slate-400">Upload one or multiple files. You can edit the name, replace the file, or remove rows.</p>
                     </div>
                     <Button onClick={handlePickPrintImages} type="button" variant="secondary">
                       <Upload className="h-4 w-4" />
-                      Upload Images
+                      Upload Artworks
                     </Button>
                   </div>
                   <input
                     ref={imageUploadInputRef}
                     className="hidden"
-                    accept="image/*"
                     multiple
                     onChange={(event) => void handlePrintImageSelection(event)}
                     type="file"
                   />
-                  <input ref={replaceImageInputRef} className="hidden" accept="image/*" onChange={(event) => void handleReplacePrintImage(event)} type="file" />
+                  <input ref={replaceImageInputRef} className="hidden" onChange={(event) => void handleReplacePrintImage(event)} type="file" />
 
                   {values.printImages.length > 0 ? (
                     <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-950/70">
                       <table className="min-w-[860px] w-full border-collapse text-sm">
                         <thead>
                           <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
-                            <th className="border border-slate-700 px-4 py-3 text-left">Image</th>
+                            <th className="border border-slate-700 px-4 py-3 text-left">Preview</th>
                             <th className="border border-slate-700 px-4 py-3 text-left">Name</th>
                             <th className="border border-slate-700 px-4 py-3 text-left">File</th>
                             <th className="border border-slate-700 px-4 py-3 text-center">Actions</th>
@@ -1211,11 +1209,22 @@ export function QuoteBuilderScreen({
                             <tr key={image.id} className="border-t border-slate-700/70 bg-slate-800/60">
                               <td className="border border-slate-700 px-4 py-3">
                                 <div className="h-14 w-20 overflow-hidden rounded-lg border border-slate-600 bg-slate-900">
-                                  {image.imageUrl ? (
+                                  {image.imageUrl &&
+                                  (image.mimeType.toLowerCase().startsWith('image/') ||
+                                    image.mimeType.toLowerCase() === 'application/pdf' ||
+                                    image.fileName.toLowerCase().endsWith('.pdf')) ? (
+                                    image.mimeType.toLowerCase().startsWith('image/') ? (
                                     <img alt={image.name} className="h-full w-full object-cover" src={buildApiUrl(image.imageUrl)} />
+                                    ) : (
+                                      <iframe
+                                        className="h-full w-full bg-white"
+                                        src={`${buildApiUrl(image.imageUrl)}#toolbar=0&navpanes=0&scrollbar=0`}
+                                        title={`${image.name} preview`}
+                                      />
+                                    )
                                   ) : (
                                     <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                      No preview
+                                      File
                                     </div>
                                   )}
                                 </div>
@@ -1241,7 +1250,7 @@ export function QuoteBuilderScreen({
                     </div>
                   ) : (
                     <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-6 text-center text-sm text-slate-400">
-                      No images uploaded yet.
+                      No artworks uploaded yet.
                     </div>
                   )}
                 </div>
@@ -1315,7 +1324,7 @@ export function QuoteBuilderScreen({
                           <div>
                             <p className="text-sm font-semibold text-white">Assets</p>
                             <p className="text-xs text-slate-400">Attach the assets you want to run in this market and choose their active weeks.</p>
-                            {values.printImages.length === 0 ? <p className="mt-1 text-xs text-slate-500">Upload images in Creative step to attach them to assets.</p> : null}
+                            {values.printImages.length === 0 ? <p className="mt-1 text-xs text-slate-500">Upload campaign artworks in Creative step to attach them to assets.</p> : null}
                           </div>
                           <div className="rounded-2xl border border-slate-700/80 bg-slate-900/45 lg:overflow-visible">
                             <div className="overflow-x-auto lg:overflow-visible">
@@ -1361,7 +1370,7 @@ export function QuoteBuilderScreen({
                                       </td>
                                       <td className="px-4 py-3">
                                         <SearchableSelect
-                                          emptyMessage={values.printImages.length ? 'No matching images found.' : 'No images uploaded in Creative step.'}
+                                          emptyMessage={values.printImages.length ? 'No matching artworks found.' : 'No artworks uploaded in Creative step.'}
                                           items={creativeImageOptions}
                                           label=""
                                           onValueChange={(value) =>
@@ -1370,7 +1379,7 @@ export function QuoteBuilderScreen({
                                               creativeImageId: value,
                                             }))
                                           }
-                                          placeholder={values.printImages.length ? 'Attach creative image' : 'No images available'}
+                                          placeholder={values.printImages.length ? 'Attach artwork' : 'No artworks available'}
                                           selectedLabel={values.printImages.find((image) => image.id === asset.creativeImageId)?.name}
                                           selectedValue={asset.creativeImageId || ''}
                                         />
@@ -1579,7 +1588,7 @@ export function QuoteBuilderScreen({
               </CardHeader>
               <CardContent className="flex flex-col gap-3 p-6 sm:flex-row">
                 <Button disabled={!hasMappedCreatives} onClick={() => void downloadArtworkWordDocument()} type="button" variant="outline">
-                  Download Artwork Word
+                    Download Artwork
                 </Button>
                 <div className="cursor-not-allowed" title="Under construction">
                   <Button className="border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100" disabled type="button" variant="secondary">
