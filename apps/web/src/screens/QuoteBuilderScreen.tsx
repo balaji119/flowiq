@@ -530,6 +530,14 @@ export function QuoteBuilderScreen({
     if (!summary) return new Map<string, CampaignCalculationSummary['perMarket'][number]>();
     return new Map(summary.perMarket.map((entry) => [entry.market, entry]));
   }, [summary]);
+  const selectedCampaignMarketNames = useMemo(
+    () => new Set(values.campaignMarkets.map((market) => market.market.trim()).filter(Boolean)),
+    [values.campaignMarkets],
+  );
+  const visibleReviewMarkets = useMemo(
+    () => (summary ? summary.perMarket.filter((entry) => selectedCampaignMarketNames.has(entry.market)) : []),
+    [selectedCampaignMarketNames, summary],
+  );
   const shippingRateByMarket = useMemo(
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.shippingRate])),
     [marketShippingRates],
@@ -1544,7 +1552,7 @@ export function QuoteBuilderScreen({
                           </tr>
                         </thead>
                         <tbody>
-                          {summary.perMarket.map((marketSummary) => {
+                          {visibleReviewMarkets.map((marketSummary) => {
                             const shippingRate = shippingRateByMarket.get(marketSummary.market) ?? 0;
                             const rows = buildReviewRows(marketSummary).map((row) =>
                               row.label === 'Posters'
@@ -1573,7 +1581,7 @@ export function QuoteBuilderScreen({
                           })}
 
                           {(() => {
-                            const grandPosterShippingCost = summary.perMarket.reduce(
+                            const grandPosterShippingCost = visibleReviewMarkets.reduce(
                               (total, marketSummary) => total + calculateShippingCost(marketSummary.posterTotal, shippingRateByMarket.get(marketSummary.market) ?? 0),
                               0,
                             );
