@@ -246,6 +246,8 @@ func (a *app) routes() http.Handler {
 	mux.Handle("POST /api/admin/calculator-mappings/import", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleImportCalculatorMappings), "super_admin", "admin")))
 	mux.Handle("GET /api/admin/market-delivery-addresses", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListMarketDeliveryAddresses), "super_admin", "admin")))
 	mux.Handle("PUT /api/admin/market-delivery-addresses", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMarketDeliveryAddress), "super_admin", "admin")))
+	mux.Handle("GET /api/admin/market-shipping-rates", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListMarketShippingRates), "super_admin")))
+	mux.Handle("PUT /api/admin/market-shipping-rates", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMarketShippingRate), "super_admin")))
 	mux.Handle("GET /api/admin/printiq-options/status", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleOptionsStatus), "super_admin")))
 	mux.Handle("POST /api/admin/printiq-options/refresh", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleRefreshOptions), "super_admin")))
 
@@ -1328,4 +1330,40 @@ func (a *app) handleUpsertMarketDeliveryAddress(w http.ResponseWriter, r *http.R
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"address": record})
+}
+
+func (a *app) handleListMarketShippingRates(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	records, err := a.mappingStore.listMarketShippingRates(r.Context(), *tenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rates": records})
+}
+
+func (a *app) handleUpsertMarketShippingRate(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var payload marketShippingRateInput
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	record, err := a.mappingStore.upsertMarketShippingRate(r.Context(), *tenantID, payload)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rate": record})
 }

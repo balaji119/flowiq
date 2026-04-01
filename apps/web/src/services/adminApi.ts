@@ -1,4 +1,16 @@
-import { AuthRole, AuthUser, CalculatorMappingInput, CalculatorMappingRecord, MarketDeliveryAddressInput, MarketDeliveryAddressRecord, MarketMetadata, PrintIqOptionsCacheStatus, TenantRecord } from '@flowiq/shared';
+import {
+  AuthRole,
+  AuthUser,
+  CalculatorMappingInput,
+  CalculatorMappingRecord,
+  MarketDeliveryAddressInput,
+  MarketDeliveryAddressRecord,
+  MarketMetadata,
+  MarketShippingRateInput,
+  MarketShippingRateRecord,
+  PrintIqOptionsCacheStatus,
+  TenantRecord,
+} from '@flowiq/shared';
 import { apiFetchJson } from './apiClient';
 
 export async function fetchTenants() {
@@ -112,6 +124,19 @@ export async function fetchMarketDeliveryAddresses(tenantId?: string) {
 export async function upsertMarketDeliveryAddress(payload: MarketDeliveryAddressInput, tenantId?: string) {
   const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
   return apiFetchJson<{ address: MarketDeliveryAddressRecord }>(`/api/admin/market-delivery-addresses${query}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchMarketShippingRates(tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ rates: MarketShippingRateRecord[] }>(`/api/admin/market-shipping-rates${query}`);
+}
+
+export async function upsertMarketShippingRate(payload: MarketShippingRateInput, tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ rate: MarketShippingRateRecord }>(`/api/admin/market-shipping-rates${query}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });

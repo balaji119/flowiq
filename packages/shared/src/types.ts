@@ -129,6 +129,17 @@ export type MarketDeliveryAddressRecord = MarketDeliveryAddressInput & {
   updatedAt: string;
 };
 
+export type MarketShippingRateInput = {
+  market: string;
+  shippingRate: number;
+};
+
+export type MarketShippingRateRecord = MarketShippingRateInput & {
+  tenantId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CampaignLineResult = {
   id: string;
   market: string;
