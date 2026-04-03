@@ -1377,23 +1377,18 @@ export function QuoteBuilderScreen({
                           <div>
                             <p className="text-sm font-semibold text-white">Assets</p>
                             <p className="text-xs text-slate-400">Attach the assets you want to run in this market and choose their active weeks.</p>
-                            {values.printImages.length === 0 ? <p className="mt-1 text-xs text-slate-500">Upload campaign artworks in Creative step to attach them to assets.</p> : null}
                           </div>
                           <div className="rounded-2xl border border-slate-700/80 bg-slate-900/45 lg:overflow-visible">
                             <div className="overflow-x-auto lg:overflow-visible">
-                              <table className="min-w-[1160px] w-full border-collapse">
+                              <table className="min-w-[780px] w-full border-collapse">
                               <colgroup>
                                 <col />
-                                <col className="w-[280px]" />
-                                <col className="w-[320px]" />
                                 <col className="w-[1%]" />
                                 <col className="w-[24px]" />
                               </colgroup>
                               <thead>
                                 <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                                   <th className="px-4 py-3 text-left">Asset</th>
-                                  <th className="px-4 py-3 text-left">Creative</th>
-                                  <th className="px-4 py-3 text-left">Delivery Address</th>
                                   <th className="px-4 py-3 text-left">Active Weeks</th>
                                   <th className="px-3 py-3 text-center">
                                     <span className="sr-only">Actions</span>
@@ -1404,7 +1399,6 @@ export function QuoteBuilderScreen({
                                 {market.assets.map((asset) => {
                                   const canRemoveAsset = market.assets.length > 1;
                                   const availableAssetOptions = assetOptionsFor(market, asset.id, asset.assetId);
-                                  const deliveryAddressOptions = deliveryAddressOptionsFor(market.market);
                                   return (
                                     <tr key={asset.id} className="border-b border-slate-700/70 align-top last:border-b-0">
                                       <td className="px-4 py-3">
@@ -1422,38 +1416,6 @@ export function QuoteBuilderScreen({
                                           placeholder={availableAssets.length ? 'Choose an asset' : 'No assets available'}
                                           selectedLabel={asset.assetSearch}
                                           selectedValue={asset.assetId}
-                                        />
-                                      </td>
-                                      <td className="px-4 py-3">
-                                        <SearchableSelect
-                                          emptyMessage={values.printImages.length ? 'No matching artworks found.' : 'No artworks uploaded in Creative step.'}
-                                          items={creativeImageOptions}
-                                          label=""
-                                          onValueChange={(value) =>
-                                            updateCampaignAsset(market.id, asset.id, (current) => ({
-                                              ...current,
-                                              creativeImageId: value,
-                                            }))
-                                          }
-                                          placeholder={values.printImages.length ? 'Attach artwork' : 'No artworks available'}
-                                          selectedLabel={values.printImages.find((image) => image.id === asset.creativeImageId)?.name}
-                                          selectedValue={asset.creativeImageId || ''}
-                                        />
-                                      </td>
-                                      <td className="px-4 py-3">
-                                        <SearchableSelect
-                                          emptyMessage={deliveryAddressOptions.length ? 'No matching addresses found.' : 'No addresses saved for this market yet.'}
-                                          items={deliveryAddressOptions}
-                                          label=""
-                                          onValueChange={(value) =>
-                                            updateCampaignAsset(market.id, asset.id, (current) => ({
-                                              ...current,
-                                              deliveryAddress: value,
-                                            }))
-                                          }
-                                          placeholder={deliveryAddressOptions.length ? 'Choose delivery address' : 'No addresses available'}
-                                          selectedLabel={asset.deliveryAddress || ''}
-                                          selectedValue={asset.deliveryAddress || ''}
                                         />
                                       </td>
                                       <td className="px-2 py-3">
@@ -1670,6 +1632,80 @@ export function QuoteBuilderScreen({
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {currentStep.key === 'finalize' ? (
+            <Card>
+              <CardHeader className="p-6 pb-0">
+                <CardTitle>Creative & Delivery Mapping</CardTitle>
+                <CardDescription>Assign artworks and delivery addresses for each asset before exporting.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5 p-6">
+                {values.campaignMarkets.map((market) => {
+                  const deliveryAddressOptions = deliveryAddressOptionsFor(market.market);
+                  return (
+                    <div key={`finalize-map-${market.id}`} className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/45 p-4">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{market.market || 'Select a market in Schedule first'}</p>
+                        <p className="text-xs text-slate-400">Map each asset to an artwork and delivery address.</p>
+                      </div>
+                      <div className="overflow-visible">
+                        <table className="w-full border-collapse table-fixed">
+                          <thead>
+                            <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                              <th className="px-4 py-3 text-left">Asset</th>
+                              <th className="px-4 py-3 text-left">Creative</th>
+                              <th className="px-4 py-3 text-left">Delivery Address</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {market.assets.map((asset) => (
+                              <tr key={`finalize-map-row-${asset.id}`} className="border-b border-slate-700/70 align-top last:border-b-0">
+                                <td className="px-4 py-3">
+                                  <p className="text-sm font-semibold text-white">{asset.assetSearch || asset.assetId || 'Asset not selected'}</p>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <SearchableSelect
+                                    emptyMessage={values.printImages.length ? 'No matching artworks found.' : 'No artworks uploaded in Creative step.'}
+                                    items={creativeImageOptions}
+                                    label=""
+                                    onValueChange={(value) =>
+                                      updateCampaignAsset(market.id, asset.id, (current) => ({
+                                        ...current,
+                                        creativeImageId: value,
+                                      }))
+                                    }
+                                    placeholder={values.printImages.length ? 'Attach artwork' : 'No artworks available'}
+                                    selectedLabel={values.printImages.find((image) => image.id === asset.creativeImageId)?.name}
+                                    selectedValue={asset.creativeImageId || ''}
+                                  />
+                                </td>
+                                <td className="px-4 py-3">
+                                  <SearchableSelect
+                                    emptyMessage={deliveryAddressOptions.length ? 'No matching addresses found.' : 'No addresses saved for this market yet.'}
+                                    items={deliveryAddressOptions}
+                                    label=""
+                                    onValueChange={(value) =>
+                                      updateCampaignAsset(market.id, asset.id, (current) => ({
+                                        ...current,
+                                        deliveryAddress: value,
+                                      }))
+                                    }
+                                    placeholder={deliveryAddressOptions.length ? 'Choose delivery address' : 'No addresses available'}
+                                    selectedLabel={asset.deliveryAddress || ''}
+                                    selectedValue={asset.deliveryAddress || ''}
+                                  />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           ) : null}
