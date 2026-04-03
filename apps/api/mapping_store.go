@@ -604,8 +604,8 @@ func (s *mappingStore) upsertMarketDeliveryAddress(ctx context.Context, tenantID
 	row, err := scanMarketDeliveryAddressRow(s.pool.QueryRow(ctx, `
 		INSERT INTO market_delivery_addresses (tenant_id, market_id, delivery_address, created_at, updated_at)
 		VALUES ($1, $2, $3, NOW(), NOW())
-		ON CONFLICT (tenant_id, market_id)
-		DO UPDATE SET delivery_address = EXCLUDED.delivery_address, updated_at = NOW()
+		ON CONFLICT (tenant_id, market_id, delivery_address)
+		DO UPDATE SET updated_at = NOW()
 		RETURNING tenant_id, $4::text, delivery_address, created_at, updated_at
 	`, tenantID, marketID, deliveryAddress, market))
 	if err != nil {
@@ -614,6 +614,38 @@ func (s *mappingStore) upsertMarketDeliveryAddress(ctx context.Context, tenantID
 
 	record := decodeMarketDeliveryAddressRow(row)
 	return &record, nil
+}
+
+func (s *mappingStore) deleteMarketDeliveryAddress(ctx context.Context, tenantID string, payload marketDeliveryAddressDeleteInput) error {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return err
+	}
+
+	market, err := sanitizeMappingText(payload.Market, "market")
+	if err != nil {
+		return err
+	}
+	deliveryAddress, err := sanitizeMappingText(payload.DeliveryAddress, "deliveryAddress")
+	if err != nil {
+		return err
+	}
+
+	commandTag, err := s.pool.Exec(ctx, `
+		DELETE FROM market_delivery_addresses mda
+		USING markets m
+		WHERE mda.tenant_id = $1
+		  AND mda.market_id = m.id
+		  AND m.tenant_id = $1
+		  AND m.name = $2
+		  AND mda.delivery_address = $3
+	`, tenantID, market, deliveryAddress)
+	if err != nil {
+		return err
+	}
+	if commandTag.RowsAffected() == 0 {
+		return errors.New("Delivery address not found")
+	}
+	return nil
 }
 
 func (s *mappingStore) listMarketShippingRates(ctx context.Context, tenantID string) ([]marketShippingRateRecord, error) {

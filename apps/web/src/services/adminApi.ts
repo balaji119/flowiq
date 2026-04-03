@@ -129,6 +129,14 @@ export async function upsertMarketDeliveryAddress(payload: MarketDeliveryAddress
   });
 }
 
+export async function deleteMarketDeliveryAddress(payload: MarketDeliveryAddressInput, tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ deleted: boolean }>(`/api/admin/market-delivery-addresses${query}`, {
+    method: 'DELETE',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchMarketShippingRates(tenantId?: string) {
   const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
   return apiFetchJson<{ rates: MarketShippingRateRecord[] }>(`/api/admin/market-shipping-rates${query}`);

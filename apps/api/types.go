@@ -81,6 +81,7 @@ type campaignAsset struct {
 	AssetSearch     string `json:"assetSearch"`
 	SelectedWeeks   []int  `json:"selectedWeeks"`
 	CreativeImageID string `json:"creativeImageId"`
+	DeliveryAddress string `json:"deliveryAddress"`
 }
 
 type campaignMarket struct {
@@ -169,6 +170,11 @@ type calculatorMappingRecord struct {
 }
 
 type marketDeliveryAddressInput struct {
+	Market          string `json:"market"`
+	DeliveryAddress string `json:"deliveryAddress"`
+}
+
+type marketDeliveryAddressDeleteInput struct {
 	Market          string `json:"market"`
 	DeliveryAddress string `json:"deliveryAddress"`
 }

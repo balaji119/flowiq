@@ -324,6 +324,7 @@ function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: n
     assets: market.assets.map((asset) => ({
       ...asset,
       creativeImageId: asset.creativeImageId || '',
+      deliveryAddress: asset.deliveryAddress || '',
       selectedWeeks: [...new Set(asset.selectedWeeks.filter((week) => week >= 1 && week <= maxWeeks))].sort((a, b) => a - b),
     })),
   }));
@@ -694,6 +695,11 @@ export function QuoteBuilderScreen({
     return marketNames.filter((marketName) => marketName === selectedMarket || !selectedInOtherRows.has(marketName)).map((marketName) => ({ label: marketName, value: marketName }));
   }
 
+  function deliveryAddressOptionsFor(marketName: string) {
+    const options = [...new Set(marketDeliveryAddresses.filter((entry) => entry.market === marketName).map((entry) => entry.deliveryAddress))];
+    return options.map((address) => ({ label: address, value: address }));
+  }
+
   async function appendPrintImages(files: File[]) {
     if (files.length === 0) {
       setError('Please choose at least one valid file');
@@ -876,7 +882,12 @@ export function QuoteBuilderScreen({
   }
 
   async function downloadArtworkWordDocument() {
-    const deliveryAddressByMarket = new Map(marketDeliveryAddresses.map((entry) => [entry.market, entry.deliveryAddress]));
+    const defaultDeliveryAddressByMarket = new Map<string, string>();
+    marketDeliveryAddresses.forEach((entry) => {
+      if (!defaultDeliveryAddressByMarket.has(entry.market)) {
+        defaultDeliveryAddressByMarket.set(entry.market, entry.deliveryAddress);
+      }
+    });
     const lineByAssetId = new Map((summary?.lines ?? []).map((line) => [line.id, line]));
     const posterDivisors: Record<string, number> = {
       '8-sheet': 4,
@@ -1010,24 +1021,22 @@ export function QuoteBuilderScreen({
 
     const deliverySection = values.campaignMarkets
       .map((market) => {
-        const marketCreativeMap = creativeBreakdownsByMarket.get(market.market) ?? new Map<string, QuantityBreakdown>();
-        const creativeLines = mappedCreatives
-          .map((entry) => {
-            const image = entry.image;
-            const index = entry.creativeNumber;
-            const breakdown = marketCreativeMap.get(image.id);
-            if (!breakdown) return '';
-            const quantitiesText = breakdownToEmailText(breakdown);
+        const assetLines = market.assets
+          .map((asset) => {
+            const line = lineByAssetId.get(asset.id);
+            if (!line) return '';
+            const quantitiesText = breakdownToEmailText(line.breakdown);
             if (!quantitiesText) return '';
-            return `Creative ${index} (${creativeTypeLabel(breakdown)}): ${quantitiesText}`;
+            const creativeName = values.printImages.find((image) => image.id === asset.creativeImageId)?.name || asset.assetSearch || asset.assetId || 'Artwork';
+            const address = asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || 'No delivery address selected';
+            return `${escapeHtml(asset.assetSearch || asset.assetId || 'Asset')} - ${escapeHtml(creativeName)} (${creativeTypeLabel(line.breakdown)}): ${quantitiesText}<br/>Deliver address - ${escapeHtml(address)}`;
           })
           .filter(Boolean)
-          .join('<br/>');
-        const address = deliveryAddressByMarket.get(market.market) || 'No delivery address mapping found';
+          .join('<br/><br/>');
+
         return `
           <p><strong>Please deliver for ${escapeHtml(market.market)} by COB:</strong><br/>
-          ${creativeLines || 'No creative quantities linked for this market.'}<br/><br/>
-          Deliver address - ${escapeHtml(address)}</p>
+          ${assetLines || 'No creative quantities linked for this market.'}</p>
         `;
       })
       .join('');
@@ -1346,13 +1355,13 @@ export function QuoteBuilderScreen({
                               emptyMessage="No markets available for this row."
                               items={availableMarkets}
                               label={`Market ${marketIndex + 1}`}
-                              onValueChange={(value) =>
-                                updateCampaignMarket(market.id, (current) => ({
-                                  ...current,
-                                  market: value,
-                                  assets: current.assets.map((asset) => ({ ...asset, assetId: '', assetSearch: '' })),
-                                }))
-                              }
+                                          onValueChange={(value) =>
+                                            updateCampaignMarket(market.id, (current) => ({
+                                              ...current,
+                                              market: value,
+                                              assets: current.assets.map((asset) => ({ ...asset, assetId: '', assetSearch: '', deliveryAddress: '' })),
+                                            }))
+                                          }
                               placeholder="Choose a market"
                               selectedValue={market.market}
                             />
@@ -1376,6 +1385,7 @@ export function QuoteBuilderScreen({
                               <colgroup>
                                 <col />
                                 <col className="w-[280px]" />
+                                <col className="w-[320px]" />
                                 <col className="w-[1%]" />
                                 <col className="w-[24px]" />
                               </colgroup>
@@ -1383,6 +1393,7 @@ export function QuoteBuilderScreen({
                                 <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                                   <th className="px-4 py-3 text-left">Asset</th>
                                   <th className="px-4 py-3 text-left">Creative</th>
+                                  <th className="px-4 py-3 text-left">Delivery Address</th>
                                   <th className="px-4 py-3 text-left">Active Weeks</th>
                                   <th className="px-3 py-3 text-center">
                                     <span className="sr-only">Actions</span>
@@ -1393,6 +1404,7 @@ export function QuoteBuilderScreen({
                                 {market.assets.map((asset) => {
                                   const canRemoveAsset = market.assets.length > 1;
                                   const availableAssetOptions = assetOptionsFor(market, asset.id, asset.assetId);
+                                  const deliveryAddressOptions = deliveryAddressOptionsFor(market.market);
                                   return (
                                     <tr key={asset.id} className="border-b border-slate-700/70 align-top last:border-b-0">
                                       <td className="px-4 py-3">
@@ -1426,6 +1438,22 @@ export function QuoteBuilderScreen({
                                           placeholder={values.printImages.length ? 'Attach artwork' : 'No artworks available'}
                                           selectedLabel={values.printImages.find((image) => image.id === asset.creativeImageId)?.name}
                                           selectedValue={asset.creativeImageId || ''}
+                                        />
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <SearchableSelect
+                                          emptyMessage={deliveryAddressOptions.length ? 'No matching addresses found.' : 'No addresses saved for this market yet.'}
+                                          items={deliveryAddressOptions}
+                                          label=""
+                                          onValueChange={(value) =>
+                                            updateCampaignAsset(market.id, asset.id, (current) => ({
+                                              ...current,
+                                              deliveryAddress: value,
+                                            }))
+                                          }
+                                          placeholder={deliveryAddressOptions.length ? 'Choose delivery address' : 'No addresses available'}
+                                          selectedLabel={asset.deliveryAddress || ''}
+                                          selectedValue={asset.deliveryAddress || ''}
                                         />
                                       </td>
                                       <td className="px-2 py-3">

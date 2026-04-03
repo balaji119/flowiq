@@ -1,23 +1,20 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Database, FileJson, LoaderCircle, Pencil, Plus, Shield, Trash2, Upload } from 'lucide-react';
-import { CalculatorMappingInput, CalculatorMappingRecord, MarketDeliveryAddressRecord, MarketMetadata, MarketShippingRateRecord, TenantRecord, createEmptyBreakdown, formatKeys } from '@flowiq/shared';
+import { CalculatorMappingInput, CalculatorMappingRecord, MarketMetadata, TenantRecord, createEmptyBreakdown, formatKeys } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import {
   createCalculatorMapping,
   deleteCalculatorMapping,
-  fetchMarketDeliveryAddresses,
-  fetchMarketShippingRates,
   fetchCalculatorMappings,
   fetchTenants,
   importCalculatorMappings,
-  upsertMarketDeliveryAddress,
-  upsertMarketShippingRate,
   updateCalculatorMapping,
 } from '../services/adminApi';
 
 type MappingAdminScreenProps = {
   onBack: () => void;
+  tenantId?: string | null;
 };
 
 function emptyForm(): CalculatorMappingInput {
@@ -41,7 +38,7 @@ function formatSheetHeader(key: (typeof formatKeys)[number]) {
   return key.includes('-sheet') ? key.replace('-', ' ') : key;
 }
 
-export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
+export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -51,20 +48,14 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(session?.user.tenantId ?? null);
   const [mappings, setMappings] = useState<CalculatorMappingRecord[]>([]);
-  const [marketAddresses, setMarketAddresses] = useState<MarketDeliveryAddressRecord[]>([]);
-  const [marketShippingRates, setMarketShippingRates] = useState<MarketShippingRateRecord[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<CalculatorMappingInput>(emptyForm);
   const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
   const [selectedMarketFilter, setSelectedMarketFilter] = useState('');
-  const [deliveryAddressDraft, setDeliveryAddressDraft] = useState('');
-  const [savingDeliveryAddress, setSavingDeliveryAddress] = useState(false);
-  const [shippingRateDraft, setShippingRateDraft] = useState('');
-  const [savingShippingRate, setSavingShippingRate] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const canSwitchTenant = session?.user.role === 'super_admin';
-  const effectiveTenantId = canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined;
+  const canSwitchTenant = session?.user.role === 'super_admin' && !tenantId;
+  const effectiveTenantId = tenantId ?? (canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined);
   const selectedTenant = useMemo(() => tenants.find((tenant) => tenant.id === selectedTenantId) ?? null, [selectedTenantId, tenants]);
 
   useEffect(() => {
@@ -104,8 +95,6 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
     let active = true;
     if (!effectiveTenantId) {
       setMappings([]);
-      setMarketAddresses([]);
-      setMarketShippingRates([]);
       setLoading(false);
       return;
     }
@@ -114,15 +103,9 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
       try {
         setLoading(true);
         setError('');
-        const [mappingResponse, addressResponse, shippingRateResponse] = await Promise.all([
-          fetchCalculatorMappings(effectiveTenantId),
-          fetchMarketDeliveryAddresses(effectiveTenantId),
-          canSwitchTenant ? fetchMarketShippingRates(effectiveTenantId) : Promise.resolve({ rates: [] }),
-        ]);
+        const mappingResponse = await fetchCalculatorMappings(effectiveTenantId);
         if (!active) return;
         setMappings(mappingResponse.mappings);
-        setMarketAddresses(addressResponse.addresses);
-        setMarketShippingRates(shippingRateResponse.rates);
       } catch (loadError) {
         if (active) {
           setError(loadError instanceof Error ? loadError.message : 'Unable to load mappings');
@@ -158,23 +141,6 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
       setSelectedMarketFilter(marketOptions[0]);
     }
   }, [marketOptions, selectedMarketFilter]);
-
-  const selectedMarketAddress = useMemo(
-    () => marketAddresses.find((address) => address.market === selectedMarketFilter)?.deliveryAddress ?? '',
-    [marketAddresses, selectedMarketFilter],
-  );
-  const selectedMarketShippingRate = useMemo(
-    () => marketShippingRates.find((rate) => rate.market === selectedMarketFilter)?.shippingRate,
-    [marketShippingRates, selectedMarketFilter],
-  );
-
-  useEffect(() => {
-    setDeliveryAddressDraft(selectedMarketAddress);
-  }, [selectedMarketAddress]);
-
-  useEffect(() => {
-    setShippingRateDraft(selectedMarketShippingRate !== undefined ? String(selectedMarketShippingRate) : '');
-  }, [selectedMarketShippingRate]);
 
   function resetForm() {
     setEditingId(null);
@@ -252,14 +218,8 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
       const parsed = JSON.parse(await file.text()) as unknown;
       const markets = parseImportedMarkets(parsed);
       const response = await importCalculatorMappings(markets, effectiveTenantId);
-      const [nextMappings, nextAddresses, nextShippingRates] = await Promise.all([
-        fetchCalculatorMappings(effectiveTenantId),
-        fetchMarketDeliveryAddresses(effectiveTenantId),
-        canSwitchTenant ? fetchMarketShippingRates(effectiveTenantId) : Promise.resolve({ rates: [] }),
-      ]);
+      const nextMappings = await fetchCalculatorMappings(effectiveTenantId);
       setMappings(nextMappings.mappings);
-      setMarketAddresses(nextAddresses.addresses);
-      setMarketShippingRates(nextShippingRates.rates);
       resetForm();
       setNotice(response.message);
     } catch (importError) {
@@ -288,70 +248,6 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
       quantities: { ...mapping.quantities },
     });
     setMappingDialogOpen(true);
-  }
-
-  async function handleSaveDeliveryAddress() {
-    if (!effectiveTenantId || !selectedMarketFilter) return;
-
-    setSavingDeliveryAddress(true);
-    setError('');
-    setNotice('');
-    try {
-      const response = await upsertMarketDeliveryAddress(
-        {
-          market: selectedMarketFilter,
-          deliveryAddress: deliveryAddressDraft,
-        },
-        effectiveTenantId,
-      );
-      setMarketAddresses((current) => {
-        const existing = current.some((item) => item.market === response.address.market);
-        if (existing) {
-          return current.map((item) => (item.market === response.address.market ? response.address : item));
-        }
-        return [...current, response.address].sort((left, right) => left.market.localeCompare(right.market));
-      });
-      setNotice(`Saved delivery address for ${response.address.market}.`);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save delivery address');
-    } finally {
-      setSavingDeliveryAddress(false);
-    }
-  }
-
-  async function handleSaveShippingRate() {
-    if (!effectiveTenantId || !selectedMarketFilter) return;
-
-    const parsedShippingRate = Number(shippingRateDraft);
-    if (!Number.isFinite(parsedShippingRate) || parsedShippingRate < 0) {
-      setError('Shipping rate must be a valid number greater than or equal to 0.');
-      return;
-    }
-
-    setSavingShippingRate(true);
-    setError('');
-    setNotice('');
-    try {
-      const response = await upsertMarketShippingRate(
-        {
-          market: selectedMarketFilter,
-          shippingRate: parsedShippingRate,
-        },
-        effectiveTenantId,
-      );
-      setMarketShippingRates((current) => {
-        const existing = current.some((item) => item.market === response.rate.market);
-        if (existing) {
-          return current.map((item) => (item.market === response.rate.market ? response.rate : item));
-        }
-        return [...current, response.rate].sort((left, right) => left.market.localeCompare(right.market));
-      });
-      setNotice(`Saved shipping rate for ${response.rate.market}.`);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save shipping rate');
-    } finally {
-      setSavingShippingRate(false);
-    }
   }
 
   if (session?.user.role === 'user') {
@@ -475,52 +371,6 @@ export function MappingAdminScreen({ onBack }: MappingAdminScreenProps) {
               Add Mapping
             </Button>
           </div>
-
-          {selectedMarketFilter ? (
-            <div className="space-y-2 rounded-2xl border border-slate-700 bg-slate-900/50 p-4">
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="delivery-address">Delivery Address ({selectedMarketFilter})</Label>
-                  <Input
-                    id="delivery-address"
-                    onChange={(event) => setDeliveryAddressDraft(event.target.value)}
-                    placeholder="Enter delivery address for this market"
-                    value={deliveryAddressDraft}
-                  />
-                  <div className="flex justify-end">
-                    <Button disabled={savingDeliveryAddress || !deliveryAddressDraft.trim()} onClick={() => void handleSaveDeliveryAddress()} type="button" variant="outline">
-                      {savingDeliveryAddress ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                      {savingDeliveryAddress ? 'Saving...' : 'Save Address'}
-                    </Button>
-                  </div>
-                </div>
-
-                {canSwitchTenant ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="shipping-rate">Shipping Rate ({selectedMarketFilter})</Label>
-                    <Input
-                      id="shipping-rate"
-                      inputMode="decimal"
-                      onChange={(event) => setShippingRateDraft(event.target.value)}
-                      placeholder="Enter shipping rate (e.g. 45.50)"
-                      value={shippingRateDraft}
-                    />
-                    <div className="flex justify-end">
-                      <Button
-                        disabled={savingShippingRate || !shippingRateDraft.trim()}
-                        onClick={() => void handleSaveShippingRate()}
-                        type="button"
-                        variant="outline"
-                      >
-                        {savingShippingRate ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                        {savingShippingRate ? 'Saving...' : 'Save Shipping Rate'}
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
 
           {loading ? (
             <div className="flex items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/60 px-6 py-14">

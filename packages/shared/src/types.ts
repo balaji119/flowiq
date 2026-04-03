@@ -70,6 +70,7 @@ export type CampaignAsset = {
   assetSearch: string;
   selectedWeeks: number[];
   creativeImageId: string;
+  deliveryAddress: string;
 };
 
 export type CampaignMarket = {

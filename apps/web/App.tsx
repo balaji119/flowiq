@@ -8,10 +8,13 @@ import { CampaignLandingScreen } from './src/screens/CampaignLandingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { MappingAdminScreen } from './src/screens/MappingAdminScreen';
 import { QuoteBuilderScreen } from './src/screens/QuoteBuilderScreen';
+import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
+import { UserManagementScreen } from './src/screens/UserManagementScreen';
 
 function AppShell() {
   const { loading, session } = useAuth();
-  const [view, setView] = useState<'landing' | 'quote' | 'admin' | 'mappings'>('landing');
+  const [view, setView] = useState<'landing' | 'quote' | 'admin' | 'users' | 'mappings' | 'shipping'>('landing');
+  const [selectedAdminTenantId, setSelectedAdminTenantId] = useState<string | null>(session?.user.tenantId ?? null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [startFreshCampaign, setStartFreshCampaign] = useState(false);
 
@@ -31,11 +34,35 @@ function AppShell() {
   }
 
   if (view === 'admin') {
-    return <AdminScreen onBack={() => setView('landing')} onOpenMappings={() => setView('mappings')} />;
+    return (
+      <AdminScreen
+        onBack={() => setView('landing')}
+        onOpenUsers={(tenantId) => {
+          setSelectedAdminTenantId(tenantId);
+          setView('users');
+        }}
+        onOpenMappings={(tenantId) => {
+          setSelectedAdminTenantId(tenantId);
+          setView('mappings');
+        }}
+        onOpenShippingSettings={(tenantId) => {
+          setSelectedAdminTenantId(tenantId);
+          setView('shipping');
+        }}
+      />
+    );
+  }
+
+  if (view === 'users') {
+    return <UserManagementScreen onBack={() => setView('admin')} tenantId={selectedAdminTenantId ?? session.user.tenantId ?? ''} />;
   }
 
   if (view === 'mappings') {
-    return <MappingAdminScreen onBack={() => setView('admin')} />;
+    return <MappingAdminScreen onBack={() => setView('admin')} tenantId={selectedAdminTenantId} />;
+  }
+
+  if (view === 'shipping') {
+    return <ShippingSettingsScreen onBack={() => setView('admin')} tenantId={selectedAdminTenantId} />;
   }
 
   if (view === 'quote') {
