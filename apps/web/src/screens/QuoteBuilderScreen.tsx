@@ -538,6 +538,11 @@ export function QuoteBuilderScreen({
     () => (summary ? summary.perMarket.filter((entry) => selectedCampaignMarketNames.has(entry.market)) : []),
     [selectedCampaignMarketNames, summary],
   );
+  const visibleReviewFormatKeys = useMemo(
+    () =>
+      formatKeys.filter((key) => visibleReviewMarkets.some((marketSummary) => (marketSummary.breakdown[key] ?? 0) > 0)),
+    [visibleReviewMarkets],
+  );
   const shippingRateByMarket = useMemo(
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.shippingRate])),
     [marketShippingRates],
@@ -1325,6 +1330,9 @@ export function QuoteBuilderScreen({
                     const availableMarkets = marketOptionsFor(market.id, market.market);
                     const isActiveMarket = market.id === activeMarket?.id;
                     const marketSummary = marketSummaryByName.get(market.market);
+                    const visibleMarketFormatKeys = marketSummary
+                      ? formatKeys.filter((key) => (marketSummary.breakdown[key] ?? 0) > 0)
+                      : formatKeys;
                     return (
                       <div
                         key={market.id}
@@ -1468,7 +1476,7 @@ export function QuoteBuilderScreen({
                                   <thead>
                                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                                       <th className="border border-slate-700 px-4 py-3 text-left">Type</th>
-                                      {formatKeys.map((key) => (
+                                      {visibleMarketFormatKeys.map((key) => (
                                         <th key={`schedule-market-head-${market.id}-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatKeyLabel(key)}</th>
                                       ))}
                                       <th className="border border-slate-700 px-4 py-3 text-center">Total</th>
@@ -1478,7 +1486,7 @@ export function QuoteBuilderScreen({
                                     {buildReviewRows(marketSummary).map((row) => (
                                       <tr key={`schedule-market-row-${market.id}-${row.label}`} className="bg-slate-800/70 border-t border-slate-700/70">
                                         <th className="border border-slate-700 px-4 py-3 text-left font-semibold text-slate-100">{row.label}</th>
-                                        {formatKeys.map((key) => (
+                                        {visibleMarketFormatKeys.map((key) => (
                                           <td key={`schedule-market-cell-${market.id}-${row.label}-${key}`} className="border border-slate-700 px-4 py-3 text-center font-semibold text-white">
                                             {row.breakdown[key]}
                                           </td>
@@ -1489,7 +1497,7 @@ export function QuoteBuilderScreen({
                                   </tbody>
                                   <tfoot>
                                     <tr className="bg-violet-500/10 border-t border-violet-400/30">
-                                      <th colSpan={formatKeys.length + 1} className="border border-violet-300/30 px-4 py-3 text-right font-black uppercase tracking-[0.12em] text-violet-100">
+                                      <th colSpan={visibleMarketFormatKeys.length + 1} className="border border-violet-300/30 px-4 py-3 text-right font-black uppercase tracking-[0.12em] text-violet-100">
                                         Total
                                       </th>
                                       <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
@@ -1544,7 +1552,7 @@ export function QuoteBuilderScreen({
                           <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                             <th className="border border-slate-700 px-4 py-3 text-left">Market</th>
                             <th className="border border-slate-700 px-4 py-3 text-left">Type</th>
-                            {formatKeys.map((key) => (
+                            {visibleReviewFormatKeys.map((key) => (
                               <th key={`review-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatKeyLabel(key)}</th>
                             ))}
                             <th className="border border-slate-700 px-4 py-3 text-center">Total</th>
@@ -1567,7 +1575,7 @@ export function QuoteBuilderScreen({
                                   </th>
                                 ) : null}
                                 <th className="border border-slate-700 px-4 py-3 text-left font-semibold text-slate-100">{row.label}</th>
-                                {formatKeys.map((key) => (
+                                {visibleReviewFormatKeys.map((key) => (
                                   <td key={`review-cell-${marketSummary.market}-${row.label}-${key}`} className="border border-slate-700 px-4 py-3 text-center font-semibold text-white">
                                     {row.breakdown[key]}
                                   </td>
@@ -1597,7 +1605,7 @@ export function QuoteBuilderScreen({
                                   </th>
                                 ) : null}
                                 <th className="border border-violet-300/30 px-4 py-3 text-left font-semibold text-violet-100">{row.label}</th>
-                                {formatKeys.map((key) => (
+                                {visibleReviewFormatKeys.map((key) => (
                                   <td key={`review-grand-cell-${row.label}-${key}`} className="border border-violet-300/30 px-4 py-3 text-center font-semibold text-violet-100">
                                     {row.breakdown[key]}
                                   </td>
