@@ -187,9 +187,9 @@ export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippin
           <CardTitle>Admin actions</CardTitle>
           <CardDescription>Open a dedicated page for the selected tenant.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
+        <CardContent className="space-y-3">
           <button
-            className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-left transition hover:border-violet-400/60 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-left transition hover:border-violet-400/60 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!effectiveTenantId}
             onClick={openUsers}
             type="button"
@@ -206,7 +206,7 @@ export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippin
           </button>
 
           <button
-            className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-left transition hover:border-violet-400/60 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-left transition hover:border-violet-400/60 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!effectiveTenantId}
             onClick={openMappings}
             type="button"
@@ -223,7 +223,7 @@ export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippin
           </button>
 
           <button
-            className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-left transition hover:border-violet-400/60 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-left transition hover:border-violet-400/60 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!effectiveTenantId}
             onClick={openShippingSettings}
             type="button"

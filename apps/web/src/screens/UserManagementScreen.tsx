@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, LoaderCircle, Pencil, Plus, Shield, Trash2, Users } from 'lucide-react';
 import { AuthRole, AuthUser, TenantRecord } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, Switch } from '@flowiq/ui';
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import { createUser, deleteUser, fetchTenants, fetchUsers, updateUser } from '../services/adminApi';
 
@@ -210,21 +210,11 @@ export function UserManagementScreen({ onBack, tenantId }: UserManagementScreenP
             <Users className="h-3.5 w-3.5" />
             User Management
           </Badge>
-          <div className="space-y-2">
-            <h1 className="text-4xl font-black tracking-tight text-white">Tenant users</h1>
-            <p className="max-w-2xl text-sm leading-6 text-slate-400">
-              Manage users for {tenantName || 'the selected tenant'}. Tenant scope is locked on this screen.
-            </p>
-          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={onBack} variant="secondary">
             <ArrowLeft className="h-4 w-4" />
             Back
-          </Button>
-          <Button onClick={openCreateUserDialog}>
-            <Plus className="h-4 w-4" />
-            Create User
           </Button>
         </div>
       </header>
@@ -234,10 +224,18 @@ export function UserManagementScreen({ onBack, tenantId }: UserManagementScreenP
 
       <Card>
         <CardHeader className="p-5 pb-0">
-          <CardTitle>Users</CardTitle>
-          <CardDescription>
-            {loading ? 'Loading users...' : `${users.length} user${users.length === 1 ? '' : 's'} in this tenant.`}
-          </CardDescription>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <CardTitle>Users</CardTitle>
+              <CardDescription>
+                {loading ? 'Loading users...' : `${users.length} user${users.length === 1 ? '' : 's'} in this tenant.`}
+              </CardDescription>
+            </div>
+            <Button onClick={openCreateUserDialog}>
+              <Plus className="h-4 w-4" />
+              Create User
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-2xl border border-slate-700 bg-slate-800/70 p-4">
@@ -322,12 +320,37 @@ export function UserManagementScreen({ onBack, tenantId }: UserManagementScreenP
               </div>
             </div>
             {editingUserId ? (
-              <div className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-800/70 px-4 py-3">
+              <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-800/70 px-4 py-3">
                 <div>
                   <p className="text-sm font-semibold text-white">User status</p>
                   <p className="text-sm text-slate-400">Disable access without deleting the account.</p>
                 </div>
-                <Switch checked={userForm.active} onCheckedChange={(value) => setUserForm((current) => ({ ...current, active: value }))} />
+                <div className="flex gap-2">
+                  <button
+                    className={[
+                      'rounded-full border px-4 py-2 text-sm font-semibold transition',
+                      userForm.active
+                        ? 'border-violet-400 bg-violet-500 text-white shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)]'
+                        : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500 hover:bg-slate-700',
+                    ].join(' ')}
+                    onClick={() => setUserForm((current) => ({ ...current, active: true }))}
+                    type="button"
+                  >
+                    Active
+                  </button>
+                  <button
+                    className={[
+                      'rounded-full border px-4 py-2 text-sm font-semibold transition',
+                      !userForm.active
+                        ? 'border-violet-400 bg-violet-500 text-white shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)]'
+                        : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500 hover:bg-slate-700',
+                    ].join(' ')}
+                    onClick={() => setUserForm((current) => ({ ...current, active: false }))}
+                    type="button"
+                  >
+                    Inactive
+                  </button>
+                </div>
               </div>
             ) : null}
             <div className="flex justify-end gap-3">
