@@ -164,6 +164,18 @@ function formatDocumentDate(value: string) {
   return parsed.toLocaleDateString('en-AU');
 }
 
+function formatDeliveryAddressOptionLabel(address: string) {
+  const lines = address
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const name = lines[0] || 'Address';
+  const localityLine = lines.find((line) => /\b\d{4}\b/.test(line)) || '';
+  const postcodeMatch = localityLine.match(/\b(\d{4})\b/);
+  const postcode = postcodeMatch ? postcodeMatch[1] : '';
+  return postcode ? `${name} - ${postcode}` : name;
+}
+
 function blobToDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -697,7 +709,7 @@ export function QuoteBuilderScreen({
 
   function deliveryAddressOptionsFor(marketName: string) {
     const options = [...new Set(marketDeliveryAddresses.filter((entry) => entry.market === marketName).map((entry) => entry.deliveryAddress))];
-    return options.map((address) => ({ label: address, value: address }));
+    return options.map((address) => ({ label: formatDeliveryAddressOptionLabel(address), value: address }));
   }
 
   async function appendPrintImages(files: File[]) {

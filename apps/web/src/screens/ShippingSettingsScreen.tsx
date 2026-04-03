@@ -16,6 +16,7 @@ import {
   DialogTitle,
   Input,
   Label,
+  Textarea,
 } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -40,6 +41,8 @@ type AddressFormState = {
   suburb: string;
   state: string;
   postcode: string;
+  phoneNumber: string;
+  deliveryNotes: string;
 };
 
 function emptyAddressForm(): AddressFormState {
@@ -50,6 +53,8 @@ function emptyAddressForm(): AddressFormState {
     suburb: '',
     state: '',
     postcode: '',
+    phoneNumber: '',
+    deliveryNotes: '',
   };
 }
 
@@ -59,10 +64,13 @@ function formatAddressLine(form: AddressFormState) {
 }
 
 function formatDeliveryAddress(form: AddressFormState) {
+  const deliveryNotes = form.deliveryNotes.trim();
   const lines = [
     form.name.trim(),
     formatAddressLine(form),
     [form.suburb.trim(), form.state.trim(), form.postcode.trim()].filter(Boolean).join(' '),
+    form.phoneNumber.trim() ? `Phone: ${form.phoneNumber.trim()}` : '',
+    deliveryNotes ? `Notes: ${deliveryNotes.replaceAll('\n', ' ')}` : '',
     'Australia',
   ].filter(Boolean);
   return lines.join('\n');
@@ -81,6 +89,8 @@ function parseDeliveryAddress(rawAddress: string): AddressFormState {
   const name = lines[0] || '';
   const streetLine = lines[1] || '';
   const suburbStatePostcodeLine = lines[2] || '';
+  const phoneLine = lines.find((line) => line.toLowerCase().startsWith('phone:')) || '';
+  const notesLine = lines.find((line) => line.toLowerCase().startsWith('notes:')) || '';
 
   const streetParts = streetLine.split(' ').filter(Boolean);
   const unitNumber = streetParts[0] || '';
@@ -98,6 +108,8 @@ function parseDeliveryAddress(rawAddress: string): AddressFormState {
     suburb,
     state,
     postcode,
+    phoneNumber: phoneLine ? phoneLine.slice('phone:'.length).trim() : '',
+    deliveryNotes: notesLine ? notesLine.slice('notes:'.length).trim() : '',
   };
 }
 
@@ -510,7 +522,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
             </div>
           ) : selectedMarketFilter ? (
             <div className="space-y-2 rounded-2xl border border-slate-700 bg-slate-900/50 p-4">
-              <p className="text-sm font-semibold text-white">Delivery addresses ({selectedMarketFilter})</p>
+              <p className="text-sm font-semibold text-white">Delivery Address</p>
               {selectedMarketAddresses.length > 0 ? (
                 <div className="grid gap-3 md:grid-cols-2">
                   {selectedMarketAddresses.map((address) => {
@@ -523,6 +535,8 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                           <p className="text-sm text-slate-300">
                             {[parsed.suburb, parsed.state, parsed.postcode].filter(Boolean).join(' ') || '-'}
                           </p>
+                          {parsed.phoneNumber ? <p className="text-xs text-slate-400">Phone: {parsed.phoneNumber}</p> : null}
+                          {parsed.deliveryNotes ? <p className="text-xs text-slate-400">Notes: {parsed.deliveryNotes}</p> : null}
                         </div>
                         <div className="mt-3 flex items-center justify-end gap-1">
                           <Button
@@ -582,7 +596,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="address-name">Location Name</Label>
+                <Label htmlFor="address-name">Name</Label>
                 <Input
                   id="address-name"
                   onChange={(event) => setAddressForm((current) => ({ ...current, name: event.target.value }))}
@@ -634,6 +648,26 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                   onChange={(event) => setAddressForm((current) => ({ ...current, postcode: event.target.value }))}
                   placeholder="2000"
                   value={addressForm.postcode}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="address-phone">Phone Number</Label>
+                <Input
+                  id="address-phone"
+                  inputMode="tel"
+                  onChange={(event) => setAddressForm((current) => ({ ...current, phoneNumber: event.target.value }))}
+                  placeholder="04xx xxx xxx"
+                  value={addressForm.phoneNumber}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="address-notes">Delivery Notes</Label>
+                <Textarea
+                  id="address-notes"
+                  onChange={(event) => setAddressForm((current) => ({ ...current, deliveryNotes: event.target.value }))}
+                  placeholder="Access details, loading dock info, contact person, etc."
+                  rows={3}
+                  value={addressForm.deliveryNotes}
                 />
               </div>
             </div>
