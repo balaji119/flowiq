@@ -203,6 +203,29 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
+async function pdfFirstPageToDataUrl(blob: Blob, maxWidth = 560) {
+  const pdfjs = await (new Function("return import('/pdf.min.mjs')")() as Promise<any>);
+  (pdfjs as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
+    '/pdf.worker.min.mjs';
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const loadingTask = pdfjs.getDocument({ url: objectUrl });
+    const pdf = await loadingTask.promise;
+    const page = await pdf.getPage(1);
+    const initialViewport = page.getViewport({ scale: 1 });
+    const scale = Math.min(1, maxWidth / initialViewport.width);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    await page.render({ canvas, viewport }).promise;
+    return canvas.toDataURL('image/png');
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 function TextField({
   id,
   label,
@@ -1082,13 +1105,16 @@ export function QuoteBuilderScreen({
       mappedCreatives.map(async (entry) => {
         const image = entry.image;
         const mimeType = image.mimeType.toLowerCase();
-        if (!image.imageUrl || !mimeType.startsWith('image/')) {
+        const isPdf = mimeType === 'application/pdf' || image.fileName.toLowerCase().endsWith('.pdf');
+        const isImage = mimeType.startsWith('image/');
+        if (!image.imageUrl || (!isImage && !isPdf)) {
           return;
         }
         try {
           const response = await fetch(buildApiUrl(image.imageUrl));
           if (!response.ok) return;
-          const dataUrl = await blobToDataUrl(await response.blob());
+          const blob = await response.blob();
+          const dataUrl = isPdf ? await pdfFirstPageToDataUrl(blob, 420) : await blobToDataUrl(blob);
           if (dataUrl) creativeImageDataUrls.set(image.id, dataUrl);
         } catch {
           // Skip image embedding when image fetch fails.
@@ -1107,7 +1133,7 @@ export function QuoteBuilderScreen({
           : '<br/><span style="color:#6b7280;">Artwork file link unavailable</span>';
         return `Creative ${index}: ${escapeHtml(image.name)}${
           embedded ? `<br/><img src="${embedded}" alt="${escapeHtml(image.name)}" style="max-width:560px;max-height:320px;border:1px solid #d1d5db;margin:6px 0 12px 0;display:block;" />` : ''
-        }${linkLine}`;
+        }${linkLine}<br/>`;
       })
       .join('<br/>');
 
@@ -1265,9 +1291,9 @@ export function QuoteBuilderScreen({
     const blob = new Blob([html], { type: 'application/msword' });
     const url = window.URL.createObjectURL(blob);
     const anchor = document.createElement('a');
-    const safeName = (values.campaignName || 'campaign').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
+    const baseName = (values.campaignName || 'Campaign').trim() || 'Campaign';
     anchor.href = url;
-    anchor.download = `${safeName || 'campaign'}-artwork-brief.doc`;
+    anchor.download = `${baseName} Creatives.doc`;
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
@@ -1928,7 +1954,7 @@ export function QuoteBuilderScreen({
               </CardHeader>
               <CardContent className="flex flex-col gap-3 p-6 sm:flex-row">
                 <Button disabled={!hasMappedCreatives} onClick={() => void downloadArtworkWordDocument()} type="button" variant="outline">
-                    Download Artwork
+                    Download Visuals
                 </Button>
                 <div className="cursor-not-allowed" title="Under construction">
                   <Button className="border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100" disabled type="button" variant="secondary">
