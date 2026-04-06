@@ -34,6 +34,7 @@ type marketDeliveryAddressRow struct {
 	TenantID        string
 	Market          string
 	DeliveryAddress string
+	IsDefault       bool
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
@@ -148,6 +149,7 @@ func scanMarketDeliveryAddressRow(scanner interface {
 		&row.TenantID,
 		&row.Market,
 		&row.DeliveryAddress,
+		&row.IsDefault,
 		&row.CreatedAt,
 		&row.UpdatedAt,
 	)
@@ -159,6 +161,7 @@ func decodeMarketDeliveryAddressRow(row marketDeliveryAddressRow) marketDelivery
 		TenantID:        row.TenantID,
 		Market:          row.Market,
 		DeliveryAddress: row.DeliveryAddress,
+		IsDefault:       row.IsDefault,
 		CreatedAt:       row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:       row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -561,11 +564,11 @@ func (s *mappingStore) listMarketDeliveryAddresses(ctx context.Context, tenantID
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT mda.tenant_id, m.name, mda.delivery_address, mda.created_at, mda.updated_at
+		SELECT mda.tenant_id, m.name, mda.delivery_address, mda.is_default, mda.created_at, mda.updated_at
 		FROM market_delivery_addresses mda
 		JOIN markets m ON m.id = mda.market_id
 		WHERE mda.tenant_id = $1
-		ORDER BY m.name ASC
+		ORDER BY m.name ASC, mda.created_at ASC, mda.delivery_address ASC
 	`, tenantID)
 	if err != nil {
 		return nil, err
@@ -601,14 +604,39 @@ func (s *mappingStore) upsertMarketDeliveryAddress(ctx context.Context, tenantID
 		return nil, err
 	}
 
-	row, err := scanMarketDeliveryAddressRow(s.pool.QueryRow(ctx, `
-		INSERT INTO market_delivery_addresses (tenant_id, market_id, delivery_address, created_at, updated_at)
-		VALUES ($1, $2, $3, NOW(), NOW())
-		ON CONFLICT (tenant_id, market_id, delivery_address)
-		DO UPDATE SET updated_at = NOW()
-		RETURNING tenant_id, $4::text, delivery_address, created_at, updated_at
-	`, tenantID, marketID, deliveryAddress, market))
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	if payload.IsDefault {
+		if _, err := tx.Exec(ctx, `
+			UPDATE market_delivery_addresses
+			SET is_default = FALSE, updated_at = NOW()
+			WHERE tenant_id = $1
+			  AND market_id = $2
+			  AND is_default = TRUE
+			  AND delivery_address <> $3
+		`, tenantID, marketID, deliveryAddress); err != nil {
+			return nil, err
+		}
+	}
+
+	row, err := scanMarketDeliveryAddressRow(tx.QueryRow(ctx, `
+		INSERT INTO market_delivery_addresses (tenant_id, market_id, delivery_address, is_default, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, NOW(), NOW())
+		ON CONFLICT (tenant_id, market_id, delivery_address)
+		DO UPDATE SET is_default = EXCLUDED.is_default, updated_at = NOW()
+		RETURNING tenant_id, $5::text, delivery_address, is_default, created_at, updated_at
+	`, tenantID, marketID, deliveryAddress, payload.IsDefault, market))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "idx_market_delivery_addresses_one_default_per_market") {
+			return nil, errors.New("Only one default delivery address is allowed per market")
+		}
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 

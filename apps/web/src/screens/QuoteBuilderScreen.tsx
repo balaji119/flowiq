@@ -164,6 +164,24 @@ function formatDocumentDate(value: string) {
   return parsed.toLocaleDateString('en-AU');
 }
 
+function toOrdinalDay(day: number) {
+  const remainder = day % 10;
+  const teens = day % 100;
+  if (teens >= 11 && teens <= 13) return `${day}th`;
+  if (remainder === 1) return `${day}st`;
+  if (remainder === 2) return `${day}nd`;
+  if (remainder === 3) return `${day}rd`;
+  return `${day}th`;
+}
+
+function formatDeliveryDeadline(value: string) {
+  const parsed = parseDateOnly(value);
+  if (!parsed) return 'the due date';
+  const weekday = parsed.toLocaleDateString('en-AU', { weekday: 'long' });
+  const month = parsed.toLocaleDateString('en-AU', { month: 'long' });
+  return `${weekday} the ${toOrdinalDay(parsed.getDate())} of ${month}`;
+}
+
 function formatDeliveryAddressOptionLabel(address: string) {
   const lines = address
     .split('\n')
@@ -560,6 +578,19 @@ export function QuoteBuilderScreen({
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.shippingRate])),
     [marketShippingRates],
   );
+  const preferredDeliveryAddressByMarket = useMemo(() => {
+    const byMarket = new Map<string, string>();
+    marketDeliveryAddresses.forEach((entry) => {
+      if (entry.isDefault) {
+        byMarket.set(entry.market, entry.deliveryAddress);
+        return;
+      }
+      if (!byMarket.has(entry.market)) {
+        byMarket.set(entry.market, entry.deliveryAddress);
+      }
+    });
+    return byMarket;
+  }, [marketDeliveryAddresses]);
   const hasUnsavedChanges = !loadingCampaign && JSON.stringify(values) !== lastPersistedValuesRef.current;
   const hasMappedCreatives = values.campaignMarkets.some((market) => market.assets.some((asset) => Boolean(asset.creativeImageId)));
   const saveDraftButtonClass = !hasUnsavedChanges && !savingCampaign ? 'border-slate-700 bg-slate-900/45 text-slate-500 disabled:opacity-100' : '';
@@ -575,6 +606,34 @@ export function QuoteBuilderScreen({
       return changed ? { ...current, campaignMarkets: normalizedMarkets } : current;
     });
   }, [loadingCampaign, numberOfWeeks]);
+
+  useEffect(() => {
+    if (loadingCampaign) return;
+    if (preferredDeliveryAddressByMarket.size === 0) return;
+
+    setValues((current) => {
+      let changed = false;
+      const nextCampaignMarkets = current.campaignMarkets.map((market) => {
+        const preferredAddress = preferredDeliveryAddressByMarket.get(market.market);
+        if (!preferredAddress) return market;
+
+        let marketChanged = false;
+        const nextAssets = market.assets.map((asset) => {
+          if (asset.deliveryAddress) return asset;
+          changed = true;
+          marketChanged = true;
+          return {
+            ...asset,
+            deliveryAddress: preferredAddress,
+          };
+        });
+
+        return marketChanged ? { ...market, assets: nextAssets } : market;
+      });
+
+      return changed ? { ...current, campaignMarkets: nextCampaignMarkets } : current;
+    });
+  }, [loadingCampaign, preferredDeliveryAddressByMarket]);
 
   useEffect(() => {
     if (values.campaignMarkets.length === 0) {
@@ -635,9 +694,17 @@ export function QuoteBuilderScreen({
       if (!nextMarketName) return current;
 
       const nextMarket = createCampaignMarket(`market-${Date.now()}`);
+      const preferredAddress = preferredDeliveryAddressByMarket.get(nextMarketName) || '';
       return {
         ...current,
-        campaignMarkets: [...current.campaignMarkets, { ...nextMarket, market: nextMarketName }],
+        campaignMarkets: [
+          ...current.campaignMarkets,
+          {
+            ...nextMarket,
+            market: nextMarketName,
+            assets: nextMarket.assets.map((asset) => ({ ...asset, deliveryAddress: preferredAddress })),
+          },
+        ],
       };
     });
   }
@@ -655,6 +722,7 @@ export function QuoteBuilderScreen({
       const selectedAssetIds = new Set(market.assets.map((asset) => asset.assetId).filter(Boolean));
       const nextAsset = availableAssets.find((asset) => !selectedAssetIds.has(asset.id));
       if (!nextAsset) return market;
+      const preferredAddress = preferredDeliveryAddressByMarket.get(market.market) || '';
 
       return {
         ...market,
@@ -664,6 +732,7 @@ export function QuoteBuilderScreen({
             ...createCampaignAsset(`asset-${Date.now()}`),
             assetId: nextAsset.id,
             assetSearch: nextAsset.label,
+            deliveryAddress: preferredAddress,
           },
         ],
       };
@@ -708,8 +777,14 @@ export function QuoteBuilderScreen({
   }
 
   function deliveryAddressOptionsFor(marketName: string) {
-    const options = [...new Set(marketDeliveryAddresses.filter((entry) => entry.market === marketName).map((entry) => entry.deliveryAddress))];
-    return options.map((address) => ({ label: formatDeliveryAddressOptionLabel(address), value: address }));
+    const options = marketDeliveryAddresses
+      .filter((entry) => entry.market === marketName)
+      .sort((left, right) => Number(right.isDefault) - Number(left.isDefault))
+      .map((entry) => ({
+        label: entry.isDefault ? `${formatDeliveryAddressOptionLabel(entry.deliveryAddress)} (Default)` : formatDeliveryAddressOptionLabel(entry.deliveryAddress),
+        value: entry.deliveryAddress,
+      }));
+    return [...new Map(options.map((option) => [option.value, option])).values()];
   }
 
   async function appendPrintImages(files: File[]) {
@@ -896,6 +971,10 @@ export function QuoteBuilderScreen({
   async function downloadArtworkWordDocument() {
     const defaultDeliveryAddressByMarket = new Map<string, string>();
     marketDeliveryAddresses.forEach((entry) => {
+      if (entry.isDefault) {
+        defaultDeliveryAddressByMarket.set(entry.market, entry.deliveryAddress);
+        return;
+      }
       if (!defaultDeliveryAddressByMarket.has(entry.market)) {
         defaultDeliveryAddressByMarket.set(entry.market, entry.deliveryAddress);
       }
@@ -988,6 +1067,7 @@ export function QuoteBuilderScreen({
         return { image, creativeNumber: index + 1, breakdown, quantitiesText };
       })
       .filter((entry): entry is { image: (typeof values.printImages)[number]; creativeNumber: number; breakdown: QuantityBreakdown; quantitiesText: string } => Boolean(entry));
+    const creativeNumberByImageID = new Map(mappedCreatives.map((entry) => [entry.image.id, entry.creativeNumber]));
 
     const creativeCountText = mappedCreatives.length
       ? `${mappedCreatives.length} creatives attached`
@@ -1031,26 +1111,135 @@ export function QuoteBuilderScreen({
       })
       .join('<br/>');
 
-    const deliverySection = values.campaignMarkets
-      .map((market) => {
-        const assetLines = market.assets
-          .map((asset) => {
-            const line = lineByAssetId.get(asset.id);
-            if (!line) return '';
-            const quantitiesText = breakdownToEmailText(line.breakdown);
-            if (!quantitiesText) return '';
-            const creativeName = values.printImages.find((image) => image.id === asset.creativeImageId)?.name || asset.assetSearch || asset.assetId || 'Artwork';
-            const address = asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || 'No delivery address selected';
-            return `${escapeHtml(asset.assetSearch || asset.assetId || 'Asset')} - ${escapeHtml(creativeName)} (${creativeTypeLabel(line.breakdown)}): ${quantitiesText}<br/>Deliver address - ${escapeHtml(address)}`;
-          })
-          .filter(Boolean)
-          .join('<br/><br/>');
+    type parsedDeliveryAddress = {
+      recipient: string;
+      street: string;
+      locality: string;
+      country: string;
+      phone: string;
+      deliveryTime: string;
+      deliveryPoint: string;
+      notes: string;
+    };
+    function parseDeliveryAddress(rawAddress: string): parsedDeliveryAddress {
+      const lines = rawAddress
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const firstLine = lines[0] || '';
+      const street = lines[1] || '';
+      const locality = lines[2] || '';
+      const phoneLine = lines.find((line) => /^phone\s*[:\-–]/i.test(line)) || '';
+      const deliveryTimeLine = lines.find((line) => /^delivery time\s*[:\-–]/i.test(line)) || '';
+      const deliveryPointLine = lines.find((line) => /^delivery point\s*[:\-–]/i.test(line)) || '';
+      const notesLine = lines.find((line) => /^notes?\s*[:\-–]/i.test(line)) || '';
+      const country = lines.find((line) => !line.includes(':') && line.toLowerCase() === 'australia') || '';
+      const recipientWithPhoneMatch = firstLine.match(/^(.+?)\s*[-–]\s*(.+)$/);
+      const recipient = recipientWithPhoneMatch ? recipientWithPhoneMatch[1].trim() : firstLine;
+      const phoneFromRecipient = recipientWithPhoneMatch ? recipientWithPhoneMatch[2].trim() : '';
 
-        return `
-          <p><strong>Please deliver for ${escapeHtml(market.market)} by COB:</strong><br/>
-          ${assetLines || 'No creative quantities linked for this market.'}</p>
-        `;
+      function extractLabeledValue(value: string) {
+        return value.replace(/^[^:\-–]+[:\-–]\s*/i, '').trim();
+      }
+
+      return {
+        recipient,
+        street,
+        locality,
+        country,
+        phone: phoneLine ? extractLabeledValue(phoneLine) : phoneFromRecipient,
+        deliveryTime: deliveryTimeLine ? extractLabeledValue(deliveryTimeLine) : '',
+        deliveryPoint: deliveryPointLine ? extractLabeledValue(deliveryPointLine) : '',
+        notes: notesLine ? extractLabeledValue(notesLine) : '',
+      };
+    }
+
+    function addressCore(rawAddress: string) {
+      const parsed = parseDeliveryAddress(rawAddress);
+      return [parsed.recipient, parsed.street, parsed.locality]
+        .map((value) => value.trim().toLowerCase())
+        .join('|');
+    }
+
+    const deliveryDeadline = formatDeliveryDeadline(values.dueDate);
+    const deliveriesByAddress = new Map<string, { parsed: parsedDeliveryAddress; lines: string[] }>();
+
+    values.campaignMarkets.forEach((market) => {
+      const marketAddressRecords = marketDeliveryAddresses
+        .filter((entry) => entry.market === market.market)
+        .map((entry) => entry.deliveryAddress);
+
+      market.assets.forEach((asset) => {
+        const line = lineByAssetId.get(asset.id);
+        if (!line) return;
+        const quantitiesText = breakdownToEmailText(line.breakdown);
+        if (!quantitiesText) return;
+
+        const selectedOrDefaultAddress = asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || '';
+        if (!selectedOrDefaultAddress) return;
+        const canonicalAddress =
+          marketAddressRecords.find((entry) => addressCore(entry) === addressCore(selectedOrDefaultAddress)) || selectedOrDefaultAddress;
+        const resolvedAddress = canonicalAddress;
+        if (!resolvedAddress) return;
+
+        const creativeNumber = asset.creativeImageId ? creativeNumberByImageID.get(asset.creativeImageId) : undefined;
+        const assetLabel = asset.assetSearch || asset.assetId || 'Asset';
+        const creativeLabel = creativeNumber ? `Creative ${creativeNumber} (${assetLabel})` : `${assetLabel} (${creativeTypeLabel(line.breakdown)})`;
+        const deliveryLine = `${escapeHtml(creativeLabel)}: ${quantitiesText}`;
+
+        const existing = deliveriesByAddress.get(resolvedAddress);
+        if (existing) {
+          existing.lines.push(deliveryLine);
+          return;
+        }
+
+        deliveriesByAddress.set(resolvedAddress, {
+          parsed: parseDeliveryAddress(resolvedAddress),
+          lines: [deliveryLine],
+        });
+      });
+    });
+
+    const deliveryGroups = Array.from(deliveriesByAddress.entries()).map(([rawAddress, group]) => {
+      const recipient = group.parsed.recipient || rawAddress;
+      return {
+        rawAddress,
+        recipient,
+        parsed: group.parsed,
+        lines: group.lines,
+      };
+    });
+
+    const deliverySection = deliveryGroups
+      .map((group) => `
+          <p><strong>Please deliver to ${escapeHtml(group.recipient)} by ${escapeHtml(deliveryDeadline)} by COB:</strong><br/><br/>
+          ${group.lines.join('<br/>')}</p>
+        `)
+      .join('');
+
+    const deliveryNotesSection = deliveryGroups
+      .map((group) => {
+        const recipientLine = group.parsed.recipient
+          ? `${escapeHtml(group.parsed.recipient)}${group.parsed.phone ? ` - ${escapeHtml(group.parsed.phone)}` : ''}`
+          : group.parsed.phone
+            ? escapeHtml(group.parsed.phone)
+            : '';
+        const addressLine = [group.parsed.street, group.parsed.locality].filter(Boolean).join(', ');
+
+        if (!recipientLine && !addressLine && !group.parsed.deliveryTime && !group.parsed.deliveryPoint && !group.parsed.notes) {
+          return '';
+        }
+
+        const noteLines: string[] = [];
+        if (recipientLine) noteLines.push(recipientLine);
+        if (addressLine) noteLines.push(`Deliver address &ndash; ${escapeHtml(addressLine)}`);
+        if (group.parsed.deliveryTime) noteLines.push(`Delivery time &ndash; ${escapeHtml(group.parsed.deliveryTime)}`);
+        if (group.parsed.deliveryPoint) noteLines.push(`Delivery point &ndash; ${escapeHtml(group.parsed.deliveryPoint)}`);
+        if (group.parsed.notes) noteLines.push(escapeHtml(group.parsed.notes));
+
+        return `<p><strong>Please note:</strong><br/>${noteLines.join('<br/>')}</p>`;
       })
+      .filter(Boolean)
       .join('');
 
     const html = `<!DOCTYPE html>
@@ -1069,6 +1258,7 @@ export function QuoteBuilderScreen({
 
   <p><strong>Delivery -</strong></p>
   ${deliverySection || '<p>No delivery details available.</p>'}
+  ${deliveryNotesSection}
 </body>
 </html>`;
 
@@ -1368,11 +1558,19 @@ export function QuoteBuilderScreen({
                               items={availableMarkets}
                               label={`Market ${marketIndex + 1}`}
                                           onValueChange={(value) =>
-                                            updateCampaignMarket(market.id, (current) => ({
-                                              ...current,
-                                              market: value,
-                                              assets: current.assets.map((asset) => ({ ...asset, assetId: '', assetSearch: '', deliveryAddress: '' })),
-                                            }))
+                                            updateCampaignMarket(market.id, (current) => {
+                                              const preferredAddress = preferredDeliveryAddressByMarket.get(value) || '';
+                                              return {
+                                                ...current,
+                                                market: value,
+                                                assets: current.assets.map((asset) => ({
+                                                  ...asset,
+                                                  assetId: '',
+                                                  assetSearch: '',
+                                                  deliveryAddress: preferredAddress,
+                                                })),
+                                              };
+                                            })
                                           }
                               placeholder="Choose a market"
                               selectedValue={market.market}
@@ -1785,9 +1983,13 @@ export function QuoteBuilderScreen({
                     {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                     {savingCampaign ? 'Saving…' : 'Save Draft'}
                   </Button>
-                  <Button disabled={submitting || calculating || savingCampaign || !summary} onClick={() => void handleSubmitQuote()} type="button">
-                    {submitting || calculating || savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                    {submitting ? 'Submitting…' : calculating ? 'Calculating…' : 'Create Quote In PrintIQ'}
+                                    <Button
+                    className="border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100"
+                    disabled
+                    type="button"
+                    variant="secondary"
+                  >
+                    Create Quote In PrintIQ (Coming Soon)
                   </Button>
                   {onBack ? (
                     <Button disabled={savingCampaign || submitting} onClick={() => void handleBackToDashboard()} type="button" variant="outline">
@@ -1833,3 +2035,4 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
+

@@ -42,6 +42,8 @@ type AddressFormState = {
   state: string;
   postcode: string;
   phoneNumber: string;
+  deliveryTime: string;
+  deliveryPoint: string;
   deliveryNotes: string;
 };
 
@@ -54,6 +56,8 @@ function emptyAddressForm(): AddressFormState {
     state: '',
     postcode: '',
     phoneNumber: '',
+    deliveryTime: '',
+    deliveryPoint: '',
     deliveryNotes: '',
   };
 }
@@ -70,6 +74,8 @@ function formatDeliveryAddress(form: AddressFormState) {
     formatAddressLine(form),
     [form.suburb.trim(), form.state.trim(), form.postcode.trim()].filter(Boolean).join(' '),
     form.phoneNumber.trim() ? `Phone: ${form.phoneNumber.trim()}` : '',
+    form.deliveryTime.trim() ? `Delivery time: ${form.deliveryTime.trim()}` : '',
+    form.deliveryPoint.trim() ? `Delivery point: ${form.deliveryPoint.trim()}` : '',
     deliveryNotes ? `Notes: ${deliveryNotes.replaceAll('\n', ' ')}` : '',
     'Australia',
   ].filter(Boolean);
@@ -90,6 +96,8 @@ function parseDeliveryAddress(rawAddress: string): AddressFormState {
   const streetLine = lines[1] || '';
   const suburbStatePostcodeLine = lines[2] || '';
   const phoneLine = lines.find((line) => line.toLowerCase().startsWith('phone:')) || '';
+  const deliveryTimeLine = lines.find((line) => line.toLowerCase().startsWith('delivery time:')) || '';
+  const deliveryPointLine = lines.find((line) => line.toLowerCase().startsWith('delivery point:')) || '';
   const notesLine = lines.find((line) => line.toLowerCase().startsWith('notes:')) || '';
 
   const streetParts = streetLine.split(' ').filter(Boolean);
@@ -109,6 +117,8 @@ function parseDeliveryAddress(rawAddress: string): AddressFormState {
     state,
     postcode,
     phoneNumber: phoneLine ? phoneLine.slice('phone:'.length).trim() : '',
+    deliveryTime: deliveryTimeLine ? deliveryTimeLine.slice('delivery time:'.length).trim() : '',
+    deliveryPoint: deliveryPointLine ? deliveryPointLine.slice('delivery point:'.length).trim() : '',
     deliveryNotes: notesLine ? notesLine.slice('notes:'.length).trim() : '',
   };
 }
@@ -126,6 +136,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
   const [marketShippingRates, setMarketShippingRates] = useState<MarketShippingRateRecord[]>([]);
   const [addressDialogOpen, setAddressDialogOpen] = useState(false);
   const [addressForm, setAddressForm] = useState<AddressFormState>(() => emptyAddressForm());
+  const [addressIsDefault, setAddressIsDefault] = useState(false);
   const [editingDeliveryAddress, setEditingDeliveryAddress] = useState<string | null>(null);
   const [savingDeliveryAddress, setSavingDeliveryAddress] = useState(false);
   const [deletingAddress, setDeletingAddress] = useState<string | null>(null);
@@ -137,7 +148,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
   const effectiveTenantId = tenantId ?? (canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined);
   const selectedTenant = useMemo(() => tenants.find((tenant) => tenant.id === selectedTenantId) ?? null, [selectedTenantId, tenants]);
   const selectedMarketAddresses = useMemo(
-    () => [...new Set(marketAddresses.filter((address) => address.market === selectedMarketFilter).map((address) => address.deliveryAddress))],
+    () => marketAddresses.filter((address) => address.market === selectedMarketFilter),
     [marketAddresses, selectedMarketFilter],
   );
   const selectedMarketShippingRate = useMemo(
@@ -244,12 +255,14 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
   function openAddAddressDialog() {
     setEditingDeliveryAddress(null);
     setAddressForm(emptyAddressForm());
+    setAddressIsDefault(false);
     setAddressDialogOpen(true);
   }
 
-  function openEditAddressDialog(address: string) {
-    setEditingDeliveryAddress(address);
-    setAddressForm(parseDeliveryAddress(address));
+  function openEditAddressDialog(address: MarketDeliveryAddressRecord) {
+    setEditingDeliveryAddress(address.deliveryAddress);
+    setAddressForm(parseDeliveryAddress(address.deliveryAddress));
+    setAddressIsDefault(address.isDefault);
     setAddressDialogOpen(true);
   }
 
@@ -266,33 +279,41 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
     setError('');
     setNotice('');
     try {
-      const response = await upsertMarketDeliveryAddress({ market: selectedMarketFilter, deliveryAddress: nextAddress }, effectiveTenantId);
+      const response = await upsertMarketDeliveryAddress(
+        { market: selectedMarketFilter, deliveryAddress: nextAddress, isDefault: addressIsDefault },
+        effectiveTenantId,
+      );
 
       if (editingDeliveryAddress && editingDeliveryAddress !== nextAddress) {
         await deleteMarketDeliveryAddress({ market: selectedMarketFilter, deliveryAddress: editingDeliveryAddress }, effectiveTenantId);
       }
 
       setMarketAddresses((current) => {
+        const normalizedCurrent = response.address.isDefault
+          ? current.map((item) => (item.market === selectedMarketFilter ? { ...item, isDefault: false } : item))
+          : current;
+
         if (editingDeliveryAddress) {
-          const editedIndex = current.findIndex(
+          const editedIndex = normalizedCurrent.findIndex(
             (item) => item.market === selectedMarketFilter && item.deliveryAddress === editingDeliveryAddress,
           );
           if (editedIndex >= 0) {
-            return current.map((item, index) => (index === editedIndex ? response.address : item));
+            return normalizedCurrent.map((item, index) => (index === editedIndex ? response.address : item));
           }
         }
 
-        const existingIndex = current.findIndex(
+        const existingIndex = normalizedCurrent.findIndex(
           (item) => item.market === response.address.market && item.deliveryAddress === response.address.deliveryAddress,
         );
         if (existingIndex >= 0) {
-          return current.map((item, index) => (index === existingIndex ? response.address : item));
+          return normalizedCurrent.map((item, index) => (index === existingIndex ? response.address : item));
         }
-        return [...current, response.address];
+        return [...normalizedCurrent, response.address];
       });
 
       setAddressDialogOpen(false);
       setAddressForm(emptyAddressForm());
+      setAddressIsDefault(false);
       setEditingDeliveryAddress(null);
       setNotice(`${editingDeliveryAddress ? 'Updated' : 'Saved'} delivery address for ${selectedMarketFilter}.`);
     } catch (saveError) {
@@ -526,16 +547,28 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
               {selectedMarketAddresses.length > 0 ? (
                 <div className="grid gap-3 md:grid-cols-2">
                   {selectedMarketAddresses.map((address) => {
-                    const parsed = parseDeliveryAddress(address);
+                    const parsed = parseDeliveryAddress(address.deliveryAddress);
                     return (
-                      <div key={`${selectedMarketFilter}-${address}`} className="rounded-xl border border-slate-700 bg-slate-900/60 p-3">
+                      <div
+                        key={`${selectedMarketFilter}-${address.deliveryAddress}`}
+                        className={
+                          address.isDefault
+                            ? 'rounded-xl border border-violet-400 bg-violet-500/10 p-3 shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)]'
+                            : 'rounded-xl border border-slate-700 bg-slate-900/60 p-3'
+                        }
+                      >
                         <div className="space-y-1">
-                          <p className="text-sm font-semibold text-white">{parsed.name || 'Delivery address'}</p>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-semibold text-white">{parsed.name || 'Delivery address'}</p>
+                            {address.isDefault ? <Badge className="px-2 py-0.5 text-[10px] font-bold">Default</Badge> : null}
+                          </div>
                           <p className="text-sm text-slate-300">{formatAddressLine(parsed) || '-'}</p>
                           <p className="text-sm text-slate-300">
                             {[parsed.suburb, parsed.state, parsed.postcode].filter(Boolean).join(' ') || '-'}
                           </p>
                           {parsed.phoneNumber ? <p className="text-xs text-slate-400">Phone: {parsed.phoneNumber}</p> : null}
+                          {parsed.deliveryTime ? <p className="text-xs text-slate-400">Delivery time: {parsed.deliveryTime}</p> : null}
+                          {parsed.deliveryPoint ? <p className="text-xs text-slate-400">Delivery point: {parsed.deliveryPoint}</p> : null}
                           {parsed.deliveryNotes ? <p className="text-xs text-slate-400">Notes: {parsed.deliveryNotes}</p> : null}
                         </div>
                         <div className="mt-3 flex items-center justify-end gap-1">
@@ -551,12 +584,12 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                           <Button
                             aria-label="Delete address"
                             className="h-7 w-7 rounded-md border-0 p-0 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200"
-                            disabled={deletingAddress === address}
-                            onClick={() => void handleDeleteAddress(address)}
+                            disabled={deletingAddress === address.deliveryAddress}
+                            onClick={() => void handleDeleteAddress(address.deliveryAddress)}
                             type="button"
                             variant="ghost"
                           >
-                            {deletingAddress === address ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                            {deletingAddress === address.deliveryAddress ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                           </Button>
                         </div>
                       </div>
@@ -582,6 +615,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
           setAddressDialogOpen(open);
           if (!open) {
             setAddressForm(emptyAddressForm());
+            setAddressIsDefault(false);
             setEditingDeliveryAddress(null);
           }
         }}
@@ -660,22 +694,48 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                   value={addressForm.phoneNumber}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="address-delivery-time">Delivery Time</Label>
+                <Input
+                  id="address-delivery-time"
+                  onChange={(event) => setAddressForm((current) => ({ ...current, deliveryTime: event.target.value }))}
+                  placeholder="10am - 3pm"
+                  value={addressForm.deliveryTime}
+                />
+              </div>
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="address-notes">Delivery Notes</Label>
+                <Label htmlFor="address-delivery-point">Delivery Point</Label>
+                <Textarea
+                  id="address-delivery-point"
+                  onChange={(event) => setAddressForm((current) => ({ ...current, deliveryPoint: event.target.value }))}
+                  rows={2}
+                  value={addressForm.deliveryPoint}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="address-notes">Additional Notes</Label>
                 <Textarea
                   id="address-notes"
                   onChange={(event) => setAddressForm((current) => ({ ...current, deliveryNotes: event.target.value }))}
-                  placeholder="Access details, loading dock info, contact person, etc."
                   rows={3}
                   value={addressForm.deliveryNotes}
                 />
               </div>
+              <label className="md:col-span-2 flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200">
+                <input
+                  checked={addressIsDefault}
+                  onChange={(event) => setAddressIsDefault(event.target.checked)}
+                  type="checkbox"
+                />
+                Set as default address for {selectedMarketFilter || 'this market'}
+              </label>
             </div>
             <div className="flex justify-end gap-3">
               <Button
                 onClick={() => {
                   setAddressDialogOpen(false);
                   setAddressForm(emptyAddressForm());
+                  setAddressIsDefault(false);
                   setEditingDeliveryAddress(null);
                 }}
                 type="button"

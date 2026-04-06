@@ -172,6 +172,7 @@ type calculatorMappingRecord struct {
 type marketDeliveryAddressInput struct {
 	Market          string `json:"market"`
 	DeliveryAddress string `json:"deliveryAddress"`
+	IsDefault       bool   `json:"isDefault"`
 }
 
 type marketDeliveryAddressDeleteInput struct {
@@ -183,6 +184,7 @@ type marketDeliveryAddressRecord struct {
 	TenantID        string `json:"tenantId"`
 	Market          string `json:"market"`
 	DeliveryAddress string `json:"deliveryAddress"`
+	IsDefault       bool   `json:"isDefault"`
 	CreatedAt       string `json:"createdAt"`
 	UpdatedAt       string `json:"updatedAt"`
 }

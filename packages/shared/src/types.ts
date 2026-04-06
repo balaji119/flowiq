@@ -122,9 +122,13 @@ export type CalculatorMappingRecord = CalculatorMappingInput & {
 export type MarketDeliveryAddressInput = {
   market: string;
   deliveryAddress: string;
+  isDefault?: boolean;
 };
 
-export type MarketDeliveryAddressRecord = MarketDeliveryAddressInput & {
+export type MarketDeliveryAddressRecord = {
+  market: string;
+  deliveryAddress: string;
+  isDefault: boolean;
   tenantId: string;
   createdAt: string;
   updatedAt: string;
