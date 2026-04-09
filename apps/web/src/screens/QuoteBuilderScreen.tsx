@@ -203,6 +203,20 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
+function toAbsoluteUrl(url: string) {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (typeof window !== 'undefined') {
+    try {
+      return new URL(trimmed, window.location.origin).toString();
+    } catch {
+      return trimmed;
+    }
+  }
+  return trimmed;
+}
+
 async function pdfFirstPageToDataUrl(blob: Blob, maxWidth = 560) {
   const pdfjs = await (new Function("return import('/pdf.min.mjs')")() as Promise<any>);
   (pdfjs as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
@@ -616,7 +630,6 @@ export function QuoteBuilderScreen({
   }, [marketDeliveryAddresses]);
   const hasUnsavedChanges = !loadingCampaign && JSON.stringify(values) !== lastPersistedValuesRef.current;
   const hasMappedCreatives = values.campaignMarkets.some((market) => market.assets.some((asset) => Boolean(asset.creativeImageId)));
-  const saveDraftButtonClass = !hasUnsavedChanges && !savingCampaign ? 'border-slate-700 bg-slate-900/45 text-slate-500 disabled:opacity-100' : '';
 
   useEffect(() => {
     if (loadingCampaign) return;
@@ -919,6 +932,18 @@ export function QuoteBuilderScreen({
     }
   }
 
+  useEffect(() => {
+    if (loadingCampaign || savingCampaign || !hasUnsavedChanges) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void saveCampaignDraft();
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [campaignId, hasUnsavedChanges, loadingCampaign, savingCampaign, values]);
+
   async function handleBackToDashboard() {
     if (!onBack) return;
     if (!hasUnsavedChanges) {
@@ -965,15 +990,13 @@ export function QuoteBuilderScreen({
       setError('Please choose a purchase order file to upload');
       return;
     }
-    if (!campaignId) {
-      setError('Please save the draft before uploading a purchase order');
-      return;
-    }
 
     setUploadingPurchaseOrder(true);
     setError('');
     try {
-      const response = await uploadPurchaseOrderFile(selectedPurchaseOrderFile, campaignId);
+      const savedCampaignId = await saveCampaignDraft();
+      if (!savedCampaignId) return;
+      const response = await uploadPurchaseOrderFile(selectedPurchaseOrderFile, savedCampaignId);
       setUploadedPurchaseOrderName(response.originalName);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload purchase order');
@@ -1111,7 +1134,7 @@ export function QuoteBuilderScreen({
           return;
         }
         try {
-          const response = await fetch(buildApiUrl(image.imageUrl));
+          const response = await fetch(toAbsoluteUrl(buildApiUrl(image.imageUrl)));
           if (!response.ok) return;
           const blob = await response.blob();
           const dataUrl = isPdf ? await pdfFirstPageToDataUrl(blob, 420) : await blobToDataUrl(blob);
@@ -1127,7 +1150,7 @@ export function QuoteBuilderScreen({
         const image = entry.image;
         const index = entry.creativeNumber;
         const embedded = creativeImageDataUrls.get(image.id);
-        const artworkUrl = image.imageUrl ? buildApiUrl(image.imageUrl) : '';
+        const artworkUrl = image.imageUrl ? toAbsoluteUrl(buildApiUrl(image.imageUrl)) : '';
         const linkLine = artworkUrl
           ? `<br/><a href="${escapeHtml(artworkUrl)}" style="color:#1d4ed8;text-decoration:underline;">Open artwork file (${escapeHtml(image.fileName || image.name)})</a>`
           : '<br/><span style="color:#6b7280;">Artwork file link unavailable</span>';
@@ -1321,7 +1344,7 @@ export function QuoteBuilderScreen({
                   Build campaign schedules, review calculated totals, and create PrintIQ-ready quotes with a cleaner browser-first workflow.
                 </p>
                 <p className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-500">
-                  {loadingCampaign ? 'Loading draft' : savingCampaign ? 'Saving draft' : hasUnsavedChanges ? 'Unsaved changes' : `Status: ${campaignStatus.replace('_', ' ')}`}
+                  {loadingCampaign ? 'Loading draft' : savingCampaign ? 'Auto-saving' : hasUnsavedChanges ? 'Unsaved changes' : `All changes saved · ${campaignStatus.replace('_', ' ')}`}
                 </p>
               </div>
             </div>
@@ -1534,10 +1557,6 @@ export function QuoteBuilderScreen({
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button className={saveDraftButtonClass} disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
-                    {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                    {savingCampaign ? 'Saving…' : 'Save Draft'}
-                  </Button>
                   <Button onClick={() => setStepIndex(1)} type="button">
                     Continue To Schedule
                   </Button>
@@ -1750,10 +1769,6 @@ export function QuoteBuilderScreen({
                       Add Market
                     </Button>
                   </div>
-                  <Button className={saveDraftButtonClass} disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
-                    {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                    {savingCampaign ? 'Saving…' : 'Save Draft'}
-                  </Button>
                   <Button disabled={calculating} onClick={reviewTotals} type="button">
                     {calculating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                     {calculating ? 'Calculating…' : 'Review Totals'}
@@ -1848,10 +1863,6 @@ export function QuoteBuilderScreen({
                     </div>
 
                     <div className="flex gap-3">
-                      <Button className={saveDraftButtonClass} disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
-                        {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                        {savingCampaign ? 'Saving…' : 'Save Draft'}
-                      </Button>
                       <Button onClick={() => setStepIndex(3)} type="button">
                         Continue To Finalise
                       </Button>
@@ -2005,10 +2016,6 @@ export function QuoteBuilderScreen({
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button className={saveDraftButtonClass} disabled={savingCampaign || !hasUnsavedChanges} onClick={() => void saveCampaignDraft()} type="button" variant="outline">
-                    {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                    {savingCampaign ? 'Saving…' : 'Save Draft'}
-                  </Button>
                                     <Button
                     className="border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100"
                     disabled
