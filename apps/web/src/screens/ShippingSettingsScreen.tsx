@@ -68,17 +68,16 @@ function formatAddressLine(form: AddressFormState) {
 }
 
 function formatDeliveryAddress(form: AddressFormState) {
-  const deliveryNotes = form.deliveryNotes.trim();
   const lines = [
     form.name.trim(),
     formatAddressLine(form),
     [form.suburb.trim(), form.state.trim(), form.postcode.trim()].filter(Boolean).join(' '),
-    form.phoneNumber.trim() ? `Phone: ${form.phoneNumber.trim()}` : '',
-    form.deliveryTime.trim() ? `Delivery time: ${form.deliveryTime.trim()}` : '',
-    form.deliveryPoint.trim() ? `Delivery point: ${form.deliveryPoint.trim()}` : '',
-    deliveryNotes ? `Notes: ${deliveryNotes.replaceAll('\n', ' ')}` : '',
+    `Phone: ${form.phoneNumber.trim()}`,
+    `Delivery time: ${form.deliveryTime.trim()}`,
+    `Delivery point: ${form.deliveryPoint.trim()}`,
+    `Notes: ${form.deliveryNotes.trim().replaceAll('\n', ' ')}`,
     'Australia',
-  ].filter(Boolean);
+  ];
   return lines.join('\n');
 }
 
@@ -136,6 +135,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
   const [marketShippingRates, setMarketShippingRates] = useState<MarketShippingRateRecord[]>([]);
   const [addressDialogOpen, setAddressDialogOpen] = useState(false);
   const [addressForm, setAddressForm] = useState<AddressFormState>(() => emptyAddressForm());
+  const [addressDialogError, setAddressDialogError] = useState('');
   const [addressIsDefault, setAddressIsDefault] = useState(false);
   const [editingDeliveryAddress, setEditingDeliveryAddress] = useState<string | null>(null);
   const [savingDeliveryAddress, setSavingDeliveryAddress] = useState(false);
@@ -255,6 +255,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
   function openAddAddressDialog() {
     setEditingDeliveryAddress(null);
     setAddressForm(emptyAddressForm());
+    setAddressDialogError('');
     setAddressIsDefault(false);
     setAddressDialogOpen(true);
   }
@@ -262,6 +263,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
   function openEditAddressDialog(address: MarketDeliveryAddressRecord) {
     setEditingDeliveryAddress(address.deliveryAddress);
     setAddressForm(parseDeliveryAddress(address.deliveryAddress));
+    setAddressDialogError('');
     setAddressIsDefault(address.isDefault);
     setAddressDialogOpen(true);
   }
@@ -269,14 +271,28 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
   async function handleSaveDeliveryAddress() {
     if (!effectiveTenantId || !selectedMarketFilter) return;
 
-    const nextAddress = formatDeliveryAddress(addressForm);
-    if (!nextAddress) {
-      setError('Delivery address is required.');
+    const requiredFields: Array<{ label: string; value: string }> = [
+      { label: 'Name', value: addressForm.name },
+      { label: 'Unit number', value: addressForm.unitNumber },
+      { label: 'Street', value: addressForm.street },
+      { label: 'Suburb', value: addressForm.suburb },
+      { label: 'State', value: addressForm.state },
+      { label: 'Postcode', value: addressForm.postcode },
+      { label: 'Phone number', value: addressForm.phoneNumber },
+      { label: 'Delivery time', value: addressForm.deliveryTime },
+      { label: 'Delivery point', value: addressForm.deliveryPoint },
+      { label: 'Delivery notes', value: addressForm.deliveryNotes },
+    ];
+    const missingField = requiredFields.find((field) => !field.value.trim());
+    if (missingField) {
+      setAddressDialogError(`${missingField.label} is required`);
       return;
     }
 
+    const nextAddress = formatDeliveryAddress(addressForm);
+
     setSavingDeliveryAddress(true);
-    setError('');
+    setAddressDialogError('');
     setNotice('');
     try {
       const response = await upsertMarketDeliveryAddress(
@@ -313,11 +329,12 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
 
       setAddressDialogOpen(false);
       setAddressForm(emptyAddressForm());
+      setAddressDialogError('');
       setAddressIsDefault(false);
       setEditingDeliveryAddress(null);
       setNotice(`${editingDeliveryAddress ? 'Updated' : 'Saved'} delivery address for ${selectedMarketFilter}.`);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save delivery address');
+      setAddressDialogError(saveError instanceof Error ? saveError.message : 'Unable to save delivery address');
     } finally {
       setSavingDeliveryAddress(false);
     }
@@ -615,6 +632,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
           setAddressDialogOpen(open);
           if (!open) {
             setAddressForm(emptyAddressForm());
+            setAddressDialogError('');
             setAddressIsDefault(false);
             setEditingDeliveryAddress(null);
           }
@@ -622,28 +640,31 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingDeliveryAddress ? 'Edit delivery address' : 'Add delivery address'}</DialogTitle>
+            <DialogTitle>{editingDeliveryAddress ? 'Edit Delivery Address' : 'Add Delivery Address'}</DialogTitle>
             <DialogDescription>
-              Enter address details in Australian format for {selectedMarketFilter || 'the selected market'}.
+              Add a new delivery address for {selectedMarketFilter || 'the selected market'}.
             </DialogDescription>
           </DialogHeader>
+          {addressDialogError ? (
+            <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200">
+              {addressDialogError}
+            </div>
+          ) : null}
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2 md:col-span-2">
+              <div className="space-y-2">
                 <Label htmlFor="address-name">Name</Label>
                 <Input
                   id="address-name"
                   onChange={(event) => setAddressForm((current) => ({ ...current, name: event.target.value }))}
-                  placeholder="Store name or recipient"
                   value={addressForm.name}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="address-unit">Door/Unit No.</Label>
+                <Label htmlFor="address-unit">Unit Number</Label>
                 <Input
                   id="address-unit"
                   onChange={(event) => setAddressForm((current) => ({ ...current, unitNumber: event.target.value }))}
-                  placeholder="12A"
                   value={addressForm.unitNumber}
                 />
               </div>
@@ -652,16 +673,14 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                 <Input
                   id="address-street"
                   onChange={(event) => setAddressForm((current) => ({ ...current, street: event.target.value }))}
-                  placeholder="George St"
                   value={addressForm.street}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="address-suburb">Suburb/Region</Label>
+                <Label htmlFor="address-suburb">Suburb</Label>
                 <Input
                   id="address-suburb"
                   onChange={(event) => setAddressForm((current) => ({ ...current, suburb: event.target.value }))}
-                  placeholder="Sydney"
                   value={addressForm.suburb}
                 />
               </div>
@@ -669,8 +688,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                 <Label htmlFor="address-state">State</Label>
                 <Input
                   id="address-state"
-                  onChange={(event) => setAddressForm((current) => ({ ...current, state: event.target.value.toUpperCase() }))}
-                  placeholder="NSW"
+                  onChange={(event) => setAddressForm((current) => ({ ...current, state: event.target.value }))}
                   value={addressForm.state}
                 />
               </div>
@@ -678,9 +696,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                 <Label htmlFor="address-postcode">Postcode</Label>
                 <Input
                   id="address-postcode"
-                  inputMode="numeric"
                   onChange={(event) => setAddressForm((current) => ({ ...current, postcode: event.target.value }))}
-                  placeholder="2000"
                   value={addressForm.postcode}
                 />
               </div>
@@ -688,9 +704,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                 <Label htmlFor="address-phone">Phone Number</Label>
                 <Input
                   id="address-phone"
-                  inputMode="tel"
                   onChange={(event) => setAddressForm((current) => ({ ...current, phoneNumber: event.target.value }))}
-                  placeholder="04xx xxx xxx"
                   value={addressForm.phoneNumber}
                 />
               </div>
@@ -699,21 +713,19 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                 <Input
                   id="address-delivery-time"
                   onChange={(event) => setAddressForm((current) => ({ ...current, deliveryTime: event.target.value }))}
-                  placeholder="10am - 3pm"
                   value={addressForm.deliveryTime}
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="address-delivery-point">Delivery Point</Label>
-                <Textarea
+                <Input
                   id="address-delivery-point"
                   onChange={(event) => setAddressForm((current) => ({ ...current, deliveryPoint: event.target.value }))}
-                  rows={2}
                   value={addressForm.deliveryPoint}
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="address-notes">Additional Notes</Label>
+                <Label htmlFor="address-notes">Delivery Notes</Label>
                 <Textarea
                   id="address-notes"
                   onChange={(event) => setAddressForm((current) => ({ ...current, deliveryNotes: event.target.value }))}
@@ -735,6 +747,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                 onClick={() => {
                   setAddressDialogOpen(false);
                   setAddressForm(emptyAddressForm());
+                  setAddressDialogError('');
                   setAddressIsDefault(false);
                   setEditingDeliveryAddress(null);
                 }}
@@ -744,15 +757,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                 Cancel
               </Button>
               <Button
-                disabled={
-                  savingDeliveryAddress ||
-                  !selectedMarketFilter ||
-                  !addressForm.name.trim() ||
-                  !addressForm.street.trim() ||
-                  !addressForm.suburb.trim() ||
-                  !addressForm.state.trim() ||
-                  !addressForm.postcode.trim()
-                }
+                disabled={savingDeliveryAddress || !selectedMarketFilter}
                 onClick={() => void handleSaveDeliveryAddress()}
               >
                 {savingDeliveryAddress ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
