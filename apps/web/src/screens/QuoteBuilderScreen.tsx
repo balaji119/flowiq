@@ -504,6 +504,7 @@ export function QuoteBuilderScreen({
   const [newAddressDialogOpen, setNewAddressDialogOpen] = useState(false);
   const [newAddressTarget, setNewAddressTarget] = useState<{ marketId: string; assetId: string; marketName: string } | null>(null);
   const [newAddressForm, setNewAddressForm] = useState<AddressFormState>(() => emptyAddressForm());
+  const [newAddressError, setNewAddressError] = useState('');
   const [savingNewAddress, setSavingNewAddress] = useState(false);
   const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
   const replaceImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -643,7 +644,7 @@ export function QuoteBuilderScreen({
   }, [loadingCampaign]);
 
   const payload = useMemo(() => buildPrintIqPayload(values, summary), [summary, values]);
-  const canAddAddressInFinalize = session?.user.role === 'admin';
+  const canAddAddressInFinalize = session?.user.role === 'admin' || session?.user.role === 'super_admin';
   const numberOfWeeks = Math.max(1, Math.min(20, Math.floor(Number(values.numberOfWeeks) || 1)));
   const currentStep = steps[stepIndex];
   const progressPercent = ((stepIndex + 1) / steps.length) * 100;
@@ -899,6 +900,7 @@ export function QuoteBuilderScreen({
     if (!canAddAddressInFinalize || !marketName.trim()) return;
     setNewAddressTarget({ marketId, assetId, marketName });
     setNewAddressForm(emptyAddressForm());
+    setNewAddressError('');
     setNewAddressDialogOpen(true);
   }
 
@@ -918,13 +920,13 @@ export function QuoteBuilderScreen({
     ];
     const missingField = requiredFields.find((field) => !field.value.trim());
     if (missingField) {
-      setError(`${missingField.label} is required`);
+      setNewAddressError(`${missingField.label} is required`);
       return;
     }
     const nextAddress = formatDeliveryAddress(newAddressForm);
 
     setSavingNewAddress(true);
-    setError('');
+    setNewAddressError('');
     try {
       const response = await upsertCampaignMarketDeliveryAddress({
         market: newAddressTarget.marketName,
@@ -949,8 +951,9 @@ export function QuoteBuilderScreen({
       setNewAddressDialogOpen(false);
       setNewAddressTarget(null);
       setNewAddressForm(emptyAddressForm());
+      setNewAddressError('');
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save delivery address');
+      setNewAddressError(saveError instanceof Error ? saveError.message : 'Unable to save delivery address');
     } finally {
       setSavingNewAddress(false);
     }
@@ -2181,6 +2184,7 @@ export function QuoteBuilderScreen({
           if (!open) {
             setNewAddressTarget(null);
             setNewAddressForm(emptyAddressForm());
+            setNewAddressError('');
           }
         }}
       >
@@ -2191,6 +2195,11 @@ export function QuoteBuilderScreen({
               Add a new delivery address for {newAddressTarget?.marketName || 'this market'}. This option is available to admin users only.
             </DialogDescription>
           </DialogHeader>
+          {newAddressError ? (
+            <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200">
+              {newAddressError}
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="addr-name">Name</Label>
@@ -2240,6 +2249,7 @@ export function QuoteBuilderScreen({
                 setNewAddressDialogOpen(false);
                 setNewAddressTarget(null);
                 setNewAddressForm(emptyAddressForm());
+                setNewAddressError('');
               }}
               type="button"
               variant="ghost"
