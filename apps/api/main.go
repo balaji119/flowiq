@@ -222,6 +222,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("POST /api/campaigns/{campaignId}/calculate", a.withAuth(http.HandlerFunc(a.handleCalculatePersistedCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/submit-to-printiq", a.withAuth(http.HandlerFunc(a.handleSubmitCampaign)))
 	mux.Handle("GET /api/market-delivery-addresses", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketDeliveryAddresses)))
+	mux.Handle("PUT /api/market-delivery-addresses", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertCampaignMarketDeliveryAddress), "admin")))
 	mux.Handle("GET /api/market-shipping-rates", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketShippingRates)))
 	mux.Handle("GET /api/calculator/metadata", a.withAuth(http.HandlerFunc(a.handleCalculatorMetadata)))
 	mux.Handle("POST /api/calculator/calculate", a.withAuth(http.HandlerFunc(a.handleCalculateCampaign)))
@@ -836,6 +837,27 @@ func (a *app) handleListCampaignMarketDeliveryAddresses(w http.ResponseWriter, r
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"addresses": records})
+}
+
+func (a *app) handleUpsertCampaignMarketDeliveryAddress(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	if user == nil || user.TenantID == nil || strings.TrimSpace(*user.TenantID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenantId is required"})
+		return
+	}
+
+	var payload marketDeliveryAddressInput
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	record, err := a.mappingStore.upsertMarketDeliveryAddress(r.Context(), *user.TenantID, payload)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"address": record})
 }
 
 func (a *app) handleListCampaignMarketShippingRates(w http.ResponseWriter, r *http.Request) {

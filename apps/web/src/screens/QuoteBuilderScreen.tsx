@@ -19,13 +19,13 @@ import {
   createDefaultFormValues,
   formatKeys,
 } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, cn } from '@flowiq/ui';
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, Textarea, cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import { buildApiUrl } from '../services/apiBase';
 import { createCampaign, fetchCampaign, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
-import { fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
+import { fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates, upsertCampaignMarketDeliveryAddress } from '../services/marketDeliveryApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 
@@ -194,6 +194,52 @@ function formatDeliveryAddressOptionLabel(address: string) {
   return postcode ? `${name} - ${postcode}` : name;
 }
 
+type AddressFormState = {
+  name: string;
+  unitNumber: string;
+  street: string;
+  suburb: string;
+  state: string;
+  postcode: string;
+  phoneNumber: string;
+  deliveryTime: string;
+  deliveryPoint: string;
+  deliveryNotes: string;
+};
+
+function emptyAddressForm(): AddressFormState {
+  return {
+    name: '',
+    unitNumber: '',
+    street: '',
+    suburb: '',
+    state: '',
+    postcode: '',
+    phoneNumber: '',
+    deliveryTime: '',
+    deliveryPoint: '',
+    deliveryNotes: '',
+  };
+}
+
+function formatAddressLine(form: AddressFormState) {
+  return [form.unitNumber.trim(), form.street.trim()].filter(Boolean).join(' ');
+}
+
+function formatDeliveryAddress(form: AddressFormState) {
+  const lines = [
+    form.name.trim(),
+    formatAddressLine(form),
+    [form.suburb.trim(), form.state.trim(), form.postcode.trim()].filter(Boolean).join(' '),
+    `Phone: ${form.phoneNumber.trim()}`,
+    `Delivery time: ${form.deliveryTime.trim()}`,
+    `Delivery point: ${form.deliveryPoint.trim()}`,
+    `Notes: ${form.deliveryNotes.trim().replaceAll('\n', ' ')}`,
+    'Australia',
+  ];
+  return lines.join('\n');
+}
+
 function blobToDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -271,6 +317,9 @@ function SearchableSelect({
   onValueChange,
   placeholder,
   emptyMessage,
+  actionLabel,
+  onAction,
+  actionDisabled = false,
 }: {
   label: string;
   selectedValue: string;
@@ -279,6 +328,9 @@ function SearchableSelect({
   onValueChange: (value: string) => void;
   placeholder: string;
   emptyMessage: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  actionDisabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -342,6 +394,21 @@ function SearchableSelect({
               })}
               {filteredItems.length === 0 ? <p className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-6 text-center text-sm text-slate-400">{emptyMessage}</p> : null}
             </div>
+            {actionLabel && onAction ? (
+              <Button
+                className="w-full"
+                disabled={actionDisabled}
+                onClick={() => {
+                  onAction();
+                  setOpen(false);
+                }}
+                type="button"
+                variant="secondary"
+              >
+                <Plus className="h-4 w-4" />
+                {actionLabel}
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -434,6 +501,10 @@ export function QuoteBuilderScreen({
   const [uploadedPurchaseOrderName, setUploadedPurchaseOrderName] = useState('');
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
   const [replacingImageId, setReplacingImageId] = useState<string | null>(null);
+  const [newAddressDialogOpen, setNewAddressDialogOpen] = useState(false);
+  const [newAddressTarget, setNewAddressTarget] = useState<{ marketId: string; assetId: string; marketName: string } | null>(null);
+  const [newAddressForm, setNewAddressForm] = useState<AddressFormState>(() => emptyAddressForm());
+  const [savingNewAddress, setSavingNewAddress] = useState(false);
   const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
   const replaceImageInputRef = useRef<HTMLInputElement | null>(null);
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
@@ -572,6 +643,7 @@ export function QuoteBuilderScreen({
   }, [loadingCampaign]);
 
   const payload = useMemo(() => buildPrintIqPayload(values, summary), [summary, values]);
+  const canAddAddressInFinalize = session?.user.role === 'admin';
   const numberOfWeeks = Math.max(1, Math.min(20, Math.floor(Number(values.numberOfWeeks) || 1)));
   const currentStep = steps[stepIndex];
   const progressPercent = ((stepIndex + 1) / steps.length) * 100;
@@ -821,6 +893,67 @@ export function QuoteBuilderScreen({
         value: entry.deliveryAddress,
       }));
     return [...new Map(options.map((option) => [option.value, option])).values()];
+  }
+
+  function openAddAddressDialog(marketId: string, assetId: string, marketName: string) {
+    if (!canAddAddressInFinalize || !marketName.trim()) return;
+    setNewAddressTarget({ marketId, assetId, marketName });
+    setNewAddressForm(emptyAddressForm());
+    setNewAddressDialogOpen(true);
+  }
+
+  async function handleSaveNewAddress() {
+    if (!newAddressTarget) return;
+    const requiredFields: Array<{ label: string; value: string }> = [
+      { label: 'Name', value: newAddressForm.name },
+      { label: 'Unit number', value: newAddressForm.unitNumber },
+      { label: 'Street', value: newAddressForm.street },
+      { label: 'Suburb', value: newAddressForm.suburb },
+      { label: 'State', value: newAddressForm.state },
+      { label: 'Postcode', value: newAddressForm.postcode },
+      { label: 'Phone number', value: newAddressForm.phoneNumber },
+      { label: 'Delivery time', value: newAddressForm.deliveryTime },
+      { label: 'Delivery point', value: newAddressForm.deliveryPoint },
+      { label: 'Delivery notes', value: newAddressForm.deliveryNotes },
+    ];
+    const missingField = requiredFields.find((field) => !field.value.trim());
+    if (missingField) {
+      setError(`${missingField.label} is required`);
+      return;
+    }
+    const nextAddress = formatDeliveryAddress(newAddressForm);
+
+    setSavingNewAddress(true);
+    setError('');
+    try {
+      const response = await upsertCampaignMarketDeliveryAddress({
+        market: newAddressTarget.marketName,
+        deliveryAddress: nextAddress,
+        isDefault: false,
+      });
+
+      setMarketDeliveryAddresses((current) => {
+        const existingIndex = current.findIndex(
+          (item) => item.market === response.address.market && item.deliveryAddress === response.address.deliveryAddress,
+        );
+        if (existingIndex >= 0) {
+          return current.map((item, index) => (index === existingIndex ? response.address : item));
+        }
+        return [...current, response.address];
+      });
+
+      updateCampaignAsset(newAddressTarget.marketId, newAddressTarget.assetId, (current) => ({
+        ...current,
+        deliveryAddress: response.address.deliveryAddress,
+      }));
+      setNewAddressDialogOpen(false);
+      setNewAddressTarget(null);
+      setNewAddressForm(emptyAddressForm());
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save delivery address');
+    } finally {
+      setSavingNewAddress(false);
+    }
   }
 
   async function appendPrintImages(files: File[]) {
@@ -1931,9 +2064,12 @@ export function QuoteBuilderScreen({
                                 </td>
                                 <td className="px-4 py-3">
                                   <SearchableSelect
+                                    actionDisabled={!market.market}
+                                    actionLabel={canAddAddressInFinalize ? 'Add new address' : undefined}
                                     emptyMessage={deliveryAddressOptions.length ? 'No matching addresses found.' : 'No addresses saved for this market yet.'}
                                     items={deliveryAddressOptions}
                                     label=""
+                                    onAction={() => openAddAddressDialog(market.id, asset.id, market.market)}
                                     onValueChange={(value) =>
                                       updateCampaignAsset(market.id, asset.id, (current) => ({
                                         ...current,
@@ -2038,6 +2174,87 @@ export function QuoteBuilderScreen({
       </div>
 
       <Dialog
+        open={newAddressDialogOpen}
+        onOpenChange={(open) => {
+          if (savingNewAddress) return;
+          setNewAddressDialogOpen(open);
+          if (!open) {
+            setNewAddressTarget(null);
+            setNewAddressForm(emptyAddressForm());
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Delivery Address</DialogTitle>
+            <DialogDescription>
+              Add a new delivery address for {newAddressTarget?.marketName || 'this market'}. This option is available to admin users only.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="addr-name">Name</Label>
+              <Input id="addr-name" value={newAddressForm.name} onChange={(event) => setNewAddressForm((current) => ({ ...current, name: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="addr-unit-number">Unit Number</Label>
+              <Input id="addr-unit-number" value={newAddressForm.unitNumber} onChange={(event) => setNewAddressForm((current) => ({ ...current, unitNumber: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="addr-street">Street</Label>
+              <Input id="addr-street" value={newAddressForm.street} onChange={(event) => setNewAddressForm((current) => ({ ...current, street: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="addr-suburb">Suburb</Label>
+              <Input id="addr-suburb" value={newAddressForm.suburb} onChange={(event) => setNewAddressForm((current) => ({ ...current, suburb: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="addr-state">State</Label>
+              <Input id="addr-state" value={newAddressForm.state} onChange={(event) => setNewAddressForm((current) => ({ ...current, state: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="addr-postcode">Postcode</Label>
+              <Input id="addr-postcode" value={newAddressForm.postcode} onChange={(event) => setNewAddressForm((current) => ({ ...current, postcode: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="addr-phone-number">Phone Number</Label>
+              <Input id="addr-phone-number" value={newAddressForm.phoneNumber} onChange={(event) => setNewAddressForm((current) => ({ ...current, phoneNumber: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="addr-delivery-time">Delivery Time</Label>
+              <Input id="addr-delivery-time" value={newAddressForm.deliveryTime} onChange={(event) => setNewAddressForm((current) => ({ ...current, deliveryTime: event.target.value }))} />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="addr-delivery-point">Delivery Point</Label>
+              <Input id="addr-delivery-point" value={newAddressForm.deliveryPoint} onChange={(event) => setNewAddressForm((current) => ({ ...current, deliveryPoint: event.target.value }))} />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="addr-delivery-notes">Delivery Notes</Label>
+              <Textarea id="addr-delivery-notes" rows={4} value={newAddressForm.deliveryNotes} onChange={(event) => setNewAddressForm((current) => ({ ...current, deliveryNotes: event.target.value }))} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              disabled={savingNewAddress}
+              onClick={() => {
+                setNewAddressDialogOpen(false);
+                setNewAddressTarget(null);
+                setNewAddressForm(emptyAddressForm());
+              }}
+              type="button"
+              variant="ghost"
+            >
+              Cancel
+            </Button>
+            <Button disabled={savingNewAddress} onClick={() => void handleSaveNewAddress()} type="button">
+              {savingNewAddress ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+              {savingNewAddress ? 'Saving…' : 'Save Address'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={unsavedDialogOpen}
         onOpenChange={(open) => {
           if (open) setUnsavedDialogOpen(true);
@@ -2068,4 +2285,3 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
-
