@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'FlowIQ',
+  title: 'ADS Connect',
   description: 'Campaign scheduling and PrintIQ quote workflow',
 };
 
