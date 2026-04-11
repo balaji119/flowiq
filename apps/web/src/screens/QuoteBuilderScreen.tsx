@@ -95,8 +95,14 @@ function buildReviewRows(totals: CampaignTotals) {
   ] as const;
 }
 
-function calculateShippingCost(posters: number, shippingRate: number) {
-  return (posters / 60) * shippingRate;
+function totalUnitsForBreakdown(breakdown: QuantityBreakdown) {
+  return formatKeys.reduce((total, key) => total + (breakdown[key] ?? 0), 0);
+}
+
+function calculateShippingCost(units: number, perBoxPrice: number, postersPerBox: number) {
+  const safePostersPerBox = Math.max(1, Math.floor(postersPerBox || 60));
+  const boxCount = Math.max(1, Math.ceil(units / safePostersPerBox));
+  return boxCount * perBoxPrice;
 }
 
 function formatKeyLabel(key: (typeof formatKeys)[number]) {
@@ -688,6 +694,10 @@ export function QuoteBuilderScreen({
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.shippingRate])),
     [marketShippingRates],
   );
+  const postersPerBoxByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.postersPerBox])),
+    [marketShippingRates],
+  );
   const preferredDeliveryAddressByMarket = useMemo(() => {
     const byMarket = new Map<string, string>();
     marketDeliveryAddresses.forEach((entry) => {
@@ -1139,6 +1149,16 @@ export function QuoteBuilderScreen({
     } finally {
       setUploadingPurchaseOrder(false);
     }
+  }
+
+  function calculateMarketShippingCost(marketName: string) {
+    const perBoxPrice = shippingRateByMarket.get(marketName) ?? 0;
+    const postersPerBox = postersPerBoxByMarket.get(marketName) ?? 60;
+    const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
+    return marketLines.reduce((total, line) => {
+      const units = totalUnitsForBreakdown(line.breakdown);
+      return total + calculateShippingCost(units, perBoxPrice, postersPerBox);
+    }, 0);
   }
 
   async function reviewTotals() {
@@ -1938,10 +1958,10 @@ export function QuoteBuilderScreen({
                         </thead>
                         <tbody>
                           {visibleReviewMarkets.map((marketSummary) => {
-                            const shippingRate = shippingRateByMarket.get(marketSummary.market) ?? 0;
+                            const marketShippingCost = calculateMarketShippingCost(marketSummary.market);
                             const rows = buildReviewRows(marketSummary).map((row) =>
                               row.label === 'Posters'
-                                ? { ...row, shippingCost: calculateShippingCost(row.total, shippingRate) }
+                                ? { ...row, shippingCost: marketShippingCost }
                                 : row,
                             );
                             return rows.map((row, rowIndex) => (
@@ -1966,10 +1986,7 @@ export function QuoteBuilderScreen({
                           })}
 
                           {(() => {
-                            const grandPosterShippingCost = visibleReviewMarkets.reduce(
-                              (total, marketSummary) => total + calculateShippingCost(marketSummary.posterTotal, shippingRateByMarket.get(marketSummary.market) ?? 0),
-                              0,
-                            );
+                            const grandPosterShippingCost = visibleReviewMarkets.reduce((total, marketSummary) => total + calculateMarketShippingCost(marketSummary.market), 0);
                             const grandRows = buildReviewRows(summary.grandTotal).map((row) =>
                               row.label === 'Posters' ? { ...row, shippingCost: grandPosterShippingCost } : row,
                             );

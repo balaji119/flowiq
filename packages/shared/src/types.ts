@@ -137,6 +137,7 @@ export type MarketDeliveryAddressRecord = {
 export type MarketShippingRateInput = {
   market: string;
   shippingRate: number;
+  postersPerBox: number;
 };
 
 export type MarketShippingRateRecord = MarketShippingRateInput & {

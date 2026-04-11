@@ -141,6 +141,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
   const [savingDeliveryAddress, setSavingDeliveryAddress] = useState(false);
   const [deletingAddress, setDeletingAddress] = useState<string | null>(null);
   const [shippingRateDraft, setShippingRateDraft] = useState('');
+  const [postersPerBoxDraft, setPostersPerBoxDraft] = useState('60');
   const [savingShippingRate, setSavingShippingRate] = useState(false);
 
   const canSwitchTenant = session?.user.role === 'super_admin' && !tenantId;
@@ -151,8 +152,8 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
     () => marketAddresses.filter((address) => address.market === selectedMarketFilter),
     [marketAddresses, selectedMarketFilter],
   );
-  const selectedMarketShippingRate = useMemo(
-    () => marketShippingRates.find((rate) => rate.market === selectedMarketFilter)?.shippingRate,
+  const selectedMarketShippingRateConfig = useMemo(
+    () => marketShippingRates.find((rate) => rate.market === selectedMarketFilter),
     [marketShippingRates, selectedMarketFilter],
   );
 
@@ -249,8 +250,9 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
   }, [marketOptions, selectedMarketFilter]);
 
   useEffect(() => {
-    setShippingRateDraft(selectedMarketShippingRate !== undefined ? String(selectedMarketShippingRate) : '');
-  }, [selectedMarketShippingRate]);
+    setShippingRateDraft(selectedMarketShippingRateConfig?.shippingRate !== undefined ? String(selectedMarketShippingRateConfig.shippingRate) : '');
+    setPostersPerBoxDraft(String(selectedMarketShippingRateConfig?.postersPerBox ?? 60));
+  }, [selectedMarketShippingRateConfig]);
 
   function openAddAddressDialog() {
     setEditingDeliveryAddress(null);
@@ -371,6 +373,12 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
       setError('Shipping rate must be a valid number greater than or equal to 0.');
       return;
     }
+    const parsedPostersPerBox = Number(postersPerBoxDraft);
+    const normalizedPostersPerBox = Math.floor(parsedPostersPerBox);
+    if (!Number.isFinite(parsedPostersPerBox) || normalizedPostersPerBox <= 0) {
+      setError('No of posters per box must be a whole number greater than 0.');
+      return;
+    }
 
     setSavingShippingRate(true);
     setError('');
@@ -382,6 +390,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
         {
           market: selectedMarketFilter,
           shippingRate: parsedShippingRate,
+          postersPerBox: normalizedPostersPerBox,
         },
         effectiveTenantId,
       );
@@ -405,10 +414,20 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
   useEffect(() => {
     if (!canEditShippingRate || !effectiveTenantId || !selectedMarketFilter) return;
     if (!shippingRateDraft.trim()) return;
+    if (!postersPerBoxDraft.trim()) return;
 
     const parsedShippingRate = Number(shippingRateDraft);
     if (!Number.isFinite(parsedShippingRate) || parsedShippingRate < 0) return;
-    if (selectedMarketShippingRate !== undefined && parsedShippingRate === selectedMarketShippingRate) return;
+    const parsedPostersPerBox = Number(postersPerBoxDraft);
+    const normalizedPostersPerBox = Math.floor(parsedPostersPerBox);
+    if (!Number.isFinite(parsedPostersPerBox) || normalizedPostersPerBox <= 0) return;
+    if (
+      selectedMarketShippingRateConfig &&
+      parsedShippingRate === selectedMarketShippingRateConfig.shippingRate &&
+      normalizedPostersPerBox === selectedMarketShippingRateConfig.postersPerBox
+    ) {
+      return;
+    }
 
     const timer = window.setTimeout(() => {
       void handleSaveShippingRate({ silent: true });
@@ -417,7 +436,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
     return () => {
       window.clearTimeout(timer);
     };
-  }, [canEditShippingRate, effectiveTenantId, selectedMarketFilter, selectedMarketShippingRate, shippingRateDraft]);
+  }, [canEditShippingRate, effectiveTenantId, selectedMarketFilter, selectedMarketShippingRateConfig, shippingRateDraft, postersPerBoxDraft]);
 
   if (session?.user.role === 'user') {
     return (
@@ -533,17 +552,29 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
               </select>
             </div>
             {canEditShippingRate ? (
-              <div className="w-full xl:w-[260px] space-y-2">
-                <Label htmlFor="shipping-rate-inline">Shipping Rate</Label>
-                <div className="flex items-center gap-2">
+              <div className="grid w-full gap-3 xl:w-auto xl:grid-cols-2">
+                <div className="w-full xl:w-[260px] space-y-2">
+                  <Label htmlFor="shipping-rate-inline">Per Box Price</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="shipping-rate-inline"
+                      inputMode="decimal"
+                      onChange={(event) => setShippingRateDraft(event.target.value)}
+                      placeholder="e.g. 45.50"
+                      value={shippingRateDraft}
+                    />
+                    {savingShippingRate ? <LoaderCircle className="h-4 w-4 animate-spin text-slate-300" /> : null}
+                  </div>
+                </div>
+                <div className="w-full xl:w-[220px] space-y-2">
+                  <Label htmlFor="posters-per-box-inline">No of Posters Per Box</Label>
                   <Input
-                    id="shipping-rate-inline"
-                    inputMode="decimal"
-                    onChange={(event) => setShippingRateDraft(event.target.value)}
-                    placeholder="e.g. 45.50"
-                    value={shippingRateDraft}
+                    id="posters-per-box-inline"
+                    inputMode="numeric"
+                    onChange={(event) => setPostersPerBoxDraft(event.target.value)}
+                    placeholder="60"
+                    value={postersPerBoxDraft}
                   />
-                  {savingShippingRate ? <LoaderCircle className="h-4 w-4 animate-spin text-slate-300" /> : null}
                 </div>
               </div>
             ) : null}

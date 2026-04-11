@@ -40,11 +40,12 @@ type marketDeliveryAddressRow struct {
 }
 
 type marketShippingRateRow struct {
-	TenantID     string
-	Market       string
-	ShippingRate float64
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	TenantID      string
+	Market        string
+	ShippingRate  float64
+	PostersPerBox int
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 func newMappingStore(pool *pgxpool.Pool) *mappingStore {
@@ -175,6 +176,7 @@ func scanMarketShippingRateRow(scanner interface {
 		&row.TenantID,
 		&row.Market,
 		&row.ShippingRate,
+		&row.PostersPerBox,
 		&row.CreatedAt,
 		&row.UpdatedAt,
 	)
@@ -183,11 +185,12 @@ func scanMarketShippingRateRow(scanner interface {
 
 func decodeMarketShippingRateRow(row marketShippingRateRow) marketShippingRateRecord {
 	return marketShippingRateRecord{
-		TenantID:     row.TenantID,
-		Market:       row.Market,
-		ShippingRate: row.ShippingRate,
-		CreatedAt:    row.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:    row.UpdatedAt.UTC().Format(time.RFC3339),
+		TenantID:      row.TenantID,
+		Market:        row.Market,
+		ShippingRate:  row.ShippingRate,
+		PostersPerBox: row.PostersPerBox,
+		CreatedAt:     row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:     row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -682,7 +685,7 @@ func (s *mappingStore) listMarketShippingRates(ctx context.Context, tenantID str
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT msr.tenant_id, m.name, msr.shipping_rate::float8, msr.created_at, msr.updated_at
+		SELECT msr.tenant_id, m.name, msr.shipping_rate::float8, msr.posters_per_box, msr.created_at, msr.updated_at
 		FROM market_shipping_rates msr
 		JOIN markets m ON m.id = msr.market_id
 		WHERE msr.tenant_id = $1
@@ -716,6 +719,9 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 	if payload.ShippingRate < 0 {
 		return nil, errors.New("shippingRate must be greater than or equal to 0")
 	}
+	if payload.PostersPerBox <= 0 {
+		return nil, errors.New("postersPerBox must be greater than 0")
+	}
 
 	marketID, err := s.ensureMarket(ctx, tenantID, market)
 	if err != nil {
@@ -723,12 +729,12 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 	}
 
 	row, err := scanMarketShippingRateRow(s.pool.QueryRow(ctx, `
-		INSERT INTO market_shipping_rates (tenant_id, market_id, shipping_rate, created_at, updated_at)
-		VALUES ($1, $2, $3, NOW(), NOW())
+		INSERT INTO market_shipping_rates (tenant_id, market_id, shipping_rate, posters_per_box, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, NOW(), NOW())
 		ON CONFLICT (tenant_id, market_id)
-		DO UPDATE SET shipping_rate = EXCLUDED.shipping_rate, updated_at = NOW()
-		RETURNING tenant_id, $4::text, shipping_rate::float8, created_at, updated_at
-	`, tenantID, marketID, payload.ShippingRate, market))
+		DO UPDATE SET shipping_rate = EXCLUDED.shipping_rate, posters_per_box = EXCLUDED.posters_per_box, updated_at = NOW()
+		RETURNING tenant_id, $5::text, shipping_rate::float8, posters_per_box, created_at, updated_at
+	`, tenantID, marketID, payload.ShippingRate, payload.PostersPerBox, market))
 	if err != nil {
 		return nil, err
 	}

@@ -190,16 +190,18 @@ type marketDeliveryAddressRecord struct {
 }
 
 type marketShippingRateInput struct {
-	Market       string  `json:"market"`
-	ShippingRate float64 `json:"shippingRate"`
+	Market        string  `json:"market"`
+	ShippingRate  float64 `json:"shippingRate"`
+	PostersPerBox int     `json:"postersPerBox"`
 }
 
 type marketShippingRateRecord struct {
-	TenantID     string  `json:"tenantId"`
-	Market       string  `json:"market"`
-	ShippingRate float64 `json:"shippingRate"`
-	CreatedAt    string  `json:"createdAt"`
-	UpdatedAt    string  `json:"updatedAt"`
+	TenantID      string  `json:"tenantId"`
+	Market        string  `json:"market"`
+	ShippingRate  float64 `json:"shippingRate"`
+	PostersPerBox int     `json:"postersPerBox"`
+	CreatedAt     string  `json:"createdAt"`
+	UpdatedAt     string  `json:"updatedAt"`
 }
 
 type campaignLine struct {
