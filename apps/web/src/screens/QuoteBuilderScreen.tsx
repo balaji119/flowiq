@@ -25,7 +25,7 @@ import { buildApiUrl } from '../services/apiBase';
 import { createCampaign, fetchCampaign, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
-import { fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates, upsertCampaignMarketDeliveryAddress } from '../services/marketDeliveryApi';
+import { fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 
@@ -202,8 +202,7 @@ function formatDeliveryAddressOptionLabel(address: string) {
 
 type AddressFormState = {
   name: string;
-  unitNumber: string;
-  street: string;
+  unitStreetNumber: string;
   suburb: string;
   state: string;
   postcode: string;
@@ -216,8 +215,7 @@ type AddressFormState = {
 function emptyAddressForm(): AddressFormState {
   return {
     name: '',
-    unitNumber: '',
-    street: '',
+    unitStreetNumber: '',
     suburb: '',
     state: '',
     postcode: '',
@@ -229,7 +227,7 @@ function emptyAddressForm(): AddressFormState {
 }
 
 function formatAddressLine(form: AddressFormState) {
-  return [form.unitNumber.trim(), form.street.trim()].filter(Boolean).join(' ');
+  return form.unitStreetNumber.trim();
 }
 
 function formatDeliveryAddress(form: AddressFormState) {
@@ -511,7 +509,6 @@ export function QuoteBuilderScreen({
   const [newAddressTarget, setNewAddressTarget] = useState<{ marketId: string; assetId: string; marketName: string } | null>(null);
   const [newAddressForm, setNewAddressForm] = useState<AddressFormState>(() => emptyAddressForm());
   const [newAddressError, setNewAddressError] = useState('');
-  const [savingNewAddress, setSavingNewAddress] = useState(false);
   const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
   const replaceImageInputRef = useRef<HTMLInputElement | null>(null);
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
@@ -896,14 +893,21 @@ export function QuoteBuilderScreen({
   }
 
   function deliveryAddressOptionsFor(marketName: string) {
-    const options = marketDeliveryAddresses
+    const savedOptions = marketDeliveryAddresses
       .filter((entry) => entry.market === marketName)
       .sort((left, right) => Number(right.isDefault) - Number(left.isDefault))
       .map((entry) => ({
         label: entry.isDefault ? `${formatDeliveryAddressOptionLabel(entry.deliveryAddress)} (Default)` : formatDeliveryAddressOptionLabel(entry.deliveryAddress),
         value: entry.deliveryAddress,
       }));
-    return [...new Map(options.map((option) => [option.value, option])).values()];
+    const campaignOnlyOptions = values.campaignMarkets
+      .filter((market) => market.market === marketName)
+      .flatMap((market) => market.assets.map((asset) => asset.deliveryAddress.trim()).filter(Boolean))
+      .map((deliveryAddress) => ({
+        label: formatDeliveryAddressOptionLabel(deliveryAddress),
+        value: deliveryAddress,
+      }));
+    return [...new Map([...campaignOnlyOptions, ...savedOptions].map((option) => [option.value, option])).values()];
   }
 
   function openAddAddressDialog(marketId: string, assetId: string, marketName: string) {
@@ -914,12 +918,11 @@ export function QuoteBuilderScreen({
     setNewAddressDialogOpen(true);
   }
 
-  async function handleSaveNewAddress() {
+  function handleSaveNewAddress() {
     if (!newAddressTarget) return;
     const requiredFields: Array<{ label: string; value: string }> = [
       { label: 'Name', value: newAddressForm.name },
-      { label: 'Unit number', value: newAddressForm.unitNumber },
-      { label: 'Street', value: newAddressForm.street },
+      { label: 'Unit/Street Number', value: newAddressForm.unitStreetNumber },
       { label: 'Suburb', value: newAddressForm.suburb },
       { label: 'State', value: newAddressForm.state },
       { label: 'Postcode', value: newAddressForm.postcode },
@@ -934,39 +937,16 @@ export function QuoteBuilderScreen({
       return;
     }
     const nextAddress = formatDeliveryAddress(newAddressForm);
-
-    setSavingNewAddress(true);
     setNewAddressError('');
-    try {
-      const response = await upsertCampaignMarketDeliveryAddress({
-        market: newAddressTarget.marketName,
-        deliveryAddress: nextAddress,
-        isDefault: false,
-      });
 
-      setMarketDeliveryAddresses((current) => {
-        const existingIndex = current.findIndex(
-          (item) => item.market === response.address.market && item.deliveryAddress === response.address.deliveryAddress,
-        );
-        if (existingIndex >= 0) {
-          return current.map((item, index) => (index === existingIndex ? response.address : item));
-        }
-        return [...current, response.address];
-      });
-
-      updateCampaignAsset(newAddressTarget.marketId, newAddressTarget.assetId, (current) => ({
-        ...current,
-        deliveryAddress: response.address.deliveryAddress,
-      }));
-      setNewAddressDialogOpen(false);
-      setNewAddressTarget(null);
-      setNewAddressForm(emptyAddressForm());
-      setNewAddressError('');
-    } catch (saveError) {
-      setNewAddressError(saveError instanceof Error ? saveError.message : 'Unable to save delivery address');
-    } finally {
-      setSavingNewAddress(false);
-    }
+    updateCampaignAsset(newAddressTarget.marketId, newAddressTarget.assetId, (current) => ({
+      ...current,
+      deliveryAddress: nextAddress,
+    }));
+    setNewAddressDialogOpen(false);
+    setNewAddressTarget(null);
+    setNewAddressForm(emptyAddressForm());
+    setNewAddressError('');
   }
 
   async function appendPrintImages(files: File[]) {
@@ -2196,7 +2176,6 @@ export function QuoteBuilderScreen({
       <Dialog
         open={newAddressDialogOpen}
         onOpenChange={(open) => {
-          if (savingNewAddress) return;
           setNewAddressDialogOpen(open);
           if (!open) {
             setNewAddressTarget(null);
@@ -2223,12 +2202,12 @@ export function QuoteBuilderScreen({
               <Input id="addr-name" value={newAddressForm.name} onChange={(event) => setNewAddressForm((current) => ({ ...current, name: event.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="addr-unit-number">Unit Number</Label>
-              <Input id="addr-unit-number" value={newAddressForm.unitNumber} onChange={(event) => setNewAddressForm((current) => ({ ...current, unitNumber: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="addr-street">Street</Label>
-              <Input id="addr-street" value={newAddressForm.street} onChange={(event) => setNewAddressForm((current) => ({ ...current, street: event.target.value }))} />
+              <Label htmlFor="addr-unit-street-number">Unit/Street Number</Label>
+              <Input
+                id="addr-unit-street-number"
+                value={newAddressForm.unitStreetNumber}
+                onChange={(event) => setNewAddressForm((current) => ({ ...current, unitStreetNumber: event.target.value }))}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="addr-suburb">Suburb</Label>
@@ -2261,7 +2240,6 @@ export function QuoteBuilderScreen({
           </div>
           <div className="flex justify-end gap-3">
             <Button
-              disabled={savingNewAddress}
               onClick={() => {
                 setNewAddressDialogOpen(false);
                 setNewAddressTarget(null);
@@ -2273,9 +2251,8 @@ export function QuoteBuilderScreen({
             >
               Cancel
             </Button>
-            <Button disabled={savingNewAddress} onClick={() => void handleSaveNewAddress()} type="button">
-              {savingNewAddress ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-              {savingNewAddress ? 'Saving…' : 'Save Address'}
+            <Button onClick={handleSaveNewAddress} type="button">
+              Save Address
             </Button>
           </div>
         </DialogContent>
