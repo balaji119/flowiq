@@ -710,6 +710,7 @@ export function QuoteBuilderScreen({
   }, [marketDeliveryAddresses]);
   const hasUnsavedChanges = !loadingCampaign && JSON.stringify(values) !== lastPersistedValuesRef.current;
   const hasMappedCreatives = values.campaignMarkets.some((market) => market.assets.some((asset) => Boolean(asset.creativeImageId)));
+  const hasUploadedPurchaseOrder = uploadedPurchaseOrderName.trim().length > 0;
 
   useEffect(() => {
     if (loadingCampaign) return;
@@ -1151,6 +1152,11 @@ export function QuoteBuilderScreen({
   }
 
   async function downloadArtworkWordDocument() {
+    if (!hasUploadedPurchaseOrder) {
+      setError('Upload a purchase order file before downloading visuals');
+      return;
+    }
+
     const defaultDeliveryAddressByMarket = new Map<string, string>();
     marketDeliveryAddresses.forEach((entry) => {
       if (entry.isDefault) {
@@ -2096,31 +2102,10 @@ export function QuoteBuilderScreen({
           {currentStep.key === 'finalize' ? (
             <Card>
               <CardHeader className="p-6 pb-0">
-                <CardTitle>Export For ADS</CardTitle>
-                <CardDescription>Export the details to send to ADS.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3 p-6 sm:flex-row">
-                <Button disabled={!hasMappedCreatives} onClick={() => void downloadArtworkWordDocument()} type="button" variant="outline">
-                    Download Visuals
-                </Button>
-                <div className="cursor-not-allowed" title="Under construction">
-                  <Button className="border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100" disabled type="button" variant="secondary">
-                    Send Email To ADS
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {currentStep.key === 'finalize' ? (
-            <Card>
-              <CardHeader className="p-6 pb-0">
-                <CardTitle>Finalise Quote</CardTitle>
-                <CardDescription>Upload the purchase order and create the PrintIQ quote without leaving this screen.</CardDescription>
+                <CardTitle>Purchase Order</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6 p-6">
                 <div className="space-y-3">
-                  <Label>Purchase Order File</Label>
                   <div className="rounded-[24px] border border-dashed border-slate-600 bg-slate-800/60 p-4">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                       <div className="min-w-0 flex-1">
@@ -2150,9 +2135,34 @@ export function QuoteBuilderScreen({
                   </div>
                   {uploadedPurchaseOrderName ? <p className="text-sm font-medium text-emerald-300">Uploaded: {uploadedPurchaseOrderName}</p> : null}
                 </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
+          {currentStep.key === 'finalize' ? (
+            <Card>
+              <CardHeader className="p-6 pb-0">
+                <CardTitle>Export For ADS</CardTitle>
+                <CardDescription>Export the details to send to ADS.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3 p-6 sm:flex-row">
+                <Button disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder} onClick={() => void downloadArtworkWordDocument()} type="button" variant="outline">
+                  Download Visuals
+                </Button>
+                <div className="cursor-not-allowed" title={hasUploadedPurchaseOrder ? 'Under construction' : 'Upload purchase order before sending to ADS'}>
+                  <Button className="border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100" disabled type="button" variant="secondary">
+                    Send Email To ADS
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {currentStep.key === 'finalize' ? (
+            <Card>
+              <CardContent className="space-y-6 p-6">
                 <div className="flex flex-col gap-3 sm:flex-row">
-                                    <Button
+                  <Button
                     className="border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100"
                     disabled
                     type="button"
