@@ -36,8 +36,7 @@ type ShippingSettingsScreenProps = {
 
 type AddressFormState = {
   name: string;
-  unitNumber: string;
-  street: string;
+  unitStreetNumber: string;
   suburb: string;
   state: string;
   postcode: string;
@@ -50,8 +49,7 @@ type AddressFormState = {
 function emptyAddressForm(): AddressFormState {
   return {
     name: '',
-    unitNumber: '',
-    street: '',
+    unitStreetNumber: '',
     suburb: '',
     state: '',
     postcode: '',
@@ -63,8 +61,7 @@ function emptyAddressForm(): AddressFormState {
 }
 
 function formatAddressLine(form: AddressFormState) {
-  const streetParts = [form.unitNumber.trim(), form.street.trim()].filter(Boolean);
-  return streetParts.join(' ');
+  return form.unitStreetNumber.trim();
 }
 
 function formatDeliveryAddress(form: AddressFormState) {
@@ -99,10 +96,6 @@ function parseDeliveryAddress(rawAddress: string): AddressFormState {
   const deliveryPointLine = lines.find((line) => line.toLowerCase().startsWith('delivery point:')) || '';
   const notesLine = lines.find((line) => line.toLowerCase().startsWith('notes:')) || '';
 
-  const streetParts = streetLine.split(' ').filter(Boolean);
-  const unitNumber = streetParts[0] || '';
-  const street = streetParts.slice(1).join(' ');
-
   const localityMatch = suburbStatePostcodeLine.match(/^(.+?)\s+([A-Za-z]{2,3})\s+(\d{4})$/);
   const suburb = localityMatch ? localityMatch[1] : suburbStatePostcodeLine;
   const state = localityMatch ? localityMatch[2] : '';
@@ -110,8 +103,7 @@ function parseDeliveryAddress(rawAddress: string): AddressFormState {
 
   return {
     name,
-    unitNumber,
-    street,
+    unitStreetNumber: streetLine,
     suburb,
     state,
     postcode,
@@ -275,8 +267,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
 
     const requiredFields: Array<{ label: string; value: string }> = [
       { label: 'Name', value: addressForm.name },
-      { label: 'Unit number', value: addressForm.unitNumber },
-      { label: 'Street', value: addressForm.street },
+      { label: 'Unit/Street Number', value: addressForm.unitStreetNumber },
       { label: 'Suburb', value: addressForm.suburb },
       { label: 'State', value: addressForm.state },
       { label: 'Postcode', value: addressForm.postcode },
@@ -692,19 +683,11 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="address-unit">Unit Number</Label>
+                <Label htmlFor="address-unit-street-number">Unit/Street Number</Label>
                 <Input
-                  id="address-unit"
-                  onChange={(event) => setAddressForm((current) => ({ ...current, unitNumber: event.target.value }))}
-                  value={addressForm.unitNumber}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address-street">Street</Label>
-                <Input
-                  id="address-street"
-                  onChange={(event) => setAddressForm((current) => ({ ...current, street: event.target.value }))}
-                  value={addressForm.street}
+                  id="address-unit-street-number"
+                  onChange={(event) => setAddressForm((current) => ({ ...current, unitStreetNumber: event.target.value }))}
+                  value={addressForm.unitStreetNumber}
                 />
               </div>
               <div className="space-y-2">
