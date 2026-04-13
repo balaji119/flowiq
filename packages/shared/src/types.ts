@@ -96,6 +96,8 @@ export type MarketAssetOption = {
   asset: string;
   label: string;
   state: string;
+  maintenanceAssetId?: string | null;
+  isMaintenance?: boolean;
   quantities: QuantityBreakdown;
 };
 
@@ -109,6 +111,7 @@ export type CalculatorMappingInput = {
   asset: string;
   label: string;
   state: string;
+  maintenanceAssetId?: string | null;
   quantities: QuantityBreakdown;
 };
 

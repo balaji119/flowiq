@@ -19,6 +19,7 @@
     "typecheck": "npm run typecheck --workspace @flowiq/web",
     "db:migrate": "go -C apps/api run . migrate",
     "db:seed": "go -C apps/api run . seed",
+    "db:backfill-maintenance-relations": "go -C apps/api run . backfill-maintenance-relations",
     "db:setup": "npm run db:migrate && npm run db:seed"
   },
   "devDependencies": {

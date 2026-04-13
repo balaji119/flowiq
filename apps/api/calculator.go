@@ -1,6 +1,9 @@
 package main
 
-import "context"
+import (
+	"context"
+	"sort"
+)
 
 var formatKeys = []string{"8-sheet", "6-sheet", "4-sheet", "2-sheet", "QA0", "Mega", "DOT M", "MP"}
 
@@ -85,13 +88,24 @@ func (c *calculatorService) calculateCampaign(tenantID string, lines []campaignL
 				selectedWeeks = append(selectedWeeks, week)
 			}
 		}
+		sort.Ints(selectedWeeks)
 		runCount := len(selectedWeeks)
 		if runCount == 0 {
 			continue
 		}
 
 		breakdown := createEmptyBreakdown()
-		addBreakdown(breakdown, asset.Quantities, runCount)
+		for _, week := range selectedWeeks {
+			runAsset := asset
+			// Maintenance runs are based on the actual campaign week number (every even week),
+			// not on the ordinal position inside the filtered selected week list.
+			if week%2 == 0 && asset.MaintenanceAssetID != nil {
+				if maintenance, maintenanceFound := assetLookup[*asset.MaintenanceAssetID]; maintenanceFound {
+					runAsset = maintenance
+				}
+			}
+			addBreakdown(breakdown, runAsset.Quantities, 1)
+		}
 
 		lineResults = append(lineResults, campaignLineResult{
 			ID:            line.ID,
@@ -104,7 +118,7 @@ func (c *calculatorService) calculateCampaign(tenantID string, lines []campaignL
 		})
 
 		totals := perMarketMap[asset.Market]
-		addBreakdown(totals.Breakdown, asset.Quantities, runCount)
+		addBreakdown(totals.Breakdown, breakdown, 1)
 		totals.ActiveAssets++
 		totals.ActiveRuns += runCount
 	}

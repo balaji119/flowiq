@@ -136,12 +136,14 @@ type quoteFormOptions struct {
 type quantityBreakdown map[string]int
 
 type marketAssetOption struct {
-	ID         string            `json:"id"`
-	Market     string            `json:"market"`
-	Asset      string            `json:"asset"`
-	Label      string            `json:"label"`
-	State      string            `json:"state"`
-	Quantities quantityBreakdown `json:"quantities"`
+	ID                 string            `json:"id"`
+	Market             string            `json:"market"`
+	Asset              string            `json:"asset"`
+	Label              string            `json:"label"`
+	State              string            `json:"state"`
+	MaintenanceAssetID *string           `json:"maintenanceAssetId,omitempty"`
+	IsMaintenance      bool              `json:"isMaintenance,omitempty"`
+	Quantities         quantityBreakdown `json:"quantities"`
 }
 
 type marketMetadata struct {
@@ -150,23 +152,25 @@ type marketMetadata struct {
 }
 
 type calculatorMappingInput struct {
-	Market     string            `json:"market"`
-	Asset      string            `json:"asset"`
-	Label      string            `json:"label"`
-	State      string            `json:"state"`
-	Quantities quantityBreakdown `json:"quantities"`
+	Market             string            `json:"market"`
+	Asset              string            `json:"asset"`
+	Label              string            `json:"label"`
+	State              string            `json:"state"`
+	MaintenanceAssetID *string           `json:"maintenanceAssetId,omitempty"`
+	Quantities         quantityBreakdown `json:"quantities"`
 }
 
 type calculatorMappingRecord struct {
-	ID         string            `json:"id"`
-	TenantID   string            `json:"tenantId"`
-	Market     string            `json:"market"`
-	Asset      string            `json:"asset"`
-	Label      string            `json:"label"`
-	State      string            `json:"state"`
-	Quantities quantityBreakdown `json:"quantities"`
-	CreatedAt  string            `json:"createdAt"`
-	UpdatedAt  string            `json:"updatedAt"`
+	ID                 string            `json:"id"`
+	TenantID           string            `json:"tenantId"`
+	Market             string            `json:"market"`
+	Asset              string            `json:"asset"`
+	Label              string            `json:"label"`
+	State              string            `json:"state"`
+	MaintenanceAssetID *string           `json:"maintenanceAssetId,omitempty"`
+	Quantities         quantityBreakdown `json:"quantities"`
+	CreatedAt          string            `json:"createdAt"`
+	UpdatedAt          string            `json:"updatedAt"`
 }
 
 type marketDeliveryAddressInput struct {

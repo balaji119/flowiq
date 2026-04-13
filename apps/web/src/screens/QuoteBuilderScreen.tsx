@@ -134,6 +134,11 @@ function formatWeekLabel(week: number, startDate: string) {
   });
 }
 
+function createAllWeeks(weekCount: number) {
+  const safeWeekCount = Math.max(1, Math.floor(weekCount || 1));
+  return Array.from({ length: safeWeekCount }, (_, index) => index + 1);
+}
+
 function toFileBaseName(fileName: string) {
   return fileName.replace(/\.[^.]+$/, '');
 }
@@ -423,15 +428,17 @@ function SearchableSelect({
 function WeekSelector({
   weekCount,
   selectedWeeks,
-  onToggle,
   startDate,
   compact = false,
+  readOnly = false,
+  onToggleWeek,
 }: {
   weekCount: number;
   selectedWeeks: number[];
-  onToggle: (week: number) => void;
   startDate: string;
   compact?: boolean;
+  readOnly?: boolean;
+  onToggleWeek?: (week: number) => void;
 }) {
   return (
     <div className={cn('flex gap-2', compact ? 'flex-nowrap whitespace-nowrap' : 'flex-wrap')}>
@@ -445,7 +452,9 @@ function WeekSelector({
               compact ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs',
               selected ? 'border-violet-400 bg-violet-500 text-white' : 'border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500',
             )}
-            onClick={() => onToggle(week)}
+            aria-pressed={selected}
+            disabled={readOnly}
+            onClick={() => onToggleWeek?.(week)}
             type="button"
           >
             {formatWeekLabel(week, startDate)}
@@ -457,13 +466,14 @@ function WeekSelector({
 }
 
 function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: number): CampaignMarket[] {
+  const allWeeks = createAllWeeks(maxWeeks);
   return campaignMarkets.map((market) => ({
     ...market,
     assets: market.assets.map((asset) => ({
       ...asset,
       creativeImageId: asset.creativeImageId || '',
       deliveryAddress: asset.deliveryAddress || '',
-      selectedWeeks: [...new Set(asset.selectedWeeks.filter((week) => week >= 1 && week <= maxWeeks))].sort((a, b) => a - b),
+      selectedWeeks: allWeeks,
     })),
   }));
 }
@@ -711,6 +721,9 @@ export function QuoteBuilderScreen({
   const hasUnsavedChanges = !loadingCampaign && JSON.stringify(values) !== lastPersistedValuesRef.current;
   const hasMappedCreatives = values.campaignMarkets.some((market) => market.assets.some((asset) => Boolean(asset.creativeImageId)));
   const hasUploadedPurchaseOrder = uploadedPurchaseOrderName.trim().length > 0;
+  const hasCampaignStartDate = values.campaignStartDate.trim().length > 0;
+  const hasDeliveryDueDate = values.dueDate.trim().length > 0;
+  const canAdvanceFromCreative = hasCampaignStartDate && hasDeliveryDueDate;
 
   useEffect(() => {
     if (loadingCampaign) return;
@@ -793,6 +806,22 @@ export function QuoteBuilderScreen({
     setValues((current) => ({ ...current, [field]: value }));
   }
 
+  function validateCreativeStepRequirements() {
+    if (canAdvanceFromCreative) return true;
+    setError('Please select both Campaign start date and Delivery Due Date to continue.');
+    return false;
+  }
+
+  function navigateToStep(nextStepIndex: number) {
+    if (nextStepIndex <= stepIndex) {
+      setStepIndex(nextStepIndex);
+      return;
+    }
+    if (stepIndex === 0 && !validateCreativeStepRequirements()) return;
+    setError('');
+    setStepIndex(nextStepIndex);
+  }
+
   function updateWeekCount(nextValue: number) {
     const normalized = Math.max(1, Math.min(20, Math.floor(nextValue)));
     updateField('numberOfWeeks', String(normalized));
@@ -819,7 +848,7 @@ export function QuoteBuilderScreen({
           {
             ...nextMarket,
             market: nextMarketName,
-            assets: nextMarket.assets.map((asset) => ({ ...asset, deliveryAddress: preferredAddress })),
+            assets: nextMarket.assets.map((asset) => ({ ...asset, deliveryAddress: preferredAddress, selectedWeeks: createAllWeeks(numberOfWeeks) })),
           },
         ],
       };
@@ -846,7 +875,7 @@ export function QuoteBuilderScreen({
         assets: [
           ...market.assets,
           {
-            ...createCampaignAsset(`asset-${Date.now()}`),
+            ...createCampaignAsset(`asset-${Date.now()}`, numberOfWeeks),
             assetId: nextAsset.id,
             assetSearch: nextAsset.label,
             deliveryAddress: preferredAddress,
@@ -864,14 +893,25 @@ export function QuoteBuilderScreen({
     updateCampaignMarket(marketId, (market) => ({ ...market, assets: market.assets.map((asset) => (asset.id === assetId ? updater(asset) : asset)) }));
   }
 
+  function toggleCampaignAssetWeek(marketId: string, assetId: string, week: number) {
+    updateCampaignAsset(marketId, assetId, (asset) => {
+      const selectedWeekSet = new Set(asset.selectedWeeks);
+      if (selectedWeekSet.has(week)) selectedWeekSet.delete(week);
+      else selectedWeekSet.add(week);
+      const nextSelectedWeeks = Array.from(selectedWeekSet).sort((left, right) => left - right);
+      return { ...asset, selectedWeeks: nextSelectedWeeks };
+    });
+  }
+
   function assetsForMarket(marketName: string) {
-    return markets.find((market) => market.name === marketName)?.assets ?? [];
+    return (markets.find((market) => market.name === marketName)?.assets ?? []).filter((asset) => !asset.isMaintenance);
   }
 
   function assetOptionsFor(market: CampaignMarket, assetId: string, selectedAssetId: string) {
     const selectedInOtherRows = new Set(market.assets.filter((asset) => asset.id !== assetId).map((asset) => asset.assetId).filter(Boolean));
-    return assetsForMarket(market.market)
-      .filter((asset) => asset.id === selectedAssetId || !selectedInOtherRows.has(asset.id))
+    const marketAssets = markets.find((entry) => entry.name === market.market)?.assets ?? [];
+    return marketAssets
+      .filter((asset) => asset.id === selectedAssetId || (!asset.isMaintenance && !selectedInOtherRows.has(asset.id)))
       .map((asset) => ({ label: asset.label, value: asset.id }));
   }
 
@@ -1529,7 +1569,7 @@ export function QuoteBuilderScreen({
                   <button
                     key={step.key}
                     className={cn('rounded-2xl border px-4 py-2.5 text-left text-sm font-semibold transition', active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-500')}
-                    onClick={() => setStepIndex(index)}
+                    onClick={() => navigateToStep(index)}
                     type="button"
                   >
                     <span className="block text-base leading-tight">{step.title}</span>
@@ -1615,6 +1655,9 @@ export function QuoteBuilderScreen({
                     </div>
                   </div>
                 </div>
+                {!canAdvanceFromCreative ? (
+                  <p className="text-sm font-medium text-amber-200">Campaign start date and Delivery Due Date are required before continuing.</p>
+                ) : null}
 
                 <div className="space-y-4 rounded-[24px] border border-slate-700 bg-slate-900/50 p-4 sm:p-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1699,7 +1742,7 @@ export function QuoteBuilderScreen({
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button onClick={() => setStepIndex(1)} type="button">
+                  <Button disabled={!canAdvanceFromCreative} onClick={() => navigateToStep(1)} type="button">
                     Continue To Schedule
                   </Button>
                 </div>
@@ -1755,6 +1798,7 @@ export function QuoteBuilderScreen({
                                                   assetId: '',
                                                   assetSearch: '',
                                                   deliveryAddress: preferredAddress,
+                                                  selectedWeeks: createAllWeeks(numberOfWeeks),
                                                 })),
                                               };
                                             })
@@ -1773,7 +1817,7 @@ export function QuoteBuilderScreen({
                         <div className="mt-5 space-y-4">
                           <div>
                             <p className="text-sm font-semibold text-white">Assets</p>
-                            <p className="text-xs text-slate-400">Attach the assets you want to run in this market and choose their active weeks.</p>
+                            <p className="text-xs text-slate-400">Attach the assets you want to run in this market. All campaign weeks are selected automatically.</p>
                           </div>
                           <div className="rounded-2xl border border-slate-700/80 bg-slate-900/45 lg:overflow-visible">
                             <div className="overflow-x-auto lg:overflow-visible">
@@ -1821,14 +1865,7 @@ export function QuoteBuilderScreen({
                                             compact
                                             weekCount={numberOfWeeks}
                                             startDate={values.campaignStartDate}
-                                            onToggle={(week) =>
-                                              updateCampaignAsset(market.id, asset.id, (current) => ({
-                                                ...current,
-                                                selectedWeeks: current.selectedWeeks.includes(week)
-                                                  ? current.selectedWeeks.filter((value) => value !== week)
-                                                  : [...current.selectedWeeks, week].sort((a, b) => a - b),
-                                              }))
-                                            }
+                                            onToggleWeek={(week) => toggleCampaignAssetWeek(market.id, asset.id, week)}
                                             selectedWeeks={asset.selectedWeeks}
                                           />
                                         </div>

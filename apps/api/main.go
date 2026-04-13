@@ -122,6 +122,15 @@ func runCLI(args []string) {
 			log.Fatalf("database seed failed: %v", err)
 		}
 		log.Println("Database seed completed successfully")
+	case "backfill-maintenance-relations":
+		if err := runMigrations(ctx, pool); err != nil {
+			log.Fatalf("database migration failed: %v", err)
+		}
+		updatedRows, err := backfillMaintenanceRelations(ctx, pool)
+		if err != nil {
+			log.Fatalf("maintenance relation backfill failed: %v", err)
+		}
+		log.Printf("Maintenance relation backfill completed successfully (%d rows updated)", updatedRows)
 	default:
 		log.Fatalf("unsupported command: %s", args[0])
 	}

@@ -23,6 +23,7 @@ function emptyForm(): CalculatorMappingInput {
     asset: '',
     label: '',
     state: '',
+    maintenanceAssetId: null,
     quantities: createEmptyBreakdown(),
   };
 }
@@ -124,6 +125,13 @@ export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps
   }, [canSwitchTenant, effectiveTenantId]);
 
   const marketOptions = useMemo(() => [...new Set(mappings.map((mapping) => mapping.market))].sort((left, right) => left.localeCompare(right)), [mappings]);
+  const mappingById = useMemo(() => new Map(mappings.map((mapping) => [mapping.id, mapping])), [mappings]);
+  const maintenanceCandidates = useMemo(() => {
+    if (!form.market) return [] as CalculatorMappingRecord[];
+    return mappings
+      .filter((mapping) => mapping.market === form.market && mapping.id !== editingId)
+      .sort((left, right) => left.label.localeCompare(right.label) || left.asset.localeCompare(right.asset));
+  }, [editingId, form.market, mappings]);
 
   const filteredMappings = useMemo(() => {
     if (!selectedMarketFilter) return [];
@@ -245,6 +253,7 @@ export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps
       asset: mapping.asset,
       label: mapping.label,
       state: mapping.state,
+      maintenanceAssetId: mapping.maintenanceAssetId ?? null,
       quantities: { ...mapping.quantities },
     });
     setMappingDialogOpen(true);
@@ -395,6 +404,7 @@ export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps
                     <th className="border border-slate-700 px-4 py-3 text-left">Asset</th>
                     <th className="border border-slate-700 px-4 py-3 text-left">Label</th>
                     <th className="border border-slate-700 px-4 py-3 text-left">State</th>
+                    <th className="border border-slate-700 px-4 py-3 text-left">Maintenance Asset</th>
                     {formatKeys.map((key) => (
                       <th key={`mapping-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatSheetHeader(key)}</th>
                     ))}
@@ -407,6 +417,9 @@ export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps
                       <td className="border border-slate-700 px-4 py-3 font-semibold text-white">{mapping.asset}</td>
                       <td className="border border-slate-700 px-4 py-3 text-slate-200">{mapping.label}</td>
                       <td className="border border-slate-700 px-4 py-3 text-slate-300">{mapping.state || '-'}</td>
+                      <td className="border border-slate-700 px-4 py-3 text-slate-300">
+                        {mapping.maintenanceAssetId ? (mappingById.get(mapping.maintenanceAssetId)?.label ?? mappingById.get(mapping.maintenanceAssetId)?.asset ?? 'Unknown') : '-'}
+                      </td>
                       {formatKeys.map((key) => (
                         <td key={`mapping-cell-${mapping.id}-${key}`} className="border border-slate-700 px-4 py-3 text-center font-semibold text-white">
                           {mapping.quantities[key]}
@@ -479,6 +492,27 @@ export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps
               <div className="space-y-2">
                 <Label htmlFor="mapping-state">State</Label>
                 <Input id="mapping-state" onChange={(event) => setForm((current) => ({ ...current, state: event.target.value }))} value={form.state} />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="mapping-maintenance-asset">Maintenance asset (optional)</Label>
+                <select
+                  id="mapping-maintenance-asset"
+                  className="h-11 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      maintenanceAssetId: event.target.value || null,
+                    }))
+                  }
+                  value={form.maintenanceAssetId ?? ''}
+                >
+                  <option value="">No maintenance asset</option>
+                  {maintenanceCandidates.map((candidate) => (
+                    <option key={`maintenance-candidate-${candidate.id}`} value={candidate.id}>
+                      {candidate.label} ({candidate.asset})
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

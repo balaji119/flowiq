@@ -19,15 +19,16 @@ type mappingStore struct {
 }
 
 type calculatorMappingRow struct {
-	ID         string
-	TenantID   string
-	Market     string
-	Asset      string
-	Label      string
-	State      string
-	Quantities []byte
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID                 string
+	TenantID           string
+	Market             string
+	Asset              string
+	Label              string
+	State              string
+	MaintenanceAssetID *string
+	Quantities         []byte
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 type marketDeliveryAddressRow struct {
@@ -95,6 +96,7 @@ func scanCalculatorMappingRow(scanner interface {
 		&row.Asset,
 		&row.Label,
 		&row.State,
+		&row.MaintenanceAssetID,
 		&row.Quantities,
 		&row.CreatedAt,
 		&row.UpdatedAt,
@@ -111,16 +113,51 @@ func decodeCalculatorMappingRow(row calculatorMappingRow) (calculatorMappingReco
 	}
 
 	return calculatorMappingRecord{
-		ID:         row.ID,
-		TenantID:   row.TenantID,
-		Market:     row.Market,
-		Asset:      row.Asset,
-		Label:      row.Label,
-		State:      row.State,
-		Quantities: normalizeQuantityBreakdown(quantities),
-		CreatedAt:  row.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:  row.UpdatedAt.UTC().Format(time.RFC3339),
+		ID:                 row.ID,
+		TenantID:           row.TenantID,
+		Market:             row.Market,
+		Asset:              row.Asset,
+		Label:              row.Label,
+		State:              row.State,
+		MaintenanceAssetID: row.MaintenanceAssetID,
+		Quantities:         normalizeQuantityBreakdown(quantities),
+		CreatedAt:          row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:          row.UpdatedAt.UTC().Format(time.RFC3339),
 	}, nil
+}
+
+func resolveMaintenanceAssetID(ctx context.Context, db interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, marketID, mappingID string, maintenanceAssetID *string) (*string, error) {
+	if maintenanceAssetID == nil {
+		return nil, nil
+	}
+
+	trimmed := strings.TrimSpace(*maintenanceAssetID)
+	if trimmed == "" {
+		return nil, nil
+	}
+	if mappingID != "" && trimmed == mappingID {
+		return nil, errors.New("A mapping cannot reference itself as maintenance")
+	}
+
+	var resolved string
+	if err := db.QueryRow(ctx, `
+		SELECT id
+		FROM market_assets
+		WHERE id = $1
+		  AND market_id = $2
+	`, trimmed, marketID).Scan(&resolved); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("Maintenance asset not found in this market")
+		}
+		return nil, err
+	}
+	if mappingID != "" && resolved == mappingID {
+		return nil, errors.New("A mapping cannot reference itself as maintenance")
+	}
+
+	return &resolved, nil
 }
 
 func encodeQuantities(quantities quantityBreakdown) (string, error) {
@@ -231,7 +268,7 @@ func (s *mappingStore) ensureMarket(ctx context.Context, tenantID, marketName st
 
 func (s *mappingStore) getRecordByID(ctx context.Context, tenantID, mappingID string) (*calculatorMappingRecord, error) {
 	row, err := scanCalculatorMappingRow(s.pool.QueryRow(ctx, `
-		SELECT ma.id, m.tenant_id, m.name AS market, ma.asset, ma.label, ma.state, ma.quantities, ma.created_at, ma.updated_at
+		SELECT ma.id, m.tenant_id, m.name AS market, ma.asset, ma.label, ma.state, ma.maintenance_asset_id, ma.quantities, ma.created_at, ma.updated_at
 		FROM market_assets ma
 		JOIN markets m ON m.id = ma.market_id
 		WHERE ma.id = $1 AND m.tenant_id = $2
@@ -255,7 +292,7 @@ func (s *mappingStore) listRecords(ctx context.Context, tenantID string) ([]calc
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT ma.id, m.tenant_id, m.name AS market, ma.asset, ma.label, ma.state, ma.quantities, ma.created_at, ma.updated_at
+		SELECT ma.id, m.tenant_id, m.name AS market, ma.asset, ma.label, ma.state, ma.maintenance_asset_id, ma.quantities, ma.created_at, ma.updated_at
 		FROM market_assets ma
 		JOIN markets m ON m.id = ma.market_id
 		WHERE m.tenant_id = $1
@@ -289,17 +326,26 @@ func (s *mappingStore) listMarketMetadata(ctx context.Context, tenantID string) 
 
 	grouped := make(map[string][]marketAssetOption)
 	order := make([]string, 0)
+	maintenanceAssetIDs := make(map[string]bool)
+	for _, record := range records {
+		if record.MaintenanceAssetID != nil && strings.TrimSpace(*record.MaintenanceAssetID) != "" {
+			maintenanceAssetIDs[*record.MaintenanceAssetID] = true
+		}
+	}
 	for _, record := range records {
 		if _, exists := grouped[record.Market]; !exists {
 			order = append(order, record.Market)
 		}
+		isMaintenance := maintenanceAssetIDs[record.ID] || strings.Contains(strings.ToLower(record.Asset), "(maintenance)")
 		grouped[record.Market] = append(grouped[record.Market], marketAssetOption{
-			ID:         record.ID,
-			Market:     record.Market,
-			Asset:      record.Asset,
-			Label:      record.Label,
-			State:      record.State,
-			Quantities: normalizeQuantityBreakdown(record.Quantities),
+			ID:                 record.ID,
+			Market:             record.Market,
+			Asset:              record.Asset,
+			Label:              record.Label,
+			State:              record.State,
+			MaintenanceAssetID: record.MaintenanceAssetID,
+			IsMaintenance:      isMaintenance,
+			Quantities:         normalizeQuantityBreakdown(record.Quantities),
 		})
 	}
 
@@ -344,6 +390,10 @@ func (s *mappingStore) createMapping(ctx context.Context, tenantID string, paylo
 	if err != nil {
 		return nil, err
 	}
+	maintenanceAssetID, err := resolveMaintenanceAssetID(ctx, s.pool, marketID, "", payload.MaintenanceAssetID)
+	if err != nil {
+		return nil, err
+	}
 
 	quantitiesJSON, err := encodeQuantities(payload.Quantities)
 	if err != nil {
@@ -352,9 +402,9 @@ func (s *mappingStore) createMapping(ctx context.Context, tenantID string, paylo
 
 	mappingID := uuid.NewString()
 	_, err = s.pool.Exec(ctx, `
-		INSERT INTO market_assets (id, market_id, asset, label, state, quantities, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW(), NOW())
-	`, mappingID, marketID, asset, label, strings.TrimSpace(payload.State), quantitiesJSON)
+		INSERT INTO market_assets (id, market_id, asset, label, state, maintenance_asset_id, quantities, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
+	`, mappingID, marketID, asset, label, strings.TrimSpace(payload.State), maintenanceAssetID, quantitiesJSON)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return nil, errors.New("A mapping for this market and asset already exists")
@@ -391,6 +441,10 @@ func (s *mappingStore) updateMapping(ctx context.Context, tenantID, mappingID st
 	if err != nil {
 		return nil, err
 	}
+	maintenanceAssetID, err := resolveMaintenanceAssetID(ctx, s.pool, marketID, mappingID, payload.MaintenanceAssetID)
+	if err != nil {
+		return nil, err
+	}
 
 	quantitiesJSON, err := encodeQuantities(payload.Quantities)
 	if err != nil {
@@ -403,13 +457,14 @@ func (s *mappingStore) updateMapping(ctx context.Context, tenantID, mappingID st
 			asset = $4,
 			label = $5,
 			state = $6,
-			quantities = $7::jsonb,
+			maintenance_asset_id = $7,
+			quantities = $8::jsonb,
 			updated_at = NOW()
 		FROM markets current_market
 		WHERE ma.id = $1
 		  AND ma.market_id = current_market.id
 		  AND current_market.tenant_id = $2
-	`, mappingID, tenantID, marketID, asset, label, strings.TrimSpace(payload.State), quantitiesJSON)
+	`, mappingID, tenantID, marketID, asset, label, strings.TrimSpace(payload.State), maintenanceAssetID, quantitiesJSON)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return nil, errors.New("A mapping for this market and asset already exists")
@@ -467,13 +522,14 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 	}
 
 	type normalizedImportRow struct {
-		id         string
-		marketID   string
-		market     string
-		asset      string
-		label      string
-		state      string
-		quantities string
+		id                  string
+		marketID            string
+		market              string
+		asset               string
+		label               string
+		state               string
+		maintenanceSourceID string
+		quantities          string
 	}
 
 	uniqueRows := make(map[string]normalizedImportRow)
@@ -532,27 +588,52 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 			if _, exists := uniqueRows[key]; !exists {
 				order = append(order, key)
 			}
+			maintenanceSourceID := ""
+			if asset.MaintenanceAssetID != nil {
+				maintenanceSourceID = strings.TrimSpace(*asset.MaintenanceAssetID)
+			}
+
 			uniqueRows[key] = normalizedImportRow{
-				id:         normalizeMappingID(asset.ID),
-				marketID:   marketID,
-				market:     marketName,
-				asset:      assetName,
-				label:      label,
-				state:      strings.TrimSpace(asset.State),
-				quantities: quantitiesJSON,
+				id:                  normalizeMappingID(asset.ID),
+				marketID:            marketID,
+				market:              marketName,
+				asset:               assetName,
+				label:               label,
+				state:               strings.TrimSpace(asset.State),
+				maintenanceSourceID: maintenanceSourceID,
+				quantities:          quantitiesJSON,
 			}
 		}
 	}
 
+	rowsByID := make(map[string]normalizedImportRow, len(order))
 	for _, key := range order {
 		row := uniqueRows[key]
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO market_assets (id, market_id, asset, label, state, quantities, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW(), NOW())
+			INSERT INTO market_assets (id, market_id, asset, label, state, maintenance_asset_id, quantities, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, NULL, $6::jsonb, NOW(), NOW())
 		`, row.id, row.marketID, row.asset, row.label, row.state, row.quantities); err != nil {
 			return 0, err
 		}
+		rowsByID[row.id] = row
 		count++
+	}
+	for _, key := range order {
+		row := uniqueRows[key]
+		if row.maintenanceSourceID == "" || row.maintenanceSourceID == row.id {
+			continue
+		}
+		targetRow, exists := rowsByID[row.maintenanceSourceID]
+		if !exists || targetRow.marketID != row.marketID {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE market_assets
+			SET maintenance_asset_id = $2, updated_at = NOW()
+			WHERE id = $1
+		`, row.id, targetRow.id); err != nil {
+			return 0, err
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {

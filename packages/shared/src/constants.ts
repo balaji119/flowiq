@@ -4,22 +4,27 @@ function getTodayDateInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function createCampaignAsset(id: string): CampaignAsset {
+function createAllWeeks(weekCount: number) {
+  const safeWeekCount = Math.max(1, Math.floor(weekCount || 1));
+  return Array.from({ length: safeWeekCount }, (_, index) => index + 1);
+}
+
+export function createCampaignAsset(id: string, weekCount = 1): CampaignAsset {
   return {
     id,
     assetId: '',
     assetSearch: '',
-    selectedWeeks: [1],
+    selectedWeeks: createAllWeeks(weekCount),
     creativeImageId: '',
     deliveryAddress: '',
   };
 }
 
-export function createCampaignMarket(id: string): CampaignMarket {
+export function createCampaignMarket(id: string, weekCount = 1): CampaignMarket {
   return {
     id,
     market: 'Sydney',
-    assets: [createCampaignAsset(`asset-${id}-1`)],
+    assets: [createCampaignAsset(`asset-${id}-1`, weekCount)],
   };
 }
 
@@ -48,7 +53,7 @@ export function createDefaultFormValues(): OrderFormValues {
     dueDate: '',
     numberOfWeeks: '3',
     printImages: [],
-    campaignMarkets: [createCampaignMarket('market-1')],
+    campaignMarkets: [createCampaignMarket('market-1', 3)],
     contact: {
       title: 'Accounts Payable',
       firstName: 'Accounts',

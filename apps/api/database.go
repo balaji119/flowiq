@@ -209,3 +209,28 @@ func seedTenantUser(ctx context.Context, tx pgx.Tx, tenantID, role, emailEnvKey,
 	`, uuid.NewString(), tenantID, email, envOrDefault(nameEnvKey, fallbackName), role, salt, hash)
 	return err
 }
+
+func backfillMaintenanceRelations(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+	commandTag, err := pool.Exec(ctx, `
+		WITH maintenance_matches AS (
+			SELECT
+				primary_asset.id AS primary_id,
+				maintenance_asset.id AS maintenance_id
+			FROM market_assets primary_asset
+			JOIN market_assets maintenance_asset
+			  ON maintenance_asset.market_id = primary_asset.market_id
+			 AND lower(maintenance_asset.asset) = lower(primary_asset.asset || ' (maintenance)')
+			WHERE primary_asset.maintenance_asset_id IS NULL
+			  AND lower(primary_asset.asset) NOT LIKE '%(maintenance)%'
+		)
+		UPDATE market_assets target
+		SET maintenance_asset_id = maintenance_matches.maintenance_id,
+			updated_at = NOW()
+		FROM maintenance_matches
+		WHERE target.id = maintenance_matches.primary_id
+	`)
+	if err != nil {
+		return 0, err
+	}
+	return commandTag.RowsAffected(), nil
+}
