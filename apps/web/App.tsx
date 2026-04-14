@@ -7,11 +7,12 @@ import { AdminScreen } from './src/screens/AdminScreen';
 import { CampaignLandingScreen } from './src/screens/CampaignLandingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { MappingAdminScreen } from './src/screens/MappingAdminScreen';
+import { PrintingCostSettingsScreen } from './src/screens/PrintingCostSettingsScreen';
 import { QuoteBuilderScreen } from './src/screens/QuoteBuilderScreen';
 import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
 import { UserManagementScreen } from './src/screens/UserManagementScreen';
 
-type AppView = 'landing' | 'quote' | 'admin' | 'users' | 'mappings' | 'shipping';
+type AppView = 'landing' | 'quote' | 'admin' | 'users' | 'mappings' | 'shipping' | 'printing-costs';
 
 type AppNavState = {
   view: AppView;
@@ -31,7 +32,7 @@ function buildUrlFromState(state: AppNavState) {
 }
 
 function parseView(raw: string | null): AppView {
-  if (raw === 'landing' || raw === 'quote' || raw === 'admin' || raw === 'users' || raw === 'mappings' || raw === 'shipping') {
+  if (raw === 'landing' || raw === 'quote' || raw === 'admin' || raw === 'users' || raw === 'mappings' || raw === 'shipping' || raw === 'printing-costs') {
     return raw;
   }
   return 'landing';
@@ -143,6 +144,14 @@ function AppShell() {
             startFreshCampaign,
           });
         }}
+        onOpenPrintingCosts={(tenantId) => {
+          navigate({
+            view: 'printing-costs',
+            selectedAdminTenantId: tenantId,
+            selectedCampaignId,
+            startFreshCampaign,
+          });
+        }}
       />
     );
   }
@@ -182,6 +191,22 @@ function AppShell() {
   if (view === 'shipping') {
     return (
       <ShippingSettingsScreen
+        onBack={() =>
+          navigate({
+            view: 'admin',
+            selectedAdminTenantId,
+            selectedCampaignId,
+            startFreshCampaign,
+          })
+        }
+        tenantId={selectedAdminTenantId}
+      />
+    );
+  }
+
+  if (view === 'printing-costs') {
+    return (
+      <PrintingCostSettingsScreen
         onBack={() =>
           navigate({
             view: 'admin',

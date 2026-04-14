@@ -208,6 +208,25 @@ type marketShippingRateRecord struct {
 	UpdatedAt     string  `json:"updatedAt"`
 }
 
+type printingCostBreakdown map[string]float64
+
+type marketAssetPrintingCostInput struct {
+	Market  string                `json:"market"`
+	AssetID string                `json:"assetId"`
+	Costs   printingCostBreakdown `json:"costs"`
+}
+
+type marketAssetPrintingCostRecord struct {
+	TenantID   string                `json:"tenantId"`
+	Market     string                `json:"market"`
+	AssetID    string                `json:"assetId"`
+	Asset      string                `json:"asset"`
+	Label      string                `json:"label"`
+	Costs      printingCostBreakdown `json:"costs"`
+	CreatedAt  string                `json:"createdAt"`
+	UpdatedAt  string                `json:"updatedAt"`
+}
+
 type campaignLine struct {
 	ID            string `json:"id"`
 	AssetID       string `json:"assetId"`

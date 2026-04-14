@@ -55,6 +55,36 @@ func parseWeeks(value string) int {
 	return weeks
 }
 
+func validateDateIsTodayOrFuture(rawValue, fieldLabel string) error {
+	trimmed := strings.TrimSpace(rawValue)
+	if trimmed == "" {
+		return nil
+	}
+
+	location := time.Now().Location()
+	parsed, err := time.ParseInLocation("2006-01-02", trimmed, location)
+	if err != nil {
+		return fmt.Errorf("%s must be a valid date (YYYY-MM-DD)", fieldLabel)
+	}
+
+	now := time.Now().In(location)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+	if parsed.Before(today) {
+		return fmt.Errorf("%s cannot be in the past", fieldLabel)
+	}
+	return nil
+}
+
+func validateCampaignDates(values orderFormValues) error {
+	if err := validateDateIsTodayOrFuture(values.CampaignStartDate, "Campaign start date"); err != nil {
+		return err
+	}
+	if err := validateDateIsTodayOrFuture(values.DueDate, "Delivery Due Date"); err != nil {
+		return err
+	}
+	return nil
+}
+
 func cloneOrderFormValues(values orderFormValues) orderFormValues {
 	cloned := values
 	cloned.CampaignMarkets = append([]campaignMarket(nil), values.CampaignMarkets...)
@@ -210,6 +240,9 @@ func (s *campaignStore) createCampaign(ctx context.Context, user AuthUser, value
 	if user.TenantID == nil {
 		return nil, errors.New("current user is not assigned to a tenant")
 	}
+	if err := validateCampaignDates(values); err != nil {
+		return nil, err
+	}
 
 	formData, err := marshalJSON(values)
 	if err != nil {
@@ -330,6 +363,9 @@ func (s *campaignStore) getCampaign(ctx context.Context, user AuthUser, campaign
 func (s *campaignStore) updateCampaign(ctx context.Context, user AuthUser, campaignID string, values orderFormValues) (*campaignRecord, error) {
 	if user.TenantID == nil {
 		return nil, errors.New("current user is not assigned to a tenant")
+	}
+	if err := validateCampaignDates(values); err != nil {
+		return nil, err
 	}
 	formData, err := marshalJSON(values)
 	if err != nil {

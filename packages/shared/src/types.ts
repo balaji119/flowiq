@@ -149,6 +149,22 @@ export type MarketShippingRateRecord = MarketShippingRateInput & {
   updatedAt: string;
 };
 
+export type PrintingCostBreakdown = Record<FormatKey, number>;
+
+export type MarketAssetPrintingCostInput = {
+  market: string;
+  assetId: string;
+  costs: PrintingCostBreakdown;
+};
+
+export type MarketAssetPrintingCostRecord = MarketAssetPrintingCostInput & {
+  tenantId: string;
+  asset: string;
+  label: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CampaignLineResult = {
   id: string;
   market: string;

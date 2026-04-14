@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Building2, Database, LoaderCircle, Plus, Truck, Users } from 'lucide-react';
+import { ArrowLeft, Building2, Database, LoaderCircle, Plus, Shield, Truck, Users } from 'lucide-react';
 import { TenantRecord } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
@@ -10,9 +10,10 @@ type AdminScreenProps = {
   onOpenUsers?: (tenantId: string) => void;
   onOpenMappings?: (tenantId: string) => void;
   onOpenShippingSettings?: (tenantId: string) => void;
+  onOpenPrintingCosts?: (tenantId: string) => void;
 };
 
-export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippingSettings }: AdminScreenProps) {
+export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippingSettings, onOpenPrintingCosts }: AdminScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
@@ -95,6 +96,11 @@ export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippin
   function openShippingSettings() {
     if (!effectiveTenantId || !onOpenShippingSettings) return;
     onOpenShippingSettings(effectiveTenantId);
+  }
+
+  function openPrintingCosts() {
+    if (!effectiveTenantId || !onOpenPrintingCosts) return;
+    onOpenPrintingCosts(effectiveTenantId);
   }
 
   if (loading) {
@@ -238,6 +244,25 @@ export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippin
               </div>
             </div>
           </button>
+
+          {canManageTenants ? (
+            <button
+              className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-left transition hover:border-violet-400/60 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!effectiveTenantId}
+              onClick={openPrintingCosts}
+              type="button"
+            >
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl border border-violet-400/40 bg-violet-500/10 p-2 text-violet-200">
+                  <Shield className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">Manage Printing Costs</p>
+                  <p className="mt-1 text-xs text-slate-400">Set per-category cost for every asset in each market.</p>
+                </div>
+              </div>
+            </button>
+          ) : null}
         </CardContent>
       </Card>
 

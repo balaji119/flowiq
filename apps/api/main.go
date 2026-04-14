@@ -233,6 +233,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/market-delivery-addresses", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketDeliveryAddresses)))
 	mux.Handle("PUT /api/market-delivery-addresses", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertCampaignMarketDeliveryAddress), "super_admin", "admin")))
 	mux.Handle("GET /api/market-shipping-rates", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketShippingRates)))
+	mux.Handle("GET /api/market-asset-printing-costs", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketAssetPrintingCosts)))
 	mux.Handle("GET /api/calculator/metadata", a.withAuth(http.HandlerFunc(a.handleCalculatorMetadata)))
 	mux.Handle("POST /api/calculator/calculate", a.withAuth(http.HandlerFunc(a.handleCalculateCampaign)))
 	mux.Handle("GET /api/printiq/options/quote-form", a.withAuth(http.HandlerFunc(a.handleQuoteFormOptions)))
@@ -260,6 +261,8 @@ func (a *app) routes() http.Handler {
 	mux.Handle("DELETE /api/admin/market-delivery-addresses", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleDeleteMarketDeliveryAddress), "super_admin", "admin")))
 	mux.Handle("GET /api/admin/market-shipping-rates", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListMarketShippingRates), "super_admin")))
 	mux.Handle("PUT /api/admin/market-shipping-rates", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMarketShippingRate), "super_admin")))
+	mux.Handle("GET /api/admin/market-asset-printing-costs", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListMarketAssetPrintingCosts), "super_admin")))
+	mux.Handle("PUT /api/admin/market-asset-printing-costs", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMarketAssetPrintingCosts), "super_admin")))
 	mux.Handle("GET /api/admin/printiq-options/status", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleOptionsStatus), "super_admin")))
 	mux.Handle("POST /api/admin/printiq-options/refresh", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleRefreshOptions), "super_admin")))
 
@@ -884,6 +887,21 @@ func (a *app) handleListCampaignMarketShippingRates(w http.ResponseWriter, r *ht
 	writeJSON(w, http.StatusOK, map[string]any{"rates": records})
 }
 
+func (a *app) handleListCampaignMarketAssetPrintingCosts(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	if user == nil || user.TenantID == nil || strings.TrimSpace(*user.TenantID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenantId is required"})
+		return
+	}
+
+	records, err := a.mappingStore.listMarketAssetPrintingCosts(r.Context(), *user.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"costs": records})
+}
+
 var unsafeFilenamePattern = regexp.MustCompile(`[^a-zA-Z0-9-_]`)
 
 func (a *app) handlePurchaseOrderUpload(w http.ResponseWriter, r *http.Request) {
@@ -1438,4 +1456,42 @@ func (a *app) handleUpsertMarketShippingRate(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rate": record})
+}
+
+func (a *app) handleListMarketAssetPrintingCosts(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	records, err := a.mappingStore.listMarketAssetPrintingCosts(r.Context(), *tenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"costs": records})
+}
+
+func (a *app) handleUpsertMarketAssetPrintingCosts(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var payload struct {
+		Costs []marketAssetPrintingCostInput `json:"costs"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	records, err := a.mappingStore.upsertMarketAssetPrintingCosts(r.Context(), *tenantID, payload.Costs)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"costs": records})
 }

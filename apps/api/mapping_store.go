@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -49,6 +50,17 @@ type marketShippingRateRow struct {
 	UpdatedAt     time.Time
 }
 
+type marketAssetPrintingCostRow struct {
+	TenantID  string
+	Market    string
+	AssetID   string
+	Asset     string
+	Label     string
+	Costs     []byte
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 func newMappingStore(pool *pgxpool.Pool) *mappingStore {
 	return &mappingStore{pool: pool}
 }
@@ -59,6 +71,26 @@ func normalizeQuantityBreakdown(input quantityBreakdown) quantityBreakdown {
 		normalized[key] = input[key]
 	}
 	return normalized
+}
+
+func createEmptyPrintingCostBreakdown() printingCostBreakdown {
+	breakdown := printingCostBreakdown{}
+	for _, key := range formatKeys {
+		breakdown[key] = 0
+	}
+	return breakdown
+}
+
+func normalizePrintingCostBreakdown(input printingCostBreakdown) (printingCostBreakdown, error) {
+	normalized := createEmptyPrintingCostBreakdown()
+	for _, key := range formatKeys {
+		value := input[key]
+		if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+			return nil, fmt.Errorf("cost for %s must be greater than or equal to 0", key)
+		}
+		normalized[key] = value
+	}
+	return normalized, nil
 }
 
 func sanitizeMappingText(value, field string) (string, error) {
@@ -220,6 +252,23 @@ func scanMarketShippingRateRow(scanner interface {
 	return row, err
 }
 
+func scanMarketAssetPrintingCostRow(scanner interface {
+	Scan(dest ...any) error
+}) (marketAssetPrintingCostRow, error) {
+	var row marketAssetPrintingCostRow
+	err := scanner.Scan(
+		&row.TenantID,
+		&row.Market,
+		&row.AssetID,
+		&row.Asset,
+		&row.Label,
+		&row.Costs,
+		&row.CreatedAt,
+		&row.UpdatedAt,
+	)
+	return row, err
+}
+
 func decodeMarketShippingRateRow(row marketShippingRateRow) marketShippingRateRecord {
 	return marketShippingRateRecord{
 		TenantID:      row.TenantID,
@@ -229,6 +278,31 @@ func decodeMarketShippingRateRow(row marketShippingRateRow) marketShippingRateRe
 		CreatedAt:     row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:     row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+func decodeMarketAssetPrintingCostRow(row marketAssetPrintingCostRow) (marketAssetPrintingCostRecord, error) {
+	costs := createEmptyPrintingCostBreakdown()
+	if len(row.Costs) > 0 {
+		if err := json.Unmarshal(row.Costs, &costs); err != nil {
+			return marketAssetPrintingCostRecord{}, err
+		}
+	}
+
+	normalizedCosts, err := normalizePrintingCostBreakdown(costs)
+	if err != nil {
+		return marketAssetPrintingCostRecord{}, err
+	}
+
+	return marketAssetPrintingCostRecord{
+		TenantID:  row.TenantID,
+		Market:    row.Market,
+		AssetID:   row.AssetID,
+		Asset:     row.Asset,
+		Label:     row.Label,
+		Costs:     normalizedCosts,
+		CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339),
+	}, nil
 }
 
 func (s *mappingStore) ensureMarket(ctx context.Context, tenantID, marketName string) (string, error) {
@@ -822,4 +896,131 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 
 	record := decodeMarketShippingRateRow(row)
 	return &record, nil
+}
+
+func (s *mappingStore) listMarketAssetPrintingCosts(ctx context.Context, tenantID string) ([]marketAssetPrintingCostRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			mapc.tenant_id,
+			m.name,
+			mapc.asset_id::text,
+			ma.asset,
+			ma.label,
+			mapc.costs,
+			mapc.created_at,
+			mapc.updated_at
+		FROM market_asset_printing_costs mapc
+		JOIN markets m ON m.id = mapc.market_id
+		JOIN market_assets ma ON ma.id = mapc.asset_id
+		WHERE mapc.tenant_id = $1
+		ORDER BY m.name ASC, ma.label ASC, ma.asset ASC
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]marketAssetPrintingCostRecord, 0)
+	for rows.Next() {
+		row, err := scanMarketAssetPrintingCostRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		record, err := decodeMarketAssetPrintingCostRow(row)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+func encodePrintingCosts(costs printingCostBreakdown) (string, error) {
+	normalized, err := normalizePrintingCostBreakdown(costs)
+	if err != nil {
+		return "", err
+	}
+	bytes, err := json.Marshal(normalized)
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), nil
+}
+
+func (s *mappingStore) upsertMarketAssetPrintingCosts(ctx context.Context, tenantID string, payload []marketAssetPrintingCostInput) ([]marketAssetPrintingCostRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+	if len(payload) == 0 {
+		return []marketAssetPrintingCostRecord{}, nil
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	records := make([]marketAssetPrintingCostRecord, 0, len(payload))
+	for _, item := range payload {
+		market, err := sanitizeMappingText(item.Market, "market")
+		if err != nil {
+			return nil, err
+		}
+
+		assetID := strings.TrimSpace(item.AssetID)
+		if assetID == "" {
+			return nil, errors.New("assetId is required")
+		}
+
+		costsJSON, err := encodePrintingCosts(item.Costs)
+		if err != nil {
+			return nil, err
+		}
+
+		var marketID string
+		var asset string
+		var label string
+		if err := tx.QueryRow(ctx, `
+			SELECT m.id, ma.asset, ma.label
+			FROM markets m
+			JOIN market_assets ma ON ma.market_id = m.id
+			WHERE m.tenant_id = $1
+			  AND m.name = $2
+			  AND ma.id = $3
+			LIMIT 1
+		`, tenantID, market, assetID).Scan(&marketID, &asset, &label); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, errors.New("Asset not found in the selected tenant market")
+			}
+			return nil, err
+		}
+
+		row, err := scanMarketAssetPrintingCostRow(tx.QueryRow(ctx, `
+			INSERT INTO market_asset_printing_costs (tenant_id, market_id, asset_id, costs, created_at, updated_at)
+			VALUES ($1, $2, $3, $4::jsonb, NOW(), NOW())
+			ON CONFLICT (tenant_id, asset_id)
+			DO UPDATE SET market_id = EXCLUDED.market_id, costs = EXCLUDED.costs, updated_at = NOW()
+			RETURNING tenant_id, $5::text, asset_id::text, $6::text, $7::text, costs, created_at, updated_at
+		`, tenantID, marketID, assetID, costsJSON, market, asset, label))
+		if err != nil {
+			return nil, err
+		}
+
+		record, err := decodeMarketAssetPrintingCostRow(row)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return records, nil
 }

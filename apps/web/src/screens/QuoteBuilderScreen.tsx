@@ -7,6 +7,7 @@ import {
   CampaignCalculationSummary,
   CampaignLine,
   CampaignMarket,
+  MarketAssetPrintingCostRecord,
   CampaignTotals,
   MarketMetadata,
   MarketDeliveryAddressRecord,
@@ -25,7 +26,7 @@ import { buildApiUrl } from '../services/apiBase';
 import { createCampaign, fetchCampaign, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
-import { fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
+import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 
@@ -120,6 +121,24 @@ function parseDateOnly(value: string) {
   const parsed = new Date(year, month - 1, day);
   if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return null;
   return parsed;
+}
+
+function getTodayDateInputValue() {
+  const now = new Date();
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function isDateBeforeToday(value: string) {
+  const parsed = parseDateOnly(value);
+  if (!parsed) return false;
+  parsed.setHours(0, 0, 0, 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return parsed < today;
 }
 
 function formatWeekLabel(week: number, startDate: string) {
@@ -499,6 +518,7 @@ export function QuoteBuilderScreen({
   const [markets, setMarkets] = useState<MarketMetadata[]>([]);
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<MarketDeliveryAddressRecord[]>([]);
   const [marketShippingRates, setMarketShippingRates] = useState<MarketShippingRateRecord[]>([]);
+  const [marketAssetPrintingCosts, setMarketAssetPrintingCosts] = useState<MarketAssetPrintingCostRecord[]>([]);
   const [metadataError, setMetadataError] = useState('');
   const [loadingMetadata, setLoadingMetadata] = useState(true);
   const [loadingCampaign, setLoadingCampaign] = useState(true);
@@ -625,6 +645,24 @@ export function QuoteBuilderScreen({
   }, []);
 
   useEffect(() => {
+    let active = true;
+    async function loadMarketAssetPrintingCosts() {
+      try {
+        const response = await fetchCampaignMarketAssetPrintingCosts();
+        if (!active) return;
+        setMarketAssetPrintingCosts(response.costs);
+      } catch {
+        if (!active) return;
+        setMarketAssetPrintingCosts([]);
+      }
+    }
+    void loadMarketAssetPrintingCosts();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (loadingCampaign) return;
 
     let active = true;
@@ -701,6 +739,19 @@ export function QuoteBuilderScreen({
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.shippingRate])),
     [marketShippingRates],
   );
+  const printingCostByMarketAsset = useMemo(
+    () => new Map(marketAssetPrintingCosts.map((entry) => [`${entry.market}\x00${entry.assetId}`, entry.costs])),
+    [marketAssetPrintingCosts],
+  );
+  const selectedAssetByLineId = useMemo(() => {
+    const byLineId = new Map<string, { market: string; assetId: string }>();
+    values.campaignMarkets.forEach((market) => {
+      market.assets.forEach((asset) => {
+        byLineId.set(asset.id, { market: market.market, assetId: asset.assetId });
+      });
+    });
+    return byLineId;
+  }, [values.campaignMarkets]);
   const postersPerBoxByMarket = useMemo(
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.postersPerBox])),
     [marketShippingRates],
@@ -723,7 +774,12 @@ export function QuoteBuilderScreen({
   const hasUploadedPurchaseOrder = uploadedPurchaseOrderName.trim().length > 0;
   const hasCampaignStartDate = values.campaignStartDate.trim().length > 0;
   const hasDeliveryDueDate = values.dueDate.trim().length > 0;
-  const canAdvanceFromCreative = hasCampaignStartDate && hasDeliveryDueDate;
+  const isCampaignStartDatePast = hasCampaignStartDate && isDateBeforeToday(values.campaignStartDate);
+  const isDeliveryDueDatePast = hasDeliveryDueDate && isDateBeforeToday(values.dueDate);
+  const hasValidCampaignStartDate = hasCampaignStartDate && !isCampaignStartDatePast;
+  const hasValidDeliveryDueDate = hasDeliveryDueDate && !isDeliveryDueDatePast;
+  const canAdvanceFromCreative = hasValidCampaignStartDate && hasValidDeliveryDueDate;
+  const minSelectableDate = getTodayDateInputValue();
 
   useEffect(() => {
     if (loadingCampaign) return;
@@ -807,9 +863,15 @@ export function QuoteBuilderScreen({
   }
 
   function validateCreativeStepRequirements() {
-    if (canAdvanceFromCreative) return true;
-    setError('Please select both Campaign start date and Delivery Due Date to continue.');
-    return false;
+    if (!hasCampaignStartDate || !hasDeliveryDueDate) {
+      setError('Please select both Campaign start date and Delivery Due Date to continue.');
+      return false;
+    }
+    if (isCampaignStartDatePast || isDeliveryDueDatePast) {
+      setError('Campaign start date and Delivery Due Date must be today or a future date.');
+      return false;
+    }
+    return true;
   }
 
   function navigateToStep(nextStepIndex: number) {
@@ -1180,6 +1242,19 @@ export function QuoteBuilderScreen({
       const units = totalUnitsForBreakdown(line.breakdown);
       return total + calculateShippingCost(units, perBoxPrice, postersPerBox);
     }, 0);
+  }
+
+  function calculateLinePrintingCost(line: CampaignCalculationSummary['lines'][number]) {
+    const selectedAsset = selectedAssetByLineId.get(line.id);
+    if (!selectedAsset) return 0;
+    const costs = printingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`);
+    if (!costs) return 0;
+    return formatKeys.reduce((total, key) => total + (line.breakdown[key] ?? 0) * (costs[key] ?? 0), 0);
+  }
+
+  function calculateMarketPrintingCost(marketName: string) {
+    const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
+    return marketLines.reduce((total, line) => total + calculateLinePrintingCost(line), 0);
   }
 
   async function reviewTotals() {
@@ -1602,6 +1677,7 @@ export function QuoteBuilderScreen({
                     <Input
                       className="pr-1 [&::-webkit-calendar-picker-indicator]:-mr-0.5 [&::-webkit-calendar-picker-indicator]:ml-auto"
                       id="campaign-start"
+                      min={minSelectableDate}
                       type="date"
                       value={values.campaignStartDate}
                       onChange={(event) => updateField('campaignStartDate', event.target.value)}
@@ -1612,6 +1688,7 @@ export function QuoteBuilderScreen({
                     <Input
                       className="pr-1 [&::-webkit-calendar-picker-indicator]:-mr-0.5 [&::-webkit-calendar-picker-indicator]:ml-auto"
                       id="due-date"
+                      min={minSelectableDate}
                       type="date"
                       value={values.dueDate}
                       onChange={(event) => updateField('dueDate', event.target.value)}
@@ -1656,7 +1733,11 @@ export function QuoteBuilderScreen({
                   </div>
                 </div>
                 {!canAdvanceFromCreative ? (
-                  <p className="text-sm font-medium text-amber-200">Campaign start date and Delivery Due Date are required before continuing.</p>
+                  <p className="text-sm font-medium text-amber-200">
+                    {(!hasCampaignStartDate || !hasDeliveryDueDate)
+                      ? 'Campaign start date and Delivery Due Date are required before continuing.'
+                      : 'Campaign start date and Delivery Due Date must be today or a future date.'}
+                  </p>
                 ) : null}
 
                 <div className="space-y-4 rounded-[24px] border border-slate-700 bg-slate-900/50 p-4 sm:p-5">
@@ -1976,15 +2057,17 @@ export function QuoteBuilderScreen({
                               <th key={`review-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatKeyLabel(key)}</th>
                             ))}
                             <th className="border border-slate-700 px-4 py-3 text-center">Total</th>
+                            <th className="border border-slate-700 px-4 py-3 text-center">Printing Cost</th>
                             <th className="border border-slate-700 px-4 py-3 text-center">Shipping Cost</th>
                           </tr>
                         </thead>
                         <tbody>
                           {visibleReviewMarkets.map((marketSummary) => {
+                            const marketPrintingCost = calculateMarketPrintingCost(marketSummary.market);
                             const marketShippingCost = calculateMarketShippingCost(marketSummary.market);
                             const rows = buildReviewRows(marketSummary).map((row) =>
                               row.label === 'Posters'
-                                ? { ...row, shippingCost: marketShippingCost }
+                                ? { ...row, printingCost: marketPrintingCost, shippingCost: marketShippingCost }
                                 : row,
                             );
                             return rows.map((row, rowIndex) => (
@@ -2002,6 +2085,9 @@ export function QuoteBuilderScreen({
                                 ))}
                                 <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">{row.total}</td>
                                 <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">
+                                  {'printingCost' in row ? row.printingCost.toFixed(2) : '—'}
+                                </td>
+                                <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">
                                   {row.shippingCost === null ? '—' : row.shippingCost.toFixed(2)}
                                 </td>
                               </tr>
@@ -2009,9 +2095,10 @@ export function QuoteBuilderScreen({
                           })}
 
                           {(() => {
+                            const grandPosterPrintingCost = visibleReviewMarkets.reduce((total, marketSummary) => total + calculateMarketPrintingCost(marketSummary.market), 0);
                             const grandPosterShippingCost = visibleReviewMarkets.reduce((total, marketSummary) => total + calculateMarketShippingCost(marketSummary.market), 0);
                             const grandRows = buildReviewRows(summary.grandTotal).map((row) =>
-                              row.label === 'Posters' ? { ...row, shippingCost: grandPosterShippingCost } : row,
+                              row.label === 'Posters' ? { ...row, printingCost: grandPosterPrintingCost, shippingCost: grandPosterShippingCost } : row,
                             );
 
                             return grandRows.map((row, rowIndex, allRows) => (
@@ -2028,6 +2115,9 @@ export function QuoteBuilderScreen({
                                   </td>
                                 ))}
                                 <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">{row.total}</td>
+                                <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
+                                  {'printingCost' in row ? row.printingCost.toFixed(2) : '—'}
+                                </td>
                                 <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
                                   {row.shippingCost === null ? '—' : row.shippingCost.toFixed(2)}
                                 </td>
