@@ -52,14 +52,13 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(tenantId ?? session?.user.tenantId ?? null);
   const [mappings, setMappings] = useState<CalculatorMappingRecord[]>([]);
   const [costRecords, setCostRecords] = useState<MarketAssetPrintingCostRecord[]>([]);
   const [draftsByAsset, setDraftsByAsset] = useState<Record<string, AssetCostDraft>>({});
   const [marketFilter, setMarketFilter] = useState<string>('');
-  const [dirtyMarkets, setDirtyMarkets] = useState<Record<string, boolean>>({});
+  const [dirtyRows, setDirtyRows] = useState<Record<string, boolean>>({});
 
   const isSuperAdmin = session?.user.role === 'super_admin';
 
@@ -104,7 +103,6 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
       try {
         setLoading(true);
         setError('');
-        setNotice('');
         const [mappingResponse, costResponse] = await Promise.all([
           fetchCalculatorMappings(tenant),
           fetchMarketAssetPrintingCosts(tenant),
@@ -127,7 +125,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
           nextDrafts[costKey(mapping.market, mapping.id)] = toDraft(costByKey.get(costKey(mapping.market, mapping.id)));
         });
         setDraftsByAsset(nextDrafts);
-        setDirtyMarkets({});
+        setDirtyRows({});
       } catch (loadError) {
         if (active) {
           setError(loadError instanceof Error ? loadError.message : 'Unable to load printing cost settings');
@@ -168,6 +166,12 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     () => selectedMarketMappings.filter((mapping) => !maintenanceAssetIds.has(mapping.id)),
     [maintenanceAssetIds, selectedMarketMappings],
   );
+  const dirtyAssetIdsForSelectedMarket = useMemo(() => {
+    const prefix = `${marketFilter}\x00`;
+    return Object.keys(dirtyRows)
+      .filter((rowKey) => dirtyRows[rowKey] && rowKey.startsWith(prefix))
+      .map((rowKey) => rowKey.slice(prefix.length));
+  }, [dirtyRows, marketFilter]);
 
   useEffect(() => {
     if (marketOptions.length === 0) {
@@ -188,22 +192,29 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
         [key]: value,
       },
     }));
-    setDirtyMarkets((current) => ({
+    setDirtyRows((current) => ({
       ...current,
-      [market]: true,
+      [rowKey]: true,
     }));
   }
 
-  async function handleSaveAll(options?: { silent?: boolean }) {
+  async function handleSaveAll() {
     if (!selectedTenantId || !marketFilter) return;
+    if (dirtyAssetIdsForSelectedMarket.length === 0) return;
     setSaving(true);
     setError('');
-    if (!options?.silent) {
-      setNotice('');
-    }
 
     try {
-      const payload = selectedMarketMappings.map((mapping) => {
+      const nextAssetIds = new Set(dirtyAssetIdsForSelectedMarket);
+      selectedMarketMappings.forEach((mapping) => {
+        if (nextAssetIds.has(mapping.id) && mapping.maintenanceAssetId) {
+          nextAssetIds.add(mapping.maintenanceAssetId);
+        }
+      });
+
+      const payload = selectedMarketMappings
+        .filter((mapping) => nextAssetIds.has(mapping.id))
+        .map((mapping) => {
         const sourceMapping = maintenanceAssetIds.has(mapping.id) ? parentByMaintenanceAssetId.get(mapping.id) ?? mapping : mapping;
         const rowKey = costKey(sourceMapping.market, sourceMapping.id);
         const draft = draftsByAsset[rowKey] || createEmptyCostDraft();
@@ -216,11 +227,13 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
 
       const response = await upsertMarketAssetPrintingCosts({ costs: payload }, selectedTenantId);
       setCostRecords(response.costs);
-      setDirtyMarkets((current) => ({
-        ...current,
-        [marketFilter]: false,
-      }));
-      setNotice(`Saved printing costs for ${payload.length} asset${payload.length === 1 ? '' : 's'}.`);
+      setDirtyRows((current) => {
+        const next = { ...current };
+        dirtyAssetIdsForSelectedMarket.forEach((assetId) => {
+          delete next[costKey(marketFilter, assetId)];
+        });
+        return next;
+      });
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save printing costs');
     } finally {
@@ -229,16 +242,16 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
   }
 
   useEffect(() => {
-    if (!selectedTenantId || !marketFilter || loading || visibleMappings.length === 0 || !dirtyMarkets[marketFilter]) return;
+    if (!selectedTenantId || !marketFilter || loading || visibleMappings.length === 0 || dirtyAssetIdsForSelectedMarket.length === 0) return;
 
     const timer = window.setTimeout(() => {
-      void handleSaveAll({ silent: true });
+      void handleSaveAll();
     }, 700);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [dirtyMarkets, draftsByAsset, loading, marketFilter, selectedTenantId, visibleMappings]);
+  }, [dirtyAssetIdsForSelectedMarket, draftsByAsset, loading, marketFilter, selectedTenantId, visibleMappings]);
 
   if (!isSuperAdmin) {
     return (
@@ -267,7 +280,6 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
       </header>
 
       {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
-      {notice ? <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
       <Card>
         <CardHeader className="p-5 pb-0">
