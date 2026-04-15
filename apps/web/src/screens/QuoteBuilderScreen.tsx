@@ -101,8 +101,9 @@ function totalUnitsForBreakdown(breakdown: QuantityBreakdown) {
 }
 
 function calculateShippingCost(units: number, perBoxPrice: number, postersPerBox: number) {
+  if (units <= 0 || perBoxPrice <= 0) return 0;
   const safePostersPerBox = Math.max(1, Math.floor(postersPerBox || 60));
-  const boxCount = Math.max(1, Math.ceil(units / safePostersPerBox));
+  const boxCount = Math.ceil(units / safePostersPerBox);
   return boxCount * perBoxPrice;
 }
 
@@ -780,6 +781,7 @@ export function QuoteBuilderScreen({
   const hasValidDeliveryDueDate = hasDeliveryDueDate && !isDeliveryDueDatePast;
   const canAdvanceFromCreative = hasValidCampaignStartDate && hasValidDeliveryDueDate;
   const minSelectableDate = getTodayDateInputValue();
+  const activeCampaignName = values.campaignName.trim() || (campaignId ? `Untitled Campaign ${campaignId.slice(0, 6)}` : 'Untitled Campaign');
 
   useEffect(() => {
     if (loadingCampaign) return;
@@ -1237,11 +1239,8 @@ export function QuoteBuilderScreen({
   function calculateMarketShippingCost(marketName: string) {
     const perBoxPrice = shippingRateByMarket.get(marketName) ?? 0;
     const postersPerBox = postersPerBoxByMarket.get(marketName) ?? 60;
-    const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
-    return marketLines.reduce((total, line) => {
-      const units = totalUnitsForBreakdown(line.breakdown);
-      return total + calculateShippingCost(units, perBoxPrice, postersPerBox);
-    }, 0);
+    const marketPosterTotal = summary?.perMarket.find((entry) => entry.market === marketName)?.posterTotal ?? 0;
+    return calculateShippingCost(marketPosterTotal, perBoxPrice, postersPerBox);
   }
 
   function calculateLinePrintingCost(line: CampaignCalculationSummary['lines'][number]) {
@@ -1599,6 +1598,9 @@ export function QuoteBuilderScreen({
                 <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">ADS CONNECT</h1>
                 <p className="max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
                   Build campaign schedules, review calculated totals, and create PrintIQ-ready quotes with a cleaner browser-first workflow.
+                </p>
+                <p className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-600 bg-slate-900/70 px-3 py-1.5 text-xs font-semibold tracking-[0.08em] text-slate-200">
+                  Campaign: <span className="text-white">{activeCampaignName}</span>
                 </p>
                 <p className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-500">
                   {loadingCampaign ? 'Loading draft' : savingCampaign ? 'Auto-saving' : hasUnsavedChanges ? 'Unsaved changes' : `All changes saved · ${campaignStatus.replace('_', ' ')}`}
