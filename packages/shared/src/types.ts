@@ -141,10 +141,29 @@ export type MarketShippingRateInput = {
   market: string;
   shippingRate: number;
   postersPerBox: number;
+  megaShippingRate: number;
+  dotMShippingRate: number;
+  mpShippingRate: number;
 };
 
 export type MarketShippingRateRecord = MarketShippingRateInput & {
   tenantId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MarketAssetShippingCostInput = {
+  market: string;
+  assetId: string;
+  megaShippingRate: number;
+  dotMShippingRate: number;
+  mpShippingRate: number;
+};
+
+export type MarketAssetShippingCostRecord = MarketAssetShippingCostInput & {
+  tenantId: string;
+  asset: string;
+  label: string;
   createdAt: string;
   updatedAt: string;
 };

@@ -10,10 +10,11 @@ type AdminScreenProps = {
   onOpenUsers?: (tenantId: string) => void;
   onOpenMappings?: (tenantId: string) => void;
   onOpenShippingSettings?: (tenantId: string) => void;
+  onOpenShippingCosts?: (tenantId: string) => void;
   onOpenPrintingCosts?: (tenantId: string) => void;
 };
 
-export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippingSettings, onOpenPrintingCosts }: AdminScreenProps) {
+export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippingSettings, onOpenShippingCosts, onOpenPrintingCosts }: AdminScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
@@ -101,6 +102,11 @@ export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippin
   function openPrintingCosts() {
     if (!effectiveTenantId || !onOpenPrintingCosts) return;
     onOpenPrintingCosts(effectiveTenantId);
+  }
+
+  function openShippingCosts() {
+    if (!effectiveTenantId || !onOpenShippingCosts) return;
+    onOpenShippingCosts(effectiveTenantId);
   }
 
   if (loading) {
@@ -240,7 +246,24 @@ export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippin
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-white">Manage Shipping Settings</p>
-                <p className="mt-1 text-xs text-slate-400">Maintain market addresses and shipping rates.</p>
+                <p className="mt-1 text-xs text-slate-400">Maintain market delivery addresses.</p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            className="w-full rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-left transition hover:border-violet-400/60 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!effectiveTenantId}
+            onClick={openShippingCosts}
+            type="button"
+          >
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl border border-violet-400/40 bg-violet-500/10 p-2 text-violet-200">
+                <Truck className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">Manage Shipping Costs</p>
+                <p className="mt-1 text-xs text-slate-400">Set per-box poster shipping and separate mega shipping costs.</p>
               </div>
             </div>
           </button>

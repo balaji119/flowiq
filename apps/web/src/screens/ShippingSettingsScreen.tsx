@@ -137,7 +137,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
   const [savingShippingRate, setSavingShippingRate] = useState(false);
 
   const canSwitchTenant = session?.user.role === 'super_admin' && !tenantId;
-  const canEditShippingRate = session?.user.role === 'super_admin';
+  const canEditShippingRate = false;
   const effectiveTenantId = tenantId ?? (canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined);
   const selectedTenant = useMemo(() => tenants.find((tenant) => tenant.id === selectedTenantId) ?? null, [selectedTenantId, tenants]);
   const selectedMarketAddresses = useMemo(
@@ -382,6 +382,9 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
           market: selectedMarketFilter,
           shippingRate: parsedShippingRate,
           postersPerBox: normalizedPostersPerBox,
+          megaShippingRate: selectedMarketShippingRateConfig?.megaShippingRate ?? 0,
+          dotMShippingRate: selectedMarketShippingRateConfig?.dotMShippingRate ?? 0,
+          mpShippingRate: selectedMarketShippingRateConfig?.mpShippingRate ?? 0,
         },
         effectiveTenantId,
       );

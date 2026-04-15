@@ -1,4 +1,4 @@
-import { MarketAssetPrintingCostRecord, MarketDeliveryAddressInput, MarketDeliveryAddressRecord, MarketShippingRateRecord } from '@flowiq/shared';
+import { MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketDeliveryAddressInput, MarketDeliveryAddressRecord, MarketShippingRateRecord } from '@flowiq/shared';
 import { apiFetchJson } from './apiClient';
 
 export async function fetchCampaignMarketDeliveryAddresses() {
@@ -11,6 +11,10 @@ export async function fetchCampaignMarketShippingRates() {
 
 export async function fetchCampaignMarketAssetPrintingCosts() {
   return apiFetchJson<{ costs: MarketAssetPrintingCostRecord[] }>('/api/market-asset-printing-costs');
+}
+
+export async function fetchCampaignMarketAssetShippingCosts() {
+  return apiFetchJson<{ costs: MarketAssetShippingCostRecord[] }>('/api/market-asset-shipping-costs');
 }
 
 export async function upsertCampaignMarketDeliveryAddress(payload: MarketDeliveryAddressInput) {

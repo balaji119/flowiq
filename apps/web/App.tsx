@@ -9,10 +9,11 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import { MappingAdminScreen } from './src/screens/MappingAdminScreen';
 import { PrintingCostSettingsScreen } from './src/screens/PrintingCostSettingsScreen';
 import { QuoteBuilderScreen } from './src/screens/QuoteBuilderScreen';
+import { ShippingCostSettingsScreen } from './src/screens/ShippingCostSettingsScreen';
 import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
 import { UserManagementScreen } from './src/screens/UserManagementScreen';
 
-type AppView = 'landing' | 'quote' | 'admin' | 'users' | 'mappings' | 'shipping' | 'printing-costs';
+type AppView = 'landing' | 'quote' | 'admin' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs';
 
 type AppNavState = {
   view: AppView;
@@ -32,7 +33,7 @@ function buildUrlFromState(state: AppNavState) {
 }
 
 function parseView(raw: string | null): AppView {
-  if (raw === 'landing' || raw === 'quote' || raw === 'admin' || raw === 'users' || raw === 'mappings' || raw === 'shipping' || raw === 'printing-costs') {
+  if (raw === 'landing' || raw === 'quote' || raw === 'admin' || raw === 'users' || raw === 'mappings' || raw === 'shipping' || raw === 'shipping-costs' || raw === 'printing-costs') {
     return raw;
   }
   return 'landing';
@@ -144,6 +145,14 @@ function AppShell() {
             startFreshCampaign,
           });
         }}
+        onOpenShippingCosts={(tenantId) => {
+          navigate({
+            view: 'shipping-costs',
+            selectedAdminTenantId: tenantId,
+            selectedCampaignId,
+            startFreshCampaign,
+          });
+        }}
         onOpenPrintingCosts={(tenantId) => {
           navigate({
             view: 'printing-costs',
@@ -207,6 +216,22 @@ function AppShell() {
   if (view === 'printing-costs') {
     return (
       <PrintingCostSettingsScreen
+        onBack={() =>
+          navigate({
+            view: 'admin',
+            selectedAdminTenantId,
+            selectedCampaignId,
+            startFreshCampaign,
+          })
+        }
+        tenantId={selectedAdminTenantId}
+      />
+    );
+  }
+
+  if (view === 'shipping-costs') {
+    return (
+      <ShippingCostSettingsScreen
         onBack={() =>
           navigate({
             view: 'admin',

@@ -11,6 +11,8 @@ type PrintingCostSettingsScreenProps = {
 };
 
 type AssetCostDraft = Record<FormatKey, string>;
+const posterFormatKeys: FormatKey[] = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0'];
+const megaFormatKeys: FormatKey[] = ['Mega', 'DOT M', 'MP'];
 
 function createEmptyCostDraft(): AssetCostDraft {
   return {
@@ -45,6 +47,12 @@ function toBreakdown(draft: AssetCostDraft): PrintingCostBreakdown {
     next[key] = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   }
   return next;
+}
+
+function posterCostValue(draft: AssetCostDraft): string {
+  const values = posterFormatKeys.map((key) => draft[key]);
+  const firstNonEmpty = values.find((value) => value.trim() !== '');
+  return firstNonEmpty ?? draft['8-sheet'] ?? '0';
 }
 
 export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSettingsScreenProps) {
@@ -166,12 +174,28 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     () => selectedMarketMappings.filter((mapping) => !maintenanceAssetIds.has(mapping.id)),
     [maintenanceAssetIds, selectedMarketMappings],
   );
-  const dirtyAssetIdsForSelectedMarket = useMemo(() => {
-    const prefix = `${marketFilter}\x00`;
-    return Object.keys(dirtyRows)
-      .filter((rowKey) => dirtyRows[rowKey] && rowKey.startsWith(prefix))
-      .map((rowKey) => rowKey.slice(prefix.length));
-  }, [dirtyRows, marketFilter]);
+  const dirtyAssetIdsByMarket = useMemo(() => {
+    const byMarket = new Map<string, Set<string>>();
+    Object.entries(dirtyRows).forEach(([rowKey, isDirty]) => {
+      if (!isDirty) return;
+      const [market, assetId] = rowKey.split('\x00');
+      if (!market || !assetId) return;
+      if (!byMarket.has(market)) {
+        byMarket.set(market, new Set<string>());
+      }
+      byMarket.get(market)?.add(assetId);
+    });
+    return byMarket;
+  }, [dirtyRows]);
+  const globalPosterCost = useMemo(() => {
+    if (mappings.length === 0) return '0';
+    const values = mappings.map((mapping) => {
+      const rowKey = costKey(mapping.market, mapping.id);
+      return posterCostValue(draftsByAsset[rowKey] || createEmptyCostDraft());
+    });
+    const first = values[0] ?? '0';
+    return values.every((value) => value === first) ? first : '';
+  }, [draftsByAsset, mappings]);
 
   useEffect(() => {
     if (marketOptions.length === 0) {
@@ -198,39 +222,96 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     }));
   }
 
-  async function handleSaveAll() {
-    if (!selectedTenantId || !marketFilter) return;
-    if (dirtyAssetIdsForSelectedMarket.length === 0) return;
+  function updatePosterDraft(market: string, assetId: string, value: string) {
+    const rowKey = costKey(market, assetId);
+    setDraftsByAsset((current) => {
+      const currentRow = { ...(current[rowKey] || createEmptyCostDraft()) };
+      posterFormatKeys.forEach((posterKey) => {
+        currentRow[posterKey] = value;
+      });
+      return {
+        ...current,
+        [rowKey]: currentRow,
+      };
+    });
+    setDirtyRows((current) => ({
+      ...current,
+      [rowKey]: true,
+    }));
+  }
+
+  function updateGlobalPosterDraft(value: string) {
+    setDraftsByAsset((current) => {
+      const next = { ...current };
+      mappings.forEach((mapping) => {
+        const rowKey = costKey(mapping.market, mapping.id);
+        const currentRow = { ...(next[rowKey] || createEmptyCostDraft()) };
+        posterFormatKeys.forEach((posterKey) => {
+          currentRow[posterKey] = value;
+        });
+        next[rowKey] = currentRow;
+      });
+      return next;
+    });
+    setDirtyRows((current) => {
+      const next = { ...current };
+      mappings.forEach((mapping) => {
+        next[costKey(mapping.market, mapping.id)] = true;
+      });
+      return next;
+    });
+  }
+
+  async function handleSaveMarket(targetMarket: string) {
+    if (!selectedTenantId || !targetMarket) return;
+    const dirtyAssetIds = Array.from(dirtyAssetIdsByMarket.get(targetMarket) ?? []);
+    if (dirtyAssetIds.length === 0) return;
+
+    const marketMappings = mappings.filter((mapping) => mapping.market === targetMarket);
+    const marketMaintenanceAssetIds = new Set(
+      marketMappings
+        .map((mapping) => mapping.maintenanceAssetId)
+        .filter((assetId): assetId is string => Boolean(assetId)),
+    );
+    const marketParentByMaintenanceAssetId = new Map<string, CalculatorMappingRecord>();
+    marketMappings.forEach((mapping) => {
+      if (mapping.maintenanceAssetId) {
+        marketParentByMaintenanceAssetId.set(mapping.maintenanceAssetId, mapping);
+      }
+    });
+
     setSaving(true);
     setError('');
 
     try {
-      const nextAssetIds = new Set(dirtyAssetIdsForSelectedMarket);
-      selectedMarketMappings.forEach((mapping) => {
+      const nextAssetIds = new Set(dirtyAssetIds);
+      marketMappings.forEach((mapping) => {
         if (nextAssetIds.has(mapping.id) && mapping.maintenanceAssetId) {
           nextAssetIds.add(mapping.maintenanceAssetId);
         }
       });
 
-      const payload = selectedMarketMappings
+      const payload = marketMappings
         .filter((mapping) => nextAssetIds.has(mapping.id))
         .map((mapping) => {
-        const sourceMapping = maintenanceAssetIds.has(mapping.id) ? parentByMaintenanceAssetId.get(mapping.id) ?? mapping : mapping;
-        const rowKey = costKey(sourceMapping.market, sourceMapping.id);
-        const draft = draftsByAsset[rowKey] || createEmptyCostDraft();
-        return {
-          market: mapping.market,
-          assetId: mapping.id,
-          costs: toBreakdown(draft),
-        };
-      });
+          const sourceMapping = marketMaintenanceAssetIds.has(mapping.id)
+            ? marketParentByMaintenanceAssetId.get(mapping.id) ?? mapping
+            : mapping;
+          const rowKey = costKey(sourceMapping.market, sourceMapping.id);
+          const draft = draftsByAsset[rowKey] || createEmptyCostDraft();
+          return {
+            market: mapping.market,
+            assetId: mapping.id,
+            costs: toBreakdown(draft),
+          };
+        });
 
       const response = await upsertMarketAssetPrintingCosts({ costs: payload }, selectedTenantId);
       setCostRecords(response.costs);
       setDirtyRows((current) => {
         const next = { ...current };
-        dirtyAssetIdsForSelectedMarket.forEach((assetId) => {
-          delete next[costKey(marketFilter, assetId)];
+        dirtyAssetIds.forEach((assetId) => {
+          delete next[costKey(targetMarket, assetId)];
         });
         return next;
       });
@@ -242,16 +323,19 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
   }
 
   useEffect(() => {
-    if (!selectedTenantId || !marketFilter || loading || visibleMappings.length === 0 || dirtyAssetIdsForSelectedMarket.length === 0) return;
+    if (!selectedTenantId || loading || saving || dirtyAssetIdsByMarket.size === 0) return;
+    const dirtyMarkets = Array.from(dirtyAssetIdsByMarket.keys());
+    const targetMarket = dirtyAssetIdsByMarket.has(marketFilter) ? marketFilter : dirtyMarkets[0];
+    if (!targetMarket) return;
 
     const timer = window.setTimeout(() => {
-      void handleSaveAll();
+      void handleSaveMarket(targetMarket);
     }, 700);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [dirtyAssetIdsForSelectedMarket, draftsByAsset, loading, marketFilter, selectedTenantId, visibleMappings]);
+  }, [dirtyAssetIdsByMarket, draftsByAsset, loading, marketFilter, saving, selectedTenantId]);
 
   if (!isSuperAdmin) {
     return (
@@ -283,9 +367,9 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
 
       <Card>
         <CardHeader className="p-5 pb-0">
-          <CardTitle>Filters</CardTitle>
+          <CardTitle>Scope and Global Cost</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 p-5 md:grid-cols-2">
+        <CardContent className="grid gap-4 p-5 md:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="printing-cost-tenant">Tenant</Label>
             <select
@@ -316,6 +400,21 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
             </select>
             <p className="text-xs text-slate-400">Loaded costs: {costRecords.length}</p>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="printing-cost-global-poster">Poster Cost</Label>
+            <Input
+              id="printing-cost-global-poster"
+              className="h-11"
+              inputMode="decimal"
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="Set for all assets and markets"
+              value={globalPosterCost}
+              onChange={(event) => updateGlobalPosterDraft(event.target.value)}
+            />
+            <p className="text-xs text-slate-400">Applied to 8-sheet, 6-sheet, 4-sheet, 2-sheet, and QA0 for all assets and markets.</p>
+          </div>
         </CardContent>
       </Card>
 
@@ -323,7 +422,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
         <CardHeader className="p-5 pb-0">
           <CardTitle>Asset printing costs</CardTitle>
           <CardDescription>
-            Enter per-unit cost for each poster category. Changes auto-save.
+            Poster Cost is global across all assets and markets. Mega pricing remains per asset. Changes auto-save.
             {saving ? ' Saving...' : ''}
           </CardDescription>
         </CardHeader>
@@ -341,15 +440,15 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
             <div className="rounded-2xl border border-slate-700 bg-slate-900/60">
               <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
                 <colgroup>
-                  <col className="w-[28%]" />
-                  {formatKeys.map((key) => (
-                    <col key={`cost-col-${key}`} className="w-[9%]" />
+                  <col className="w-[46%]" />
+                  {megaFormatKeys.map((key) => (
+                    <col key={`cost-col-${key}`} className="w-[18%]" />
                   ))}
                 </colgroup>
                 <thead>
                   <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
                     <th className="border border-slate-700 px-2 py-2 text-left sm:px-3">Asset</th>
-                    {formatKeys.map((key) => (
+                    {megaFormatKeys.map((key) => (
                       <th key={`cost-head-${key}`} className="border border-slate-700 px-1 py-2 text-center sm:px-2">
                         {key}
                       </th>
@@ -366,7 +465,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
                           <p className="truncate font-semibold">{mapping.label || mapping.asset}</p>
                           <p className="truncate text-[10px] text-slate-400 sm:text-xs">{mapping.asset}</p>
                         </td>
-                        {formatKeys.map((key) => (
+                        {megaFormatKeys.map((key) => (
                           <td key={`cost-cell-${mapping.id}-${key}`} className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
                             <Input
                               className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"

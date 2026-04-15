@@ -42,12 +42,15 @@ type marketDeliveryAddressRow struct {
 }
 
 type marketShippingRateRow struct {
-	TenantID      string
-	Market        string
-	ShippingRate  float64
-	PostersPerBox int
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	TenantID         string
+	Market           string
+	ShippingRate     float64
+	PostersPerBox    int
+	MegaShippingRate float64
+	DotMShippingRate float64
+	MpShippingRate   float64
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 type marketAssetPrintingCostRow struct {
@@ -59,6 +62,19 @@ type marketAssetPrintingCostRow struct {
 	Costs     []byte
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type marketAssetShippingCostRow struct {
+	TenantID         string
+	Market           string
+	AssetID          string
+	Asset            string
+	Label            string
+	MegaShippingRate float64
+	DotMShippingRate float64
+	MpShippingRate   float64
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 func newMappingStore(pool *pgxpool.Pool) *mappingStore {
@@ -246,6 +262,9 @@ func scanMarketShippingRateRow(scanner interface {
 		&row.Market,
 		&row.ShippingRate,
 		&row.PostersPerBox,
+		&row.MegaShippingRate,
+		&row.DotMShippingRate,
+		&row.MpShippingRate,
 		&row.CreatedAt,
 		&row.UpdatedAt,
 	)
@@ -269,14 +288,36 @@ func scanMarketAssetPrintingCostRow(scanner interface {
 	return row, err
 }
 
+func scanMarketAssetShippingCostRow(scanner interface {
+	Scan(dest ...any) error
+}) (marketAssetShippingCostRow, error) {
+	var row marketAssetShippingCostRow
+	err := scanner.Scan(
+		&row.TenantID,
+		&row.Market,
+		&row.AssetID,
+		&row.Asset,
+		&row.Label,
+		&row.MegaShippingRate,
+		&row.DotMShippingRate,
+		&row.MpShippingRate,
+		&row.CreatedAt,
+		&row.UpdatedAt,
+	)
+	return row, err
+}
+
 func decodeMarketShippingRateRow(row marketShippingRateRow) marketShippingRateRecord {
 	return marketShippingRateRecord{
-		TenantID:      row.TenantID,
-		Market:        row.Market,
-		ShippingRate:  row.ShippingRate,
-		PostersPerBox: row.PostersPerBox,
-		CreatedAt:     row.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:     row.UpdatedAt.UTC().Format(time.RFC3339),
+		TenantID:         row.TenantID,
+		Market:           row.Market,
+		ShippingRate:     row.ShippingRate,
+		PostersPerBox:    row.PostersPerBox,
+		MegaShippingRate: row.MegaShippingRate,
+		DotMShippingRate: row.DotMShippingRate,
+		MpShippingRate:   row.MpShippingRate,
+		CreatedAt:        row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:        row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -303,6 +344,21 @@ func decodeMarketAssetPrintingCostRow(row marketAssetPrintingCostRow) (marketAss
 		CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339),
 	}, nil
+}
+
+func decodeMarketAssetShippingCostRow(row marketAssetShippingCostRow) marketAssetShippingCostRecord {
+	return marketAssetShippingCostRecord{
+		TenantID:         row.TenantID,
+		Market:           row.Market,
+		AssetID:          row.AssetID,
+		Asset:            row.Asset,
+		Label:            row.Label,
+		MegaShippingRate: row.MegaShippingRate,
+		DotMShippingRate: row.DotMShippingRate,
+		MpShippingRate:   row.MpShippingRate,
+		CreatedAt:        row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:        row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
 }
 
 func (s *mappingStore) ensureMarket(ctx context.Context, tenantID, marketName string) (string, error) {
@@ -840,7 +896,16 @@ func (s *mappingStore) listMarketShippingRates(ctx context.Context, tenantID str
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT msr.tenant_id, m.name, msr.shipping_rate::float8, msr.posters_per_box, msr.created_at, msr.updated_at
+		SELECT
+			msr.tenant_id,
+			m.name,
+			msr.shipping_rate::float8,
+			msr.posters_per_box,
+			msr.mega_shipping_rate::float8,
+			msr.dot_m_shipping_rate::float8,
+			msr.mp_shipping_rate::float8,
+			msr.created_at,
+			msr.updated_at
 		FROM market_shipping_rates msr
 		JOIN markets m ON m.id = msr.market_id
 		WHERE msr.tenant_id = $1
@@ -874,6 +939,15 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 	if payload.ShippingRate < 0 {
 		return nil, errors.New("shippingRate must be greater than or equal to 0")
 	}
+	if payload.MegaShippingRate < 0 {
+		return nil, errors.New("megaShippingRate must be greater than or equal to 0")
+	}
+	if payload.DotMShippingRate < 0 {
+		return nil, errors.New("dotMShippingRate must be greater than or equal to 0")
+	}
+	if payload.MpShippingRate < 0 {
+		return nil, errors.New("mpShippingRate must be greater than or equal to 0")
+	}
 	if payload.PostersPerBox <= 0 {
 		return nil, errors.New("postersPerBox must be greater than 0")
 	}
@@ -884,12 +958,37 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 	}
 
 	row, err := scanMarketShippingRateRow(s.pool.QueryRow(ctx, `
-		INSERT INTO market_shipping_rates (tenant_id, market_id, shipping_rate, posters_per_box, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, NOW(), NOW())
+		INSERT INTO market_shipping_rates (
+			tenant_id,
+			market_id,
+			shipping_rate,
+			posters_per_box,
+			mega_shipping_rate,
+			dot_m_shipping_rate,
+			mp_shipping_rate,
+			created_at,
+			updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
 		ON CONFLICT (tenant_id, market_id)
-		DO UPDATE SET shipping_rate = EXCLUDED.shipping_rate, posters_per_box = EXCLUDED.posters_per_box, updated_at = NOW()
-		RETURNING tenant_id, $5::text, shipping_rate::float8, posters_per_box, created_at, updated_at
-	`, tenantID, marketID, payload.ShippingRate, payload.PostersPerBox, market))
+		DO UPDATE SET
+			shipping_rate = EXCLUDED.shipping_rate,
+			posters_per_box = EXCLUDED.posters_per_box,
+			mega_shipping_rate = EXCLUDED.mega_shipping_rate,
+			dot_m_shipping_rate = EXCLUDED.dot_m_shipping_rate,
+			mp_shipping_rate = EXCLUDED.mp_shipping_rate,
+			updated_at = NOW()
+		RETURNING
+			tenant_id,
+			$8::text,
+			shipping_rate::float8,
+			posters_per_box,
+			mega_shipping_rate::float8,
+			dot_m_shipping_rate::float8,
+			mp_shipping_rate::float8,
+			created_at,
+			updated_at
+	`, tenantID, marketID, payload.ShippingRate, payload.PostersPerBox, payload.MegaShippingRate, payload.DotMShippingRate, payload.MpShippingRate, market))
 	if err != nil {
 		return nil, err
 	}
@@ -1016,6 +1115,143 @@ func (s *mappingStore) upsertMarketAssetPrintingCosts(ctx context.Context, tenan
 			return nil, err
 		}
 		records = append(records, record)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return records, nil
+}
+
+func (s *mappingStore) listMarketAssetShippingCosts(ctx context.Context, tenantID string) ([]marketAssetShippingCostRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			masc.tenant_id,
+			m.name,
+			masc.asset_id::text,
+			ma.asset,
+			ma.label,
+			masc.mega_shipping_rate::float8,
+			masc.dot_m_shipping_rate::float8,
+			masc.mp_shipping_rate::float8,
+			masc.created_at,
+			masc.updated_at
+		FROM market_asset_shipping_costs masc
+		JOIN markets m ON m.id = masc.market_id
+		JOIN market_assets ma ON ma.id = masc.asset_id
+		WHERE masc.tenant_id = $1
+		ORDER BY m.name ASC, ma.label ASC, ma.asset ASC
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]marketAssetShippingCostRecord, 0)
+	for rows.Next() {
+		row, err := scanMarketAssetShippingCostRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, decodeMarketAssetShippingCostRow(row))
+	}
+	return records, rows.Err()
+}
+
+func (s *mappingStore) upsertMarketAssetShippingCosts(ctx context.Context, tenantID string, payload []marketAssetShippingCostInput) ([]marketAssetShippingCostRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+	if len(payload) == 0 {
+		return []marketAssetShippingCostRecord{}, nil
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	records := make([]marketAssetShippingCostRecord, 0, len(payload))
+	for _, item := range payload {
+		market, err := sanitizeMappingText(item.Market, "market")
+		if err != nil {
+			return nil, err
+		}
+
+		assetID := strings.TrimSpace(item.AssetID)
+		if assetID == "" {
+			return nil, errors.New("assetId is required")
+		}
+		if item.MegaShippingRate < 0 {
+			return nil, errors.New("megaShippingRate must be greater than or equal to 0")
+		}
+		if item.DotMShippingRate < 0 {
+			return nil, errors.New("dotMShippingRate must be greater than or equal to 0")
+		}
+		if item.MpShippingRate < 0 {
+			return nil, errors.New("mpShippingRate must be greater than or equal to 0")
+		}
+
+		var marketID string
+		var asset string
+		var label string
+		if err := tx.QueryRow(ctx, `
+			SELECT m.id, ma.asset, ma.label
+			FROM markets m
+			JOIN market_assets ma ON ma.market_id = m.id
+			WHERE m.tenant_id = $1
+			  AND m.name = $2
+			  AND ma.id = $3
+			LIMIT 1
+		`, tenantID, market, assetID).Scan(&marketID, &asset, &label); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, errors.New("Asset not found in the selected tenant market")
+			}
+			return nil, err
+		}
+
+		row, err := scanMarketAssetShippingCostRow(tx.QueryRow(ctx, `
+			INSERT INTO market_asset_shipping_costs (
+				tenant_id,
+				market_id,
+				asset_id,
+				mega_shipping_rate,
+				dot_m_shipping_rate,
+				mp_shipping_rate,
+				created_at,
+				updated_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+			ON CONFLICT (tenant_id, asset_id)
+			DO UPDATE SET
+				market_id = EXCLUDED.market_id,
+				mega_shipping_rate = EXCLUDED.mega_shipping_rate,
+				dot_m_shipping_rate = EXCLUDED.dot_m_shipping_rate,
+				mp_shipping_rate = EXCLUDED.mp_shipping_rate,
+				updated_at = NOW()
+			RETURNING
+				tenant_id,
+				$7::text,
+				asset_id::text,
+				$8::text,
+				$9::text,
+				mega_shipping_rate::float8,
+				dot_m_shipping_rate::float8,
+				mp_shipping_rate::float8,
+				created_at,
+				updated_at
+		`, tenantID, marketID, assetID, item.MegaShippingRate, item.DotMShippingRate, item.MpShippingRate, market, asset, label))
+		if err != nil {
+			return nil, err
+		}
+
+		records = append(records, decodeMarketAssetShippingCostRow(row))
 	}
 
 	if err := tx.Commit(ctx); err != nil {

@@ -194,18 +194,24 @@ type marketDeliveryAddressRecord struct {
 }
 
 type marketShippingRateInput struct {
-	Market        string  `json:"market"`
-	ShippingRate  float64 `json:"shippingRate"`
-	PostersPerBox int     `json:"postersPerBox"`
+	Market            string  `json:"market"`
+	ShippingRate      float64 `json:"shippingRate"`
+	PostersPerBox     int     `json:"postersPerBox"`
+	MegaShippingRate  float64 `json:"megaShippingRate"`
+	DotMShippingRate  float64 `json:"dotMShippingRate"`
+	MpShippingRate    float64 `json:"mpShippingRate"`
 }
 
 type marketShippingRateRecord struct {
-	TenantID      string  `json:"tenantId"`
-	Market        string  `json:"market"`
-	ShippingRate  float64 `json:"shippingRate"`
-	PostersPerBox int     `json:"postersPerBox"`
-	CreatedAt     string  `json:"createdAt"`
-	UpdatedAt     string  `json:"updatedAt"`
+	TenantID         string  `json:"tenantId"`
+	Market           string  `json:"market"`
+	ShippingRate     float64 `json:"shippingRate"`
+	PostersPerBox    int     `json:"postersPerBox"`
+	MegaShippingRate float64 `json:"megaShippingRate"`
+	DotMShippingRate float64 `json:"dotMShippingRate"`
+	MpShippingRate   float64 `json:"mpShippingRate"`
+	CreatedAt        string  `json:"createdAt"`
+	UpdatedAt        string  `json:"updatedAt"`
 }
 
 type printingCostBreakdown map[string]float64
@@ -225,6 +231,27 @@ type marketAssetPrintingCostRecord struct {
 	Costs      printingCostBreakdown `json:"costs"`
 	CreatedAt  string                `json:"createdAt"`
 	UpdatedAt  string                `json:"updatedAt"`
+}
+
+type marketAssetShippingCostInput struct {
+	Market           string  `json:"market"`
+	AssetID          string  `json:"assetId"`
+	MegaShippingRate float64 `json:"megaShippingRate"`
+	DotMShippingRate float64 `json:"dotMShippingRate"`
+	MpShippingRate   float64 `json:"mpShippingRate"`
+}
+
+type marketAssetShippingCostRecord struct {
+	TenantID         string  `json:"tenantId"`
+	Market           string  `json:"market"`
+	AssetID          string  `json:"assetId"`
+	Asset            string  `json:"asset"`
+	Label            string  `json:"label"`
+	MegaShippingRate float64 `json:"megaShippingRate"`
+	DotMShippingRate float64 `json:"dotMShippingRate"`
+	MpShippingRate   float64 `json:"mpShippingRate"`
+	CreatedAt        string  `json:"createdAt"`
+	UpdatedAt        string  `json:"updatedAt"`
 }
 
 type campaignLine struct {

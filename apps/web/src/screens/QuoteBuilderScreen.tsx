@@ -8,6 +8,7 @@ import {
   CampaignLine,
   CampaignMarket,
   MarketAssetPrintingCostRecord,
+  MarketAssetShippingCostRecord,
   CampaignTotals,
   MarketMetadata,
   MarketDeliveryAddressRecord,
@@ -26,7 +27,7 @@ import { buildApiUrl } from '../services/apiBase';
 import { createCampaign, fetchCampaign, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
-import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
+import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 
@@ -96,15 +97,15 @@ function buildReviewRows(totals: CampaignTotals) {
   ] as const;
 }
 
-function totalUnitsForBreakdown(breakdown: QuantityBreakdown) {
-  return formatKeys.reduce((total, key) => total + (breakdown[key] ?? 0), 0);
-}
-
 function calculateShippingCost(units: number, perBoxPrice: number, postersPerBox: number) {
   if (units <= 0 || perBoxPrice <= 0) return 0;
   const safePostersPerBox = Math.max(1, Math.floor(postersPerBox || 60));
   const boxCount = Math.ceil(units / safePostersPerBox);
   return boxCount * perBoxPrice;
+}
+
+function posterUnitsFromBreakdown(breakdown: QuantityBreakdown) {
+  return (breakdown['8-sheet'] ?? 0) + (breakdown['6-sheet'] ?? 0) + (breakdown['4-sheet'] ?? 0) + (breakdown['2-sheet'] ?? 0) + (breakdown.QA0 ?? 0);
 }
 
 function formatKeyLabel(key: (typeof formatKeys)[number]) {
@@ -520,6 +521,7 @@ export function QuoteBuilderScreen({
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<MarketDeliveryAddressRecord[]>([]);
   const [marketShippingRates, setMarketShippingRates] = useState<MarketShippingRateRecord[]>([]);
   const [marketAssetPrintingCosts, setMarketAssetPrintingCosts] = useState<MarketAssetPrintingCostRecord[]>([]);
+  const [marketAssetShippingCosts, setMarketAssetShippingCosts] = useState<MarketAssetShippingCostRecord[]>([]);
   const [metadataError, setMetadataError] = useState('');
   const [loadingMetadata, setLoadingMetadata] = useState(true);
   const [loadingCampaign, setLoadingCampaign] = useState(true);
@@ -604,6 +606,24 @@ export function QuoteBuilderScreen({
     }
 
     void loadMetadata();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function loadMarketAssetShippingCosts() {
+      try {
+        const response = await fetchCampaignMarketAssetShippingCosts();
+        if (!active) return;
+        setMarketAssetShippingCosts(response.costs);
+      } catch {
+        if (!active) return;
+        setMarketAssetShippingCosts([]);
+      }
+    }
+    void loadMarketAssetShippingCosts();
     return () => {
       active = false;
     };
@@ -756,6 +776,22 @@ export function QuoteBuilderScreen({
   const postersPerBoxByMarket = useMemo(
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.postersPerBox])),
     [marketShippingRates],
+  );
+  const megaShippingRateByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.megaShippingRate ?? 0])),
+    [marketShippingRates],
+  );
+  const dotMShippingRateByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.dotMShippingRate ?? 0])),
+    [marketShippingRates],
+  );
+  const mpShippingRateByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.mpShippingRate ?? 0])),
+    [marketShippingRates],
+  );
+  const shippingCostByMarketAsset = useMemo(
+    () => new Map(marketAssetShippingCosts.map((entry) => [`${entry.market}\x00${entry.assetId}`, entry])),
+    [marketAssetShippingCosts],
   );
   const preferredDeliveryAddressByMarket = useMemo(() => {
     const byMarket = new Map<string, string>();
@@ -1239,8 +1275,26 @@ export function QuoteBuilderScreen({
   function calculateMarketShippingCost(marketName: string) {
     const perBoxPrice = shippingRateByMarket.get(marketName) ?? 0;
     const postersPerBox = postersPerBoxByMarket.get(marketName) ?? 60;
-    const marketPosterTotal = summary?.perMarket.find((entry) => entry.market === marketName)?.posterTotal ?? 0;
-    return calculateShippingCost(marketPosterTotal, perBoxPrice, postersPerBox);
+    const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
+    const posterUnits = marketLines.reduce((total, line) => total + posterUnitsFromBreakdown(line.breakdown), 0);
+    const posterShipping = calculateShippingCost(posterUnits, perBoxPrice, postersPerBox);
+
+    const megaShipping = marketLines.reduce((total, line) => {
+      const selectedAsset = selectedAssetByLineId.get(line.id);
+      if (!selectedAsset) return total;
+
+      const assetShippingCosts = shippingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`);
+      const megaRate = assetShippingCosts?.megaShippingRate ?? (megaShippingRateByMarket.get(marketName) ?? 0);
+      const dotMRate = assetShippingCosts?.dotMShippingRate ?? (dotMShippingRateByMarket.get(marketName) ?? 0);
+      const mpRate = assetShippingCosts?.mpShippingRate ?? (mpShippingRateByMarket.get(marketName) ?? 0);
+
+      return total
+        + (line.breakdown.Mega ?? 0) * megaRate
+        + (line.breakdown['DOT M'] ?? 0) * dotMRate
+        + (line.breakdown.MP ?? 0) * mpRate;
+    }, 0);
+
+    return posterShipping + megaShipping;
   }
 
   function calculateLinePrintingCost(line: CampaignCalculationSummary['lines'][number]) {
@@ -1588,26 +1642,21 @@ export function QuoteBuilderScreen({
       <section className="relative overflow-hidden rounded-[32px] border border-slate-700/70 bg-slate-950/70 px-6 py-8 shadow-2xl shadow-slate-950/40">
         <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.2),transparent_52%)]" />
         <div className="relative flex flex-col gap-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-3">
+          <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:gap-6">
+            <div className="space-y-3 lg:min-w-[260px]">
               <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
                 <LayoutGrid className="h-3.5 w-3.5" />
-                Print Workflow Studio
+                Campaign Builder
               </Badge>
-              <div className="space-y-2">
-                <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">ADS CONNECT</h1>
-                <p className="max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                  Build campaign schedules, review calculated totals, and create PrintIQ-ready quotes with a cleaner browser-first workflow.
-                </p>
-                <p className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-600 bg-slate-900/70 px-3 py-1.5 text-xs font-semibold tracking-[0.08em] text-slate-200">
-                  Campaign: <span className="text-white">{activeCampaignName}</span>
-                </p>
-                <p className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-500">
-                  {loadingCampaign ? 'Loading draft' : savingCampaign ? 'Auto-saving' : hasUnsavedChanges ? 'Unsaved changes' : `All changes saved · ${campaignStatus.replace('_', ' ')}`}
-                </p>
-              </div>
+              <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">ADS CONNECT</h1>
             </div>
-            <div className="flex flex-col gap-3 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-200">
+            <div className="max-w-3xl px-1 py-1 lg:justify-self-center">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Active Campaign</p>
+              <p className="mt-1 truncate text-xl font-semibold text-white sm:text-2xl" title={activeCampaignName}>
+                {activeCampaignName}
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-200 lg:justify-self-end">
               <div>
                 <p className="font-semibold text-white">{session?.user.name}</p>
                 <p className="text-slate-400">

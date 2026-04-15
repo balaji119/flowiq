@@ -111,9 +111,6 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
               </Badge>
               <div className="space-y-2">
                 <h1 className="text-4xl font-black tracking-tight text-white sm:text-5xl">ADS CONNECT</h1>
-                <p className="max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                  Review saved campaign schedules, reopen drafts, and start a new campaign from one landing page.
-                </p>
               </div>
             </div>
 
