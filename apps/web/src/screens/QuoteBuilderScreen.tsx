@@ -294,6 +294,23 @@ function buildCreativeCode(state: ExportState, creativeNumber: number) {
   return `${prefix}${creativeNumber}`;
 }
 
+function downloadBlobWithFileName(blob: Blob, fileName: string) {
+  const objectUrl = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+
+  // Some browsers need a small delay before revoking object URLs, otherwise
+  // the saved file may end up with a temporary name/extension.
+  window.setTimeout(() => {
+    window.URL.revokeObjectURL(objectUrl);
+    anchor.remove();
+  }, 1500);
+}
+
 function blobToDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -1380,6 +1397,7 @@ export function QuoteBuilderScreen({
         {
           creativeCode: string;
           creativeNumber: number;
+          creativeImageId: string;
           fileName: string;
           state: ExportState;
           quantities: Record<number, number>;
@@ -1476,6 +1494,7 @@ export function QuoteBuilderScreen({
           const printRow = printRows.get(printRowKey) ?? {
             creativeCode,
             creativeNumber: creative.creativeNumber,
+            creativeImageId: creative.image.id,
             fileName,
             state,
             quantities: {},
@@ -1535,6 +1554,42 @@ export function QuoteBuilderScreen({
         .filter(Boolean)
         .join('\n');
 
+      const imageRecordById = new Map(values.printImages.map((image) => [image.id, image]));
+      const creativeImageDataUrlById = new Map<string, string>();
+      const creativeImageByCreativeFileKey = new Map<string, string>();
+      Array.from(printRows.values()).forEach((row) => {
+        creativeImageByCreativeFileKey.set(`${row.creativeCode}\x00${row.fileName}`, row.creativeImageId);
+      });
+
+      const requiredCreativeImageIds = new Set(Array.from(printRows.values()).map((row) => row.creativeImageId));
+      const detectImageExtension = (mimeType: string, fileName: string) => {
+        const mime = mimeType.toLowerCase();
+        const lowerName = fileName.toLowerCase();
+        if (mime.includes('png') || lowerName.endsWith('.png')) return 'png';
+        if (mime.includes('jpg') || mime.includes('jpeg') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return 'jpeg';
+        return 'png';
+      };
+
+      await Promise.all(
+        Array.from(requiredCreativeImageIds).map(async (imageId) => {
+          const image = imageRecordById.get(imageId);
+          if (!image?.imageUrl) return;
+          const mimeType = image.mimeType.toLowerCase();
+          const isPdf = mimeType === 'application/pdf' || image.fileName.toLowerCase().endsWith('.pdf');
+          const isImage = mimeType.startsWith('image/');
+          if (!isPdf && !isImage) return;
+          try {
+            const response = await fetch(toAbsoluteUrl(buildApiUrl(image.imageUrl)));
+            if (!response.ok) return;
+            const blob = await response.blob();
+            const dataUrl = isPdf ? await pdfFirstPageToDataUrl(blob, 420) : await blobToDataUrl(blob);
+            if (dataUrl) creativeImageDataUrlById.set(imageId, dataUrl);
+          } catch {
+            // Skip image embedding when image fetch fails.
+          }
+        }),
+      );
+
       const fillPrintWorkbook = async () => {
         const response = await fetch('/templates/26-233_PrintQuantities.xlsx');
         if (!response.ok) throw new Error('Unable to load print quantities template');
@@ -1543,6 +1598,27 @@ export function QuoteBuilderScreen({
         await workbook.xlsx.load(arrayBuffer as ArrayBuffer);
         const sheet = workbook.worksheets[0];
         if (!sheet) throw new Error('Print quantities sheet is missing');
+        // Keep the purchase-order instruction header block aligned with template sizing.
+        const purchaseOrderHeaderHeights: Array<[number, number]> = [
+          [2, 34],
+          [3, 27],
+          [4, 27],
+          [5, 27],
+          [6, 27],
+          [7, 157],
+          [8, 27],
+        ];
+        purchaseOrderHeaderHeights.forEach(([row, height]) => {
+          sheet.getRow(row).height = height;
+        });
+        sheet.views = [
+          {
+            state: 'frozen',
+            ySplit: 10,
+            topLeftCell: 'A11',
+            activeCell: 'A1',
+          },
+        ];
 
         sheet.getCell('C3').value = values.campaignName || '';
         sheet.getCell('C4').value = campaignNumber;
@@ -1550,16 +1626,21 @@ export function QuoteBuilderScreen({
         sheet.getCell('C7').value = creativeSummaryText;
 
         const rows = Array.from(printRows.values()).sort((a, b) => a.creativeCode.localeCompare(b.creativeCode));
-        const baseDataRows = 4;
+        const baseDataRows = 3;
         const startRow = 11;
-        const extraRows = Math.max(0, rows.length - baseDataRows);
-        if (extraRows > 0) {
-          sheet.spliceRows(15, 0, ...Array.from({ length: extraRows }, () => []));
+        const templateTotalsRow = 15;
+        const rowDelta = rows.length - baseDataRows;
+        if (rowDelta > 0) {
+          sheet.spliceRows(templateTotalsRow, 0, ...Array.from({ length: rowDelta }, () => []));
         }
 
-        const dataEndRow = startRow + baseDataRows + extraRows - 1;
+        const dataEndRow = Math.max(startRow + rows.length - 1, startRow + baseDataRows - 1);
         for (let row = startRow; row <= dataEndRow; row += 1) {
+          sheet.getRow(row).height = 141;
+          // Keep template stable: hide unused template data rows instead of deleting them.
+          sheet.getRow(row).hidden = row >= startRow + rows.length && row < startRow + baseDataRows;
           sheet.getCell(row, 2).value = null;
+          sheet.getCell(row, 3).value = null;
           sheet.getCell(row, 4).value = null;
           sheet.getCell(row, 5).value = null;
           sheet.getCell(row, 6).value = null;
@@ -1574,13 +1655,27 @@ export function QuoteBuilderScreen({
           if (entry.state === 'NSW') sheet.getCell(row, 5).value = 0;
           if (entry.state === 'VIC') sheet.getCell(row, 6).value = 0;
           if (entry.state === 'QLD') sheet.getCell(row, 7).value = 0;
+          const dataUrl = creativeImageDataUrlById.get(entry.creativeImageId);
+          if (dataUrl) {
+            try {
+              const imageRecord = imageRecordById.get(entry.creativeImageId);
+              const extension = detectImageExtension(imageRecord?.mimeType ?? '', imageRecord?.fileName ?? '');
+              const imageId = workbook.addImage({ base64: dataUrl, extension });
+              sheet.addImage(imageId, {
+                tl: { col: 2.1, row: row - 1 + 0.05 },
+                ext: { width: 140, height: 130 },
+              });
+            } catch (imageError) {
+              console.error('Unable to embed creative image in print sheet', imageError);
+            }
+          }
           Object.entries(entry.quantities).forEach(([column, quantity]) => {
             sheet.getCell(row, Number(column)).value = quantity;
           });
         });
 
-        const totalRow = 15 + extraRows;
-        const setsRow = 16 + extraRows;
+        const totalRow = startRow + rows.length;
+        const setsRow = totalRow + 1;
         const lastDataRow = Math.max(startRow, startRow + rows.length - 1);
         for (let col = 9; col <= 20; col += 1) {
           const columnLetter = sheet.getColumn(col).letter;
@@ -1592,14 +1687,7 @@ export function QuoteBuilderScreen({
 
         const outputBuffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([outputBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const objectUrl = window.URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = objectUrl;
-        anchor.download = `${baseName} - Print Quantities.xlsx`;
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
-        window.URL.revokeObjectURL(objectUrl);
+        downloadBlobWithFileName(blob, `${baseName} - Print Quantities.xlsx`);
       };
 
       const fillDeliveryWorkbook = async () => {
@@ -1610,6 +1698,35 @@ export function QuoteBuilderScreen({
         await workbook.xlsx.load(arrayBuffer as ArrayBuffer);
         const sheet = workbook.worksheets[0];
         if (!sheet) throw new Error('Delivery instructions sheet is missing');
+        // Match Delivery Instructions template header sizing for the purchase-order section.
+        const purchaseOrderHeaderHeights: Array<[number, number]> = [
+          [2, 34],
+          [3, 27],
+          [4, 27],
+          [5, 27],
+          [6, 27],
+          [7, 27],
+          [8, 126],
+        ];
+        purchaseOrderHeaderHeights.forEach(([row, height]) => {
+          sheet.getRow(row).height = height;
+        });
+        sheet.views = [
+          {
+            state: 'frozen',
+            ySplit: 10,
+            topLeftCell: 'A11',
+            activeCell: 'A1',
+          },
+        ];
+
+        const cloneCellStyle = (style: any) => JSON.parse(JSON.stringify(style ?? {}));
+        const markerBlankStyle = cloneCellStyle(sheet.getCell('D11').style);
+        const markerTemplateByState = {
+          NSW: { value: sheet.getCell('C11').value, style: cloneCellStyle(sheet.getCell('C11').style), col: 3 },
+          VIC: { value: sheet.getCell('D13').value, style: cloneCellStyle(sheet.getCell('D13').style), col: 4 },
+          QLD: { value: sheet.getCell('E15').value, style: cloneCellStyle(sheet.getCell('E15').style), col: 5 },
+        } as const;
 
         sheet.getCell('C3').value = values.campaignName || '';
         sheet.getCell('C4').value = campaignNumber;
@@ -1620,17 +1737,22 @@ export function QuoteBuilderScreen({
         const rows = Array.from(deliveryRows.values()).sort((a, b) => a.creativeCode.localeCompare(b.creativeCode) || a.typeLabel.localeCompare(b.typeLabel));
         const baseDataRows = 5;
         const startRow = 11;
-        const extraRows = Math.max(0, rows.length - baseDataRows);
-        if (extraRows > 0) {
-          sheet.spliceRows(17, 0, ...Array.from({ length: extraRows }, () => []));
+        const templateInfoHeaderRow = 17;
+        const rowDelta = rows.length - baseDataRows;
+        if (rowDelta > 0) {
+          sheet.spliceRows(templateInfoHeaderRow, 0, ...Array.from({ length: rowDelta }, () => []));
         }
 
-        const dataEndRow = startRow + baseDataRows + extraRows - 1;
+        const dataEndRow = Math.max(startRow + rows.length - 1, startRow + baseDataRows - 1);
         for (let row = startRow; row <= dataEndRow; row += 1) {
+          sheet.getRow(row).height = 102;
+          // Keep template stable: hide unused template data rows instead of deleting them.
+          sheet.getRow(row).hidden = row >= startRow + rows.length && row < startRow + baseDataRows;
           sheet.getCell(row, 2).value = null;
           sheet.getCell(row, 3).value = null;
           sheet.getCell(row, 4).value = null;
           sheet.getCell(row, 5).value = null;
+          sheet.getCell(row, 7).value = null;
           sheet.getCell(row, 8).value = null;
           sheet.getCell(row, 9).value = null;
           sheet.getCell(row, 11).value = null;
@@ -1642,9 +1764,32 @@ export function QuoteBuilderScreen({
         rows.forEach((entry, index) => {
           const row = startRow + index;
           sheet.getCell(row, 2).value = entry.creativeCode;
-          if (entry.state === 'NSW') sheet.getCell(row, 3).value = 0;
-          if (entry.state === 'VIC') sheet.getCell(row, 4).value = 0;
-          if (entry.state === 'QLD') sheet.getCell(row, 5).value = 0;
+          [3, 4, 5].forEach((col) => {
+            const markerCell = sheet.getCell(row, col);
+            markerCell.value = null;
+            markerCell.style = cloneCellStyle(markerBlankStyle);
+          });
+          const selectedMarker = markerTemplateByState[entry.state];
+          const selectedMarkerCell = sheet.getCell(row, selectedMarker.col);
+          selectedMarkerCell.value = selectedMarker.value;
+          selectedMarkerCell.style = cloneCellStyle(selectedMarker.style);
+          const creativeImageId = creativeImageByCreativeFileKey.get(`${entry.creativeCode}\x00${entry.fileName}`);
+          if (creativeImageId) {
+            const dataUrl = creativeImageDataUrlById.get(creativeImageId);
+            if (dataUrl) {
+              try {
+                const imageRecord = imageRecordById.get(creativeImageId);
+                const extension = detectImageExtension(imageRecord?.mimeType ?? '', imageRecord?.fileName ?? '');
+                const imageId = workbook.addImage({ base64: dataUrl, extension });
+                sheet.addImage(imageId, {
+                  tl: { col: 6.1, row: row - 1 + 0.05 },
+                  ext: { width: 120, height: 92 },
+                });
+              } catch (imageError) {
+                console.error('Unable to embed creative image in delivery sheet', imageError);
+              }
+            }
+          }
           sheet.getCell(row, 8).value = entry.fileName;
           sheet.getCell(row, 9).value = entry.typeLabel;
           sheet.getCell(row, 11).value = entry.quantity;
@@ -1652,7 +1797,7 @@ export function QuoteBuilderScreen({
           sheet.getCell(row, 13).value = entry.deliveredTo;
         });
 
-        const infoHeaderRow = 17 + extraRows;
+        const infoHeaderRow = startRow + rows.length + 1;
         const infoStartRow = infoHeaderRow + 1;
         sheet.getCell(infoHeaderRow, 2).value = 'DELIVERY INFORMATION:';
         for (let row = infoStartRow; row <= infoStartRow + 24; row += 1) {
@@ -1664,14 +1809,7 @@ export function QuoteBuilderScreen({
 
         const outputBuffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([outputBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const objectUrl = window.URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = objectUrl;
-        anchor.download = `${baseName} - Delivery Instructions.xlsx`;
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
-        window.URL.revokeObjectURL(objectUrl);
+        downloadBlobWithFileName(blob, `${baseName} - Delivery Instructions.xlsx`);
       };
 
       await fillPrintWorkbook();
