@@ -602,6 +602,8 @@ export function QuoteBuilderScreen({
   const [submitting, setSubmitting] = useState(false);
   const [quoteResponseMessage, setQuoteResponseMessage] = useState('');
   const [error, setError] = useState('');
+  const [exportingTemplates, setExportingTemplates] = useState(false);
+  const [exportProgressMessage, setExportProgressMessage] = useState('');
   const [stepIndex, setStepIndex] = useState(0);
   const [selectedPurchaseOrderFile, setSelectedPurchaseOrderFile] = useState<File | null>(null);
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
@@ -1398,12 +1400,15 @@ export function QuoteBuilderScreen({
   }
 
   async function downloadArtworkExcelTemplates() {
+    if (exportingTemplates) return;
     if (!hasUploadedPurchaseOrder) {
       setError('Upload a purchase order file before downloading visuals');
       return;
     }
 
     setError('');
+    setExportingTemplates(true);
+    setExportProgressMessage('Preparing export...');
 
     try {
       const ExcelJSRuntime = ExcelJS as any;
@@ -1617,6 +1622,7 @@ export function QuoteBuilderScreen({
         return 'png';
       };
 
+      setExportProgressMessage('Preparing artwork previews...');
       await Promise.all(
         Array.from(requiredCreativeImageIds).map(async (imageId) => {
           const image = imageRecordById.get(imageId);
@@ -1638,6 +1644,7 @@ export function QuoteBuilderScreen({
       );
 
       const fillPrintWorkbook = async () => {
+        setExportProgressMessage('Generating Print Quantities file...');
         const response = await fetch('/templates/26-233_PrintQuantities.xlsx');
         if (!response.ok) throw new Error('Unable to load print quantities template');
         const arrayBuffer = await response.arrayBuffer();
@@ -1757,6 +1764,7 @@ export function QuoteBuilderScreen({
       };
 
       const fillDeliveryWorkbook = async () => {
+        setExportProgressMessage('Generating Delivery Instructions file...');
         const response = await fetch('/templates/26-233_Delivery_Instructions.xlsx');
         if (!response.ok) throw new Error('Unable to load delivery instructions template');
         const arrayBuffer = await response.arrayBuffer();
@@ -1912,10 +1920,14 @@ export function QuoteBuilderScreen({
 
       await fillPrintWorkbook();
       await fillDeliveryWorkbook();
+      setExportProgressMessage('Download started. Check your browser download bar.');
       setError('');
     } catch (exportError) {
       const message = exportError instanceof Error ? exportError.message : 'Unable to download Excel templates. Please try again.';
       setError(message);
+      setExportProgressMessage('');
+    } finally {
+      setExportingTemplates(false);
     }
   }
 
@@ -2609,15 +2621,28 @@ export function QuoteBuilderScreen({
                 <CardTitle>Export For ADS</CardTitle>
                 <CardDescription>Export the details to send to ADS.</CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col gap-3 p-6 sm:flex-row">
-                <Button disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder} onClick={() => void downloadArtworkExcelTemplates()} type="button" variant="outline">
-                  Download Visuals
-                </Button>
-                <div className="cursor-not-allowed" title={hasUploadedPurchaseOrder ? 'Under construction' : 'Upload purchase order before sending to ADS'}>
-                  <Button className="border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100" disabled type="button" variant="secondary">
-                    Send Email To ADS
+              <CardContent className="space-y-3 p-6">
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button
+                    disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates}
+                    onClick={() => void downloadArtworkExcelTemplates()}
+                    type="button"
+                    variant="outline"
+                  >
+                    {exportingTemplates ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                    {exportingTemplates ? 'Generating Files...' : 'Download Visuals'}
                   </Button>
+                  <div className="cursor-not-allowed" title={hasUploadedPurchaseOrder ? 'Under construction' : 'Upload purchase order before sending to ADS'}>
+                    <Button className="border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100" disabled type="button" variant="secondary">
+                      Send Email To ADS
+                    </Button>
+                  </div>
                 </div>
+                {exportProgressMessage ? (
+                  <p className="text-sm text-slate-300" role="status">
+                    {exportProgressMessage}
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
           ) : null}
