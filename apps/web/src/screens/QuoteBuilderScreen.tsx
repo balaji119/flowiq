@@ -965,8 +965,7 @@ export function QuoteBuilderScreen({
   function addCampaignAsset(marketId: string) {
     updateCampaignMarket(marketId, (market) => {
       const availableAssets = assetsForMarket(market.market);
-      const selectedAssetIds = new Set(market.assets.map((asset) => asset.assetId).filter(Boolean));
-      const nextAsset = availableAssets.find((asset) => !selectedAssetIds.has(asset.id));
+      const nextAsset = availableAssets[0];
       if (!nextAsset) return market;
       const preferredAddress = preferredDeliveryAddressByMarket.get(market.market) || '';
 
@@ -1008,24 +1007,22 @@ export function QuoteBuilderScreen({
   }
 
   function assetOptionsFor(market: CampaignMarket, assetId: string, selectedAssetId: string) {
-    const selectedInOtherRows = new Set(market.assets.filter((asset) => asset.id !== assetId).map((asset) => asset.assetId).filter(Boolean));
     const marketAssets = markets.find((entry) => entry.name === market.market)?.assets ?? [];
     return marketAssets
-      .filter((asset) => asset.id === selectedAssetId || (!asset.isMaintenance && !selectedInOtherRows.has(asset.id)))
+      .filter((asset) => asset.id === selectedAssetId || !asset.isMaintenance)
       .map((asset) => ({ label: asset.label, value: asset.id }));
   }
 
   function canAddAssetForMarket(market: CampaignMarket) {
     const availableAssets = assetsForMarket(market.market);
-    const selectedAssetIds = new Set(market.assets.map((asset) => asset.assetId).filter(Boolean));
-    return availableAssets.some((asset) => !selectedAssetIds.has(asset.id));
+    return availableAssets.length > 0;
   }
 
   function addAssetDisabledReasonForMarket(market: CampaignMarket) {
     const availableAssets = assetsForMarket(market.market);
     if (!market.market) return 'Choose a market before adding assets.';
     if (availableAssets.length === 0) return 'No assets are available for this market.';
-    return 'All available assets for this market have already been added.';
+    return '';
   }
 
   function marketOptionsFor(marketId: string, selectedMarket: string) {
