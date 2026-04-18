@@ -42,7 +42,7 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
   const [error, setError] = useState('');
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(tenantId ?? session?.user.tenantId ?? null);
-  const [marketFilter, setMarketFilter] = useState('all');
+  const [marketFilter, setMarketFilter] = useState('');
   const [mappings, setMappings] = useState<CalculatorMappingRecord[]>([]);
   const [rates, setRates] = useState<MarketShippingRateRecord[]>([]);
   const [assetCosts, setAssetCosts] = useState<MarketAssetShippingCostRecord[]>([]);
@@ -59,7 +59,7 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
     [mappings],
   );
   const filteredMappings = useMemo(
-    () => (marketFilter === 'all' ? mappings : mappings.filter((mapping) => mapping.market === marketFilter)),
+    () => mappings.filter((mapping) => mapping.market === marketFilter),
     [mappings, marketFilter],
   );
   const maintenanceAssetIds = useMemo(
@@ -180,11 +180,11 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
 
   useEffect(() => {
     if (marketOptions.length === 0) {
-      setMarketFilter('all');
+      setMarketFilter('');
       return;
     }
-    if (marketFilter !== 'all' && !marketOptions.includes(marketFilter)) {
-      setMarketFilter('all');
+    if (!marketFilter || !marketOptions.includes(marketFilter)) {
+      setMarketFilter(marketOptions[0]);
     }
   }, [marketFilter, marketOptions]);
 
@@ -357,7 +357,6 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
               value={marketFilter}
               onChange={(event) => setMarketFilter(event.target.value)}
             >
-              <option value="all">All markets</option>
               {marketOptions.map((market) => (
                 <option key={`shipping-cost-market-${market}`} value={market}>{market}</option>
               ))}

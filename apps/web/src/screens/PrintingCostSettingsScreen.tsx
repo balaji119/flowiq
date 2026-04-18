@@ -171,7 +171,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     return map;
   }, [selectedMarketMappings]);
   const visibleMappings = useMemo(
-    () => selectedMarketMappings.filter((mapping) => !maintenanceAssetIds.has(mapping.id)),
+    () => selectedMarketMappings.filter((mapping) => !maintenanceAssetIds.has(mapping.id) && mapping.quantities.Mega > 0),
     [maintenanceAssetIds, selectedMarketMappings],
   );
   const dirtyAssetIdsByMarket = useMemo(() => {
