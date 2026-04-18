@@ -1442,8 +1442,18 @@ export function QuoteBuilderScreen({
         rolled: boolean;
       }>();
       const creativeSummary = new Map<number, QuantityBreakdown>();
-      const deliveryAddressBlocks: string[] = [];
-      const seenDeliveryAddress = new Set<string>();
+      const deliveryInfoBlocks: string[] = [];
+      const seenDeliveryInfo = new Set<string>();
+      const pushDeliveryInfo = (address: string, marketName: string, stateHint?: ExportState | null) => {
+        const normalizedAddress = address.trim().replace(/\r\n/g, '\n');
+        if (!normalizedAddress) return;
+        const state = stateHint ?? normalizeExportState(marketName);
+        const heading = state ? `VIM ${state}` : `VIM ${marketName.trim().toUpperCase()}`;
+        const block = normalizedAddress.toUpperCase().startsWith('VIM ') ? normalizedAddress : `${heading}\n${normalizedAddress}`;
+        if (seenDeliveryInfo.has(block)) return;
+        seenDeliveryInfo.add(block);
+        deliveryInfoBlocks.push(block);
+      };
 
       const updateSummary = (creativeNumber: number, breakdown: QuantityBreakdown) => {
         const bucket = creativeSummary.get(creativeNumber) ?? { '8-sheet': 0, '6-sheet': 0, '4-sheet': 0, '2-sheet': 0, QA0: 0, Mega: 0, 'DOT M': 0, MP: 0 };
@@ -1508,6 +1518,18 @@ export function QuoteBuilderScreen({
         MP: 'Mega Portrait',
       };
 
+      // Collect delivery addresses from campaign data regardless of mapped creatives.
+      values.campaignMarkets.forEach((market) => {
+        market.assets.forEach((asset) => {
+          pushDeliveryInfo(asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || '', market.market);
+        });
+      });
+      if (deliveryInfoBlocks.length === 0) {
+        values.campaignMarkets.forEach((market) => {
+          pushDeliveryInfo(defaultDeliveryAddressByMarket.get(market.market) || '', market.market);
+        });
+      }
+
       values.campaignMarkets.forEach((market) => {
         market.assets.forEach((asset) => {
           const line = lineByAssetId.get(asset.id);
@@ -1557,11 +1579,7 @@ export function QuoteBuilderScreen({
           printRows.set(printRowKey, printRow);
           updateSummary(creative.creativeNumber, line.breakdown);
 
-          const address = (asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || '').trim();
-          if (address && !seenDeliveryAddress.has(address)) {
-            seenDeliveryAddress.add(address);
-            deliveryAddressBlocks.push(address);
-          }
+          pushDeliveryInfo(asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || '', market.market, state);
         });
       });
 
@@ -1852,14 +1870,39 @@ export function QuoteBuilderScreen({
           sheet.getCell(row, 13).value = entry.deliveredTo;
         });
 
-        const infoHeaderRow = startRow + rows.length + 1;
+        const infoHeaderRow = templateInfoHeaderRow + Math.max(0, rowDelta);
         const infoStartRow = infoHeaderRow + 1;
-        sheet.getCell(infoHeaderRow, 2).value = 'DELIVERY INFORMATION:';
-        for (let row = infoStartRow; row <= infoStartRow + 24; row += 1) {
-          sheet.getCell(row, 2).value = null;
+        const infoTemplateRow = 18;
+        const infoTemplateRowHeight = sheet.getRow(infoTemplateRow).height ?? 134;
+        const baseInfoRows = 3;
+        const requiredInfoRows = Math.max(baseInfoRows, deliveryInfoBlocks.length);
+        if (requiredInfoRows > baseInfoRows) {
+          sheet.spliceRows(infoStartRow + baseInfoRows, 0, ...Array.from({ length: requiredInfoRows - baseInfoRows }, () => []));
         }
-        deliveryAddressBlocks.forEach((address, index) => {
-          sheet.getCell(infoStartRow + index, 2).value = address;
+        sheet.getCell(infoHeaderRow, 2).value = 'DELIVERY INFORMATION:';
+        for (let offset = 0; offset < requiredInfoRows; offset += 1) {
+          const row = infoStartRow + offset;
+          sheet.getRow(row).hidden = false;
+          sheet.getRow(row).height = infoTemplateRowHeight;
+          const mergeRef = `B${row}:P${row}`;
+          try {
+            sheet.mergeCells(mergeRef);
+          } catch {
+            // Ignore when already merged in template rows.
+          }
+          for (let col = 2; col <= 16; col += 1) {
+            sheet.getCell(row, col).value = null;
+          }
+        }
+        deliveryInfoBlocks.forEach((block, index) => {
+          const row = infoStartRow + index;
+          const cell = sheet.getCell(row, 2);
+          cell.value = block;
+          cell.alignment = {
+            ...(cell.alignment ?? {}),
+            wrapText: true,
+            vertical: 'top',
+          };
         });
 
         const outputBuffer = await workbook.xlsx.writeBuffer();
