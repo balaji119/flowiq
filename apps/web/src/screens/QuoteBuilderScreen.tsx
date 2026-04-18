@@ -30,6 +30,7 @@ import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculat
 import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
+import ExcelJS from 'exceljs';
 
 const steps = [
   { key: 'creative', title: 'Creative' },
@@ -570,6 +571,7 @@ export function QuoteBuilderScreen({
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
   const campaignHydratedRef = useRef(false);
   const lastPersistedValuesRef = useRef('');
+  const lastAutoSaveFailedValuesRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -1192,16 +1194,22 @@ export function QuoteBuilderScreen({
     }
   }
 
-  async function saveCampaignDraft() {
+  async function saveCampaignDraft(options?: { fromAutoSave?: boolean }) {
+    const fromAutoSave = options?.fromAutoSave ?? false;
+    const currentValuesSerialized = JSON.stringify(values);
+    if (fromAutoSave && lastAutoSaveFailedValuesRef.current === currentValuesSerialized) {
+      return null;
+    }
     if (campaignId && !hasUnsavedChanges) return campaignId;
 
     setSavingCampaign(true);
-    setError('');
+    if (!fromAutoSave) setError('');
     try {
       if (!campaignId) {
         const response = await createCampaign({ values });
         applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
         lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
+        lastAutoSaveFailedValuesRef.current = null;
         await setStoredCampaignId(response.campaign.id);
         return response.campaign.id;
       }
@@ -1210,8 +1218,12 @@ export function QuoteBuilderScreen({
       setCampaignStatus(response.campaign.status);
       setUploadedPurchaseOrderName(response.campaign.purchaseOrder?.originalName || '');
       lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
+      lastAutoSaveFailedValuesRef.current = null;
       return campaignId;
     } catch (saveError) {
+      if (fromAutoSave) {
+        lastAutoSaveFailedValuesRef.current = currentValuesSerialized;
+      }
       setError(saveError instanceof Error ? saveError.message : 'Unable to save campaign draft');
       return null;
     } finally {
@@ -1223,7 +1235,7 @@ export function QuoteBuilderScreen({
     if (loadingCampaign || savingCampaign || !hasUnsavedChanges) return;
 
     const timeoutId = window.setTimeout(() => {
-      void saveCampaignDraft();
+      void saveCampaignDraft({ fromAutoSave: true });
     }, 900);
 
     return () => {
@@ -1348,7 +1360,7 @@ export function QuoteBuilderScreen({
     setError('');
 
     try {
-      const ExcelJS = await import('exceljs');
+      const ExcelJSRuntime = ExcelJS as any;
       const baseName = sanitizeFileName((values.campaignName || 'Campaign').trim() || 'Campaign');
       const campaignNumber = values.customerReference.trim() || campaignId || '';
       const weekCommencing = parseDateOnly(values.campaignStartDate);
@@ -1527,7 +1539,7 @@ export function QuoteBuilderScreen({
         const response = await fetch('/templates/26-233_PrintQuantities.xlsx');
         if (!response.ok) throw new Error('Unable to load print quantities template');
         const arrayBuffer = await response.arrayBuffer();
-        const workbook = new ExcelJS.Workbook();
+        const workbook = new ExcelJSRuntime.Workbook();
         await workbook.xlsx.load(arrayBuffer as ArrayBuffer);
         const sheet = workbook.worksheets[0];
         if (!sheet) throw new Error('Print quantities sheet is missing');
@@ -1594,7 +1606,7 @@ export function QuoteBuilderScreen({
         const response = await fetch('/templates/26-233_Delivery_Instructions.xlsx');
         if (!response.ok) throw new Error('Unable to load delivery instructions template');
         const arrayBuffer = await response.arrayBuffer();
-        const workbook = new ExcelJS.Workbook();
+        const workbook = new ExcelJSRuntime.Workbook();
         await workbook.xlsx.load(arrayBuffer as ArrayBuffer);
         const sheet = workbook.worksheets[0];
         if (!sheet) throw new Error('Delivery instructions sheet is missing');
