@@ -271,13 +271,19 @@ function formatDeliveryAddress(form: AddressFormState) {
   return lines.join('\n');
 }
 
-type ExportState = 'NSW' | 'VIC' | 'QLD';
+const exportStates = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'] as const;
+type ExportState = (typeof exportStates)[number];
 
 function normalizeExportState(value: string) {
   const normalized = value.trim().toUpperCase();
   if (normalized.includes('NSW') || normalized.includes('SYD')) return 'NSW' as const;
   if (normalized.includes('VIC') || normalized.includes('MEL')) return 'VIC' as const;
   if (normalized.includes('QLD') || normalized.includes('BRIS')) return 'QLD' as const;
+  if (normalized.includes('WA') || normalized.includes('PERTH')) return 'WA' as const;
+  if (normalized.includes('SA') || normalized.includes('ADELAIDE')) return 'SA' as const;
+  if (normalized.includes('TAS') || normalized.includes('HOBART')) return 'TAS' as const;
+  if (normalized.includes('ACT') || normalized.includes('CANBERRA')) return 'ACT' as const;
+  if (normalized.includes('NT') || normalized.includes('DARWIN')) return 'NT' as const;
   return null;
 }
 
@@ -290,7 +296,17 @@ function sanitizeFileName(value: string) {
 }
 
 function buildCreativeCode(state: ExportState, creativeNumber: number) {
-  const prefix = state === 'NSW' ? 'CS' : state === 'VIC' ? 'CM' : 'CB';
+  const prefixByState: Record<ExportState, string> = {
+    NSW: 'CS',
+    VIC: 'CM',
+    QLD: 'CB',
+    WA: 'CW',
+    SA: 'CA',
+    TAS: 'CT',
+    ACT: 'CC',
+    NT: 'CN',
+  };
+  const prefix = prefixByState[state] ?? 'CS';
   return `${prefix}${creativeNumber}`;
 }
 
@@ -332,6 +348,19 @@ function toAbsoluteUrl(url: string) {
     }
   }
   return trimmed;
+}
+
+function detectStateMarkerColumns(sheet: any, headerRow: number, fromColumn: number, toColumn: number) {
+  const markerColumnByState = new Map<ExportState, number>();
+  for (let col = fromColumn; col <= toColumn; col += 1) {
+    const cell = sheet.getCell(headerRow, col);
+    const text = String(cell?.text ?? cell?.value ?? '').trim();
+    const state = normalizeExportState(text);
+    if (state && !markerColumnByState.has(state)) {
+      markerColumnByState.set(state, col);
+    }
+  }
+  return markerColumnByState;
 }
 
 async function pdfFirstPageToDataUrl(blob: Blob, maxWidth = 560) {
@@ -1485,7 +1514,7 @@ export function QuoteBuilderScreen({
           const creative = asset.creativeImageId ? imageById.get(asset.creativeImageId) : undefined;
           if (!line || !creative) return;
 
-          const state = (normalizeExportState(line.state) ?? inferStateFromMarket(market.market)) as ExportState | null;
+          const state = normalizeExportState(line.state) ?? inferStateFromMarket(market.market);
           if (!state) return;
 
           const creativeCode = buildCreativeCode(state, creative.creativeNumber);
@@ -1598,6 +1627,7 @@ export function QuoteBuilderScreen({
         await workbook.xlsx.load(arrayBuffer as ArrayBuffer);
         const sheet = workbook.worksheets[0];
         if (!sheet) throw new Error('Print quantities sheet is missing');
+        sheet.getColumn(2).width = 33.83203125;
         // Keep the purchase-order instruction header block aligned with template sizing.
         const purchaseOrderHeaderHeights: Array<[number, number]> = [
           [2, 34],
@@ -1626,6 +1656,8 @@ export function QuoteBuilderScreen({
         sheet.getCell('C7').value = creativeSummaryText;
 
         const rows = Array.from(printRows.values()).sort((a, b) => a.creativeCode.localeCompare(b.creativeCode));
+        const stateMarkerColumnByState = detectStateMarkerColumns(sheet, 10, 1, 30);
+        const stateMarkerColumns = Array.from(new Set([...stateMarkerColumnByState.values()]));
         const baseDataRows = 3;
         const startRow = 11;
         const templateTotalsRow = 15;
@@ -1652,9 +1684,25 @@ export function QuoteBuilderScreen({
           const row = startRow + index;
           sheet.getCell(row, 2).value = entry.creativeCode;
           sheet.getCell(row, 4).value = entry.fileName;
-          if (entry.state === 'NSW') sheet.getCell(row, 5).value = 0;
-          if (entry.state === 'VIC') sheet.getCell(row, 6).value = 0;
-          if (entry.state === 'QLD') sheet.getCell(row, 7).value = 0;
+          (stateMarkerColumns.length > 0 ? stateMarkerColumns : [5, 6, 7]).forEach((col) => {
+            sheet.getCell(row, col).value = null;
+          });
+          const stateMarkerColumn = stateMarkerColumnByState.get(entry.state);
+          if (stateMarkerColumn) {
+            const stateMarkerCell = sheet.getCell(row, stateMarkerColumn);
+            stateMarkerCell.value = '\u2605';
+            stateMarkerCell.font = {
+              ...(stateMarkerCell.font ?? {}),
+              name: 'Segoe UI Symbol',
+              size: 14,
+              color: { argb: 'FFC9A227' },
+            };
+            stateMarkerCell.alignment = {
+              ...(stateMarkerCell.alignment ?? {}),
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+          }
           const dataUrl = creativeImageDataUrlById.get(entry.creativeImageId);
           if (dataUrl) {
             try {
@@ -1698,6 +1746,7 @@ export function QuoteBuilderScreen({
         await workbook.xlsx.load(arrayBuffer as ArrayBuffer);
         const sheet = workbook.worksheets[0];
         if (!sheet) throw new Error('Delivery instructions sheet is missing');
+        sheet.getColumn(2).width = 33.83203125;
         // Match Delivery Instructions template header sizing for the purchase-order section.
         const purchaseOrderHeaderHeights: Array<[number, number]> = [
           [2, 34],
@@ -1720,13 +1769,8 @@ export function QuoteBuilderScreen({
           },
         ];
 
-        const cloneCellStyle = (style: any) => JSON.parse(JSON.stringify(style ?? {}));
-        const markerBlankStyle = cloneCellStyle(sheet.getCell('D11').style);
-        const markerTemplateByState = {
-          NSW: { value: sheet.getCell('C11').value, style: cloneCellStyle(sheet.getCell('C11').style), col: 3 },
-          VIC: { value: sheet.getCell('D13').value, style: cloneCellStyle(sheet.getCell('D13').style), col: 4 },
-          QLD: { value: sheet.getCell('E15').value, style: cloneCellStyle(sheet.getCell('E15').style), col: 5 },
-        } as const;
+        const stateMarkerColumnByState = detectStateMarkerColumns(sheet, 10, 1, 30);
+        const stateMarkerColumns = Array.from(new Set([...stateMarkerColumnByState.values()]));
 
         sheet.getCell('C3').value = values.campaignName || '';
         sheet.getCell('C4').value = campaignNumber;
@@ -1764,15 +1808,26 @@ export function QuoteBuilderScreen({
         rows.forEach((entry, index) => {
           const row = startRow + index;
           sheet.getCell(row, 2).value = entry.creativeCode;
-          [3, 4, 5].forEach((col) => {
+          (stateMarkerColumns.length > 0 ? stateMarkerColumns : [3, 4, 5]).forEach((col) => {
             const markerCell = sheet.getCell(row, col);
             markerCell.value = null;
-            markerCell.style = cloneCellStyle(markerBlankStyle);
           });
-          const selectedMarker = markerTemplateByState[entry.state];
-          const selectedMarkerCell = sheet.getCell(row, selectedMarker.col);
-          selectedMarkerCell.value = selectedMarker.value;
-          selectedMarkerCell.style = cloneCellStyle(selectedMarker.style);
+          const stateMarkerColumn = stateMarkerColumnByState.get(entry.state);
+          if (stateMarkerColumn) {
+            const selectedMarkerCell = sheet.getCell(row, stateMarkerColumn);
+            selectedMarkerCell.value = '\u2605';
+            selectedMarkerCell.font = {
+              ...(selectedMarkerCell.font ?? {}),
+              name: 'Segoe UI Symbol',
+              size: 14,
+              color: { argb: 'FFC9A227' },
+            };
+            selectedMarkerCell.alignment = {
+              ...(selectedMarkerCell.alignment ?? {}),
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+          }
           const creativeImageId = creativeImageByCreativeFileKey.get(`${entry.creativeCode}\x00${entry.fileName}`);
           if (creativeImageId) {
             const dataUrl = creativeImageDataUrlById.get(creativeImageId);
