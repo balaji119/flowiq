@@ -270,6 +270,29 @@ function formatDeliveryAddress(form: AddressFormState) {
   return lines.join('\n');
 }
 
+type ExportState = 'NSW' | 'VIC' | 'QLD';
+
+function normalizeExportState(value: string) {
+  const normalized = value.trim().toUpperCase();
+  if (normalized.includes('NSW') || normalized.includes('SYD')) return 'NSW' as const;
+  if (normalized.includes('VIC') || normalized.includes('MEL')) return 'VIC' as const;
+  if (normalized.includes('QLD') || normalized.includes('BRIS')) return 'QLD' as const;
+  return null;
+}
+
+function inferStateFromMarket(marketName: string) {
+  return normalizeExportState(marketName);
+}
+
+function sanitizeFileName(value: string) {
+  return value.replace(/[\\/:*?"<>|]/g, '').trim();
+}
+
+function buildCreativeCode(state: ExportState, creativeNumber: number) {
+  const prefix = state === 'NSW' ? 'CS' : state === 'VIC' ? 'CM' : 'CB';
+  return `${prefix}${creativeNumber}`;
+}
+
 function blobToDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -1316,318 +1339,336 @@ export function QuoteBuilderScreen({
     setStepIndex(2);
   }
 
-  async function downloadArtworkWordDocument() {
+  async function downloadArtworkExcelTemplates() {
     if (!hasUploadedPurchaseOrder) {
       setError('Upload a purchase order file before downloading visuals');
       return;
     }
 
-    const defaultDeliveryAddressByMarket = new Map<string, string>();
-    marketDeliveryAddresses.forEach((entry) => {
-      if (entry.isDefault) {
-        defaultDeliveryAddressByMarket.set(entry.market, entry.deliveryAddress);
-        return;
-      }
-      if (!defaultDeliveryAddressByMarket.has(entry.market)) {
-        defaultDeliveryAddressByMarket.set(entry.market, entry.deliveryAddress);
-      }
-    });
-    const lineByAssetId = new Map((summary?.lines ?? []).map((line) => [line.id, line]));
-    const posterDivisors: Record<string, number> = {
-      '8-sheet': 4,
-      '6-sheet': 3,
-      '4-sheet': 2,
-      '2-sheet': 1,
-      QA0: 4,
-      Mega: 1,
-      'DOT M': 1,
-      MP: 1,
-    };
-    const posterLabels: Record<string, string> = {
-      '8-sheet': 'posters',
-      '6-sheet': 'posters',
-      '4-sheet': 'posters',
-      '2-sheet': 'posters',
-      QA0: 'A0 sized posters',
-      Mega: 'Mega',
-      'DOT M': 'DOT Mega',
-      MP: 'Mega Portrait',
-    };
+    setError('');
 
-    function emptyBreakdown(): QuantityBreakdown {
-      return { '8-sheet': 0, '6-sheet': 0, '4-sheet': 0, '2-sheet': 0, QA0: 0, Mega: 0, 'DOT M': 0, MP: 0 };
-    }
+    try {
+      const ExcelJS = await import('exceljs');
+      const baseName = sanitizeFileName((values.campaignName || 'Campaign').trim() || 'Campaign');
+      const campaignNumber = values.customerReference.trim() || campaignId || '';
+      const weekCommencing = parseDateOnly(values.campaignStartDate);
+      const weekCount = Math.max(1, Number.parseInt(values.numberOfWeeks || '1', 10) || 1);
 
-    function addBreakdown(target: QuantityBreakdown, source: QuantityBreakdown) {
-      formatKeys.forEach((key) => {
-        target[key] += source[key] || 0;
-      });
-    }
-
-    function breakdownToEmailText(breakdown: QuantityBreakdown) {
-      const parts: string[] = [];
-      formatKeys.forEach((key) => {
-        const qty = breakdown[key];
-        if (!qty) return;
-        if (key === 'Mega' || key === 'DOT M' || key === 'MP') {
-          parts.push(`${qty} x ${posterLabels[key]}`);
-          return;
+      const lineByAssetId = new Map((summary?.lines ?? []).map((line) => [line.id, line]));
+      const defaultDeliveryAddressByMarket = new Map<string, string>();
+      marketDeliveryAddresses.forEach((entry) => {
+        if (!defaultDeliveryAddressByMarket.has(entry.market) || entry.isDefault) {
+          defaultDeliveryAddressByMarket.set(entry.market, entry.deliveryAddress);
         }
-        const sheetRuns = qty / posterDivisors[key];
-        parts.push(`${qty} ${posterLabels[key]} (${sheetRuns} x ${key})`);
       });
-      return parts.join(' & ');
-    }
 
-    function creativeTypeLabel(breakdown: QuantityBreakdown) {
-      if (breakdown.MP > 0) return 'Mega Portrait';
-      if (breakdown.Mega > 0 || breakdown['DOT M'] > 0) return 'Mega';
-      if (breakdown['8-sheet'] > 0) return '8 sheet';
-      if (breakdown['6-sheet'] > 0) return '6 sheet';
-      if (breakdown['4-sheet'] > 0) return '4 sheet';
-      if (breakdown['2-sheet'] > 0) return '2 sheet';
-      if (breakdown.QA0 > 0) return 'QA0';
-      return 'Artwork';
-    }
-
-    const creativeBreakdowns = new Map<string, QuantityBreakdown>();
-    const creativeBreakdownsByMarket = new Map<string, Map<string, QuantityBreakdown>>();
-
-    values.campaignMarkets.forEach((market) => {
-      market.assets.forEach((asset) => {
-        if (!asset.creativeImageId) return;
-        const line = lineByAssetId.get(asset.id);
-        if (!line) return;
-
-        const totalBucket = creativeBreakdowns.get(asset.creativeImageId) ?? emptyBreakdown();
-        addBreakdown(totalBucket, line.breakdown);
-        creativeBreakdowns.set(asset.creativeImageId, totalBucket);
-
-        const marketMap = creativeBreakdownsByMarket.get(market.market) ?? new Map<string, QuantityBreakdown>();
-        const marketBucket = marketMap.get(asset.creativeImageId) ?? emptyBreakdown();
-        addBreakdown(marketBucket, line.breakdown);
-        marketMap.set(asset.creativeImageId, marketBucket);
-        creativeBreakdownsByMarket.set(market.market, marketMap);
-      });
-    });
-
-    const mappedCreatives = values.printImages
-      .map((image, index) => {
-        const breakdown = creativeBreakdowns.get(image.id);
-        if (!breakdown) return null;
-        const quantitiesText = breakdownToEmailText(breakdown);
-        if (!quantitiesText) return null;
-        return { image, creativeNumber: index + 1, breakdown, quantitiesText };
-      })
-      .filter((entry): entry is { image: (typeof values.printImages)[number]; creativeNumber: number; breakdown: QuantityBreakdown; quantitiesText: string } => Boolean(entry));
-    const creativeNumberByImageID = new Map(mappedCreatives.map((entry) => [entry.image.id, entry.creativeNumber]));
-
-    const creativeCountText = mappedCreatives.length
-      ? `${mappedCreatives.length} creatives attached`
-      : 'No creatives attached';
-
-    const postersToPrintLines = mappedCreatives
-      .map((entry) => `Creative ${entry.creativeNumber} (${creativeTypeLabel(entry.breakdown)}): ${entry.quantitiesText}`)
-      .join('<br/>');
-
-    const creativeImageDataUrls = new Map<string, string>();
-    await Promise.all(
-      mappedCreatives.map(async (entry) => {
-        const image = entry.image;
-        const mimeType = image.mimeType.toLowerCase();
-        const isPdf = mimeType === 'application/pdf' || image.fileName.toLowerCase().endsWith('.pdf');
-        const isImage = mimeType.startsWith('image/');
-        if (!image.imageUrl || (!isImage && !isPdf)) {
-          return;
+      const imageById = new Map(values.printImages.map((image, index) => [image.id, { image, creativeNumber: index + 1 }]));
+      const printRows = new Map<
+        string,
+        {
+          creativeCode: string;
+          creativeNumber: number;
+          fileName: string;
+          state: ExportState;
+          quantities: Record<number, number>;
         }
-        try {
-          const response = await fetch(toAbsoluteUrl(buildApiUrl(image.imageUrl)));
-          if (!response.ok) return;
-          const blob = await response.blob();
-          const dataUrl = isPdf ? await pdfFirstPageToDataUrl(blob, 420) : await blobToDataUrl(blob);
-          if (dataUrl) creativeImageDataUrls.set(image.id, dataUrl);
-        } catch {
-          // Skip image embedding when image fetch fails.
-        }
-      }),
-    );
+      >();
+      const deliveryRows = new Map<string, {
+        creativeCode: string;
+        fileName: string;
+        state: ExportState;
+        typeLabel: string;
+        quantity: number;
+        deliveredTo: string;
+        rolled: boolean;
+      }>();
+      const creativeSummary = new Map<number, QuantityBreakdown>();
+      const deliveryAddressBlocks: string[] = [];
+      const seenDeliveryAddress = new Set<string>();
 
-    const artworkNameLines = mappedCreatives
-      .map((entry) => {
-        const image = entry.image;
-        const index = entry.creativeNumber;
-        const embedded = creativeImageDataUrls.get(image.id);
-        const artworkUrl = image.imageUrl ? toAbsoluteUrl(buildApiUrl(image.imageUrl)) : '';
-        const linkLine = artworkUrl
-          ? `<br/><a href="${escapeHtml(artworkUrl)}" style="color:#1d4ed8;text-decoration:underline;">Open artwork file (${escapeHtml(image.fileName || image.name)})</a>`
-          : '<br/><span style="color:#6b7280;">Artwork file link unavailable</span>';
-        return `Creative ${index}: ${escapeHtml(image.name)}${
-          embedded ? `<br/><img src="${embedded}" alt="${escapeHtml(image.name)}" style="max-width:560px;max-height:320px;border:1px solid #d1d5db;margin:6px 0 12px 0;display:block;" />` : ''
-        }${linkLine}<br/>`;
-      })
-      .join('<br/>');
-
-    type parsedDeliveryAddress = {
-      recipient: string;
-      street: string;
-      locality: string;
-      country: string;
-      phone: string;
-      deliveryTime: string;
-      deliveryPoint: string;
-      notes: string;
-    };
-    function parseDeliveryAddress(rawAddress: string): parsedDeliveryAddress {
-      const lines = rawAddress
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean);
-      const firstLine = lines[0] || '';
-      const street = lines[1] || '';
-      const locality = lines[2] || '';
-      const phoneLine = lines.find((line) => /^phone\s*[:\-–]/i.test(line)) || '';
-      const deliveryTimeLine = lines.find((line) => /^delivery time\s*[:\-–]/i.test(line)) || '';
-      const deliveryPointLine = lines.find((line) => /^delivery point\s*[:\-–]/i.test(line)) || '';
-      const notesLine = lines.find((line) => /^notes?\s*[:\-–]/i.test(line)) || '';
-      const country = lines.find((line) => !line.includes(':') && line.toLowerCase() === 'australia') || '';
-      const recipientWithPhoneMatch = firstLine.match(/^(.+?)\s*[-–]\s*(.+)$/);
-      const recipient = recipientWithPhoneMatch ? recipientWithPhoneMatch[1].trim() : firstLine;
-      const phoneFromRecipient = recipientWithPhoneMatch ? recipientWithPhoneMatch[2].trim() : '';
-
-      function extractLabeledValue(value: string) {
-        return value.replace(/^[^:\-–]+[:\-–]\s*/i, '').trim();
-      }
-
-      return {
-        recipient,
-        street,
-        locality,
-        country,
-        phone: phoneLine ? extractLabeledValue(phoneLine) : phoneFromRecipient,
-        deliveryTime: deliveryTimeLine ? extractLabeledValue(deliveryTimeLine) : '',
-        deliveryPoint: deliveryPointLine ? extractLabeledValue(deliveryPointLine) : '',
-        notes: notesLine ? extractLabeledValue(notesLine) : '',
+      const updateSummary = (creativeNumber: number, breakdown: QuantityBreakdown) => {
+        const bucket = creativeSummary.get(creativeNumber) ?? { '8-sheet': 0, '6-sheet': 0, '4-sheet': 0, '2-sheet': 0, QA0: 0, Mega: 0, 'DOT M': 0, MP: 0 };
+        formatKeys.forEach((key) => {
+          bucket[key] += breakdown[key] ?? 0;
+        });
+        creativeSummary.set(creativeNumber, bucket);
       };
-    }
 
-    function addressCore(rawAddress: string) {
-      const parsed = parseDeliveryAddress(rawAddress);
-      return [parsed.recipient, parsed.street, parsed.locality]
-        .map((value) => value.trim().toLowerCase())
-        .join('|');
-    }
-
-    const deliveryDeadline = formatDeliveryDeadline(values.dueDate);
-    const deliveriesByAddress = new Map<string, { parsed: parsedDeliveryAddress; lines: string[] }>();
-
-    values.campaignMarkets.forEach((market) => {
-      const marketAddressRecords = marketDeliveryAddresses
-        .filter((entry) => entry.market === market.market)
-        .map((entry) => entry.deliveryAddress);
-
-      market.assets.forEach((asset) => {
-        const line = lineByAssetId.get(asset.id);
-        if (!line) return;
-        const quantitiesText = breakdownToEmailText(line.breakdown);
-        if (!quantitiesText) return;
-
-        const selectedOrDefaultAddress = asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || '';
-        if (!selectedOrDefaultAddress) return;
-        const canonicalAddress =
-          marketAddressRecords.find((entry) => addressCore(entry) === addressCore(selectedOrDefaultAddress)) || selectedOrDefaultAddress;
-        const resolvedAddress = canonicalAddress;
-        if (!resolvedAddress) return;
-
-        const creativeNumber = asset.creativeImageId ? creativeNumberByImageID.get(asset.creativeImageId) : undefined;
-        const assetLabel = asset.assetSearch || asset.assetId || 'Asset';
-        const creativeLabel = creativeNumber ? `Creative ${creativeNumber} (${assetLabel})` : `${assetLabel} (${creativeTypeLabel(line.breakdown)})`;
-        const deliveryLine = `${escapeHtml(creativeLabel)}: ${quantitiesText}`;
-
-        const existing = deliveriesByAddress.get(resolvedAddress);
-        if (existing) {
-          existing.lines.push(deliveryLine);
-          return;
+      const getPrintColumn = (state: ExportState, key: keyof QuantityBreakdown) => {
+        if (state === 'QLD') {
+          if (key === '8-sheet') return 14;
+          if (key === '6-sheet') return 15;
+          if (key === '4-sheet') return 16;
+          if (key === '2-sheet') return 17;
         }
+        if (key === '8-sheet') return 9;
+        if (key === '6-sheet') return 10;
+        if (key === '4-sheet') return 11;
+        if (key === '2-sheet') return 12;
+        if (key === 'QA0') return 13;
+        if (key === 'Mega') return 18;
+        if (key === 'DOT M') return 19;
+        return 20;
+      };
 
-        deliveriesByAddress.set(resolvedAddress, {
-          parsed: parseDeliveryAddress(resolvedAddress),
-          lines: [deliveryLine],
+      const getDeliveryTypeLabel = (state: ExportState, key: keyof QuantityBreakdown) => {
+        if (state === 'QLD') {
+          if (key === '8-sheet') return 'BRIS 8 SHEET';
+          if (key === '6-sheet') return 'BRIS 6 SHEET';
+          if (key === '4-sheet') return 'BRIS 4 SHEET';
+          if (key === '2-sheet') return 'BRIS 2 SHEET';
+        }
+        if (key === '8-sheet') return '8 SHEET';
+        if (key === '6-sheet') return '6 SHEET';
+        if (key === '4-sheet') return '4 SHEET';
+        if (key === '2-sheet') return '2 SHEET';
+        if (key === 'QA0') return 'QA0';
+        if (key === 'Mega') return 'FERRO';
+        if (key === 'DOT M') return 'REFLECTIVE';
+        return 'MEGA PORT';
+      };
+
+      const posterDivisors: Record<keyof QuantityBreakdown, number> = {
+        '8-sheet': 4,
+        '6-sheet': 3,
+        '4-sheet': 2,
+        '2-sheet': 1,
+        QA0: 4,
+        Mega: 1,
+        'DOT M': 1,
+        MP: 1,
+      };
+      const summaryLabels: Record<keyof QuantityBreakdown, string> = {
+        '8-sheet': 'posters',
+        '6-sheet': 'posters',
+        '4-sheet': 'posters',
+        '2-sheet': 'posters',
+        QA0: 'A0 sized posters',
+        Mega: 'Mega',
+        'DOT M': 'DOT Mega',
+        MP: 'Mega Portrait',
+      };
+
+      values.campaignMarkets.forEach((market) => {
+        market.assets.forEach((asset) => {
+          const line = lineByAssetId.get(asset.id);
+          const creative = asset.creativeImageId ? imageById.get(asset.creativeImageId) : undefined;
+          if (!line || !creative) return;
+
+          const state = (normalizeExportState(line.state) ?? inferStateFromMarket(market.market)) as ExportState | null;
+          if (!state) return;
+
+          const creativeCode = buildCreativeCode(state, creative.creativeNumber);
+          const fileName = toFileBaseName(creative.image.fileName || creative.image.name || asset.assetSearch || asset.assetId || 'Artwork');
+          const printRowKey = `${creativeCode}\x00${fileName}`;
+          const printRow = printRows.get(printRowKey) ?? {
+            creativeCode,
+            creativeNumber: creative.creativeNumber,
+            fileName,
+            state,
+            quantities: {},
+          };
+
+          (Object.keys(line.breakdown) as Array<keyof QuantityBreakdown>).forEach((key) => {
+            const quantity = line.breakdown[key] ?? 0;
+            if (quantity <= 0) return;
+            const column = getPrintColumn(state, key);
+            printRow.quantities[column] = (printRow.quantities[column] ?? 0) + quantity;
+            const typeLabel = getDeliveryTypeLabel(state, key);
+            const deliveredTo = `VIM ${state}`;
+            const rolled = state !== 'NSW';
+            const deliveryKey = `${creativeCode}\x00${fileName}\x00${typeLabel}\x00${deliveredTo}`;
+            const existingDeliveryRow = deliveryRows.get(deliveryKey);
+            if (existingDeliveryRow) {
+              existingDeliveryRow.quantity += quantity;
+            } else {
+              deliveryRows.set(deliveryKey, {
+                creativeCode,
+                fileName,
+                state,
+                typeLabel,
+                quantity,
+                deliveredTo,
+                rolled,
+              });
+            }
+          });
+
+          printRows.set(printRowKey, printRow);
+          updateSummary(creative.creativeNumber, line.breakdown);
+
+          const address = (asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || '').trim();
+          if (address && !seenDeliveryAddress.has(address)) {
+            seenDeliveryAddress.add(address);
+            deliveryAddressBlocks.push(address);
+          }
         });
       });
-    });
 
-    const deliveryGroups = Array.from(deliveriesByAddress.entries()).map(([rawAddress, group]) => {
-      const recipient = group.parsed.recipient || rawAddress;
-      return {
-        rawAddress,
-        recipient,
-        parsed: group.parsed,
-        lines: group.lines,
-      };
-    });
+      const creativeSummaryText = Array.from(creativeSummary.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([creativeNumber, breakdown]) => {
+          const parts: string[] = [];
+          formatKeys.forEach((key) => {
+            const quantity = breakdown[key] ?? 0;
+            if (quantity <= 0) return;
+            if (key === 'Mega' || key === 'DOT M' || key === 'MP') {
+              parts.push(`${quantity} x ${summaryLabels[key]}`);
+              return;
+            }
+            parts.push(`${quantity} ${summaryLabels[key]} (${quantity / posterDivisors[key]} x ${key})`);
+          });
+          return parts.length ? `Creative ${creativeNumber}: ${parts.join(' & ')}` : '';
+        })
+        .filter(Boolean)
+        .join('\n');
 
-    const deliverySection = deliveryGroups
-      .map((group) => `
-          <p><strong>Please deliver to ${escapeHtml(group.recipient)} by ${escapeHtml(deliveryDeadline)} by COB:</strong><br/><br/>
-          ${group.lines.join('<br/>')}</p>
-        `)
-      .join('');
+      const fillPrintWorkbook = async () => {
+        const response = await fetch('/templates/26-233_PrintQuantities.xlsx');
+        if (!response.ok) throw new Error('Unable to load print quantities template');
+        const arrayBuffer = await response.arrayBuffer();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(arrayBuffer as ArrayBuffer);
+        const sheet = workbook.worksheets[0];
+        if (!sheet) throw new Error('Print quantities sheet is missing');
 
-    const deliveryNotesSection = deliveryGroups
-      .map((group) => {
-        const recipientLine = group.parsed.recipient
-          ? `${escapeHtml(group.parsed.recipient)}${group.parsed.phone ? ` - ${escapeHtml(group.parsed.phone)}` : ''}`
-          : group.parsed.phone
-            ? escapeHtml(group.parsed.phone)
-            : '';
-        const addressLine = [group.parsed.street, group.parsed.locality].filter(Boolean).join(', ');
+        sheet.getCell('C3').value = values.campaignName || '';
+        sheet.getCell('C4').value = campaignNumber;
+        if (weekCommencing) sheet.getCell('C5').value = weekCommencing;
+        sheet.getCell('C7').value = creativeSummaryText;
 
-        if (!recipientLine && !addressLine && !group.parsed.deliveryTime && !group.parsed.deliveryPoint && !group.parsed.notes) {
-          return '';
+        const rows = Array.from(printRows.values()).sort((a, b) => a.creativeCode.localeCompare(b.creativeCode));
+        const baseDataRows = 4;
+        const startRow = 11;
+        const extraRows = Math.max(0, rows.length - baseDataRows);
+        if (extraRows > 0) {
+          sheet.spliceRows(15, 0, ...Array.from({ length: extraRows }, () => []));
         }
 
-        const noteLines: string[] = [];
-        if (recipientLine) noteLines.push(recipientLine);
-        if (addressLine) noteLines.push(`Deliver address &ndash; ${escapeHtml(addressLine)}`);
-        if (group.parsed.deliveryTime) noteLines.push(`Delivery time &ndash; ${escapeHtml(group.parsed.deliveryTime)}`);
-        if (group.parsed.deliveryPoint) noteLines.push(`Delivery point &ndash; ${escapeHtml(group.parsed.deliveryPoint)}`);
-        if (group.parsed.notes) noteLines.push(escapeHtml(group.parsed.notes));
+        const dataEndRow = startRow + baseDataRows + extraRows - 1;
+        for (let row = startRow; row <= dataEndRow; row += 1) {
+          sheet.getCell(row, 2).value = null;
+          sheet.getCell(row, 4).value = null;
+          sheet.getCell(row, 5).value = null;
+          sheet.getCell(row, 6).value = null;
+          sheet.getCell(row, 7).value = null;
+          for (let col = 9; col <= 20; col += 1) sheet.getCell(row, col).value = null;
+        }
 
-        return `<p><strong>Please note:</strong><br/>${noteLines.join('<br/>')}</p>`;
-      })
-      .filter(Boolean)
-      .join('');
+        rows.forEach((entry, index) => {
+          const row = startRow + index;
+          sheet.getCell(row, 2).value = entry.creativeCode;
+          sheet.getCell(row, 4).value = entry.fileName;
+          if (entry.state === 'NSW') sheet.getCell(row, 5).value = 0;
+          if (entry.state === 'VIC') sheet.getCell(row, 6).value = 0;
+          if (entry.state === 'QLD') sheet.getCell(row, 7).value = 0;
+          Object.entries(entry.quantities).forEach(([column, quantity]) => {
+            sheet.getCell(row, Number(column)).value = quantity;
+          });
+        });
 
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Artwork Brief</title>
-</head>
-<body style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#111827;">
-  <p><strong>Creative -</strong> ${escapeHtml(creativeCountText)}</p>
+        const totalRow = 15 + extraRows;
+        const setsRow = 16 + extraRows;
+        const lastDataRow = Math.max(startRow, startRow + rows.length - 1);
+        for (let col = 9; col <= 20; col += 1) {
+          const columnLetter = sheet.getColumn(col).letter;
+          sheet.getCell(totalRow, col).value = {
+            formula: `SUM(${columnLetter}${startRow}:${columnLetter}${lastDataRow})`,
+          };
+          sheet.getCell(setsRow, col).value = { formula: `${columnLetter}${totalRow}/4` };
+        }
 
-  <p><strong>No. of posters to print -</strong><br/>
-  ${postersToPrintLines || 'No creative quantities linked yet.'}</p>
+        const outputBuffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([outputBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const objectUrl = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = `${baseName} - Print Quantities.xlsx`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        window.URL.revokeObjectURL(objectUrl);
+      };
 
-  <p>${artworkNameLines || 'No artwork names available.'}</p>
+      const fillDeliveryWorkbook = async () => {
+        const response = await fetch('/templates/26-233_Delivery_Instructions.xlsx');
+        if (!response.ok) throw new Error('Unable to load delivery instructions template');
+        const arrayBuffer = await response.arrayBuffer();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(arrayBuffer as ArrayBuffer);
+        const sheet = workbook.worksheets[0];
+        if (!sheet) throw new Error('Delivery instructions sheet is missing');
 
-  <p><strong>Delivery -</strong></p>
-  ${deliverySection || '<p>No delivery details available.</p>'}
-  ${deliveryNotesSection}
-</body>
-</html>`;
+        sheet.getCell('C3').value = values.campaignName || '';
+        sheet.getCell('C4').value = campaignNumber;
+        sheet.getCell('C5').value = `${weekCount} WEEK${weekCount === 1 ? '' : 'S'}`;
+        if (weekCommencing) sheet.getCell('C6').value = weekCommencing;
+        sheet.getCell('C8').value = creativeSummaryText;
 
-    const blob = new Blob([html], { type: 'application/msword' });
-    const url = window.URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    const baseName = (values.campaignName || 'Campaign').trim() || 'Campaign';
-    anchor.href = url;
-    anchor.download = `${baseName} Creatives.doc`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    window.URL.revokeObjectURL(url);
+        const rows = Array.from(deliveryRows.values()).sort((a, b) => a.creativeCode.localeCompare(b.creativeCode) || a.typeLabel.localeCompare(b.typeLabel));
+        const baseDataRows = 5;
+        const startRow = 11;
+        const extraRows = Math.max(0, rows.length - baseDataRows);
+        if (extraRows > 0) {
+          sheet.spliceRows(17, 0, ...Array.from({ length: extraRows }, () => []));
+        }
+
+        const dataEndRow = startRow + baseDataRows + extraRows - 1;
+        for (let row = startRow; row <= dataEndRow; row += 1) {
+          sheet.getCell(row, 2).value = null;
+          sheet.getCell(row, 3).value = null;
+          sheet.getCell(row, 4).value = null;
+          sheet.getCell(row, 5).value = null;
+          sheet.getCell(row, 8).value = null;
+          sheet.getCell(row, 9).value = null;
+          sheet.getCell(row, 11).value = null;
+          sheet.getCell(row, 12).value = null;
+          sheet.getCell(row, 13).value = null;
+          sheet.getCell(row, 14).value = null;
+        }
+
+        rows.forEach((entry, index) => {
+          const row = startRow + index;
+          sheet.getCell(row, 2).value = entry.creativeCode;
+          if (entry.state === 'NSW') sheet.getCell(row, 3).value = 0;
+          if (entry.state === 'VIC') sheet.getCell(row, 4).value = 0;
+          if (entry.state === 'QLD') sheet.getCell(row, 5).value = 0;
+          sheet.getCell(row, 8).value = entry.fileName;
+          sheet.getCell(row, 9).value = entry.typeLabel;
+          sheet.getCell(row, 11).value = entry.quantity;
+          sheet.getCell(row, 12).value = entry.rolled;
+          sheet.getCell(row, 13).value = entry.deliveredTo;
+        });
+
+        const infoHeaderRow = 17 + extraRows;
+        const infoStartRow = infoHeaderRow + 1;
+        sheet.getCell(infoHeaderRow, 2).value = 'DELIVERY INFORMATION:';
+        for (let row = infoStartRow; row <= infoStartRow + 24; row += 1) {
+          sheet.getCell(row, 2).value = null;
+        }
+        deliveryAddressBlocks.forEach((address, index) => {
+          sheet.getCell(infoStartRow + index, 2).value = address;
+        });
+
+        const outputBuffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([outputBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const objectUrl = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = `${baseName} - Delivery Instructions.xlsx`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        window.URL.revokeObjectURL(objectUrl);
+      };
+
+      await fillPrintWorkbook();
+      await fillDeliveryWorkbook();
+      setError('');
+    } catch (exportError) {
+      const message = exportError instanceof Error ? exportError.message : 'Unable to download Excel templates. Please try again.';
+      setError(message);
+    }
   }
 
   function openPurchaseOrderPicker() {
@@ -2321,7 +2362,7 @@ export function QuoteBuilderScreen({
                 <CardDescription>Export the details to send to ADS.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3 p-6 sm:flex-row">
-                <Button disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder} onClick={() => void downloadArtworkWordDocument()} type="button" variant="outline">
+                <Button disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder} onClick={() => void downloadArtworkExcelTemplates()} type="button" variant="outline">
                   Download Visuals
                 </Button>
                 <div className="cursor-not-allowed" title={hasUploadedPurchaseOrder ? 'Under construction' : 'Upload purchase order before sending to ADS'}>
