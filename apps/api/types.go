@@ -194,12 +194,13 @@ type marketDeliveryAddressRecord struct {
 }
 
 type marketShippingRateInput struct {
-	Market            string  `json:"market"`
-	ShippingRate      float64 `json:"shippingRate"`
-	PostersPerBox     int     `json:"postersPerBox"`
-	MegaShippingRate  float64 `json:"megaShippingRate"`
-	DotMShippingRate  float64 `json:"dotMShippingRate"`
-	MpShippingRate    float64 `json:"mpShippingRate"`
+	Market           string  `json:"market"`
+	ShippingRate     float64 `json:"shippingRate"`
+	PostersPerBox    int     `json:"postersPerBox"`
+	MegasPerBox      int     `json:"megasPerBox"`
+	MegaShippingRate float64 `json:"megaShippingRate"`
+	DotMShippingRate float64 `json:"dotMShippingRate"`
+	MpShippingRate   float64 `json:"mpShippingRate"`
 }
 
 type marketShippingRateRecord struct {
@@ -207,6 +208,7 @@ type marketShippingRateRecord struct {
 	Market           string  `json:"market"`
 	ShippingRate     float64 `json:"shippingRate"`
 	PostersPerBox    int     `json:"postersPerBox"`
+	MegasPerBox      int     `json:"megasPerBox"`
 	MegaShippingRate float64 `json:"megaShippingRate"`
 	DotMShippingRate float64 `json:"dotMShippingRate"`
 	MpShippingRate   float64 `json:"mpShippingRate"`
@@ -223,14 +225,14 @@ type marketAssetPrintingCostInput struct {
 }
 
 type marketAssetPrintingCostRecord struct {
-	TenantID   string                `json:"tenantId"`
-	Market     string                `json:"market"`
-	AssetID    string                `json:"assetId"`
-	Asset      string                `json:"asset"`
-	Label      string                `json:"label"`
-	Costs      printingCostBreakdown `json:"costs"`
-	CreatedAt  string                `json:"createdAt"`
-	UpdatedAt  string                `json:"updatedAt"`
+	TenantID  string                `json:"tenantId"`
+	Market    string                `json:"market"`
+	AssetID   string                `json:"assetId"`
+	Asset     string                `json:"asset"`
+	Label     string                `json:"label"`
+	Costs     printingCostBreakdown `json:"costs"`
+	CreatedAt string                `json:"createdAt"`
+	UpdatedAt string                `json:"updatedAt"`
 }
 
 type marketAssetShippingCostInput struct {

@@ -10,6 +10,11 @@ RUN go build -o /tmp/flowiq-api .
 
 FROM debian:bookworm-slim
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && update-ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY --from=builder /tmp/flowiq-api ./flowiq-api

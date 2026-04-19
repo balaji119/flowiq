@@ -19,8 +19,6 @@ type ShippingCostSettingsScreenProps = {
 
 type AssetShippingDraft = {
   megaShippingRate: string;
-  dotMShippingRate: string;
-  mpShippingRate: string;
 };
 
 function costKey(market: string, assetId: string) {
@@ -30,8 +28,6 @@ function costKey(market: string, assetId: string) {
 function emptyAssetShippingDraft(): AssetShippingDraft {
   return {
     megaShippingRate: '0',
-    dotMShippingRate: '0',
-    mpShippingRate: '0',
   };
 }
 
@@ -46,9 +42,10 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
   const [mappings, setMappings] = useState<CalculatorMappingRecord[]>([]);
   const [rates, setRates] = useState<MarketShippingRateRecord[]>([]);
   const [assetCosts, setAssetCosts] = useState<MarketAssetShippingCostRecord[]>([]);
-  const [globalPosterBoxPrice, setGlobalPosterBoxPrice] = useState('0');
-  const [globalPostersPerBox, setGlobalPostersPerBox] = useState('60');
-  const [globalDirty, setGlobalDirty] = useState(false);
+  const [marketPosterBoxPrice, setMarketPosterBoxPrice] = useState('0');
+  const [marketPostersPerBox, setMarketPostersPerBox] = useState('60');
+  const [marketMegasPerBox, setMarketMegasPerBox] = useState('1');
+  const [marketRateDirty, setMarketRateDirty] = useState(false);
   const [draftsByAsset, setDraftsByAsset] = useState<Record<string, AssetShippingDraft>>({});
   const [dirtyRows, setDirtyRows] = useState<Record<string, boolean>>({});
 
@@ -86,6 +83,10 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
   const rateByMarket = useMemo(
     () => new Map(rates.map((rate) => [rate.market, rate])),
     [rates],
+  );
+  const selectedMarketRate = useMemo(
+    () => (marketFilter ? rateByMarket.get(marketFilter) : undefined),
+    [marketFilter, rateByMarket],
   );
 
   useEffect(() => {
@@ -144,14 +145,7 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
         setMappings(sortedMappings);
         setRates(rateResponse.rates);
         setAssetCosts(assetCostResponse.costs);
-
-        const posterRates = rateResponse.rates.map((rate) => String(rate.shippingRate));
-        const postersPerBoxValues = rateResponse.rates.map((rate) => String(rate.postersPerBox));
-        const defaultPosterRate = posterRates[0] ?? '0';
-        const defaultPostersPerBox = postersPerBoxValues[0] ?? '60';
-        setGlobalPosterBoxPrice(posterRates.every((value) => value === defaultPosterRate) ? defaultPosterRate : '');
-        setGlobalPostersPerBox(postersPerBoxValues.every((value) => value === defaultPostersPerBox) ? defaultPostersPerBox : '');
-        setGlobalDirty(false);
+        setMarketRateDirty(false);
 
         const byAssetKey = new Map(assetCostResponse.costs.map((entry) => [costKey(entry.market, entry.assetId), entry]));
         const nextDrafts: Record<string, AssetShippingDraft> = {};
@@ -159,8 +153,6 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
           const existing = byAssetKey.get(costKey(mapping.market, mapping.id));
           nextDrafts[costKey(mapping.market, mapping.id)] = {
             megaShippingRate: String(existing?.megaShippingRate ?? 0),
-            dotMShippingRate: String(existing?.dotMShippingRate ?? 0),
-            mpShippingRate: String(existing?.mpShippingRate ?? 0),
           };
         });
         setDraftsByAsset(nextDrafts);
@@ -188,13 +180,20 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
     }
   }, [marketFilter, marketOptions]);
 
-  function updateAssetDraft(market: string, assetId: string, key: keyof AssetShippingDraft, value: string) {
+  useEffect(() => {
+    setMarketPosterBoxPrice(String(selectedMarketRate?.shippingRate ?? 0));
+    setMarketPostersPerBox(String(selectedMarketRate?.postersPerBox ?? 60));
+    setMarketMegasPerBox(String(selectedMarketRate?.megasPerBox ?? 1));
+    setMarketRateDirty(false);
+  }, [selectedMarketRate]);
+
+  function updateAssetDraft(market: string, assetId: string, value: string) {
     const rowKey = costKey(market, assetId);
     setDraftsByAsset((current) => ({
       ...current,
       [rowKey]: {
         ...(current[rowKey] || emptyAssetShippingDraft()),
-        [key]: value,
+        megaShippingRate: value,
       },
     }));
     setDirtyRows((current) => ({
@@ -203,34 +202,36 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
     }));
   }
 
-  async function saveGlobalPosterSettings() {
-    if (!selectedTenantId) return;
-    const parsedPosterBoxPrice = Number(globalPosterBoxPrice);
-    const parsedPostersPerBox = Math.floor(Number(globalPostersPerBox));
+  async function saveMarketPosterSettings() {
+    if (!selectedTenantId || !marketFilter) return;
+    const parsedPosterBoxPrice = Number(marketPosterBoxPrice);
+    const parsedPostersPerBox = Math.floor(Number(marketPostersPerBox));
+    const parsedMegasPerBox = Math.floor(Number(marketMegasPerBox));
     if (!Number.isFinite(parsedPosterBoxPrice) || parsedPosterBoxPrice < 0) {
       throw new Error('Poster Box Price must be a valid number greater than or equal to 0.');
     }
     if (!Number.isFinite(parsedPostersPerBox) || parsedPostersPerBox <= 0) {
       throw new Error('Posters Per Box must be a whole number greater than 0.');
     }
+    if (!Number.isFinite(parsedMegasPerBox) || parsedMegasPerBox <= 0) {
+      throw new Error('Megas Per Box must be a whole number greater than 0.');
+    }
 
-    const nextRates: MarketShippingRateRecord[] = [];
-    for (const market of marketOptions) {
-      const existing = rateByMarket.get(market);
-      const response = await upsertMarketShippingRate({
-        market,
-        shippingRate: parsedPosterBoxPrice,
-        postersPerBox: parsedPostersPerBox,
-        megaShippingRate: existing?.megaShippingRate ?? 0,
-        dotMShippingRate: existing?.dotMShippingRate ?? 0,
-        mpShippingRate: existing?.mpShippingRate ?? 0,
-      }, selectedTenantId);
-      nextRates.push(response.rate);
-    }
-    if (nextRates.length > 0) {
-      setRates(nextRates.sort((a, b) => a.market.localeCompare(b.market)));
-    }
-    setGlobalDirty(false);
+    const existing = rateByMarket.get(marketFilter);
+    const response = await upsertMarketShippingRate({
+      market: marketFilter,
+      shippingRate: parsedPosterBoxPrice,
+      postersPerBox: parsedPostersPerBox,
+      megasPerBox: parsedMegasPerBox,
+      megaShippingRate: existing?.megaShippingRate ?? 0,
+      dotMShippingRate: existing?.dotMShippingRate ?? 0,
+      mpShippingRate: existing?.mpShippingRate ?? 0,
+    }, selectedTenantId);
+    setRates((current) => {
+      const withoutSelected = current.filter((rate) => rate.market !== response.rate.market);
+      return [...withoutSelected, response.rate].sort((a, b) => a.market.localeCompare(b.market));
+    });
+    setMarketRateDirty(false);
   }
 
   async function saveAssetMegaSettings() {
@@ -254,8 +255,8 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
           market: mapping.market,
           assetId: mapping.id,
           megaShippingRate: Math.max(0, Number(sourceDraft.megaShippingRate) || 0),
-          dotMShippingRate: Math.max(0, Number(sourceDraft.dotMShippingRate) || 0),
-          mpShippingRate: Math.max(0, Number(sourceDraft.mpShippingRate) || 0),
+          dotMShippingRate: Math.max(0, Number(sourceDraft.megaShippingRate) || 0),
+          mpShippingRate: Math.max(0, Number(sourceDraft.megaShippingRate) || 0),
         };
       });
 
@@ -272,15 +273,15 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
   }
 
   useEffect(() => {
-    if (!selectedTenantId || loading || saving || (!globalDirty && dirtyRowKeys.length === 0)) return;
+    if (!selectedTenantId || loading || saving || (!marketRateDirty && dirtyRowKeys.length === 0)) return;
 
     const timer = window.setTimeout(() => {
       void (async () => {
         setSaving(true);
         setError('');
         try {
-          if (globalDirty) {
-            await saveGlobalPosterSettings();
+          if (marketRateDirty) {
+            await saveMarketPosterSettings();
           }
           if (dirtyRowKeys.length > 0) {
             await saveAssetMegaSettings();
@@ -296,7 +297,7 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
     return () => {
       window.clearTimeout(timer);
     };
-  }, [dirtyRowKeys, draftsByAsset, globalDirty, globalPosterBoxPrice, globalPostersPerBox, loading, saving, selectedTenantId]);
+  }, [dirtyRowKeys, draftsByAsset, loading, marketFilter, marketMegasPerBox, marketPosterBoxPrice, marketPostersPerBox, marketRateDirty, saving, selectedTenantId]);
 
   if (!isSuperAdmin) {
     return (
@@ -330,7 +331,7 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
         <CardHeader className="p-5 pb-0">
           <CardTitle>Scope and Poster Settings</CardTitle>
           <CardDescription>
-            Poster Box Price and Posters Per Box are global for the tenant. Mega shipping prices are per asset.
+            Poster and mega box settings are per selected market.
             {saving ? ' Saving...' : ''}
           </CardDescription>
         </CardHeader>
@@ -371,10 +372,10 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
               type="number"
               min={0}
               step="0.01"
-              value={globalPosterBoxPrice}
+              value={marketPosterBoxPrice}
               onChange={(event) => {
-                setGlobalPosterBoxPrice(event.target.value);
-                setGlobalDirty(true);
+                setMarketPosterBoxPrice(event.target.value);
+                setMarketRateDirty(true);
               }}
             />
           </div>
@@ -387,10 +388,10 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
               type="number"
               min={1}
               step="1"
-              value={globalPostersPerBox}
+              value={marketPostersPerBox}
               onChange={(event) => {
-                setGlobalPostersPerBox(event.target.value);
-                setGlobalDirty(true);
+                setMarketPostersPerBox(event.target.value);
+                setMarketRateDirty(true);
               }}
             />
           </div>
@@ -398,9 +399,24 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
       </Card>
 
       <Card>
-        <CardHeader className="p-5 pb-0">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 p-5 pb-0">
           <CardTitle>Mega Shipping Price Per Asset</CardTitle>
-          <CardDescription>Set separate shipping price for Mega, DOT M, and MP per asset.</CardDescription>
+          <div className="flex items-center gap-2">
+            <Label className="whitespace-nowrap" htmlFor="megas-per-box-inline">Megas Per Box</Label>
+            <Input
+              id="megas-per-box-inline"
+              className="h-11 w-24"
+              inputMode="numeric"
+              type="number"
+              min={1}
+              step="1"
+              value={marketMegasPerBox}
+              onChange={(event) => {
+                setMarketMegasPerBox(event.target.value);
+                setMarketRateDirty(true);
+              }}
+            />
+          </div>
         </CardHeader>
         <CardContent className="space-y-4 p-5">
           {loading ? (
@@ -420,8 +436,6 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                     <th className="border border-slate-700 px-2 py-2 text-left sm:px-3">Market</th>
                     <th className="border border-slate-700 px-2 py-2 text-left sm:px-3">Asset</th>
                     <th className="border border-slate-700 px-2 py-2 text-center sm:px-3">Mega Price</th>
-                    <th className="border border-slate-700 px-2 py-2 text-center sm:px-3">DOT M Price</th>
-                    <th className="border border-slate-700 px-2 py-2 text-center sm:px-3">MP Price</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -436,13 +450,7 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                           <p className="truncate text-[10px] text-slate-400 sm:text-xs">{mapping.asset}</p>
                         </td>
                         <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                          <Input className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm" type="number" min={0} step="0.01" value={draft.megaShippingRate} onChange={(event) => updateAssetDraft(mapping.market, mapping.id, 'megaShippingRate', event.target.value)} />
-                        </td>
-                        <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                          <Input className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm" type="number" min={0} step="0.01" value={draft.dotMShippingRate} onChange={(event) => updateAssetDraft(mapping.market, mapping.id, 'dotMShippingRate', event.target.value)} />
-                        </td>
-                        <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                          <Input className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm" type="number" min={0} step="0.01" value={draft.mpShippingRate} onChange={(event) => updateAssetDraft(mapping.market, mapping.id, 'mpShippingRate', event.target.value)} />
+                          <Input className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm" type="number" min={0} step="0.01" value={draft.megaShippingRate} onChange={(event) => updateAssetDraft(mapping.market, mapping.id, event.target.value)} />
                         </td>
                       </tr>
                     );

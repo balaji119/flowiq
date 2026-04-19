@@ -36,6 +36,9 @@ services:
     restart: unless-stopped
 
   api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
     image: balaji119/flowiq-api:v1
     env_file:
       - ./.env.production

@@ -382,6 +382,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
           market: selectedMarketFilter,
           shippingRate: parsedShippingRate,
           postersPerBox: normalizedPostersPerBox,
+          megasPerBox: selectedMarketShippingRateConfig?.megasPerBox ?? 1,
           megaShippingRate: selectedMarketShippingRateConfig?.megaShippingRate ?? 0,
           dotMShippingRate: selectedMarketShippingRateConfig?.dotMShippingRate ?? 0,
           mpShippingRate: selectedMarketShippingRateConfig?.mpShippingRate ?? 0,

@@ -159,10 +159,9 @@ func sendPasswordResetEmail(cfg smtpConfig, recipientEmail, recipientName, reset
 
 	subject := "Reset your ADS Connect password"
 	body := fmt.Sprintf(
-		"Hi %s,\r\n\r\nWe received a request to reset your ADS Connect password.\r\n\r\nUse this link to choose a new password:\r\n%s\r\n\r\nThis link expires in %s.\r\nIf you did not request this, you can ignore this email.\r\n",
+		"Hi %s,\r\n\r\nWe received a request to reset your ADS Connect password.\r\n\r\nUse this link to choose a new password:\r\n%s\r\n\r\nThis link expires in one hour.\r\nIf you did not request this, you can ignore this email.\r\n",
 		firstNonEmpty(strings.TrimSpace(recipientName), "there"),
 		resetURL,
-		cfg.resetTokenTTL.String(),
 	)
 	message := strings.Join([]string{
 		fmt.Sprintf("From: %s", fromHeader),

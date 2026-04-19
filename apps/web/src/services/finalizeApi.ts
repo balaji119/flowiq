@@ -5,13 +5,21 @@ type SendEmailToAdsResponse = {
   message: string;
 };
 
-export async function sendEmailToAds(files: File[], campaignName?: string): Promise<SendEmailToAdsResponse> {
+export type CreativeEmailLink = {
+  name: string;
+  url: string;
+};
+
+export async function sendEmailToAds(files: File[], campaignName?: string, creativeLinks: CreativeEmailLink[] = []): Promise<SendEmailToAdsResponse> {
   const formData = new FormData();
   files.forEach((file) => {
     formData.append('files', file, file.name);
   });
   if (campaignName?.trim()) {
     formData.append('campaignName', campaignName.trim());
+  }
+  if (creativeLinks.length > 0) {
+    formData.append('creativeLinks', JSON.stringify(creativeLinks));
   }
 
   const headers = new Headers();

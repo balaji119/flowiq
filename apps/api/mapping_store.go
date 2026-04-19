@@ -46,6 +46,7 @@ type marketShippingRateRow struct {
 	Market           string
 	ShippingRate     float64
 	PostersPerBox    int
+	MegasPerBox      int
 	MegaShippingRate float64
 	DotMShippingRate float64
 	MpShippingRate   float64
@@ -262,6 +263,7 @@ func scanMarketShippingRateRow(scanner interface {
 		&row.Market,
 		&row.ShippingRate,
 		&row.PostersPerBox,
+		&row.MegasPerBox,
 		&row.MegaShippingRate,
 		&row.DotMShippingRate,
 		&row.MpShippingRate,
@@ -313,6 +315,7 @@ func decodeMarketShippingRateRow(row marketShippingRateRow) marketShippingRateRe
 		Market:           row.Market,
 		ShippingRate:     row.ShippingRate,
 		PostersPerBox:    row.PostersPerBox,
+		MegasPerBox:      row.MegasPerBox,
 		MegaShippingRate: row.MegaShippingRate,
 		DotMShippingRate: row.DotMShippingRate,
 		MpShippingRate:   row.MpShippingRate,
@@ -901,6 +904,7 @@ func (s *mappingStore) listMarketShippingRates(ctx context.Context, tenantID str
 			m.name,
 			msr.shipping_rate::float8,
 			msr.posters_per_box,
+			msr.megas_per_box,
 			msr.mega_shipping_rate::float8,
 			msr.dot_m_shipping_rate::float8,
 			msr.mp_shipping_rate::float8,
@@ -951,6 +955,9 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 	if payload.PostersPerBox <= 0 {
 		return nil, errors.New("postersPerBox must be greater than 0")
 	}
+	if payload.MegasPerBox <= 0 {
+		return nil, errors.New("megasPerBox must be greater than 0")
+	}
 
 	marketID, err := s.ensureMarket(ctx, tenantID, market)
 	if err != nil {
@@ -963,32 +970,35 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 			market_id,
 			shipping_rate,
 			posters_per_box,
+			megas_per_box,
 			mega_shipping_rate,
 			dot_m_shipping_rate,
 			mp_shipping_rate,
 			created_at,
 			updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
 		ON CONFLICT (tenant_id, market_id)
 		DO UPDATE SET
 			shipping_rate = EXCLUDED.shipping_rate,
 			posters_per_box = EXCLUDED.posters_per_box,
+			megas_per_box = EXCLUDED.megas_per_box,
 			mega_shipping_rate = EXCLUDED.mega_shipping_rate,
 			dot_m_shipping_rate = EXCLUDED.dot_m_shipping_rate,
 			mp_shipping_rate = EXCLUDED.mp_shipping_rate,
 			updated_at = NOW()
 		RETURNING
 			tenant_id,
-			$8::text,
+			$9::text,
 			shipping_rate::float8,
 			posters_per_box,
+			megas_per_box,
 			mega_shipping_rate::float8,
 			dot_m_shipping_rate::float8,
 			mp_shipping_rate::float8,
 			created_at,
 			updated_at
-	`, tenantID, marketID, payload.ShippingRate, payload.PostersPerBox, payload.MegaShippingRate, payload.DotMShippingRate, payload.MpShippingRate, market))
+	`, tenantID, marketID, payload.ShippingRate, payload.PostersPerBox, payload.MegasPerBox, payload.MegaShippingRate, payload.DotMShippingRate, payload.MpShippingRate, market))
 	if err != nil {
 		return nil, err
 	}

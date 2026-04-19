@@ -852,6 +852,10 @@ export function QuoteBuilderScreen({
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.postersPerBox])),
     [marketShippingRates],
   );
+  const megasPerBoxByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.megasPerBox ?? 1])),
+    [marketShippingRates],
+  );
   const megaShippingRateByMarket = useMemo(
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.megaShippingRate ?? 0])),
     [marketShippingRates],
@@ -1357,6 +1361,7 @@ export function QuoteBuilderScreen({
   function calculateMarketShippingCost(marketName: string) {
     const perBoxPrice = shippingRateByMarket.get(marketName) ?? 0;
     const postersPerBox = postersPerBoxByMarket.get(marketName) ?? 60;
+    const megasPerBox = megasPerBoxByMarket.get(marketName) ?? 1;
     const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
     const posterUnits = marketLines.reduce((total, line) => total + posterUnitsFromBreakdown(line.breakdown), 0);
     const posterShipping = calculateShippingCost(posterUnits, perBoxPrice, postersPerBox);
@@ -1371,9 +1376,9 @@ export function QuoteBuilderScreen({
       const mpRate = assetShippingCosts?.mpShippingRate ?? (mpShippingRateByMarket.get(marketName) ?? 0);
 
       return total
-        + (line.breakdown.Mega ?? 0) * megaRate
-        + (line.breakdown['DOT M'] ?? 0) * dotMRate
-        + (line.breakdown.MP ?? 0) * mpRate;
+        + calculateShippingCost(line.breakdown.Mega ?? 0, megaRate, megasPerBox)
+        + calculateShippingCost(line.breakdown['DOT M'] ?? 0, dotMRate, megasPerBox)
+        + calculateShippingCost(line.breakdown.MP ?? 0, mpRate, megasPerBox);
     }, 0);
 
     return posterShipping + megaShipping;
@@ -1671,8 +1676,24 @@ export function QuoteBuilderScreen({
         sheet.getCell('C4').value = campaignNumber;
         if (weekCommencing) sheet.getCell('C5').value = weekCommencing;
         sheet.getCell('C7').value = creativeSummaryText;
+        const masterArtworkFolderCell = sheet.getCell('B8');
+        const masterArtworkFolderLabel = (masterArtworkFolderCell.text || '').trim() || 'MASTER ARTWORK FOLDER';
+        // Keep the existing yellow template styling, but remove the hyperlink from this label.
+        masterArtworkFolderCell.value = masterArtworkFolderLabel;
+        const worksheetModel = sheet.model as { hyperlinks?: Array<{ ref?: string }> };
+        if (Array.isArray(worksheetModel.hyperlinks)) {
+          worksheetModel.hyperlinks = worksheetModel.hyperlinks.filter((entry) => {
+            const ref = (entry.ref || '').toUpperCase();
+            return ref !== 'B8' && ref !== 'B8:I8';
+          });
+        }
 
         const rows = Array.from(printRows.values()).sort((a, b) => a.creativeCode.localeCompare(b.creativeCode));
+        const usedQuantityColumns = new Set<number>();
+        const columnTotals = new Map<number, number>();
+        for (let col = 9; col <= 20; col += 1) {
+          columnTotals.set(col, 0);
+        }
         const stateMarkerColumnByState = detectStateMarkerColumns(sheet, 10, 1, 30);
         const stateMarkerColumns = Array.from(new Set([...stateMarkerColumnByState.values()]));
         const baseDataRows = 3;
@@ -1735,19 +1756,35 @@ export function QuoteBuilderScreen({
             }
           }
           Object.entries(entry.quantities).forEach(([column, quantity]) => {
-            sheet.getCell(row, Number(column)).value = quantity;
+            const numericColumn = Number(column);
+            sheet.getCell(row, numericColumn).value = quantity;
+            if (quantity > 0) {
+              usedQuantityColumns.add(numericColumn);
+            }
+            columnTotals.set(numericColumn, (columnTotals.get(numericColumn) ?? 0) + quantity);
           });
         });
 
-        const totalRow = startRow + rows.length;
+        // Show only quantity columns that actually contain values in this export.
+        for (let col = 9; col <= 20; col += 1) {
+          sheet.getColumn(col).hidden = !usedQuantityColumns.has(col);
+        }
+
+        const renderedDataRows = Math.max(rows.length, baseDataRows);
+        const totalRow = startRow + renderedDataRows + 1;
         const setsRow = totalRow + 1;
         const lastDataRow = Math.max(startRow, startRow + rows.length - 1);
         for (let col = 9; col <= 20; col += 1) {
           const columnLetter = sheet.getColumn(col).letter;
+          const totalValue = columnTotals.get(col) ?? 0;
           sheet.getCell(totalRow, col).value = {
             formula: `SUM(${columnLetter}${startRow}:${columnLetter}${lastDataRow})`,
+            result: totalValue,
           };
-          sheet.getCell(setsRow, col).value = { formula: `${columnLetter}${totalRow}/4` };
+          sheet.getCell(setsRow, col).value = {
+            formula: `${columnLetter}${totalRow}/4`,
+            result: totalValue / 4,
+          };
         }
 
         const outputBuffer = await workbook.xlsx.writeBuffer();
@@ -1969,8 +2006,18 @@ export function QuoteBuilderScreen({
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           }),
       );
+      const usedCreativeImageIds = new Set(
+        values.campaignMarkets.flatMap((market) => market.assets.map((asset) => asset.creativeImageId).filter(Boolean)),
+      );
+      const creativeLinks = values.printImages
+        .filter((image) => usedCreativeImageIds.has(image.id))
+        .map((image) => ({
+          name: image.name || image.fileName || 'Creative',
+          url: toAbsoluteUrl(buildApiUrl(image.imageUrl || '')),
+        }))
+        .filter((link) => Boolean(link.url.trim()));
       setExportProgressMessage('Sending email to ADS...');
-      await sendEmailToAds(files, values.campaignName);
+      await sendEmailToAds(files, values.campaignName, creativeLinks);
       setExportProgressMessage('Email sent to ADS.');
       setError('');
     } catch (sendError) {

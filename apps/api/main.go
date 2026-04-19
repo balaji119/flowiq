@@ -456,7 +456,7 @@ func (a *app) handleRequestPasswordReset(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if user != nil && user.Active {
+	if user != nil {
 		token, err := a.authStore.createPasswordResetToken(r.Context(), user.ID, time.Now().Add(cfg.resetTokenTTL))
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -467,10 +467,18 @@ func (a *app) handleRequestPasswordReset(w http.ResponseWriter, r *http.Request)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to send password reset email"})
 			return
 		}
+		writeJSON(w, http.StatusOK, map[string]string{
+			"message": "Password reset link has been sent",
+		})
+		return
 	}
 
+	requestedEmail := strings.TrimSpace(payload.Email)
+	if requestedEmail == "" {
+		requestedEmail = "that email address"
+	}
 	writeJSON(w, http.StatusOK, map[string]string{
-		"message": "If an account exists for that email, a password reset link has been sent.",
+		"message": fmt.Sprintf("No account exists for %s.", requestedEmail),
 	})
 }
 

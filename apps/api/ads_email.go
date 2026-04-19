@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/smtp"
@@ -20,6 +22,11 @@ type emailAttachment struct {
 	fileName    string
 	contentType string
 	content     []byte
+}
+
+type creativeEmailLink struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
 }
 
 func loadSMTPAdsToEmail() (string, error) {
@@ -56,7 +63,7 @@ func writeBase64MimeChunk(target io.Writer, source []byte) error {
 	return nil
 }
 
-func sendADSEmailWithAttachments(cfg smtpConfig, toEmail, campaignName, senderName string, attachments []emailAttachment) error {
+func sendADSEmailWithAttachments(cfg smtpConfig, toEmail, campaignName, senderName string, attachments []emailAttachment, creativeLinks []creativeEmailLink) error {
 	if len(attachments) == 0 {
 		return fmt.Errorf("at least one attachment is required")
 	}
@@ -76,16 +83,29 @@ func sendADSEmailWithAttachments(cfg smtpConfig, toEmail, campaignName, senderNa
 		requestedBy = strings.TrimSpace(senderName)
 	}
 
-	bodyText := strings.Join([]string{
+	bodyLines := []string{
 		"Hi Team,",
 		"",
 		"Please find the generated visuals files attached from ADS Connect.",
 		fmt.Sprintf("Requested by: %s", requestedBy),
 		fmt.Sprintf("Generated at: %s", time.Now().Format(time.RFC1123Z)),
-		"",
-		"Regards,",
-		"ADS Australia",
-	}, "\r\n")
+	}
+	if len(creativeLinks) > 0 {
+		bodyLines = append(bodyLines, "", "Creative links used in campaign:")
+		for index, link := range creativeLinks {
+			name := strings.TrimSpace(link.Name)
+			url := strings.TrimSpace(link.URL)
+			if url == "" {
+				continue
+			}
+			if name == "" {
+				name = fmt.Sprintf("Creative %d", index+1)
+			}
+			bodyLines = append(bodyLines, fmt.Sprintf("- %s: %s", name, url))
+		}
+	}
+	bodyLines = append(bodyLines, "", "Regards,", "ADS Australia")
+	bodyText := strings.Join(bodyLines, "\r\n")
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -210,9 +230,18 @@ func (a *app) handleSendEmailToADS(w http.ResponseWriter, r *http.Request) {
 		userName = firstNonEmpty(strings.TrimSpace(user.Name), strings.TrimSpace(user.Email))
 	}
 	campaignName := strings.TrimSpace(r.FormValue("campaignName"))
+	creativeLinksPayload := strings.TrimSpace(r.FormValue("creativeLinks"))
+	var creativeLinks []creativeEmailLink
+	if creativeLinksPayload != "" {
+		if err := json.Unmarshal([]byte(creativeLinksPayload), &creativeLinks); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid creative links payload"})
+			return
+		}
+	}
 
-	if err := sendADSEmailWithAttachments(cfg, toEmail, campaignName, userName, attachments); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to send email to ADS"})
+	if err := sendADSEmailWithAttachments(cfg, toEmail, campaignName, userName, attachments, creativeLinks); err != nil {
+		log.Printf("send email to ADS failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("Unable to send email to ADS: %v", err)})
 		return
 	}
 

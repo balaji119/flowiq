@@ -37,6 +37,10 @@ function toDraft(costs?: PrintingCostBreakdown): AssetCostDraft {
   for (const key of formatKeys) {
     next[key] = String(costs[key] ?? 0);
   }
+  const megaValue = megaCostValue(next);
+  next.Mega = megaValue;
+  next['DOT M'] = megaValue;
+  next.MP = megaValue;
   return next;
 }
 
@@ -46,6 +50,9 @@ function toBreakdown(draft: AssetCostDraft): PrintingCostBreakdown {
     const parsed = Number.parseFloat((draft[key] || '').trim());
     next[key] = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   }
+  const normalizedMegaCost = next.Mega;
+  next['DOT M'] = normalizedMegaCost;
+  next.MP = normalizedMegaCost;
   return next;
 }
 
@@ -53,6 +60,12 @@ function posterCostValue(draft: AssetCostDraft): string {
   const values = posterFormatKeys.map((key) => draft[key]);
   const firstNonEmpty = values.find((value) => value.trim() !== '');
   return firstNonEmpty ?? draft['8-sheet'] ?? '0';
+}
+
+function megaCostValue(draft: AssetCostDraft): string {
+  const values = megaFormatKeys.map((key) => draft[key]);
+  const firstNonEmpty = values.find((value) => value.trim() !== '');
+  return firstNonEmpty ?? draft.Mega ?? '0';
 }
 
 export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSettingsScreenProps) {
@@ -187,15 +200,15 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     });
     return byMarket;
   }, [dirtyRows]);
-  const globalPosterCost = useMemo(() => {
-    if (mappings.length === 0) return '0';
-    const values = mappings.map((mapping) => {
+  const marketPosterCost = useMemo(() => {
+    if (selectedMarketMappings.length === 0) return '0';
+    const values = selectedMarketMappings.map((mapping) => {
       const rowKey = costKey(mapping.market, mapping.id);
       return posterCostValue(draftsByAsset[rowKey] || createEmptyCostDraft());
     });
     const first = values[0] ?? '0';
     return values.every((value) => value === first) ? first : '';
-  }, [draftsByAsset, mappings]);
+  }, [draftsByAsset, selectedMarketMappings]);
 
   useEffect(() => {
     if (marketOptions.length === 0) {
@@ -207,13 +220,15 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     }
   }, [marketFilter, marketOptions]);
 
-  function updateDraft(market: string, assetId: string, key: FormatKey, value: string) {
+  function updateMegaDraft(market: string, assetId: string, value: string) {
     const rowKey = costKey(market, assetId);
     setDraftsByAsset((current) => ({
       ...current,
       [rowKey]: {
         ...(current[rowKey] || createEmptyCostDraft()),
-        [key]: value,
+        Mega: value,
+        'DOT M': value,
+        MP: value,
       },
     }));
     setDirtyRows((current) => ({
@@ -240,10 +255,11 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     }));
   }
 
-  function updateGlobalPosterDraft(value: string) {
+  function updateMarketPosterDraft(value: string) {
+    if (!marketFilter) return;
     setDraftsByAsset((current) => {
       const next = { ...current };
-      mappings.forEach((mapping) => {
+      selectedMarketMappings.forEach((mapping) => {
         const rowKey = costKey(mapping.market, mapping.id);
         const currentRow = { ...(next[rowKey] || createEmptyCostDraft()) };
         posterFormatKeys.forEach((posterKey) => {
@@ -255,7 +271,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     });
     setDirtyRows((current) => {
       const next = { ...current };
-      mappings.forEach((mapping) => {
+      selectedMarketMappings.forEach((mapping) => {
         next[costKey(mapping.market, mapping.id)] = true;
       });
       return next;
@@ -367,7 +383,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
 
       <Card>
         <CardHeader className="p-5 pb-0">
-          <CardTitle>Scope and Global Cost</CardTitle>
+          <CardTitle>Scope and Market Poster Cost</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 p-5 md:grid-cols-3">
           <div className="space-y-2">
@@ -409,11 +425,11 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
               type="number"
               min={0}
               step="0.01"
-              placeholder="Set for all assets and markets"
-              value={globalPosterCost}
-              onChange={(event) => updateGlobalPosterDraft(event.target.value)}
+              placeholder={marketFilter ? `Set for ${marketFilter}` : 'Select a market'}
+              value={marketPosterCost}
+              onChange={(event) => updateMarketPosterDraft(event.target.value)}
             />
-            <p className="text-xs text-slate-400">Applied to 8-sheet, 6-sheet, 4-sheet, 2-sheet, and QA0 for all assets and markets.</p>
+            <p className="text-xs text-slate-400">Applied to 8-sheet, 6-sheet, 4-sheet, 2-sheet, and QA0 for the selected market only.</p>
           </div>
         </CardContent>
       </Card>
@@ -422,7 +438,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
         <CardHeader className="p-5 pb-0">
           <CardTitle>Asset printing costs</CardTitle>
           <CardDescription>
-            Poster Cost is global across all assets and markets. Mega pricing remains per asset. Changes auto-save.
+            Poster Cost applies to the selected market. Mega pricing uses one value per asset for Mega, DOT M, and MP. Changes auto-save.
             {saving ? ' Saving...' : ''}
           </CardDescription>
         </CardHeader>
@@ -440,19 +456,15 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
             <div className="rounded-2xl border border-slate-700 bg-slate-900/60">
               <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
                 <colgroup>
-                  <col className="w-[46%]" />
-                  {megaFormatKeys.map((key) => (
-                    <col key={`cost-col-${key}`} className="w-[18%]" />
-                  ))}
+                  <col className="w-[24%]" />
+                  <col className="w-[52%]" />
+                  <col className="w-[24%]" />
                 </colgroup>
                 <thead>
                   <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
+                    <th className="border border-slate-700 px-2 py-2 text-left sm:px-3">Market</th>
                     <th className="border border-slate-700 px-2 py-2 text-left sm:px-3">Asset</th>
-                    {megaFormatKeys.map((key) => (
-                      <th key={`cost-head-${key}`} className="border border-slate-700 px-1 py-2 text-center sm:px-2">
-                        {key}
-                      </th>
-                    ))}
+                    <th className="border border-slate-700 px-1 py-2 text-center sm:px-2">Mega Price</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -461,23 +473,22 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
                     const draft = draftsByAsset[rowKey] || createEmptyCostDraft();
                     return (
                       <tr key={`cost-row-${mapping.id}`} className="border-t border-slate-700/70 bg-slate-800/65">
+                        <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{mapping.market}</td>
                         <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">
                           <p className="truncate font-semibold">{mapping.label || mapping.asset}</p>
                           <p className="truncate text-[10px] text-slate-400 sm:text-xs">{mapping.asset}</p>
                         </td>
-                        {megaFormatKeys.map((key) => (
-                          <td key={`cost-cell-${mapping.id}-${key}`} className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                            <Input
-                              className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
-                              inputMode="decimal"
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              value={draft[key]}
-                              onChange={(event) => updateDraft(mapping.market, mapping.id, key, event.target.value)}
-                            />
-                          </td>
-                        ))}
+                        <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                          <Input
+                            className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                            inputMode="decimal"
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={megaCostValue(draft)}
+                            onChange={(event) => updateMegaDraft(mapping.market, mapping.id, event.target.value)}
+                          />
+                        </td>
                       </tr>
                     );
                   })}
