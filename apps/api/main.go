@@ -243,6 +243,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/printiq/token", a.withAuth(http.HandlerFunc(a.handlePrintIQToken)))
 	mux.Handle("POST /api/quotes/price", a.withAuth(http.HandlerFunc(a.handleQuotePrice)))
 	mux.Handle("POST /api/purchase-orders/upload", a.withAuth(http.HandlerFunc(a.handlePurchaseOrderUpload)))
+	mux.Handle("POST /api/finalize/send-email-to-ads", a.withAuth(http.HandlerFunc(a.handleSendEmailToADS)))
 	mux.Handle("POST /api/campaign-images/upload", a.withAuth(http.HandlerFunc(a.handleCampaignImageUpload)))
 	mux.Handle("GET /api/campaign-images/{storedName}", http.HandlerFunc(a.handleCampaignImageGet))
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(filepath.Join(".", "storage", "uploads")))))

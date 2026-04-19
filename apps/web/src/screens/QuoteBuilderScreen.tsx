@@ -27,6 +27,7 @@ import { buildApiUrl } from '../services/apiBase';
 import { createCampaign, fetchCampaign, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
+import { sendEmailToAds } from '../services/finalizeApi';
 import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
@@ -603,6 +604,7 @@ export function QuoteBuilderScreen({
   const [quoteResponseMessage, setQuoteResponseMessage] = useState('');
   const [error, setError] = useState('');
   const [exportingTemplates, setExportingTemplates] = useState(false);
+  const [sendingAdsEmail, setSendingAdsEmail] = useState(false);
   const [exportProgressMessage, setExportProgressMessage] = useState('');
   const [stepIndex, setStepIndex] = useState(0);
   const [selectedPurchaseOrderFile, setSelectedPurchaseOrderFile] = useState<File | null>(null);
@@ -1399,17 +1401,7 @@ export function QuoteBuilderScreen({
     setStepIndex(2);
   }
 
-  async function downloadArtworkExcelTemplates() {
-    if (exportingTemplates) return;
-    if (!hasUploadedPurchaseOrder) {
-      setError('Upload a purchase order file before downloading visuals');
-      return;
-    }
-
-    setError('');
-    setExportingTemplates(true);
-    setExportProgressMessage('Preparing export...');
-
+  async function generateArtworkExcelTemplates(downloadFiles: boolean) {
     try {
       const ExcelJSRuntime = ExcelJS as any;
       const baseName = sanitizeFileName((values.campaignName || 'Campaign').trim() || 'Campaign');
@@ -1760,7 +1752,11 @@ export function QuoteBuilderScreen({
 
         const outputBuffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([outputBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        downloadBlobWithFileName(blob, `${baseName} - Print Quantities.xlsx`);
+        const fileName = `${baseName} - Print Quantities.xlsx`;
+        if (downloadFiles) {
+          downloadBlobWithFileName(blob, fileName);
+        }
+        return { fileName, blob };
       };
 
       const fillDeliveryWorkbook = async () => {
@@ -1915,11 +1911,34 @@ export function QuoteBuilderScreen({
 
         const outputBuffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([outputBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        downloadBlobWithFileName(blob, `${baseName} - Delivery Instructions.xlsx`);
+        const fileName = `${baseName} - Delivery Instructions.xlsx`;
+        if (downloadFiles) {
+          downloadBlobWithFileName(blob, fileName);
+        }
+        return { fileName, blob };
       };
 
-      await fillPrintWorkbook();
-      await fillDeliveryWorkbook();
+      const printWorkbookFile = await fillPrintWorkbook();
+      const deliveryWorkbookFile = await fillDeliveryWorkbook();
+      return [printWorkbookFile, deliveryWorkbookFile];
+    } catch (exportError) {
+      throw exportError instanceof Error ? exportError : new Error('Unable to generate Excel templates. Please try again.');
+    }
+  }
+
+  async function downloadArtworkExcelTemplates() {
+    if (exportingTemplates || sendingAdsEmail) return;
+    if (!hasUploadedPurchaseOrder) {
+      setError('Upload a purchase order file before downloading visuals');
+      return;
+    }
+
+    setError('');
+    setExportingTemplates(true);
+    setExportProgressMessage('Preparing export...');
+
+    try {
+      await generateArtworkExcelTemplates(true);
       setExportProgressMessage('Download started. Check your browser download bar.');
       setError('');
     } catch (exportError) {
@@ -1928,6 +1947,38 @@ export function QuoteBuilderScreen({
       setExportProgressMessage('');
     } finally {
       setExportingTemplates(false);
+    }
+  }
+
+  async function sendArtworkEmailToAds() {
+    if (sendingAdsEmail || exportingTemplates) return;
+    if (!hasUploadedPurchaseOrder) {
+      setError('Upload a purchase order file before sending email to ADS');
+      return;
+    }
+
+    setError('');
+    setSendingAdsEmail(true);
+    setExportProgressMessage('Preparing export for email...');
+
+    try {
+      const generatedFiles = await generateArtworkExcelTemplates(false);
+      const files = generatedFiles.map(
+        (generatedFile) =>
+          new File([generatedFile.blob], generatedFile.fileName, {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          }),
+      );
+      setExportProgressMessage('Sending email to ADS...');
+      await sendEmailToAds(files, values.campaignName);
+      setExportProgressMessage('Email sent to ADS.');
+      setError('');
+    } catch (sendError) {
+      const message = sendError instanceof Error ? sendError.message : 'Unable to send email to ADS. Please try again.';
+      setError(message);
+      setExportProgressMessage('');
+    } finally {
+      setSendingAdsEmail(false);
     }
   }
 
@@ -2624,7 +2675,7 @@ export function QuoteBuilderScreen({
               <CardContent className="space-y-3 p-6">
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Button
-                    disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates}
+                    disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates || sendingAdsEmail}
                     onClick={() => void downloadArtworkExcelTemplates()}
                     type="button"
                     variant="outline"
@@ -2632,11 +2683,16 @@ export function QuoteBuilderScreen({
                     {exportingTemplates ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                     {exportingTemplates ? 'Generating Files...' : 'Download Visuals'}
                   </Button>
-                  <div className="cursor-not-allowed" title={hasUploadedPurchaseOrder ? 'Under construction' : 'Upload purchase order before sending to ADS'}>
-                    <Button className="border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100" disabled type="button" variant="secondary">
-                      Send Email To ADS
-                    </Button>
-                  </div>
+                  <Button
+                    disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates || sendingAdsEmail}
+                    onClick={() => void sendArtworkEmailToAds()}
+                    title={hasUploadedPurchaseOrder ? undefined : 'Upload purchase order before sending to ADS'}
+                    type="button"
+                    variant="secondary"
+                  >
+                    {sendingAdsEmail ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                    {sendingAdsEmail ? 'Sending Email...' : 'Send Email To ADS'}
+                  </Button>
                 </div>
                 {exportProgressMessage ? (
                   <p className="text-sm text-slate-300" role="status">
