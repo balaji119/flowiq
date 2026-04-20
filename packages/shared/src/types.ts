@@ -141,6 +141,10 @@ export type MarketShippingRateInput = {
   market: string;
   shippingRate: number;
   postersPerBox: number;
+  twoSheeterPrice: number;
+  fourSheeterPrice: number;
+  sixSheeterPrice: number;
+  eightSheeterPrice: number;
   megasPerBox: number;
   megaShippingRate: number;
   dotMShippingRate: number;

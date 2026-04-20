@@ -378,15 +378,19 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
     }
     try {
       const response = await upsertMarketShippingRate(
-        {
-          market: selectedMarketFilter,
-          shippingRate: parsedShippingRate,
-          postersPerBox: normalizedPostersPerBox,
-          megasPerBox: selectedMarketShippingRateConfig?.megasPerBox ?? 1,
-          megaShippingRate: selectedMarketShippingRateConfig?.megaShippingRate ?? 0,
-          dotMShippingRate: selectedMarketShippingRateConfig?.dotMShippingRate ?? 0,
-          mpShippingRate: selectedMarketShippingRateConfig?.mpShippingRate ?? 0,
-        },
+          {
+            market: selectedMarketFilter,
+            shippingRate: parsedShippingRate,
+            postersPerBox: normalizedPostersPerBox,
+            twoSheeterPrice: selectedMarketShippingRateConfig?.twoSheeterPrice ?? 0,
+            fourSheeterPrice: selectedMarketShippingRateConfig?.fourSheeterPrice ?? 0,
+            sixSheeterPrice: selectedMarketShippingRateConfig?.sixSheeterPrice ?? 0,
+            eightSheeterPrice: selectedMarketShippingRateConfig?.eightSheeterPrice ?? 0,
+            megasPerBox: selectedMarketShippingRateConfig?.megasPerBox ?? 1,
+            megaShippingRate: selectedMarketShippingRateConfig?.megaShippingRate ?? 0,
+            dotMShippingRate: selectedMarketShippingRateConfig?.dotMShippingRate ?? 0,
+            mpShippingRate: selectedMarketShippingRateConfig?.mpShippingRate ?? 0,
+          },
         effectiveTenantId,
       );
       setMarketShippingRates((current) => {
@@ -549,7 +553,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
             {canEditShippingRate ? (
               <div className="grid w-full gap-3 xl:w-auto xl:grid-cols-2">
                 <div className="w-full xl:w-[260px] space-y-2">
-                  <Label htmlFor="shipping-rate-inline">Per Box Price</Label>
+                    <Label htmlFor="shipping-rate-inline">Per Box Price ($)</Label>
                   <div className="flex items-center gap-2">
                     <Input
                       id="shipping-rate-inline"

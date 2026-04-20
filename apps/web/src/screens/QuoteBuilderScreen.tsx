@@ -106,8 +106,16 @@ function calculateShippingCost(units: number, perBoxPrice: number, postersPerBox
   return boxCount * perBoxPrice;
 }
 
-function posterUnitsFromBreakdown(breakdown: QuantityBreakdown) {
-  return (breakdown['8-sheet'] ?? 0) + (breakdown['6-sheet'] ?? 0) + (breakdown['4-sheet'] ?? 0) + (breakdown['2-sheet'] ?? 0) + (breakdown.QA0 ?? 0);
+function calculatePosterShippingForSheeter(posters: number, pricePerBox: number, postersPerSet: number) {
+  if (posters <= 0 || pricePerBox <= 0) return 0;
+  const safePostersPerSet = Math.max(1, Math.floor(postersPerSet || 1));
+  const sets = posters / safePostersPerSet;
+  const boxes = Math.ceil(sets / 15);
+  return boxes * pricePerBox;
+}
+
+function formatCurrency(value: number) {
+  return `$${value.toFixed(2)}`;
 }
 
 function formatKeyLabel(key: (typeof formatKeys)[number]) {
@@ -831,8 +839,20 @@ export function QuoteBuilderScreen({
       formatKeys.filter((key) => visibleReviewMarkets.some((marketSummary) => (marketSummary.breakdown[key] ?? 0) > 0)),
     [visibleReviewMarkets],
   );
-  const shippingRateByMarket = useMemo(
-    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.shippingRate])),
+  const twoSheeterPriceByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.twoSheeterPrice ?? 0])),
+    [marketShippingRates],
+  );
+  const fourSheeterPriceByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.fourSheeterPrice ?? 0])),
+    [marketShippingRates],
+  );
+  const sixSheeterPriceByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.sixSheeterPrice ?? 0])),
+    [marketShippingRates],
+  );
+  const eightSheeterPriceByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.eightSheeterPrice ?? 0])),
     [marketShippingRates],
   );
   const printingCostByMarketAsset = useMemo(
@@ -848,10 +868,6 @@ export function QuoteBuilderScreen({
     });
     return byLineId;
   }, [values.campaignMarkets]);
-  const postersPerBoxByMarket = useMemo(
-    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.postersPerBox])),
-    [marketShippingRates],
-  );
   const megasPerBoxByMarket = useMemo(
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.megasPerBox ?? 1])),
     [marketShippingRates],
@@ -1359,12 +1375,20 @@ export function QuoteBuilderScreen({
   }
 
   function calculateMarketShippingCost(marketName: string) {
-    const perBoxPrice = shippingRateByMarket.get(marketName) ?? 0;
-    const postersPerBox = postersPerBoxByMarket.get(marketName) ?? 60;
+    const twoSheeterPrice = twoSheeterPriceByMarket.get(marketName) ?? 0;
+    const fourSheeterPrice = fourSheeterPriceByMarket.get(marketName) ?? 0;
+    const sixSheeterPrice = sixSheeterPriceByMarket.get(marketName) ?? 0;
+    const eightSheeterPrice = eightSheeterPriceByMarket.get(marketName) ?? 0;
     const megasPerBox = megasPerBoxByMarket.get(marketName) ?? 1;
     const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
-    const posterUnits = marketLines.reduce((total, line) => total + posterUnitsFromBreakdown(line.breakdown), 0);
-    const posterShipping = calculateShippingCost(posterUnits, perBoxPrice, postersPerBox);
+    const posterShipping = marketLines.reduce((total, line) => {
+      const breakdown = line.breakdown;
+      return total
+        + calculatePosterShippingForSheeter((breakdown['8-sheet'] ?? 0) + (breakdown.QA0 ?? 0), eightSheeterPrice, 4)
+        + calculatePosterShippingForSheeter(breakdown['6-sheet'] ?? 0, sixSheeterPrice, 3)
+        + calculatePosterShippingForSheeter(breakdown['4-sheet'] ?? 0, fourSheeterPrice, 2)
+        + calculatePosterShippingForSheeter(breakdown['2-sheet'] ?? 0, twoSheeterPrice, 1);
+    }, 0);
 
     const megaShipping = marketLines.reduce((total, line) => {
       const selectedAsset = selectedAssetByLineId.get(line.id);
@@ -2504,8 +2528,8 @@ export function QuoteBuilderScreen({
                               <th key={`review-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatKeyLabel(key)}</th>
                             ))}
                             <th className="border border-slate-700 px-4 py-3 text-center">Total</th>
-                            <th className="border border-slate-700 px-4 py-3 text-center">Printing Cost</th>
-                            <th className="border border-slate-700 px-4 py-3 text-center">Shipping Cost</th>
+                          <th className="border border-slate-700 px-4 py-3 text-center">Printing Cost ($)</th>
+                          <th className="border border-slate-700 px-4 py-3 text-center">Shipping Cost ($)</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2532,10 +2556,10 @@ export function QuoteBuilderScreen({
                                 ))}
                                 <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">{row.total}</td>
                                 <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">
-                                  {'printingCost' in row ? row.printingCost.toFixed(2) : '—'}
+                                  {'printingCost' in row ? formatCurrency(row.printingCost) : '—'}
                                 </td>
                                 <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">
-                                  {row.shippingCost === null ? '—' : row.shippingCost.toFixed(2)}
+                                  {row.shippingCost === null ? '—' : formatCurrency(row.shippingCost)}
                                 </td>
                               </tr>
                             ));
@@ -2563,10 +2587,10 @@ export function QuoteBuilderScreen({
                                 ))}
                                 <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">{row.total}</td>
                                 <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
-                                  {'printingCost' in row ? row.printingCost.toFixed(2) : '—'}
+                                  {'printingCost' in row ? formatCurrency(row.printingCost) : '—'}
                                 </td>
                                 <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
-                                  {row.shippingCost === null ? '—' : row.shippingCost.toFixed(2)}
+                                  {row.shippingCost === null ? '—' : formatCurrency(row.shippingCost)}
                                 </td>
                               </tr>
                             ));

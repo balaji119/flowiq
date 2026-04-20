@@ -417,18 +417,21 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
             <p className="text-xs text-slate-400">Loaded costs: {costRecords.length}</p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="printing-cost-global-poster">Poster Cost</Label>
-            <Input
-              id="printing-cost-global-poster"
-              className="h-11"
-              inputMode="decimal"
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder={marketFilter ? `Set for ${marketFilter}` : 'Select a market'}
-              value={marketPosterCost}
-              onChange={(event) => updateMarketPosterDraft(event.target.value)}
-            />
+            <Label htmlFor="printing-cost-global-poster">Poster Cost ($)</Label>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-300">$</span>
+              <Input
+                id="printing-cost-global-poster"
+                className="h-11"
+                inputMode="decimal"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder={marketFilter ? `Set for ${marketFilter}` : 'Select a market'}
+                value={marketPosterCost}
+                onChange={(event) => updateMarketPosterDraft(event.target.value)}
+              />
+            </div>
             <p className="text-xs text-slate-400">Applied to 8-sheet, 6-sheet, 4-sheet, 2-sheet, and QA0 for the selected market only.</p>
           </div>
         </CardContent>
@@ -464,7 +467,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
                   <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
                     <th className="border border-slate-700 px-2 py-2 text-left sm:px-3">Market</th>
                     <th className="border border-slate-700 px-2 py-2 text-left sm:px-3">Asset</th>
-                    <th className="border border-slate-700 px-1 py-2 text-center sm:px-2">Mega Price</th>
+                    <th className="border border-slate-700 px-1 py-2 text-center sm:px-2">Mega Price ($)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -479,15 +482,18 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
                           <p className="truncate text-[10px] text-slate-400 sm:text-xs">{mapping.asset}</p>
                         </td>
                         <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                          <Input
-                            className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
-                            inputMode="decimal"
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={megaCostValue(draft)}
-                            onChange={(event) => updateMegaDraft(mapping.market, mapping.id, event.target.value)}
-                          />
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-300">$</span>
+                            <Input
+                              className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                              inputMode="decimal"
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={megaCostValue(draft)}
+                              onChange={(event) => updateMegaDraft(mapping.market, mapping.id, event.target.value)}
+                            />
+                          </div>
                         </td>
                       </tr>
                     );
