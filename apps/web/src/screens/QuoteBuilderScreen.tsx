@@ -1413,7 +1413,12 @@ export function QuoteBuilderScreen({
     if (!selectedAsset) return 0;
     const costs = printingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`);
     if (!costs) return 0;
-    return formatKeys.reduce((total, key) => total + (line.breakdown[key] ?? 0) * (costs[key] ?? 0), 0);
+    const qa0Units = line.breakdown.QA0 ?? 0;
+    const eightSheetRate = costs['8-sheet'] ?? 0;
+    return formatKeys.reduce((total, key) => {
+      if (key === 'QA0') return total;
+      return total + (line.breakdown[key] ?? 0) * (costs[key] ?? 0);
+    }, 0) + qa0Units * eightSheetRate;
   }
 
   function calculateMarketPrintingCost(marketName: string) {
