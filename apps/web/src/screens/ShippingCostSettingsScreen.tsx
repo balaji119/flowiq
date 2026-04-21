@@ -46,6 +46,10 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
   const [marketFourSheeterPrice, setMarketFourSheeterPrice] = useState('0');
   const [marketSixSheeterPrice, setMarketSixSheeterPrice] = useState('0');
   const [marketEightSheeterPrice, setMarketEightSheeterPrice] = useState('0');
+  const [marketFlatShippingRate, setMarketFlatShippingRate] = useState('0');
+  const [marketSheeterSetsPerBox, setMarketSheeterSetsPerBox] = useState('15');
+  const [marketMegasPerBox, setMarketMegasPerBox] = useState('1');
+  const [marketUseFlatRate, setMarketUseFlatRate] = useState(false);
   const [marketRateDirty, setMarketRateDirty] = useState(false);
   const [draftsByAsset, setDraftsByAsset] = useState<Record<string, AssetShippingDraft>>({});
   const [dirtyRows, setDirtyRows] = useState<Record<string, boolean>>({});
@@ -186,6 +190,10 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
     setMarketFourSheeterPrice(String(selectedMarketRate?.fourSheeterPrice ?? 0));
     setMarketSixSheeterPrice(String(selectedMarketRate?.sixSheeterPrice ?? 0));
     setMarketEightSheeterPrice(String(selectedMarketRate?.eightSheeterPrice ?? 0));
+    setMarketFlatShippingRate(String(selectedMarketRate?.shippingRate ?? 0));
+    setMarketSheeterSetsPerBox(String(selectedMarketRate?.sheeterSetsPerBox ?? 15));
+    setMarketMegasPerBox(String(selectedMarketRate?.megasPerBox ?? 1));
+    setMarketUseFlatRate(Boolean(selectedMarketRate?.useFlatRate));
     setMarketRateDirty(false);
   }, [selectedMarketRate]);
 
@@ -210,6 +218,11 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
     const parsedFourSheeterPrice = Number(marketFourSheeterPrice);
     const parsedSixSheeterPrice = Number(marketSixSheeterPrice);
     const parsedEightSheeterPrice = Number(marketEightSheeterPrice);
+    const parsedFlatShippingRate = Number(marketFlatShippingRate);
+    const parsedSheeterSetsPerBox = Number(marketSheeterSetsPerBox);
+    const normalizedSheeterSetsPerBox = Math.floor(parsedSheeterSetsPerBox);
+    const parsedMegasPerBox = Number(marketMegasPerBox);
+    const normalizedMegasPerBox = Math.floor(parsedMegasPerBox);
     if (!Number.isFinite(parsedTwoSheeterPrice) || parsedTwoSheeterPrice < 0) {
       throw new Error('2 Sheeter Price must be a valid number greater than or equal to 0.');
     }
@@ -222,16 +235,27 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
     if (!Number.isFinite(parsedEightSheeterPrice) || parsedEightSheeterPrice < 0) {
       throw new Error('8 Sheeter Price must be a valid number greater than or equal to 0.');
     }
+    if (!Number.isFinite(parsedFlatShippingRate) || parsedFlatShippingRate < 0) {
+      throw new Error('Flat shipping rate must be a valid number greater than or equal to 0.');
+    }
+    if (!marketUseFlatRate && (!Number.isFinite(parsedSheeterSetsPerBox) || normalizedSheeterSetsPerBox <= 0)) {
+      throw new Error('Sheeter sets per shipping box must be a whole number greater than 0.');
+    }
+    if (!marketUseFlatRate && (!Number.isFinite(parsedMegasPerBox) || normalizedMegasPerBox <= 0)) {
+      throw new Error('Mega units per shipping box must be a whole number greater than 0.');
+    }
     const existing = rateByMarket.get(marketFilter);
     const response = await upsertMarketShippingRate({
       market: marketFilter,
-      shippingRate: existing?.shippingRate ?? 0,
+      useFlatRate: marketUseFlatRate,
+      shippingRate: parsedFlatShippingRate,
       postersPerBox: existing?.postersPerBox ?? 60,
+      sheeterSetsPerBox: marketUseFlatRate ? (existing?.sheeterSetsPerBox ?? 15) : normalizedSheeterSetsPerBox,
       twoSheeterPrice: parsedTwoSheeterPrice,
       fourSheeterPrice: parsedFourSheeterPrice,
       sixSheeterPrice: parsedSixSheeterPrice,
       eightSheeterPrice: parsedEightSheeterPrice,
-      megasPerBox: 1,
+      megasPerBox: marketUseFlatRate ? (existing?.megasPerBox ?? 1) : normalizedMegasPerBox,
       megaShippingRate: existing?.megaShippingRate ?? 0,
       dotMShippingRate: existing?.dotMShippingRate ?? 0,
       mpShippingRate: existing?.mpShippingRate ?? 0,
@@ -306,7 +330,7 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
     return () => {
       window.clearTimeout(timer);
     };
-  }, [dirtyRowKeys, draftsByAsset, loading, marketEightSheeterPrice, marketFilter, marketFourSheeterPrice, marketRateDirty, marketSixSheeterPrice, marketTwoSheeterPrice, saving, selectedTenantId]);
+  }, [dirtyRowKeys, draftsByAsset, loading, marketEightSheeterPrice, marketFilter, marketFlatShippingRate, marketFourSheeterPrice, marketMegasPerBox, marketRateDirty, marketSheeterSetsPerBox, marketSixSheeterPrice, marketTwoSheeterPrice, marketUseFlatRate, saving, selectedTenantId]);
 
   if (!isSuperAdmin) {
     return (
@@ -371,6 +395,18 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3 p-5 pb-0">
           <CardTitle>Freight Rate Card</CardTitle>
+          <label className="inline-flex items-center gap-2 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-500 bg-slate-800"
+              checked={marketUseFlatRate}
+              onChange={(event) => {
+                setMarketUseFlatRate(event.target.checked);
+                setMarketRateDirty(true);
+              }}
+            />
+            Use flat rate
+          </label>
         </CardHeader>
         <CardContent className="space-y-4 p-5">
           {loading ? (
@@ -388,9 +424,12 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                 <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
                   <thead>
                     <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
-                      <th className="w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3">Market</th>
-                      <th className="w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3">Sheeters</th>
-                      <th className="w-1/3 border border-slate-700 px-2 py-2 text-center sm:px-3">Sheeters - Freight ($)</th>
+                      <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Market</th>
+                      <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Sheeters</th>
+                      <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-center sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3'}>Sheeters - Freight ($)</th>
+                      {!marketUseFlatRate ? (
+                        <th className="w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3">Sets / Shipping Box</th>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -415,6 +454,22 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                           />
                         </div>
                       </td>
+                      {!marketUseFlatRate ? (
+                        <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                          <Input
+                            className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                            inputMode="numeric"
+                            type="number"
+                            min={1}
+                            step="1"
+                            value={marketSheeterSetsPerBox}
+                            onChange={(event) => {
+                              setMarketSheeterSetsPerBox(event.target.value);
+                              setMarketRateDirty(true);
+                            }}
+                          />
+                        </td>
+                      ) : null}
                     </tr>
                     <tr className="border-t border-slate-700/70 bg-slate-800/65">
                       <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
@@ -437,6 +492,22 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                           />
                         </div>
                       </td>
+                      {!marketUseFlatRate ? (
+                        <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                          <Input
+                            className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                            inputMode="numeric"
+                            type="number"
+                            min={1}
+                            step="1"
+                            value={marketSheeterSetsPerBox}
+                            onChange={(event) => {
+                              setMarketSheeterSetsPerBox(event.target.value);
+                              setMarketRateDirty(true);
+                            }}
+                          />
+                        </td>
+                      ) : null}
                     </tr>
                     <tr className="border-t border-slate-700/70 bg-slate-800/65">
                       <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
@@ -459,29 +530,61 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                           />
                         </div>
                       </td>
-                    </tr>
-                    <tr className="border-t border-slate-700/70 bg-slate-800/65">
-                      <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
-                      <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">8 Sheeter</td>
-                      <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-slate-300">$</span>
+                      {!marketUseFlatRate ? (
+                        <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
                           <Input
-                            id="eight-sheeter-price"
                             className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
-                            inputMode="decimal"
+                            inputMode="numeric"
                             type="number"
-                            min={0}
-                            step="0.01"
-                            value={marketEightSheeterPrice}
+                            min={1}
+                            step="1"
+                            value={marketSheeterSetsPerBox}
                             onChange={(event) => {
-                              setMarketEightSheeterPrice(event.target.value);
+                              setMarketSheeterSetsPerBox(event.target.value);
                               setMarketRateDirty(true);
                             }}
                           />
-                        </div>
-                      </td>
+                        </td>
+                      ) : null}
                     </tr>
+                    <tr className="border-t border-slate-700/70 bg-slate-800/65">
+                        <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
+                        <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">8 Sheeter</td>
+                        <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-300">$</span>
+                            <Input
+                              id="eight-sheeter-price"
+                              className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                              inputMode="decimal"
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={marketEightSheeterPrice}
+                              onChange={(event) => {
+                                setMarketEightSheeterPrice(event.target.value);
+                                setMarketRateDirty(true);
+                              }}
+                            />
+                          </div>
+                        </td>
+                        {!marketUseFlatRate ? (
+                          <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                            <Input
+                              className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                              inputMode="numeric"
+                              type="number"
+                              min={1}
+                              step="1"
+                              value={marketSheeterSetsPerBox}
+                              onChange={(event) => {
+                                setMarketSheeterSetsPerBox(event.target.value);
+                                setMarketRateDirty(true);
+                              }}
+                            />
+                          </td>
+                        ) : null}
+                      </tr>
                   </tbody>
                 </table>
               </div>
@@ -489,9 +592,12 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                 <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
                   <thead>
                     <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
-                      <th className="w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3">Market</th>
-                      <th className="w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3">Asset</th>
-                      <th className="w-1/3 border border-slate-700 px-2 py-2 text-center sm:px-3">MEGA SITES - FREIGHT ($)</th>
+                      <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Market</th>
+                      <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Asset</th>
+                      <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-center sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3'}>MEGA SITES - FREIGHT ($)</th>
+                      {!marketUseFlatRate ? (
+                        <th className="w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3">Megas / Shipping Box</th>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -511,6 +617,22 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                               <Input className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm" type="number" min={0} step="0.01" value={draft.megaShippingRate} onChange={(event) => updateAssetDraft(mapping.market, mapping.id, event.target.value)} />
                             </div>
                           </td>
+                          {!marketUseFlatRate ? (
+                            <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                              <Input
+                                className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                                inputMode="numeric"
+                                type="number"
+                                min={1}
+                                step="1"
+                                value={marketMegasPerBox}
+                                onChange={(event) => {
+                                  setMarketMegasPerBox(event.target.value);
+                                  setMarketRateDirty(true);
+                                }}
+                              />
+                            </td>
+                          ) : null}
                         </tr>
                       );
                     })}

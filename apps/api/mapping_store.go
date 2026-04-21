@@ -44,8 +44,10 @@ type marketDeliveryAddressRow struct {
 type marketShippingRateRow struct {
 	TenantID          string
 	Market            string
+	UseFlatRate       bool
 	ShippingRate      float64
 	PostersPerBox     int
+	SheeterSetsPerBox int
 	TwoSheeterPrice   float64
 	FourSheeterPrice  float64
 	SixSheeterPrice   float64
@@ -265,8 +267,10 @@ func scanMarketShippingRateRow(scanner interface {
 	err := scanner.Scan(
 		&row.TenantID,
 		&row.Market,
+		&row.UseFlatRate,
 		&row.ShippingRate,
 		&row.PostersPerBox,
+		&row.SheeterSetsPerBox,
 		&row.TwoSheeterPrice,
 		&row.FourSheeterPrice,
 		&row.SixSheeterPrice,
@@ -321,8 +325,10 @@ func decodeMarketShippingRateRow(row marketShippingRateRow) marketShippingRateRe
 	return marketShippingRateRecord{
 		TenantID:          row.TenantID,
 		Market:            row.Market,
+		UseFlatRate:       row.UseFlatRate,
 		ShippingRate:      row.ShippingRate,
 		PostersPerBox:     row.PostersPerBox,
+		SheeterSetsPerBox: row.SheeterSetsPerBox,
 		TwoSheeterPrice:   row.TwoSheeterPrice,
 		FourSheeterPrice:  row.FourSheeterPrice,
 		SixSheeterPrice:   row.SixSheeterPrice,
@@ -914,8 +920,10 @@ func (s *mappingStore) listMarketShippingRates(ctx context.Context, tenantID str
 		SELECT
 			msr.tenant_id,
 			m.name,
+			msr.use_flat_rate,
 			msr.shipping_rate::float8,
 			msr.posters_per_box,
+			msr.sheeter_sets_per_box,
 			msr.two_sheeter_price::float8,
 			msr.four_sheeter_price::float8,
 			msr.six_sheeter_price::float8,
@@ -983,6 +991,9 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 	if payload.PostersPerBox <= 0 {
 		return nil, errors.New("postersPerBox must be greater than 0")
 	}
+	if payload.SheeterSetsPerBox <= 0 {
+		return nil, errors.New("sheeterSetsPerBox must be greater than 0")
+	}
 	if payload.MegasPerBox <= 0 {
 		return nil, errors.New("megasPerBox must be greater than 0")
 	}
@@ -996,8 +1007,10 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 		INSERT INTO market_shipping_rates (
 			tenant_id,
 			market_id,
+			use_flat_rate,
 			shipping_rate,
 			posters_per_box,
+			sheeter_sets_per_box,
 			two_sheeter_price,
 			four_sheeter_price,
 			six_sheeter_price,
@@ -1009,11 +1022,13 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 			created_at,
 			updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
 		ON CONFLICT (tenant_id, market_id)
 		DO UPDATE SET
+			use_flat_rate = EXCLUDED.use_flat_rate,
 			shipping_rate = EXCLUDED.shipping_rate,
 			posters_per_box = EXCLUDED.posters_per_box,
+			sheeter_sets_per_box = EXCLUDED.sheeter_sets_per_box,
 			two_sheeter_price = EXCLUDED.two_sheeter_price,
 			four_sheeter_price = EXCLUDED.four_sheeter_price,
 			six_sheeter_price = EXCLUDED.six_sheeter_price,
@@ -1025,9 +1040,11 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 			updated_at = NOW()
 		RETURNING
 			tenant_id,
-			$13::text,
+			$15::text,
+			use_flat_rate,
 			shipping_rate::float8,
 			posters_per_box,
+			sheeter_sets_per_box,
 			two_sheeter_price::float8,
 			four_sheeter_price::float8,
 			six_sheeter_price::float8,
@@ -1038,7 +1055,7 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 			mp_shipping_rate::float8,
 			created_at,
 			updated_at
-	`, tenantID, marketID, payload.ShippingRate, payload.PostersPerBox, payload.TwoSheeterPrice, payload.FourSheeterPrice, payload.SixSheeterPrice, payload.EightSheeterPrice, payload.MegasPerBox, payload.MegaShippingRate, payload.DotMShippingRate, payload.MpShippingRate, market))
+	`, tenantID, marketID, payload.UseFlatRate, payload.ShippingRate, payload.PostersPerBox, payload.SheeterSetsPerBox, payload.TwoSheeterPrice, payload.FourSheeterPrice, payload.SixSheeterPrice, payload.EightSheeterPrice, payload.MegasPerBox, payload.MegaShippingRate, payload.DotMShippingRate, payload.MpShippingRate, market))
 	if err != nil {
 		return nil, err
 	}

@@ -139,8 +139,10 @@ export type MarketDeliveryAddressRecord = {
 
 export type MarketShippingRateInput = {
   market: string;
+  useFlatRate: boolean;
   shippingRate: number;
   postersPerBox: number;
+  sheeterSetsPerBox: number;
   twoSheeterPrice: number;
   fourSheeterPrice: number;
   sixSheeterPrice: number;

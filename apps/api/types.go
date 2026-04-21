@@ -195,8 +195,10 @@ type marketDeliveryAddressRecord struct {
 
 type marketShippingRateInput struct {
 	Market            string  `json:"market"`
+	UseFlatRate       bool    `json:"useFlatRate"`
 	ShippingRate      float64 `json:"shippingRate"`
 	PostersPerBox     int     `json:"postersPerBox"`
+	SheeterSetsPerBox int     `json:"sheeterSetsPerBox"`
 	TwoSheeterPrice   float64 `json:"twoSheeterPrice"`
 	FourSheeterPrice  float64 `json:"fourSheeterPrice"`
 	SixSheeterPrice   float64 `json:"sixSheeterPrice"`
@@ -210,8 +212,10 @@ type marketShippingRateInput struct {
 type marketShippingRateRecord struct {
 	TenantID          string  `json:"tenantId"`
 	Market            string  `json:"market"`
+	UseFlatRate       bool    `json:"useFlatRate"`
 	ShippingRate      float64 `json:"shippingRate"`
 	PostersPerBox     int     `json:"postersPerBox"`
+	SheeterSetsPerBox int     `json:"sheeterSetsPerBox"`
 	TwoSheeterPrice   float64 `json:"twoSheeterPrice"`
 	FourSheeterPrice  float64 `json:"fourSheeterPrice"`
 	SixSheeterPrice   float64 `json:"sixSheeterPrice"`

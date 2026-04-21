@@ -380,8 +380,10 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
       const response = await upsertMarketShippingRate(
           {
             market: selectedMarketFilter,
+            useFlatRate: selectedMarketShippingRateConfig?.useFlatRate ?? false,
             shippingRate: parsedShippingRate,
             postersPerBox: normalizedPostersPerBox,
+            sheeterSetsPerBox: selectedMarketShippingRateConfig?.sheeterSetsPerBox ?? 15,
             twoSheeterPrice: selectedMarketShippingRateConfig?.twoSheeterPrice ?? 0,
             fourSheeterPrice: selectedMarketShippingRateConfig?.fourSheeterPrice ?? 0,
             sixSheeterPrice: selectedMarketShippingRateConfig?.sixSheeterPrice ?? 0,
