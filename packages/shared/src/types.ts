@@ -143,6 +143,10 @@ export type MarketShippingRateInput = {
   shippingRate: number;
   postersPerBox: number;
   sheeterSetsPerBox: number;
+  twoSheeterSetsPerBox: number;
+  fourSheeterSetsPerBox: number;
+  sixSheeterSetsPerBox: number;
+  eightSheeterSetsPerBox: number;
   twoSheeterPrice: number;
   fourSheeterPrice: number;
   sixSheeterPrice: number;

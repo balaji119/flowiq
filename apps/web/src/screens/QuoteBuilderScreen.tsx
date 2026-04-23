@@ -856,8 +856,20 @@ export function QuoteBuilderScreen({
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.eightSheeterPrice ?? 0])),
     [marketShippingRates],
   );
-  const sheeterSetsPerBoxByMarket = useMemo(
-    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.sheeterSetsPerBox ?? 15])),
+  const twoSheeterSetsPerBoxByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.twoSheeterSetsPerBox ?? entry.sheeterSetsPerBox ?? 15])),
+    [marketShippingRates],
+  );
+  const fourSheeterSetsPerBoxByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.fourSheeterSetsPerBox ?? entry.sheeterSetsPerBox ?? 15])),
+    [marketShippingRates],
+  );
+  const sixSheeterSetsPerBoxByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.sixSheeterSetsPerBox ?? entry.sheeterSetsPerBox ?? 15])),
+    [marketShippingRates],
+  );
+  const eightSheeterSetsPerBoxByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.eightSheeterSetsPerBox ?? entry.sheeterSetsPerBox ?? 15])),
     [marketShippingRates],
   );
   const useFlatRateByMarket = useMemo(
@@ -1388,7 +1400,10 @@ export function QuoteBuilderScreen({
     const fourSheeterPrice = fourSheeterPriceByMarket.get(marketName) ?? 0;
     const sixSheeterPrice = sixSheeterPriceByMarket.get(marketName) ?? 0;
     const eightSheeterPrice = eightSheeterPriceByMarket.get(marketName) ?? 0;
-    const sheeterSetsPerBox = sheeterSetsPerBoxByMarket.get(marketName) ?? 15;
+    const twoSheeterSetsPerBox = twoSheeterSetsPerBoxByMarket.get(marketName) ?? 15;
+    const fourSheeterSetsPerBox = fourSheeterSetsPerBoxByMarket.get(marketName) ?? 15;
+    const sixSheeterSetsPerBox = sixSheeterSetsPerBoxByMarket.get(marketName) ?? 15;
+    const eightSheeterSetsPerBox = eightSheeterSetsPerBoxByMarket.get(marketName) ?? 15;
     const megasPerBox = megasPerBoxByMarket.get(marketName) ?? 1;
     const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
     const useFlatRate = useFlatRateByMarket.get(marketName) ?? false;
@@ -1422,14 +1437,14 @@ export function QuoteBuilderScreen({
       return posterShipping + megaShipping;
     }
 
-    const posterShipping = marketLines.reduce((total, line) => {
-      const breakdown = line.breakdown;
-      return total
-        + calculatePosterShippingForSheeter((breakdown['8-sheet'] ?? 0) + (breakdown.QA0 ?? 0), eightSheeterPrice, 4, sheeterSetsPerBox)
-        + calculatePosterShippingForSheeter(breakdown['6-sheet'] ?? 0, sixSheeterPrice, 3, sheeterSetsPerBox)
-        + calculatePosterShippingForSheeter(breakdown['4-sheet'] ?? 0, fourSheeterPrice, 2, sheeterSetsPerBox)
-        + calculatePosterShippingForSheeter(breakdown['2-sheet'] ?? 0, twoSheeterPrice, 1, sheeterSetsPerBox);
-    }, 0);
+    const totalTwoSheet = marketLines.reduce((total, line) => total + (line.breakdown['2-sheet'] ?? 0), 0);
+    const totalFourSheet = marketLines.reduce((total, line) => total + (line.breakdown['4-sheet'] ?? 0), 0);
+    const totalSixSheet = marketLines.reduce((total, line) => total + (line.breakdown['6-sheet'] ?? 0), 0);
+    const totalEightAndQa0 = marketLines.reduce((total, line) => total + (line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0), 0);
+    const posterShipping = calculatePosterShippingForSheeter(totalEightAndQa0, eightSheeterPrice, 4, eightSheeterSetsPerBox)
+      + calculatePosterShippingForSheeter(totalSixSheet, sixSheeterPrice, 3, sixSheeterSetsPerBox)
+      + calculatePosterShippingForSheeter(totalFourSheet, fourSheeterPrice, 2, fourSheeterSetsPerBox)
+      + calculatePosterShippingForSheeter(totalTwoSheet, twoSheeterPrice, 1, twoSheeterSetsPerBox);
 
     const megaShipping = marketLines.reduce((total, line) => {
       const selectedAsset = selectedAssetByLineId.get(line.id);

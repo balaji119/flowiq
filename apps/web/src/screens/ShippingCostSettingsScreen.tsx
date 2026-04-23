@@ -47,7 +47,10 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
   const [marketSixSheeterPrice, setMarketSixSheeterPrice] = useState('0');
   const [marketEightSheeterPrice, setMarketEightSheeterPrice] = useState('0');
   const [marketFlatShippingRate, setMarketFlatShippingRate] = useState('0');
-  const [marketSheeterSetsPerBox, setMarketSheeterSetsPerBox] = useState('15');
+  const [marketTwoSheeterSetsPerBox, setMarketTwoSheeterSetsPerBox] = useState('15');
+  const [marketFourSheeterSetsPerBox, setMarketFourSheeterSetsPerBox] = useState('15');
+  const [marketSixSheeterSetsPerBox, setMarketSixSheeterSetsPerBox] = useState('15');
+  const [marketEightSheeterSetsPerBox, setMarketEightSheeterSetsPerBox] = useState('15');
   const [marketMegasPerBox, setMarketMegasPerBox] = useState('1');
   const [marketUseFlatRate, setMarketUseFlatRate] = useState(false);
   const [marketRateDirty, setMarketRateDirty] = useState(false);
@@ -191,7 +194,10 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
     setMarketSixSheeterPrice(String(selectedMarketRate?.sixSheeterPrice ?? 0));
     setMarketEightSheeterPrice(String(selectedMarketRate?.eightSheeterPrice ?? 0));
     setMarketFlatShippingRate(String(selectedMarketRate?.shippingRate ?? 0));
-    setMarketSheeterSetsPerBox(String(selectedMarketRate?.sheeterSetsPerBox ?? 15));
+    setMarketTwoSheeterSetsPerBox(String(selectedMarketRate?.twoSheeterSetsPerBox ?? selectedMarketRate?.sheeterSetsPerBox ?? 15));
+    setMarketFourSheeterSetsPerBox(String(selectedMarketRate?.fourSheeterSetsPerBox ?? selectedMarketRate?.sheeterSetsPerBox ?? 15));
+    setMarketSixSheeterSetsPerBox(String(selectedMarketRate?.sixSheeterSetsPerBox ?? selectedMarketRate?.sheeterSetsPerBox ?? 15));
+    setMarketEightSheeterSetsPerBox(String(selectedMarketRate?.eightSheeterSetsPerBox ?? selectedMarketRate?.sheeterSetsPerBox ?? 15));
     setMarketMegasPerBox(String(selectedMarketRate?.megasPerBox ?? 1));
     setMarketUseFlatRate(Boolean(selectedMarketRate?.useFlatRate));
     setMarketRateDirty(false);
@@ -219,8 +225,14 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
     const parsedSixSheeterPrice = Number(marketSixSheeterPrice);
     const parsedEightSheeterPrice = Number(marketEightSheeterPrice);
     const parsedFlatShippingRate = Number(marketFlatShippingRate);
-    const parsedSheeterSetsPerBox = Number(marketSheeterSetsPerBox);
-    const normalizedSheeterSetsPerBox = Math.floor(parsedSheeterSetsPerBox);
+    const parsedTwoSheeterSetsPerBox = Number(marketTwoSheeterSetsPerBox);
+    const normalizedTwoSheeterSetsPerBox = Math.floor(parsedTwoSheeterSetsPerBox);
+    const parsedFourSheeterSetsPerBox = Number(marketFourSheeterSetsPerBox);
+    const normalizedFourSheeterSetsPerBox = Math.floor(parsedFourSheeterSetsPerBox);
+    const parsedSixSheeterSetsPerBox = Number(marketSixSheeterSetsPerBox);
+    const normalizedSixSheeterSetsPerBox = Math.floor(parsedSixSheeterSetsPerBox);
+    const parsedEightSheeterSetsPerBox = Number(marketEightSheeterSetsPerBox);
+    const normalizedEightSheeterSetsPerBox = Math.floor(parsedEightSheeterSetsPerBox);
     const parsedMegasPerBox = Number(marketMegasPerBox);
     const normalizedMegasPerBox = Math.floor(parsedMegasPerBox);
     if (!Number.isFinite(parsedTwoSheeterPrice) || parsedTwoSheeterPrice < 0) {
@@ -238,8 +250,17 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
     if (!Number.isFinite(parsedFlatShippingRate) || parsedFlatShippingRate < 0) {
       throw new Error('Flat shipping rate must be a valid number greater than or equal to 0.');
     }
-    if (!marketUseFlatRate && (!Number.isFinite(parsedSheeterSetsPerBox) || normalizedSheeterSetsPerBox <= 0)) {
-      throw new Error('Sheeter sets per shipping box must be a whole number greater than 0.');
+    if (!marketUseFlatRate && (!Number.isFinite(parsedTwoSheeterSetsPerBox) || normalizedTwoSheeterSetsPerBox <= 0)) {
+      throw new Error('2 Sheeter sets per shipping box must be a whole number greater than 0.');
+    }
+    if (!marketUseFlatRate && (!Number.isFinite(parsedFourSheeterSetsPerBox) || normalizedFourSheeterSetsPerBox <= 0)) {
+      throw new Error('4 Sheeter sets per shipping box must be a whole number greater than 0.');
+    }
+    if (!marketUseFlatRate && (!Number.isFinite(parsedSixSheeterSetsPerBox) || normalizedSixSheeterSetsPerBox <= 0)) {
+      throw new Error('6 Sheeter sets per shipping box must be a whole number greater than 0.');
+    }
+    if (!marketUseFlatRate && (!Number.isFinite(parsedEightSheeterSetsPerBox) || normalizedEightSheeterSetsPerBox <= 0)) {
+      throw new Error('8 Sheeter sets per shipping box must be a whole number greater than 0.');
     }
     if (!marketUseFlatRate && (!Number.isFinite(parsedMegasPerBox) || normalizedMegasPerBox <= 0)) {
       throw new Error('Mega units per shipping box must be a whole number greater than 0.');
@@ -250,7 +271,11 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
       useFlatRate: marketUseFlatRate,
       shippingRate: parsedFlatShippingRate,
       postersPerBox: existing?.postersPerBox ?? 60,
-      sheeterSetsPerBox: marketUseFlatRate ? (existing?.sheeterSetsPerBox ?? 15) : normalizedSheeterSetsPerBox,
+      sheeterSetsPerBox: marketUseFlatRate ? (existing?.sheeterSetsPerBox ?? 15) : normalizedTwoSheeterSetsPerBox,
+      twoSheeterSetsPerBox: marketUseFlatRate ? (existing?.twoSheeterSetsPerBox ?? existing?.sheeterSetsPerBox ?? 15) : normalizedTwoSheeterSetsPerBox,
+      fourSheeterSetsPerBox: marketUseFlatRate ? (existing?.fourSheeterSetsPerBox ?? existing?.sheeterSetsPerBox ?? 15) : normalizedFourSheeterSetsPerBox,
+      sixSheeterSetsPerBox: marketUseFlatRate ? (existing?.sixSheeterSetsPerBox ?? existing?.sheeterSetsPerBox ?? 15) : normalizedSixSheeterSetsPerBox,
+      eightSheeterSetsPerBox: marketUseFlatRate ? (existing?.eightSheeterSetsPerBox ?? existing?.sheeterSetsPerBox ?? 15) : normalizedEightSheeterSetsPerBox,
       twoSheeterPrice: parsedTwoSheeterPrice,
       fourSheeterPrice: parsedFourSheeterPrice,
       sixSheeterPrice: parsedSixSheeterPrice,
@@ -330,7 +355,7 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
     return () => {
       window.clearTimeout(timer);
     };
-  }, [dirtyRowKeys, draftsByAsset, loading, marketEightSheeterPrice, marketFilter, marketFlatShippingRate, marketFourSheeterPrice, marketMegasPerBox, marketRateDirty, marketSheeterSetsPerBox, marketSixSheeterPrice, marketTwoSheeterPrice, marketUseFlatRate, saving, selectedTenantId]);
+  }, [dirtyRowKeys, draftsByAsset, loading, marketEightSheeterPrice, marketEightSheeterSetsPerBox, marketFilter, marketFlatShippingRate, marketFourSheeterPrice, marketFourSheeterSetsPerBox, marketMegasPerBox, marketRateDirty, marketSixSheeterPrice, marketSixSheeterSetsPerBox, marketTwoSheeterPrice, marketTwoSheeterSetsPerBox, marketUseFlatRate, saving, selectedTenantId]);
 
   if (!isSuperAdmin) {
     return (
@@ -462,9 +487,9 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                             type="number"
                             min={1}
                             step="1"
-                            value={marketSheeterSetsPerBox}
+                            value={marketTwoSheeterSetsPerBox}
                             onChange={(event) => {
-                              setMarketSheeterSetsPerBox(event.target.value);
+                              setMarketTwoSheeterSetsPerBox(event.target.value);
                               setMarketRateDirty(true);
                             }}
                           />
@@ -500,9 +525,9 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                             type="number"
                             min={1}
                             step="1"
-                            value={marketSheeterSetsPerBox}
+                            value={marketFourSheeterSetsPerBox}
                             onChange={(event) => {
-                              setMarketSheeterSetsPerBox(event.target.value);
+                              setMarketFourSheeterSetsPerBox(event.target.value);
                               setMarketRateDirty(true);
                             }}
                           />
@@ -538,9 +563,9 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                             type="number"
                             min={1}
                             step="1"
-                            value={marketSheeterSetsPerBox}
+                            value={marketSixSheeterSetsPerBox}
                             onChange={(event) => {
-                              setMarketSheeterSetsPerBox(event.target.value);
+                              setMarketSixSheeterSetsPerBox(event.target.value);
                               setMarketRateDirty(true);
                             }}
                           />
@@ -576,9 +601,9 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                               type="number"
                               min={1}
                               step="1"
-                              value={marketSheeterSetsPerBox}
+                              value={marketEightSheeterSetsPerBox}
                               onChange={(event) => {
-                                setMarketSheeterSetsPerBox(event.target.value);
+                                setMarketEightSheeterSetsPerBox(event.target.value);
                                 setMarketRateDirty(true);
                               }}
                             />

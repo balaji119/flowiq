@@ -42,22 +42,26 @@ type marketDeliveryAddressRow struct {
 }
 
 type marketShippingRateRow struct {
-	TenantID          string
-	Market            string
-	UseFlatRate       bool
-	ShippingRate      float64
-	PostersPerBox     int
-	SheeterSetsPerBox int
-	TwoSheeterPrice   float64
-	FourSheeterPrice  float64
-	SixSheeterPrice   float64
-	EightSheeterPrice float64
-	MegasPerBox       int
-	MegaShippingRate  float64
-	DotMShippingRate  float64
-	MpShippingRate    float64
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	TenantID               string
+	Market                 string
+	UseFlatRate            bool
+	ShippingRate           float64
+	PostersPerBox          int
+	SheeterSetsPerBox      int
+	TwoSheeterSetsPerBox   int
+	FourSheeterSetsPerBox  int
+	SixSheeterSetsPerBox   int
+	EightSheeterSetsPerBox int
+	TwoSheeterPrice        float64
+	FourSheeterPrice       float64
+	SixSheeterPrice        float64
+	EightSheeterPrice      float64
+	MegasPerBox            int
+	MegaShippingRate       float64
+	DotMShippingRate       float64
+	MpShippingRate         float64
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 type marketAssetPrintingCostRow struct {
@@ -271,6 +275,10 @@ func scanMarketShippingRateRow(scanner interface {
 		&row.ShippingRate,
 		&row.PostersPerBox,
 		&row.SheeterSetsPerBox,
+		&row.TwoSheeterSetsPerBox,
+		&row.FourSheeterSetsPerBox,
+		&row.SixSheeterSetsPerBox,
+		&row.EightSheeterSetsPerBox,
 		&row.TwoSheeterPrice,
 		&row.FourSheeterPrice,
 		&row.SixSheeterPrice,
@@ -323,22 +331,26 @@ func scanMarketAssetShippingCostRow(scanner interface {
 
 func decodeMarketShippingRateRow(row marketShippingRateRow) marketShippingRateRecord {
 	return marketShippingRateRecord{
-		TenantID:          row.TenantID,
-		Market:            row.Market,
-		UseFlatRate:       row.UseFlatRate,
-		ShippingRate:      row.ShippingRate,
-		PostersPerBox:     row.PostersPerBox,
-		SheeterSetsPerBox: row.SheeterSetsPerBox,
-		TwoSheeterPrice:   row.TwoSheeterPrice,
-		FourSheeterPrice:  row.FourSheeterPrice,
-		SixSheeterPrice:   row.SixSheeterPrice,
-		EightSheeterPrice: row.EightSheeterPrice,
-		MegasPerBox:       row.MegasPerBox,
-		MegaShippingRate:  row.MegaShippingRate,
-		DotMShippingRate:  row.DotMShippingRate,
-		MpShippingRate:    row.MpShippingRate,
-		CreatedAt:         row.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:         row.UpdatedAt.UTC().Format(time.RFC3339),
+		TenantID:               row.TenantID,
+		Market:                 row.Market,
+		UseFlatRate:            row.UseFlatRate,
+		ShippingRate:           row.ShippingRate,
+		PostersPerBox:          row.PostersPerBox,
+		SheeterSetsPerBox:      row.SheeterSetsPerBox,
+		TwoSheeterSetsPerBox:   row.TwoSheeterSetsPerBox,
+		FourSheeterSetsPerBox:  row.FourSheeterSetsPerBox,
+		SixSheeterSetsPerBox:   row.SixSheeterSetsPerBox,
+		EightSheeterSetsPerBox: row.EightSheeterSetsPerBox,
+		TwoSheeterPrice:        row.TwoSheeterPrice,
+		FourSheeterPrice:       row.FourSheeterPrice,
+		SixSheeterPrice:        row.SixSheeterPrice,
+		EightSheeterPrice:      row.EightSheeterPrice,
+		MegasPerBox:            row.MegasPerBox,
+		MegaShippingRate:       row.MegaShippingRate,
+		DotMShippingRate:       row.DotMShippingRate,
+		MpShippingRate:         row.MpShippingRate,
+		CreatedAt:              row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:              row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -924,6 +936,10 @@ func (s *mappingStore) listMarketShippingRates(ctx context.Context, tenantID str
 			msr.shipping_rate::float8,
 			msr.posters_per_box,
 			msr.sheeter_sets_per_box,
+			msr.two_sheeter_sets_per_box,
+			msr.four_sheeter_sets_per_box,
+			msr.six_sheeter_sets_per_box,
+			msr.eight_sheeter_sets_per_box,
 			msr.two_sheeter_price::float8,
 			msr.four_sheeter_price::float8,
 			msr.six_sheeter_price::float8,
@@ -994,6 +1010,18 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 	if payload.SheeterSetsPerBox <= 0 {
 		return nil, errors.New("sheeterSetsPerBox must be greater than 0")
 	}
+	if payload.TwoSheeterSetsPerBox <= 0 {
+		return nil, errors.New("twoSheeterSetsPerBox must be greater than 0")
+	}
+	if payload.FourSheeterSetsPerBox <= 0 {
+		return nil, errors.New("fourSheeterSetsPerBox must be greater than 0")
+	}
+	if payload.SixSheeterSetsPerBox <= 0 {
+		return nil, errors.New("sixSheeterSetsPerBox must be greater than 0")
+	}
+	if payload.EightSheeterSetsPerBox <= 0 {
+		return nil, errors.New("eightSheeterSetsPerBox must be greater than 0")
+	}
 	if payload.MegasPerBox <= 0 {
 		return nil, errors.New("megasPerBox must be greater than 0")
 	}
@@ -1011,6 +1039,10 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 			shipping_rate,
 			posters_per_box,
 			sheeter_sets_per_box,
+			two_sheeter_sets_per_box,
+			four_sheeter_sets_per_box,
+			six_sheeter_sets_per_box,
+			eight_sheeter_sets_per_box,
 			two_sheeter_price,
 			four_sheeter_price,
 			six_sheeter_price,
@@ -1022,13 +1054,17 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 			created_at,
 			updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
 		ON CONFLICT (tenant_id, market_id)
 		DO UPDATE SET
 			use_flat_rate = EXCLUDED.use_flat_rate,
 			shipping_rate = EXCLUDED.shipping_rate,
 			posters_per_box = EXCLUDED.posters_per_box,
 			sheeter_sets_per_box = EXCLUDED.sheeter_sets_per_box,
+			two_sheeter_sets_per_box = EXCLUDED.two_sheeter_sets_per_box,
+			four_sheeter_sets_per_box = EXCLUDED.four_sheeter_sets_per_box,
+			six_sheeter_sets_per_box = EXCLUDED.six_sheeter_sets_per_box,
+			eight_sheeter_sets_per_box = EXCLUDED.eight_sheeter_sets_per_box,
 			two_sheeter_price = EXCLUDED.two_sheeter_price,
 			four_sheeter_price = EXCLUDED.four_sheeter_price,
 			six_sheeter_price = EXCLUDED.six_sheeter_price,
@@ -1040,11 +1076,15 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 			updated_at = NOW()
 		RETURNING
 			tenant_id,
-			$15::text,
+			$19::text,
 			use_flat_rate,
 			shipping_rate::float8,
 			posters_per_box,
 			sheeter_sets_per_box,
+			two_sheeter_sets_per_box,
+			four_sheeter_sets_per_box,
+			six_sheeter_sets_per_box,
+			eight_sheeter_sets_per_box,
 			two_sheeter_price::float8,
 			four_sheeter_price::float8,
 			six_sheeter_price::float8,
@@ -1055,7 +1095,7 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 			mp_shipping_rate::float8,
 			created_at,
 			updated_at
-	`, tenantID, marketID, payload.UseFlatRate, payload.ShippingRate, payload.PostersPerBox, payload.SheeterSetsPerBox, payload.TwoSheeterPrice, payload.FourSheeterPrice, payload.SixSheeterPrice, payload.EightSheeterPrice, payload.MegasPerBox, payload.MegaShippingRate, payload.DotMShippingRate, payload.MpShippingRate, market))
+	`, tenantID, marketID, payload.UseFlatRate, payload.ShippingRate, payload.PostersPerBox, payload.SheeterSetsPerBox, payload.TwoSheeterSetsPerBox, payload.FourSheeterSetsPerBox, payload.SixSheeterSetsPerBox, payload.EightSheeterSetsPerBox, payload.TwoSheeterPrice, payload.FourSheeterPrice, payload.SixSheeterPrice, payload.EightSheeterPrice, payload.MegasPerBox, payload.MegaShippingRate, payload.DotMShippingRate, payload.MpShippingRate, market))
 	if err != nil {
 		return nil, err
 	}

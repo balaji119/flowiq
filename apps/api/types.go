@@ -194,38 +194,46 @@ type marketDeliveryAddressRecord struct {
 }
 
 type marketShippingRateInput struct {
-	Market            string  `json:"market"`
-	UseFlatRate       bool    `json:"useFlatRate"`
-	ShippingRate      float64 `json:"shippingRate"`
-	PostersPerBox     int     `json:"postersPerBox"`
-	SheeterSetsPerBox int     `json:"sheeterSetsPerBox"`
-	TwoSheeterPrice   float64 `json:"twoSheeterPrice"`
-	FourSheeterPrice  float64 `json:"fourSheeterPrice"`
-	SixSheeterPrice   float64 `json:"sixSheeterPrice"`
-	EightSheeterPrice float64 `json:"eightSheeterPrice"`
-	MegasPerBox       int     `json:"megasPerBox"`
-	MegaShippingRate  float64 `json:"megaShippingRate"`
-	DotMShippingRate  float64 `json:"dotMShippingRate"`
-	MpShippingRate    float64 `json:"mpShippingRate"`
+	Market                 string  `json:"market"`
+	UseFlatRate            bool    `json:"useFlatRate"`
+	ShippingRate           float64 `json:"shippingRate"`
+	PostersPerBox          int     `json:"postersPerBox"`
+	SheeterSetsPerBox      int     `json:"sheeterSetsPerBox"`
+	TwoSheeterSetsPerBox   int     `json:"twoSheeterSetsPerBox"`
+	FourSheeterSetsPerBox  int     `json:"fourSheeterSetsPerBox"`
+	SixSheeterSetsPerBox   int     `json:"sixSheeterSetsPerBox"`
+	EightSheeterSetsPerBox int     `json:"eightSheeterSetsPerBox"`
+	TwoSheeterPrice        float64 `json:"twoSheeterPrice"`
+	FourSheeterPrice       float64 `json:"fourSheeterPrice"`
+	SixSheeterPrice        float64 `json:"sixSheeterPrice"`
+	EightSheeterPrice      float64 `json:"eightSheeterPrice"`
+	MegasPerBox            int     `json:"megasPerBox"`
+	MegaShippingRate       float64 `json:"megaShippingRate"`
+	DotMShippingRate       float64 `json:"dotMShippingRate"`
+	MpShippingRate         float64 `json:"mpShippingRate"`
 }
 
 type marketShippingRateRecord struct {
-	TenantID          string  `json:"tenantId"`
-	Market            string  `json:"market"`
-	UseFlatRate       bool    `json:"useFlatRate"`
-	ShippingRate      float64 `json:"shippingRate"`
-	PostersPerBox     int     `json:"postersPerBox"`
-	SheeterSetsPerBox int     `json:"sheeterSetsPerBox"`
-	TwoSheeterPrice   float64 `json:"twoSheeterPrice"`
-	FourSheeterPrice  float64 `json:"fourSheeterPrice"`
-	SixSheeterPrice   float64 `json:"sixSheeterPrice"`
-	EightSheeterPrice float64 `json:"eightSheeterPrice"`
-	MegasPerBox       int     `json:"megasPerBox"`
-	MegaShippingRate  float64 `json:"megaShippingRate"`
-	DotMShippingRate  float64 `json:"dotMShippingRate"`
-	MpShippingRate    float64 `json:"mpShippingRate"`
-	CreatedAt         string  `json:"createdAt"`
-	UpdatedAt         string  `json:"updatedAt"`
+	TenantID               string  `json:"tenantId"`
+	Market                 string  `json:"market"`
+	UseFlatRate            bool    `json:"useFlatRate"`
+	ShippingRate           float64 `json:"shippingRate"`
+	PostersPerBox          int     `json:"postersPerBox"`
+	SheeterSetsPerBox      int     `json:"sheeterSetsPerBox"`
+	TwoSheeterSetsPerBox   int     `json:"twoSheeterSetsPerBox"`
+	FourSheeterSetsPerBox  int     `json:"fourSheeterSetsPerBox"`
+	SixSheeterSetsPerBox   int     `json:"sixSheeterSetsPerBox"`
+	EightSheeterSetsPerBox int     `json:"eightSheeterSetsPerBox"`
+	TwoSheeterPrice        float64 `json:"twoSheeterPrice"`
+	FourSheeterPrice       float64 `json:"fourSheeterPrice"`
+	SixSheeterPrice        float64 `json:"sixSheeterPrice"`
+	EightSheeterPrice      float64 `json:"eightSheeterPrice"`
+	MegasPerBox            int     `json:"megasPerBox"`
+	MegaShippingRate       float64 `json:"megaShippingRate"`
+	DotMShippingRate       float64 `json:"dotMShippingRate"`
+	MpShippingRate         float64 `json:"mpShippingRate"`
+	CreatedAt              string  `json:"createdAt"`
+	UpdatedAt              string  `json:"updatedAt"`
 }
 
 type printingCostBreakdown map[string]float64
