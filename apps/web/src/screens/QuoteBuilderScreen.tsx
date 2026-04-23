@@ -643,7 +643,28 @@ function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: n
 }
 
 const defaultValues = createDefaultFormValues();
-const defaultValuesSerialized = JSON.stringify(defaultValues);
+function toStableValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => toStableValue(item));
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const sorted: Record<string, unknown> = {};
+    Object.keys(record)
+      .sort((left, right) => left.localeCompare(right))
+      .forEach((key) => {
+        sorted[key] = toStableValue(record[key]);
+      });
+    return sorted;
+  }
+  return value;
+}
+
+function stableSerialize(value: unknown) {
+  return JSON.stringify(toStableValue(value));
+}
+
+const defaultValuesSerialized = stableSerialize(defaultValues);
 
 export function QuoteBuilderScreen({
   campaignId: selectedCampaignId,
@@ -720,7 +741,7 @@ export function QuoteBuilderScreen({
             const response = await fetchCampaign(storedCampaignId);
             if (!active) return;
             applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
-            lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
+            lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
             campaignHydratedRef.current = true;
             await setStoredCampaignId(response.campaign.id);
             return;
@@ -1035,7 +1056,7 @@ export function QuoteBuilderScreen({
     });
     return byMarket;
   }, [marketDeliveryAddresses]);
-  const hasUnsavedChanges = !loadingCampaign && JSON.stringify(values) !== lastPersistedValuesRef.current;
+  const hasUnsavedChanges = !loadingCampaign && stableSerialize(values) !== lastPersistedValuesRef.current;
   const hasMappedCreatives = useMemo(() => {
     if (!summary || !summary.lines.length) return false;
     return values.campaignMarkets.every((market) =>
@@ -1411,7 +1432,7 @@ export function QuoteBuilderScreen({
 
   async function saveCampaignDraft(options?: { fromAutoSave?: boolean }) {
     const fromAutoSave = options?.fromAutoSave ?? false;
-    const currentValuesSerialized = JSON.stringify(values);
+    const currentValuesSerialized = stableSerialize(values);
     if (fromAutoSave && lastAutoSaveFailedValuesRef.current === currentValuesSerialized) {
       return null;
     }
@@ -1423,7 +1444,7 @@ export function QuoteBuilderScreen({
       if (!campaignId) {
         const response = await createCampaign({ values });
         applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
-        lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
+            lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
         lastAutoSaveFailedValuesRef.current = null;
         await setStoredCampaignId(response.campaign.id);
         return response.campaign.id;
@@ -1432,7 +1453,7 @@ export function QuoteBuilderScreen({
       const response = await updateStoredCampaign(campaignId, { values });
       setCampaignStatus(response.campaign.status);
       setUploadedPurchaseOrderName(response.campaign.purchaseOrder?.originalName || '');
-      lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
+        lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
       lastAutoSaveFailedValuesRef.current = null;
       return campaignId;
     } catch (saveError) {
@@ -1465,6 +1486,12 @@ export function QuoteBuilderScreen({
       onBack();
       return;
     }
+    const savedCampaignId = await saveCampaignDraft({ fromAutoSave: true });
+    if (savedCampaignId) {
+      await releaseActiveCampaignLock(savedCampaignId);
+      onBack();
+      return;
+    }
     setUnsavedDialogOpen(true);
   }
 
@@ -1493,7 +1520,7 @@ export function QuoteBuilderScreen({
       const response = await submitCampaignToPrintIQ(savedCampaignId);
       const amount = response.amount === null || response.amount === undefined || response.amount === '' ? 'N/A' : String(response.amount);
       applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
-      lastPersistedValuesRef.current = JSON.stringify(response.campaign.values);
+      lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
       setQuoteResponseMessage(`Quote created successfully. Amount: ${amount}`);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Unable to create quote');
