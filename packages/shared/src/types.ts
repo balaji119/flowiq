@@ -281,6 +281,7 @@ export type CampaignListItem = {
   id: string;
   tenantId: string;
   status: CampaignStatus;
+  createdBy: string;
   campaignName: string;
   campaignStartDate: string;
   dueDate: string;

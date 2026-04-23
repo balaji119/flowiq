@@ -285,13 +285,13 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
                   <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                     <th className="border border-slate-700 px-4 py-3 text-left">Campaign</th>
                     <th className="border border-slate-700 px-4 py-3 text-left">Status</th>
+                    <th className="border border-slate-700 px-4 py-3 text-left">Created By</th>
                     <th className="border border-slate-700 px-4 py-3 text-left">Updated</th>
                     <th className="border border-slate-700 px-4 py-3 text-center">Markets</th>
                     <th className="border border-slate-700 px-4 py-3 text-center">Assets</th>
                     <th className="border border-slate-700 px-4 py-3 text-left">Start</th>
                     <th className="border border-slate-700 px-4 py-3 text-left">Due</th>
                     <th className="border border-slate-700 px-4 py-3 text-center">Weeks</th>
-                    <th className="border border-slate-700 px-4 py-3 text-center">Latest Quote</th>
                     <th className="border border-slate-700 px-4 py-3 text-center">Action</th>
                   </tr>
                 </thead>
@@ -306,13 +306,13 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
                           {campaign.status}
                         </span>
                       </td>
+                      <td className="border border-slate-700 px-4 py-3 text-slate-300">{campaign.createdBy || 'N/A'}</td>
                       <td className="border border-slate-700 px-4 py-3 text-slate-300">{new Date(campaign.updatedAt).toLocaleString()}</td>
                       <td className="border border-slate-700 px-4 py-3 text-center font-semibold text-white">{campaign.marketCount}</td>
                       <td className="border border-slate-700 px-4 py-3 text-center font-semibold text-white">{campaign.assetCount}</td>
                       <td className="border border-slate-700 px-4 py-3 text-slate-300">{formatCampaignDate(campaign.campaignStartDate)}</td>
                       <td className="border border-slate-700 px-4 py-3 text-slate-300">{formatCampaignDate(campaign.dueDate)}</td>
                       <td className="border border-slate-700 px-4 py-3 text-center text-slate-300">{campaign.numberOfWeeks || '0'}</td>
-                      <td className="border border-slate-700 px-4 py-3 text-center text-slate-300">{campaign.latestQuoteAmount ?? 'N/A'}</td>
                       <td className="border border-slate-700 px-4 py-3">
                         <div className="flex justify-center gap-2">
                           <Button
