@@ -1,6 +1,6 @@
 import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useState } from 'react';
 import { AuthSession } from '@flowiq/shared';
-import { applyAuthToken, fetchCurrentSession, login as loginRequest } from '../services/authApi';
+import { applyAuthToken, fetchCurrentSession, login as loginRequest, logout as logoutRequest } from '../services/authApi';
 
 type AuthContextValue = {
   session: AuthSession | null;
@@ -87,6 +87,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
         await setStoredValue(JSON.stringify(nextSession));
       },
       logout: async () => {
+        try {
+          await logoutRequest();
+        } catch {
+          // Continue local logout even if server logout fails.
+        }
         applyAuthToken(null);
         setSession(null);
         await setStoredValue(null);

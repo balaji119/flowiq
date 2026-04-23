@@ -21,7 +21,7 @@ import (
 type contextKey string
 
 const authUserKey contextKey = "authUser"
-const activeUsersWindow = 15 * time.Minute
+const activeUsersWindow = 1 * time.Minute
 
 type app struct {
 	authStore        *authStore
@@ -224,6 +224,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /api/auth/password-reset/request", a.handleRequestPasswordReset)
 	mux.HandleFunc("POST /api/auth/password-reset/confirm", a.handleConfirmPasswordReset)
 	mux.Handle("GET /api/auth/me", a.withAuth(http.HandlerFunc(a.handleCurrentSession)))
+	mux.Handle("POST /api/auth/logout", a.withAuth(http.HandlerFunc(a.handleLogout)))
 	mux.Handle("GET /api/auth/active-users", a.withAuth(http.HandlerFunc(a.handleActiveUsersCount)))
 	mux.Handle("GET /api/campaigns", a.withAuth(http.HandlerFunc(a.handleListCampaigns)))
 	mux.Handle("POST /api/campaigns", a.withAuth(http.HandlerFunc(a.handleCreateCampaign)))
@@ -440,6 +441,21 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) handleCurrentSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, currentUser(r.Context()))
+}
+
+func (a *app) handleLogout(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	if user == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Authentication required"})
+		return
+	}
+
+	if err := a.authStore.clearPresence(r.Context(), user.ID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"loggedOut": true})
 }
 
 func (a *app) handleActiveUsersCount(w http.ResponseWriter, r *http.Request) {

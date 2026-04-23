@@ -70,6 +70,7 @@ export type CampaignAsset = {
   assetSearch: string;
   selectedWeeks: number[];
   creativeImageId: string;
+  creativeImageIds?: Partial<Record<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'Mega' | 'DOT M' | 'MP', string>>;
   deliveryAddress: string;
 };
 

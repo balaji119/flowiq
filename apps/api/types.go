@@ -76,12 +76,13 @@ type orderFormValues struct {
 }
 
 type campaignAsset struct {
-	ID              string `json:"id"`
-	AssetID         string `json:"assetId"`
-	AssetSearch     string `json:"assetSearch"`
-	SelectedWeeks   []int  `json:"selectedWeeks"`
-	CreativeImageID string `json:"creativeImageId"`
-	DeliveryAddress string `json:"deliveryAddress"`
+	ID               string            `json:"id"`
+	AssetID          string            `json:"assetId"`
+	AssetSearch      string            `json:"assetSearch"`
+	SelectedWeeks    []int             `json:"selectedWeeks"`
+	CreativeImageID  string            `json:"creativeImageId"`
+	CreativeImageIDs map[string]string `json:"creativeImageIds,omitempty"`
+	DeliveryAddress  string            `json:"deliveryAddress"`
 }
 
 type campaignMarket struct {

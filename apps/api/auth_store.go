@@ -151,6 +151,14 @@ func (s *authStore) touchPresence(ctx context.Context, user AuthUser) error {
 	return err
 }
 
+func (s *authStore) clearPresence(ctx context.Context, userID string) error {
+	_, err := s.pool.Exec(ctx, `
+		DELETE FROM user_presence
+		WHERE user_id = $1
+	`, userID)
+	return err
+}
+
 func (s *authStore) countRecentlyActiveUsers(ctx context.Context, tenantID *string, activeWithin time.Duration) (int, error) {
 	window := int(activeWithin / time.Second)
 	if window < 60 {

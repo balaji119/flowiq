@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LayoutGrid, LoaderCircle, LogOut, Pencil, Plus, Shield, Trash2, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
@@ -126,6 +126,54 @@ function formatKeyLabel(key: (typeof formatKeys)[number]) {
   return key;
 }
 
+const creativeFormatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'Mega', 'DOT M', 'MP'] as const;
+type CreativeFormatKey = (typeof creativeFormatKeys)[number];
+
+function creativeFormatLabel(key: CreativeFormatKey) {
+  if (key === '8-sheet') return '8-sheet / QA0';
+  return formatKeyLabel(key);
+}
+
+function toCreativeFormatKey(key: keyof QuantityBreakdown): CreativeFormatKey {
+  if (key === 'QA0') return '8-sheet';
+  return key as CreativeFormatKey;
+}
+
+function normalizeCreativeImageIds(asset: CampaignAsset): Partial<Record<CreativeFormatKey, string>> {
+  const normalized: Partial<Record<CreativeFormatKey, string>> = {};
+  creativeFormatKeys.forEach((key) => {
+    const mapped = (asset.creativeImageIds?.[key] || '').trim();
+    if (mapped) {
+      normalized[key] = mapped;
+    }
+  });
+
+  const legacyCreativeId = (asset.creativeImageId || '').trim();
+  if (legacyCreativeId && Object.keys(normalized).length === 0) {
+    creativeFormatKeys.forEach((key) => {
+      normalized[key] = legacyCreativeId;
+    });
+  }
+  return normalized;
+}
+
+function getCreativeImageIdForFormat(asset: CampaignAsset, format: CreativeFormatKey) {
+  const mapped = (asset.creativeImageIds?.[format] || '').trim();
+  if (mapped) return mapped;
+  return (asset.creativeImageId || '').trim();
+}
+
+function getCreativeFormatsForBreakdown(breakdown: QuantityBreakdown | null | undefined) {
+  const formats = new Set<CreativeFormatKey>();
+  if (!breakdown) return [];
+  (Object.keys(breakdown) as Array<keyof QuantityBreakdown>).forEach((key) => {
+    if ((breakdown[key] ?? 0) > 0) {
+      formats.add(toCreativeFormatKey(key));
+    }
+  });
+  return Array.from(formats);
+}
+
 function parseDateOnly(value: string) {
   if (!value) return null;
   const parts = value.split('-').map((part) => Number(part));
@@ -178,6 +226,17 @@ function toFileBaseName(fileName: string) {
 function normalizeFormValues(values: OrderFormValues): OrderFormValues {
   return {
     ...values,
+    campaignMarkets: (values.campaignMarkets ?? []).map((market) => ({
+      ...market,
+      assets: (market.assets ?? []).map((asset) => {
+        const creativeImageIds = normalizeCreativeImageIds(asset);
+        return {
+          ...asset,
+          creativeImageIds,
+          creativeImageId: getCreativeImageIdForFormat({ ...asset, creativeImageIds }, '8-sheet') || asset.creativeImageId || '',
+        };
+      }),
+    })),
     printImages: (values.printImages ?? []).map((image) => ({
       id: image.id,
       name: image.name,
@@ -570,12 +629,16 @@ function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: n
   const allWeeks = createAllWeeks(maxWeeks);
   return campaignMarkets.map((market) => ({
     ...market,
-    assets: market.assets.map((asset) => ({
-      ...asset,
-      creativeImageId: asset.creativeImageId || '',
-      deliveryAddress: asset.deliveryAddress || '',
-      selectedWeeks: allWeeks,
-    })),
+    assets: market.assets.map((asset) => {
+      const creativeImageIds = normalizeCreativeImageIds(asset);
+      return {
+        ...asset,
+        creativeImageId: getCreativeImageIdForFormat({ ...asset, creativeImageIds }, '8-sheet') || '',
+        creativeImageIds,
+        deliveryAddress: asset.deliveryAddress || '',
+        selectedWeeks: allWeeks,
+      };
+    }),
   }));
 }
 
@@ -938,6 +1001,7 @@ export function QuoteBuilderScreen({
     });
     return byLineId;
   }, [values.campaignMarkets]);
+  const summaryLineByAssetId = useMemo(() => new Map((summary?.lines ?? []).map((line) => [line.id, line])), [summary]);
   const megasPerBoxByMarket = useMemo(
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.megasPerBox ?? 1])),
     [marketShippingRates],
@@ -972,7 +1036,18 @@ export function QuoteBuilderScreen({
     return byMarket;
   }, [marketDeliveryAddresses]);
   const hasUnsavedChanges = !loadingCampaign && JSON.stringify(values) !== lastPersistedValuesRef.current;
-  const hasMappedCreatives = values.campaignMarkets.some((market) => market.assets.some((asset) => Boolean(asset.creativeImageId)));
+  const hasMappedCreatives = useMemo(() => {
+    if (!summary || !summary.lines.length) return false;
+    return values.campaignMarkets.every((market) =>
+      market.assets.every((asset) => {
+        const line = summaryLineByAssetId.get(asset.id);
+        if (!line) return false;
+        const requiredFormats = getCreativeFormatsForBreakdown(line.breakdown);
+        if (requiredFormats.length === 0) return false;
+        return requiredFormats.every((format) => Boolean(getCreativeImageIdForFormat(asset, format)));
+      }),
+    );
+  }, [summary, summaryLineByAssetId, values.campaignMarkets]);
   const hasUploadedPurchaseOrder = uploadedPurchaseOrderName.trim().length > 0;
   const hasCampaignStartDate = values.campaignStartDate.trim().length > 0;
   const hasDeliveryDueDate = values.dueDate.trim().length > 0;
@@ -1594,11 +1669,10 @@ export function QuoteBuilderScreen({
         deliveryInfoBlocks.push(block);
       };
 
-      const updateSummary = (creativeNumber: number, breakdown: QuantityBreakdown) => {
+      const updateSummary = (creativeNumber: number, key: keyof QuantityBreakdown, quantity: number) => {
+        if (quantity <= 0) return;
         const bucket = creativeSummary.get(creativeNumber) ?? { '8-sheet': 0, '6-sheet': 0, '4-sheet': 0, '2-sheet': 0, QA0: 0, Mega: 0, 'DOT M': 0, MP: 0 };
-        formatKeys.forEach((key) => {
-          bucket[key] += breakdown[key] ?? 0;
-        });
+        bucket[key] += quantity;
         creativeSummary.set(creativeNumber, bucket);
       };
 
@@ -1672,29 +1746,36 @@ export function QuoteBuilderScreen({
       values.campaignMarkets.forEach((market) => {
         market.assets.forEach((asset) => {
           const line = lineByAssetId.get(asset.id);
-          const creative = asset.creativeImageId ? imageById.get(asset.creativeImageId) : undefined;
-          if (!line || !creative) return;
+          if (!line) return;
 
           const state = normalizeExportState(line.state) ?? inferStateFromMarket(market.market);
           if (!state) return;
-
-          const creativeCode = buildCreativeCode(state, creative.creativeNumber);
-          const fileName = toFileBaseName(creative.image.fileName || creative.image.name || asset.assetSearch || asset.assetId || 'Artwork');
-          const printRowKey = `${creativeCode}\x00${fileName}`;
-          const printRow = printRows.get(printRowKey) ?? {
-            creativeCode,
-            creativeNumber: creative.creativeNumber,
-            creativeImageId: creative.image.id,
-            fileName,
-            state,
-            quantities: {},
-          };
-
           (Object.keys(line.breakdown) as Array<keyof QuantityBreakdown>).forEach((key) => {
             const quantity = line.breakdown[key] ?? 0;
             if (quantity <= 0) return;
+
+            const creativeFormat = toCreativeFormatKey(key);
+            const creativeImageId = getCreativeImageIdForFormat(asset, creativeFormat);
+            if (!creativeImageId) return;
+            const creative = imageById.get(creativeImageId);
+            if (!creative) return;
+
+            const creativeCode = buildCreativeCode(state, creative.creativeNumber);
+            const fileName = toFileBaseName(creative.image.fileName || creative.image.name || asset.assetSearch || asset.assetId || 'Artwork');
+            const printRowKey = `${creativeCode}\x00${fileName}`;
+            const printRow = printRows.get(printRowKey) ?? {
+              creativeCode,
+              creativeNumber: creative.creativeNumber,
+              creativeImageId: creative.image.id,
+              fileName,
+              state,
+              quantities: {},
+            };
+
             const column = getPrintColumn(state, key);
             printRow.quantities[column] = (printRow.quantities[column] ?? 0) + quantity;
+            printRows.set(printRowKey, printRow);
+
             const typeLabel = getDeliveryTypeLabel(state, key);
             const deliveredTo = `VIM ${state}`;
             const rolled = state !== 'NSW';
@@ -1713,10 +1794,9 @@ export function QuoteBuilderScreen({
                 rolled,
               });
             }
-          });
 
-          printRows.set(printRowKey, printRow);
-          updateSummary(creative.creativeNumber, line.breakdown);
+            updateSummary(creative.creativeNumber, key, quantity);
+          });
 
           pushDeliveryInfo(asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || '', market.market, state);
         });
@@ -2144,7 +2224,14 @@ export function QuoteBuilderScreen({
           }),
       );
       const usedCreativeImageIds = new Set(
-        values.campaignMarkets.flatMap((market) => market.assets.map((asset) => asset.creativeImageId).filter(Boolean)),
+        values.campaignMarkets.flatMap((market) =>
+          market.assets.flatMap((asset) => {
+            const mapped = creativeFormatKeys
+              .map((format) => getCreativeImageIdForFormat(asset, format))
+              .filter((imageId) => Boolean(imageId.trim()));
+            return Array.from(new Set(mapped));
+          }),
+        ),
       );
       const creativeLinks = values.printImages
         .filter((image) => usedCreativeImageIds.has(image.id))
@@ -2746,60 +2833,98 @@ export function QuoteBuilderScreen({
                     <div key={`finalize-map-${market.id}`} className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/45 p-4">
                       <div>
                         <p className="text-sm font-semibold text-white">{market.market || 'Select a market in Schedule first'}</p>
-                        <p className="text-xs text-slate-400">Map each asset to an artwork and delivery address.</p>
                       </div>
                       <div className="overflow-visible">
                         <table className="w-full border-collapse table-fixed">
                           <thead>
                             <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                               <th className="px-4 py-3 text-left">Asset</th>
+                              <th className="px-4 py-3 text-left">Category</th>
                               <th className="px-4 py-3 text-left">Creative</th>
                               <th className="px-4 py-3 text-left">Delivery Address</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {market.assets.map((asset) => (
-                              <tr key={`finalize-map-row-${asset.id}`} className="border-b border-slate-700/70 align-top last:border-b-0">
-                                <td className="px-4 py-3">
-                                  <p className="text-sm font-semibold text-white">{asset.assetSearch || asset.assetId || 'Asset not selected'}</p>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <SearchableSelect
-                                    emptyMessage={values.printImages.length ? 'No matching artworks found.' : 'No artworks uploaded in Creative step.'}
-                                    items={creativeImageOptions}
-                                    label=""
-                                    onValueChange={(value) =>
-                                      updateCampaignAsset(market.id, asset.id, (current) => ({
-                                        ...current,
-                                        creativeImageId: value,
-                                      }))
-                                    }
-                                    placeholder={values.printImages.length ? 'Attach artwork' : 'No artworks available'}
-                                    selectedLabel={values.printImages.find((image) => image.id === asset.creativeImageId)?.name}
-                                    selectedValue={asset.creativeImageId || ''}
-                                  />
-                                </td>
-                                <td className="px-4 py-3">
-                                  <SearchableSelect
-                                    actionDisabled={!market.market}
-                                    actionLabel={canAddAddressInFinalize ? 'Add new address' : undefined}
-                                    emptyMessage={deliveryAddressOptions.length ? 'No matching addresses found.' : 'No addresses saved for this market yet.'}
-                                    items={deliveryAddressOptions}
-                                    label=""
-                                    onAction={() => openAddAddressDialog(market.id, asset.id, market.market)}
-                                    onValueChange={(value) =>
-                                      updateCampaignAsset(market.id, asset.id, (current) => ({
-                                        ...current,
-                                        deliveryAddress: value,
-                                      }))
-                                    }
-                                    placeholder={deliveryAddressOptions.length ? 'Choose delivery address' : 'No addresses available'}
-                                    selectedLabel={asset.deliveryAddress || ''}
-                                    selectedValue={asset.deliveryAddress || ''}
-                                  />
-                                </td>
-                              </tr>
-                            ))}
+                            {market.assets.map((asset) => {
+                              const line = summaryLineByAssetId.get(asset.id);
+                              const requiredFormats = getCreativeFormatsForBreakdown(line?.breakdown);
+                              const displayFormats = requiredFormats.length > 0 ? requiredFormats : [null];
+                              const rowSpan = displayFormats.length;
+                              return (
+                                <Fragment key={`finalize-map-group-${asset.id}`}>
+                                  {displayFormats.map((formatKey, index) => {
+                                    const selectedCreativeId = formatKey ? getCreativeImageIdForFormat(asset, formatKey) : '';
+                                    return (
+                                      <tr key={`finalize-map-row-${asset.id}-${formatKey ?? 'none'}-${index}`} className="border-b border-slate-700/70 align-top last:border-b-0">
+                                        {index === 0 ? (
+                                          <td className="px-4 py-3" rowSpan={rowSpan}>
+                                            <p className="text-sm font-semibold text-white">{asset.assetSearch || asset.assetId || 'Asset not selected'}</p>
+                                          </td>
+                                        ) : null}
+                                        <td className="px-4 py-3">
+                                          {formatKey ? (
+                                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">{creativeFormatLabel(formatKey)}</p>
+                                          ) : (
+                                            <p className="text-sm text-slate-400">No active quantity formats</p>
+                                          )}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          {formatKey ? (
+                                            <SearchableSelect
+                                              emptyMessage={values.printImages.length ? 'No matching artworks found.' : 'No artworks uploaded in Creative step.'}
+                                              items={creativeImageOptions}
+                                              label=""
+                                              onValueChange={(value) =>
+                                                updateCampaignAsset(market.id, asset.id, (current) => {
+                                                  const nextCreativeImageIds = {
+                                                    ...normalizeCreativeImageIds(current),
+                                                    [formatKey]: value,
+                                                  };
+                                                  if (!value) {
+                                                    delete nextCreativeImageIds[formatKey];
+                                                  }
+                                                  return {
+                                                    ...current,
+                                                    creativeImageIds: nextCreativeImageIds,
+                                                    creativeImageId: getCreativeImageIdForFormat({ ...current, creativeImageIds: nextCreativeImageIds }, '8-sheet') || '',
+                                                  };
+                                                })
+                                              }
+                                              placeholder={values.printImages.length ? 'Attach artwork' : 'No artworks available'}
+                                              selectedLabel={values.printImages.find((image) => image.id === selectedCreativeId)?.name}
+                                              selectedValue={selectedCreativeId || ''}
+                                            />
+                                          ) : (
+                                            <p className="text-sm text-slate-500">-</p>
+                                          )}
+                                        </td>
+                                        {index === 0 ? (
+                                          <td className="px-4 py-3" rowSpan={rowSpan}>
+                                            <SearchableSelect
+                                              actionDisabled={!market.market}
+                                              actionLabel={canAddAddressInFinalize ? 'Add new address' : undefined}
+                                              emptyMessage={deliveryAddressOptions.length ? 'No matching addresses found.' : 'No addresses saved for this market yet.'}
+                                              items={deliveryAddressOptions}
+                                              label=""
+                                              onAction={() => openAddAddressDialog(market.id, asset.id, market.market)}
+                                              onValueChange={(value) =>
+                                                updateCampaignAsset(market.id, asset.id, (current) => ({
+                                                  ...current,
+                                                  deliveryAddress: value,
+                                                }))
+                                              }
+                                              placeholder={deliveryAddressOptions.length ? 'Choose delivery address' : 'No addresses available'}
+                                              selectedLabel={asset.deliveryAddress || ''}
+                                              selectedValue={asset.deliveryAddress || ''}
+                                            />
+                                          </td>
+                                        ) : null}
+                                      </tr>
+                                    );
+                                  })}
+                                </Fragment>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

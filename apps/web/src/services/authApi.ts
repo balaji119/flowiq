@@ -28,6 +28,12 @@ export async function fetchCurrentSession() {
   return apiFetchJson<LoginResponse['user']>('/api/auth/me');
 }
 
+export async function logout() {
+  return apiFetchJson<{ loggedOut: boolean }>('/api/auth/logout', {
+    method: 'POST',
+  });
+}
+
 export async function fetchActiveUsersCount() {
   return apiFetchJson<ActiveUsersResponse>('/api/auth/active-users');
 }
