@@ -3,7 +3,8 @@ import { CalendarDays, FolderKanban, LayoutGrid, LoaderCircle, LogOut, Pencil, P
 import { CampaignListItem } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
-import { deleteCampaign, fetchCampaigns } from '../services/campaignApi';
+import { fetchActiveUsersCount } from '../services/authApi';
+import { acquireCampaignEditLock, deleteCampaign, fetchCampaigns } from '../services/campaignApi';
 
 type CampaignLandingScreenProps = {
   onOpenCampaign: (campaignId: string | null) => void;
@@ -37,6 +38,7 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [campaignPendingDelete, setCampaignPendingDelete] = useState<CampaignListItem | null>(null);
   const [deletingCampaign, setDeletingCampaign] = useState(false);
+  const [activeUsersCount, setActiveUsersCount] = useState<number | null>(session ? 1 : null);
 
   useEffect(() => {
     let active = true;
@@ -62,9 +64,44 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadActiveUsers() {
+      try {
+        const response = await fetchActiveUsersCount();
+        if (!active) return;
+        setActiveUsersCount(Math.max(1, response.activeUsers || 0));
+      } catch {
+        if (!active) return;
+        setActiveUsersCount(1);
+      }
+    }
+
+    void loadActiveUsers();
+    const intervalId = window.setInterval(() => {
+      void loadActiveUsers();
+    }, 60000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
   function handleCreateCampaign() {
     setError('');
     onOpenCampaign(null);
+  }
+
+  async function handleOpenCampaign(campaignId: string) {
+    setError('');
+    try {
+      await acquireCampaignEditLock(campaignId);
+      onOpenCampaign(campaignId);
+    } catch (lockError) {
+      setError(lockError instanceof Error ? lockError.message : 'Unable to open campaign for editing');
+    }
   }
 
   function openDeleteDialog(campaign: CampaignListItem) {
@@ -139,6 +176,9 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="text-sm text-slate-400">
               {filteredCampaigns.length} of {campaigns.length} campaign schedule{campaigns.length === 1 ? '' : 's'}
+            </div>
+            <div className="text-sm text-slate-400">
+              Logged in users: <span className="font-semibold text-slate-100">{activeUsersCount ?? '--'}</span>
             </div>
             <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
               <input
@@ -251,13 +291,13 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
                     </div>
 
                     <div className="flex justify-end gap-2">
-                      <Button
-                        aria-label="Edit campaign"
-                        className="h-7 w-7 rounded-md border-0 p-0 hover:bg-slate-700/70"
-                        onClick={() => onOpenCampaign(campaign.id)}
-                        type="button"
-                        variant="ghost"
-                      >
+                        <Button
+                          aria-label="Edit campaign"
+                          className="h-7 w-7 rounded-md border-0 p-0 hover:bg-slate-700/70"
+                          onClick={() => void handleOpenCampaign(campaign.id)}
+                          type="button"
+                          variant="ghost"
+                        >
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button
@@ -318,7 +358,7 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
                           <Button
                             aria-label="Edit campaign"
                             className="h-7 w-7 rounded-md border-0 p-0 hover:bg-slate-700/70"
-                            onClick={() => onOpenCampaign(campaign.id)}
+                            onClick={() => void handleOpenCampaign(campaign.id)}
                             type="button"
                             variant="ghost"
                           >

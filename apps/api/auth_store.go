@@ -135,6 +135,52 @@ func (s *authStore) authenticate(email, password string) (*AuthUser, error) {
 	return &user, nil
 }
 
+func (s *authStore) touchPresence(ctx context.Context, user AuthUser) error {
+	var tenantID any
+	if user.TenantID != nil && strings.TrimSpace(*user.TenantID) != "" {
+		tenantID = strings.TrimSpace(*user.TenantID)
+	}
+
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO user_presence (user_id, tenant_id, last_seen)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (user_id) DO UPDATE
+		SET tenant_id = EXCLUDED.tenant_id,
+			last_seen = NOW()
+	`, user.ID, tenantID)
+	return err
+}
+
+func (s *authStore) countRecentlyActiveUsers(ctx context.Context, tenantID *string, activeWithin time.Duration) (int, error) {
+	window := int(activeWithin / time.Second)
+	if window < 60 {
+		window = 60
+	}
+
+	if tenantID != nil && strings.TrimSpace(*tenantID) != "" {
+		var count int
+		err := s.pool.QueryRow(ctx, `
+			SELECT COUNT(*)
+			FROM user_presence up
+			INNER JOIN users u ON u.id = up.user_id
+			WHERE up.tenant_id = $1
+			  AND u.active = TRUE
+			  AND up.last_seen >= NOW() - ($2 * INTERVAL '1 second')
+		`, strings.TrimSpace(*tenantID), window).Scan(&count)
+		return count, err
+	}
+
+	var count int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM user_presence up
+		INNER JOIN users u ON u.id = up.user_id
+		WHERE u.active = TRUE
+		  AND up.last_seen >= NOW() - ($1 * INTERVAL '1 second')
+	`, window).Scan(&count)
+	return count, err
+}
+
 func (s *authStore) userByEmail(ctx context.Context, email string) (*AuthUser, error) {
 	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
 	row, _, _, err := scanUserRow(s.pool.QueryRow(ctx, `

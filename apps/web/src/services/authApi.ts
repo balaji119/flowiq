@@ -1,4 +1,4 @@
-import { LoginResponse } from '@flowiq/shared';
+import { ActiveUsersResponse, LoginResponse } from '@flowiq/shared';
 import { apiFetchJson, setApiAuthToken } from './apiClient';
 import { buildApiUrl } from './apiBase';
 
@@ -26,6 +26,10 @@ export async function login(email: string, password: string): Promise<LoginRespo
 
 export async function fetchCurrentSession() {
   return apiFetchJson<LoginResponse['user']>('/api/auth/me');
+}
+
+export async function fetchActiveUsersCount() {
+  return apiFetchJson<ActiveUsersResponse>('/api/auth/active-users');
 }
 
 export function applyAuthToken(token: string | null) {

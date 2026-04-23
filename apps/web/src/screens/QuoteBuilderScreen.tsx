@@ -24,7 +24,7 @@ import {
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, Textarea, cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import { buildApiUrl } from '../services/apiBase';
-import { createCampaign, fetchCampaign, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
+import { acquireCampaignEditLock, createCampaign, fetchCampaign, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
@@ -632,6 +632,16 @@ export function QuoteBuilderScreen({
   const lastPersistedValuesRef = useRef('');
   const lastAutoSaveFailedValuesRef = useRef<string | null>(null);
 
+  async function releaseActiveCampaignLock(targetCampaignId?: string | null) {
+    const id = targetCampaignId ?? campaignId;
+    if (!id) return;
+    try {
+      await releaseCampaignEditLock(id);
+    } catch {
+      // Best-effort cleanup only; lock will also expire automatically.
+    }
+  }
+
   useEffect(() => {
     let active = true;
 
@@ -642,6 +652,8 @@ export function QuoteBuilderScreen({
 
         if (storedCampaignId) {
           try {
+            await acquireCampaignEditLock(storedCampaignId);
+            if (!active) return;
             const response = await fetchCampaign(storedCampaignId);
             if (!active) return;
             applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
@@ -649,7 +661,16 @@ export function QuoteBuilderScreen({
             campaignHydratedRef.current = true;
             await setStoredCampaignId(response.campaign.id);
             return;
-          } catch {
+          } catch (loadError) {
+            if (!active) return;
+            const message = loadError instanceof Error ? loadError.message : 'Unable to load campaign draft';
+            setError(message);
+            if (selectedCampaignId) {
+              await setStoredCampaignId(null);
+              setLoadingCampaign(false);
+              onBack?.();
+              return;
+            }
             await setStoredCampaignId(null);
           }
         }
@@ -672,7 +693,35 @@ export function QuoteBuilderScreen({
     return () => {
       active = false;
     };
-  }, [selectedCampaignId, startFresh]);
+  }, [onBack, selectedCampaignId, startFresh]);
+
+  useEffect(() => {
+    if (!campaignId) return;
+
+    let active = true;
+    const intervalId = window.setInterval(async () => {
+      try {
+        await acquireCampaignEditLock(campaignId);
+      } catch (lockError) {
+        if (!active) return;
+        setError(lockError instanceof Error ? lockError.message : 'Campaign lock expired');
+      }
+    }, 30000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [campaignId]);
+
+  useEffect(() => {
+    if (!campaignId) return;
+    return () => {
+      void releaseCampaignEditLock(campaignId).catch(() => {
+        // Best-effort cleanup only; lock will also expire automatically.
+      });
+    };
+  }, [campaignId]);
 
   useEffect(() => {
     let active = true;
@@ -1337,6 +1386,7 @@ export function QuoteBuilderScreen({
   async function handleBackToDashboard() {
     if (!onBack) return;
     if (!hasUnsavedChanges) {
+      await releaseActiveCampaignLock();
       onBack();
       return;
     }
@@ -1347,11 +1397,13 @@ export function QuoteBuilderScreen({
     const savedCampaignId = await saveCampaignDraft();
     if (!savedCampaignId) return;
     setUnsavedDialogOpen(false);
+    await releaseActiveCampaignLock(savedCampaignId);
     onBack?.();
   }
 
-  function handleDiscardAndLeave() {
+  async function handleDiscardAndLeave() {
     setUnsavedDialogOpen(false);
+    await releaseActiveCampaignLock();
     onBack?.();
   }
 

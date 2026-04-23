@@ -359,3 +359,15 @@ export type PrintIqQuotePayload = {
 };
 
 export type LoginResponse = AuthSession;
+
+export type ActiveUsersResponse = {
+  activeUsers: number;
+  windowMinutes: number;
+};
+
+export type CampaignEditLockInfo = {
+  campaignId: string;
+  userId: string;
+  userName: string;
+  expiresAt: string;
+};

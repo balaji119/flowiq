@@ -21,6 +21,7 @@ import (
 type contextKey string
 
 const authUserKey contextKey = "authUser"
+const activeUsersWindow = 15 * time.Minute
 
 type app struct {
 	authStore        *authStore
@@ -223,9 +224,12 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /api/auth/password-reset/request", a.handleRequestPasswordReset)
 	mux.HandleFunc("POST /api/auth/password-reset/confirm", a.handleConfirmPasswordReset)
 	mux.Handle("GET /api/auth/me", a.withAuth(http.HandlerFunc(a.handleCurrentSession)))
+	mux.Handle("GET /api/auth/active-users", a.withAuth(http.HandlerFunc(a.handleActiveUsersCount)))
 	mux.Handle("GET /api/campaigns", a.withAuth(http.HandlerFunc(a.handleListCampaigns)))
 	mux.Handle("POST /api/campaigns", a.withAuth(http.HandlerFunc(a.handleCreateCampaign)))
 	mux.Handle("GET /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleGetCampaign)))
+	mux.Handle("POST /api/campaigns/{campaignId}/edit-lock", a.withAuth(http.HandlerFunc(a.handleAcquireCampaignEditLock)))
+	mux.Handle("DELETE /api/campaigns/{campaignId}/edit-lock", a.withAuth(http.HandlerFunc(a.handleReleaseCampaignEditLock)))
 	mux.Handle("PUT /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleUpdateCampaign)))
 	mux.Handle("DELETE /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleDeleteCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/calculate", a.withAuth(http.HandlerFunc(a.handleCalculatePersistedCampaign)))
@@ -334,6 +338,9 @@ func (a *app) withAuth(next http.Handler) http.Handler {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Session is no longer valid"})
 			return
 		}
+		if err := a.authStore.touchPresence(r.Context(), *user); err != nil {
+			log.Printf("touch presence failed for user %s: %v", user.ID, err)
+		}
 
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), authUserKey, *user)))
 	})
@@ -435,6 +442,68 @@ func (a *app) handleCurrentSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, currentUser(r.Context()))
 }
 
+func (a *app) handleActiveUsersCount(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	if user == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Authentication required"})
+		return
+	}
+
+	count, err := a.authStore.countRecentlyActiveUsers(r.Context(), user.TenantID, activeUsersWindow)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"activeUsers":   count,
+		"windowMinutes": int(activeUsersWindow / time.Minute),
+	})
+}
+
+func (a *app) writeCampaignLockError(w http.ResponseWriter, err error) bool {
+	var lockErr *campaignLockedError
+	if errors.As(err, &lockErr) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": lockErr.Error()})
+		return true
+	}
+	return false
+}
+
+func (a *app) handleAcquireCampaignEditLock(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	lock, err := a.campaignStore.acquireCampaignEditLock(r.Context(), *user, r.PathValue("campaignId"))
+	if err != nil {
+		if a.writeCampaignLockError(w, err) {
+			return
+		}
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"lock": map[string]any{
+			"campaignId": lock.CampaignID,
+			"userId":     lock.UserID,
+			"userName":   normalizeLockOwnerName(lock.UserName, lock.UserEmail),
+			"expiresAt":  lock.ExpiresAt.UTC().Format(time.RFC3339),
+		},
+	})
+}
+
+func (a *app) handleReleaseCampaignEditLock(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	if err := a.campaignStore.releaseCampaignEditLock(r.Context(), *user, r.PathValue("campaignId")); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"released": true})
+}
+
 func (a *app) handleRequestPasswordReset(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		Email string `json:"email"`
@@ -532,6 +601,18 @@ func (a *app) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) handleGetCampaign(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r.Context())
+	if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, r.PathValue("campaignId")); err != nil {
+		if a.writeCampaignLockError(w, err) {
+			return
+		}
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+
 	campaign, err := a.campaignStore.getCampaign(r.Context(), *user, r.PathValue("campaignId"))
 	if err != nil {
 		status := http.StatusBadRequest
@@ -546,6 +627,18 @@ func (a *app) handleGetCampaign(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) handleUpdateCampaign(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r.Context())
+	if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, r.PathValue("campaignId")); err != nil {
+		if a.writeCampaignLockError(w, err) {
+			return
+		}
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+
 	var payload struct {
 		Values orderFormValues `json:"values"`
 	}
@@ -582,6 +675,18 @@ func (a *app) handleDeleteCampaign(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) handleCalculatePersistedCampaign(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r.Context())
+	if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, r.PathValue("campaignId")); err != nil {
+		if a.writeCampaignLockError(w, err) {
+			return
+		}
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+
 	campaign, summary, err := a.campaignStore.calculateCampaign(r.Context(), *user, r.PathValue("campaignId"), a.calculator)
 	if err != nil {
 		status := http.StatusBadRequest
@@ -748,6 +853,18 @@ func (a *app) handleQuotePrice(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r.Context())
+	if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, r.PathValue("campaignId")); err != nil {
+		if a.writeCampaignLockError(w, err) {
+			return
+		}
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+
 	campaign, err := a.campaignStore.getCampaign(r.Context(), *user, r.PathValue("campaignId"))
 	if err != nil {
 		status := http.StatusBadRequest
@@ -979,6 +1096,13 @@ func (a *app) handlePurchaseOrderUpload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if campaignID := strings.TrimSpace(r.FormValue("campaignId")); campaignID != "" && user != nil {
+		if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, campaignID); err != nil {
+			if a.writeCampaignLockError(w, err) {
+				return
+			}
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
 		if _, err := a.campaignStore.setPurchaseOrder(r.Context(), *user, campaignID, response); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return

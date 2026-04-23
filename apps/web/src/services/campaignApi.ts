@@ -1,5 +1,6 @@
 import {
   CampaignCalculationResponse,
+  CampaignEditLockInfo,
   CampaignListItem,
   CampaignRecord,
   CampaignSubmitResponse,
@@ -44,5 +45,17 @@ export async function calculatePersistedCampaign(campaignId: string) {
 export async function submitCampaignToPrintIQ(campaignId: string) {
   return apiFetchJson<CampaignSubmitResponse>(`/api/campaigns/${encodeURIComponent(campaignId)}/submit-to-printiq`, {
     method: 'POST',
+  });
+}
+
+export async function acquireCampaignEditLock(campaignId: string) {
+  return apiFetchJson<{ lock: CampaignEditLockInfo }>(`/api/campaigns/${encodeURIComponent(campaignId)}/edit-lock`, {
+    method: 'POST',
+  });
+}
+
+export async function releaseCampaignEditLock(campaignId: string) {
+  return apiFetchJson<{ released: boolean }>(`/api/campaigns/${encodeURIComponent(campaignId)}/edit-lock`, {
+    method: 'DELETE',
   });
 }
