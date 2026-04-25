@@ -2306,9 +2306,9 @@ export function QuoteBuilderScreen({
               </Badge>
               <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">ADS CONNECT</h1>
             </div>
-            <div className="max-w-3xl px-1 py-1 lg:justify-self-center">
+            <div className="min-w-0 px-1 py-1 lg:justify-self-stretch">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Active Campaign</p>
-              <p className="mt-1 truncate text-xl font-semibold text-white sm:text-2xl" title={activeCampaignName}>
+              <p className="mt-1 max-w-full truncate text-xl font-semibold text-white sm:text-2xl" title={activeCampaignName}>
                 {activeCampaignName}
               </p>
             </div>
