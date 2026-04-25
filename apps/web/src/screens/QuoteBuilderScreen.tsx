@@ -631,12 +631,21 @@ function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: n
     ...market,
     assets: market.assets.map((asset) => {
       const creativeImageIds = normalizeCreativeImageIds(asset);
+      const normalizedSelectedWeeks = Array.isArray(asset.selectedWeeks)
+        ? Array.from(
+            new Set(
+              asset.selectedWeeks
+                .map((week) => Number(week))
+                .filter((week) => Number.isInteger(week) && week >= 1 && week <= maxWeeks),
+            ),
+          ).sort((left, right) => left - right)
+        : allWeeks;
       return {
         ...asset,
         creativeImageId: getCreativeImageIdForFormat({ ...asset, creativeImageIds }, '8-sheet') || '',
         creativeImageIds,
         deliveryAddress: asset.deliveryAddress || '',
-        selectedWeeks: allWeeks,
+        selectedWeeks: normalizedSelectedWeeks,
       };
     }),
   }));
