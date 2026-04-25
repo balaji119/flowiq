@@ -2027,16 +2027,34 @@ export function QuoteBuilderScreen({
         const totalRow = startRow + renderedDataRows + 1;
         const setsRow = totalRow + 1;
         const lastDataRow = Math.max(startRow, startRow + rows.length - 1);
+        const setsDivisorByColumn = new Map<number, number>([
+          // NSW/VIC/WA/SA/TAS/ACT/NT poster columns.
+          [9, 4],  // 8-sheet
+          [10, 3], // 6-sheet
+          [11, 2], // 4-sheet
+          [12, 1], // 2-sheet
+          [13, 4], // QA0
+          // QLD poster columns.
+          [14, 4], // 8-sheet
+          [15, 3], // 6-sheet
+          [16, 2], // 4-sheet
+          [17, 1], // 2-sheet
+          // Mega formats are already in sets.
+          [18, 1], // Mega
+          [19, 1], // DOT M
+          [20, 1], // MP
+        ]);
         for (let col = 9; col <= 20; col += 1) {
           const columnLetter = sheet.getColumn(col).letter;
           const totalValue = columnTotals.get(col) ?? 0;
+          const setDivisor = setsDivisorByColumn.get(col) ?? 1;
           sheet.getCell(totalRow, col).value = {
             formula: `SUM(${columnLetter}${startRow}:${columnLetter}${lastDataRow})`,
             result: totalValue,
           };
           sheet.getCell(setsRow, col).value = {
-            formula: `${columnLetter}${totalRow}/4`,
-            result: totalValue / 4,
+            formula: `${columnLetter}${totalRow}/${setDivisor}`,
+            result: totalValue / setDivisor,
           };
         }
 
