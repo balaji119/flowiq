@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AdminScreen } from './src/screens/AdminScreen';
+import { CampaignArtworkFolderScreen } from './src/screens/CampaignArtworkFolderScreen';
 import { CampaignLandingScreen } from './src/screens/CampaignLandingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { MappingAdminScreen } from './src/screens/MappingAdminScreen';
@@ -13,7 +14,7 @@ import { ShippingCostSettingsScreen } from './src/screens/ShippingCostSettingsSc
 import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
 import { UserManagementScreen } from './src/screens/UserManagementScreen';
 
-type AppView = 'landing' | 'quote' | 'admin' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs';
+type AppView = 'landing' | 'quote' | 'artworks' | 'admin' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs';
 
 type AppNavState = {
   view: AppView;
@@ -33,7 +34,7 @@ function buildUrlFromState(state: AppNavState) {
 }
 
 function parseView(raw: string | null): AppView {
-  if (raw === 'landing' || raw === 'quote' || raw === 'admin' || raw === 'users' || raw === 'mappings' || raw === 'shipping' || raw === 'shipping-costs' || raw === 'printing-costs') {
+  if (raw === 'landing' || raw === 'quote' || raw === 'artworks' || raw === 'admin' || raw === 'users' || raw === 'mappings' || raw === 'shipping' || raw === 'shipping-costs' || raw === 'printing-costs') {
     return raw;
   }
   return 'landing';
@@ -268,6 +269,30 @@ function AppShell() {
                   startFreshCampaign,
                 })
             : undefined
+        }
+      />
+    );
+  }
+
+  if (view === 'artworks') {
+    return (
+      <CampaignArtworkFolderScreen
+        campaignId={selectedCampaignId}
+        onBack={() =>
+          navigate({
+            view: 'landing',
+            selectedAdminTenantId,
+            selectedCampaignId,
+            startFreshCampaign,
+          })
+        }
+        onOpenCampaign={(campaignId) =>
+          navigate({
+            view: 'quote',
+            selectedAdminTenantId,
+            selectedCampaignId: campaignId,
+            startFreshCampaign: false,
+          })
         }
       />
     );

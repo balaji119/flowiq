@@ -1956,14 +1956,24 @@ export function QuoteBuilderScreen({
         sheet.getCell('C7').value = creativeSummaryText;
         const masterArtworkFolderCell = sheet.getCell('B8');
         const masterArtworkFolderLabel = (masterArtworkFolderCell.text || '').trim() || 'MASTER ARTWORK FOLDER';
-        // Keep the existing yellow template styling, but remove the hyperlink from this label.
-        masterArtworkFolderCell.value = masterArtworkFolderLabel;
+        const artworkFolderUrl = campaignId
+          ? toAbsoluteUrl(`/?view=artworks&campaignId=${encodeURIComponent(campaignId)}`)
+          : '';
+        // Keep template styling while wiring the campaign artwork-folder link when campaign id is available.
+        masterArtworkFolderCell.value = artworkFolderUrl
+          ? { text: masterArtworkFolderLabel, hyperlink: artworkFolderUrl }
+          : masterArtworkFolderLabel;
         const worksheetModel = sheet.model as { hyperlinks?: Array<{ ref?: string }> };
         if (Array.isArray(worksheetModel.hyperlinks)) {
           worksheetModel.hyperlinks = worksheetModel.hyperlinks.filter((entry) => {
             const ref = (entry.ref || '').toUpperCase();
             return ref !== 'B8' && ref !== 'B8:I8';
           });
+        }
+        if (artworkFolderUrl) {
+          const hyperlinks = Array.isArray(worksheetModel.hyperlinks) ? worksheetModel.hyperlinks : [];
+          hyperlinks.push({ ref: 'B8', target: artworkFolderUrl } as { ref?: string; target?: string });
+          worksheetModel.hyperlinks = hyperlinks;
         }
 
         const rows = Array.from(printRows.values()).sort((a, b) => a.creativeCode.localeCompare(b.creativeCode));
