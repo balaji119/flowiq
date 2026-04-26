@@ -432,6 +432,26 @@ function detectStateMarkerColumns(sheet: any, headerRow: number, fromColumn: num
   return markerColumnByState;
 }
 
+function stripSharedFormulaClones(workbook: any) {
+  workbook.worksheets.forEach((sheet: any) => {
+    sheet.eachRow({ includeEmpty: true }, (row: any) => {
+      row.eachCell({ includeEmpty: true }, (cell: any) => {
+        const value = cell.value as
+          | {
+              sharedFormula?: string;
+              result?: unknown;
+            }
+          | null;
+        if (!value || typeof value !== 'object') return;
+        if (!('sharedFormula' in value) || !value.sharedFormula) return;
+        // Shared-formula clones in templates can break after row inserts.
+        // Keep export stable by materializing clone results as static values.
+        cell.value = value.result ?? null;
+      });
+    });
+  });
+}
+
 async function pdfFirstPageToDataUrl(blob: Blob, maxWidth = 560) {
   const pdfjs = await (new Function("return import('/pdf.min.mjs')")() as Promise<any>);
   (pdfjs as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
@@ -2063,6 +2083,7 @@ export function QuoteBuilderScreen({
           };
         }
 
+        stripSharedFormulaClones(workbook);
         const outputBuffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([outputBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const fileName = `${baseName} - Print Quantities.xlsx`;
@@ -2222,6 +2243,7 @@ export function QuoteBuilderScreen({
           };
         });
 
+        stripSharedFormulaClones(workbook);
         const outputBuffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([outputBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const fileName = `${baseName} - Delivery Instructions.xlsx`;
