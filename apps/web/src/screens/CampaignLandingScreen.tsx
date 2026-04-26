@@ -259,7 +259,14 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-2">
                         <CardTitle className="text-2xl">
-                          {campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}`}
+                          <button
+                            className="w-full whitespace-normal break-words text-left text-white transition hover:text-violet-200"
+                            onClick={() => void handleOpenCampaign(campaign.id)}
+                            title="Open campaign for editing"
+                            type="button"
+                          >
+                            {campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}`}
+                          </button>
                         </CardTitle>
                         <CardDescription>Updated {new Date(campaign.updatedAt).toLocaleString()}</CardDescription>
                       </div>
@@ -339,7 +346,14 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
                   {filteredCampaigns.map((campaign) => (
                     <tr key={`campaign-table-${campaign.id}`} className="bg-slate-800/70 border-t border-slate-700/70">
                       <td className="border border-slate-700 px-4 py-3 font-semibold text-white">
-                        {campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}`}
+                        <button
+                          className="w-full whitespace-normal break-words text-left text-white transition hover:text-violet-200"
+                          onClick={() => void handleOpenCampaign(campaign.id)}
+                          title="Open campaign for editing"
+                          type="button"
+                        >
+                          {campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}`}
+                        </button>
                       </td>
                       <td className="border border-slate-700 px-4 py-3">
                         <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${statusStyles(campaign.status)}`}>

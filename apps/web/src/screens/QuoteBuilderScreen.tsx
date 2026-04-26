@@ -1490,12 +1490,17 @@ export function QuoteBuilderScreen({
 
   async function handleBackToDashboard() {
     if (!onBack) return;
+    if (isCampaignStartDatePast || isDeliveryDueDatePast) {
+      await releaseActiveCampaignLock();
+      onBack();
+      return;
+    }
     if (!hasUnsavedChanges) {
       await releaseActiveCampaignLock();
       onBack();
       return;
     }
-    const savedCampaignId = await saveCampaignDraft({ fromAutoSave: true });
+    const savedCampaignId = await saveCampaignDraft();
     if (savedCampaignId) {
       await releaseActiveCampaignLock(savedCampaignId);
       onBack();
