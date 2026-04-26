@@ -31,6 +31,34 @@ function extensionFromName(fileName: string) {
   return fileName.slice(dotIndex + 1).toUpperCase();
 }
 
+function triggerDownload(href: string, fileName: string) {
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = fileName;
+  link.rel = 'noopener noreferrer';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function campaignFileDownloadUrl(url: string) {
+  const resolvedUrl = new URL(url, window.location.origin);
+  const segments = resolvedUrl.pathname.split('/').filter(Boolean);
+  const storedName = segments[segments.length - 1];
+  if (!storedName) return '';
+  return new URL(`/campaign-files/${encodeURIComponent(storedName)}`, window.location.origin).toString();
+}
+
+function apiFileDownloadUrl(url: string, fileName: string) {
+  const resolvedUrl = new URL(url, window.location.origin);
+  const segments = resolvedUrl.pathname.split('/').filter(Boolean);
+  const storedName = segments[segments.length - 1];
+  if (!storedName) return '';
+  const apiUrl = new URL(`/api/campaign-images/${encodeURIComponent(storedName)}/download`, window.location.origin);
+  apiUrl.searchParams.set('filename', fileName);
+  return apiUrl.toString();
+}
+
 export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign }: CampaignArtworkFolderScreenProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -87,19 +115,33 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
 
   function downloadFile(url: string, fileName: string) {
     if (!url) return;
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    void (async () => {
+      setError('');
+      const directDownloadUrl = campaignFileDownloadUrl(url);
+      const fallbackApiUrl = apiFileDownloadUrl(url, fileName);
+      if (!directDownloadUrl || !fallbackApiUrl) {
+        setError('Invalid file URL');
+        return;
+      }
+
+      try {
+        const probe = await fetch(directDownloadUrl, { method: 'HEAD', cache: 'no-store' });
+        if (probe.ok) {
+          triggerDownload(directDownloadUrl, fileName);
+          return;
+        }
+      } catch {
+        // Fall back to API download endpoint below.
+      }
+
+      triggerDownload(fallbackApiUrl, fileName);
+    })();
   }
 
   const campaignName = campaign?.values.campaignName?.trim() || (campaign?.id ? `Untitled Campaign ${campaign.id.slice(0, 6)}` : 'Campaign');
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+    <main className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
       <section className="relative overflow-hidden rounded-[32px] border border-slate-700/70 bg-slate-950/70 px-6 py-8 shadow-2xl shadow-slate-950/40">
         <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.2),transparent_52%)]" />
         <div className="relative flex flex-col gap-5">
@@ -144,21 +186,21 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
                 No artwork files uploaded for this campaign.
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-900/60">
-                <table className="w-full border-collapse text-sm">
+              <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60">
+                <table className="w-full table-fixed border-collapse text-sm">
                   <thead>
                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
-                      <th className="border border-slate-700 px-4 py-3 text-left">Name</th>
-                      <th className="border border-slate-700 px-4 py-3 text-left">File</th>
-                      <th className="border border-slate-700 px-4 py-3 text-left">Type</th>
-                      <th className="border border-slate-700 px-4 py-3 text-center">Action</th>
+                      <th className="w-[36%] border border-slate-700 px-4 py-3 text-left">Name</th>
+                      <th className="w-[36%] border border-slate-700 px-4 py-3 text-left">File</th>
+                      <th className="w-[10%] border border-slate-700 px-4 py-3 text-left">Type</th>
+                      <th className="w-[18%] border border-slate-700 px-4 py-3 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {artworkFiles.map((file) => (
                       <tr key={file.id} className="border-t border-slate-700/70 bg-slate-800/70">
-                        <td className="border border-slate-700 px-4 py-3 font-semibold text-white">{file.name}</td>
-                        <td className="border border-slate-700 px-4 py-3 text-slate-200">{file.fileName}</td>
+                        <td className="border border-slate-700 px-4 py-3 font-semibold text-white break-words whitespace-normal">{file.name}</td>
+                        <td className="border border-slate-700 px-4 py-3 text-slate-200 break-words whitespace-normal">{file.fileName}</td>
                         <td className="border border-slate-700 px-4 py-3 text-slate-300">
                           <div className="flex items-center gap-2">
                             <FileText className="h-4 w-4 text-slate-400" />
@@ -166,14 +208,29 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
                           </div>
                         </td>
                         <td className="border border-slate-700 px-4 py-3">
-                          <div className="flex justify-center gap-2">
-                            <Button onClick={() => openFile(file.url)} size="sm" type="button" variant="outline">
+                          <div className="flex items-center justify-center gap-2 whitespace-nowrap">
+                            <Button
+                              onClick={() => openFile(file.url)}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                              title="Open file"
+                              aria-label="Open file"
+                              className="h-9 w-9 px-0 2xl:h-9 2xl:w-auto 2xl:px-3"
+                            >
                               <ExternalLink className="h-4 w-4" />
-                              Open
+                              <span className="sr-only 2xl:not-sr-only 2xl:ml-2">Open</span>
                             </Button>
-                            <Button onClick={() => downloadFile(file.url, file.fileName)} size="sm" type="button">
+                            <Button
+                              onClick={() => downloadFile(file.url, file.fileName)}
+                              size="sm"
+                              type="button"
+                              title="Download file"
+                              aria-label="Download file"
+                              className="h-9 w-9 px-0 2xl:h-9 2xl:w-auto 2xl:px-3"
+                            >
                               <Download className="h-4 w-4" />
-                              Download
+                              <span className="sr-only 2xl:not-sr-only 2xl:ml-2">Download</span>
                             </Button>
                           </div>
                         </td>

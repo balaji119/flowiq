@@ -1,6 +1,6 @@
 services:
   caddy:
-    image: caddy:2.10
+    image: balaji119/flowiq-caddy:v1
     env_file:
       - ./.env.production
     depends_on:
@@ -10,9 +10,9 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+      - ./storage:/shared-storage:ro
     restart: unless-stopped
 
   postgres:
@@ -46,7 +46,7 @@ services:
       PORT: 4000
       DATABASE_URL: ${DATABASE_URL:-postgres://flowiq:change-me@postgres:5432/flowiq?sslmode=disable}
     volumes:
-      - api-storage:/app/storage
+      - ./storage:/app/storage
     depends_on:
       - postgres
     ports:
@@ -57,4 +57,3 @@ volumes:
   caddy-data:
   caddy-config:
   postgres-data:
-  api-storage:

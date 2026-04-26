@@ -732,6 +732,9 @@ export function QuoteBuilderScreen({
   const [selectedPurchaseOrderFile, setSelectedPurchaseOrderFile] = useState<File | null>(null);
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
   const [uploadedPurchaseOrderName, setUploadedPurchaseOrderName] = useState('');
+  const [uploadingArtworks, setUploadingArtworks] = useState(false);
+  const [artworkUploadTotal, setArtworkUploadTotal] = useState(0);
+  const [artworkUploadCompleted, setArtworkUploadCompleted] = useState(0);
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
   const [replacingImageId, setReplacingImageId] = useState<string | null>(null);
   const [newAddressDialogOpen, setNewAddressDialogOpen] = useState(false);
@@ -1383,6 +1386,9 @@ export function QuoteBuilderScreen({
       return;
     }
 
+    setUploadingArtworks(true);
+    setArtworkUploadTotal(files.length);
+    setArtworkUploadCompleted(0);
     try {
       const uploadedImages: CampaignPrintImage[] = [];
       for (const [index, file] of files.entries()) {
@@ -1395,15 +1401,21 @@ export function QuoteBuilderScreen({
           storedName: uploadResult.storedName,
           imageUrl: uploadResult.url,
         });
+        setArtworkUploadCompleted(index + 1);
       }
       setValues((current) => ({ ...current, printImages: [...current.printImages, ...uploadedImages] }));
       setError('');
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload file(s)');
+    } finally {
+      setUploadingArtworks(false);
+      setArtworkUploadTotal(0);
+      setArtworkUploadCompleted(0);
     }
   }
 
   function handlePickPrintImages() {
+    if (uploadingArtworks) return;
     imageUploadInputRef.current?.click();
   }
 
@@ -2508,14 +2520,22 @@ export function QuoteBuilderScreen({
                       <p className="text-base font-semibold text-white">Campaign Artworks</p>
                       <p className="text-sm text-slate-400">Upload one or multiple files. You can edit the name, replace the file, or remove rows.</p>
                     </div>
-                    <Button onClick={handlePickPrintImages} type="button" variant="secondary">
-                      <Upload className="h-4 w-4" />
-                      Upload Artworks
+                    <Button disabled={uploadingArtworks} onClick={handlePickPrintImages} type="button" variant="secondary">
+                      {uploadingArtworks ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      {uploadingArtworks
+                        ? `Uploading Artworks (${artworkUploadCompleted}/${Math.max(artworkUploadTotal, 1)})`
+                        : 'Upload Artworks'}
                     </Button>
                   </div>
+                  {uploadingArtworks ? (
+                    <p className="text-sm text-slate-300" role="status">
+                      Uploading files in the background. Please wait...
+                    </p>
+                  ) : null}
                   <input
                     ref={imageUploadInputRef}
                     className="hidden"
+                    disabled={uploadingArtworks}
                     multiple
                     onChange={(event) => void handlePrintImageSelection(event)}
                     type="file"

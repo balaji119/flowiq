@@ -1,5 +1,23 @@
+{
+  servers {
+    # Disable HTTP/3 (QUIC) because some networks/browsers intermittently fail
+    # large streamed downloads with ERR_QUIC_PROTOCOL_ERROR.
+    protocols h1 h2
+  }
+}
+
 :80 {
-  encode zstd gzip
+  @compressible not path /api/campaign-images/* /campaign-files/*
+  encode @compressible zstd gzip
+
+  handle_path /campaign-files/* {
+    root * /shared-storage/uploads/campaign-images
+    header {
+      Cache-Control "private, no-store, no-transform"
+      X-Content-Type-Options nosniff
+    }
+    file_server
+  }
 
   @api path /api/*
   handle @api {

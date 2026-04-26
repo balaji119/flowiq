@@ -1,0 +1,3 @@
+FROM caddy:2.10
+
+COPY infra/docker/Caddyfile /etc/caddy/Caddyfile

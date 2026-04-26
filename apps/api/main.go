@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +37,7 @@ type app struct {
 	uploadDir        string
 	campaignImageDir string
 	printIQBaseURL   string
+	blobStorage      *azureBlobStorage
 }
 
 type authClaims struct {
@@ -88,6 +91,9 @@ func main() {
 	}
 	if err := os.MkdirAll(api.campaignImageDir, 0o755); err != nil {
 		log.Fatalf("failed to create campaign image directory: %v", err)
+	}
+	if err := api.initCampaignBlobStorage(ctx); err != nil {
+		log.Fatalf("failed to initialize Azure blob storage: %v", err)
 	}
 
 	address := fmt.Sprintf(":%s", envOrDefault("PORT", "4000"))
@@ -251,6 +257,9 @@ func (a *app) routes() http.Handler {
 	mux.Handle("POST /api/finalize/send-email-to-ads", a.withAuth(http.HandlerFunc(a.handleSendEmailToADS)))
 	mux.Handle("POST /api/campaign-images/upload", a.withAuth(http.HandlerFunc(a.handleCampaignImageUpload)))
 	mux.Handle("GET /api/campaign-images/{storedName}", http.HandlerFunc(a.handleCampaignImageGet))
+	mux.Handle("GET /api/campaign-images/{storedName}/download", http.HandlerFunc(a.handleCampaignImageDownload))
+	mux.Handle("GET /api/campaign-images/{storedName}/meta", http.HandlerFunc(a.handleCampaignImageMeta))
+	mux.Handle("GET /api/campaign-images/{storedName}/chunk", http.HandlerFunc(a.handleCampaignImageChunk))
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(filepath.Join(".", "storage", "uploads")))))
 	mux.Handle("GET /api/admin/tenants", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListTenants), "super_admin")))
 	mux.Handle("POST /api/admin/tenants", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleCreateTenant), "super_admin")))
@@ -1157,16 +1166,13 @@ func (a *app) handleCampaignImageUpload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	storedName := fmt.Sprintf("%d-%s%s", time.Now().UnixMilli(), safeBaseName, extension)
-	targetPath := filepath.Join(a.campaignImageDir, storedName)
-	out, err := os.Create(targetPath)
+	fileContents, err := io.ReadAll(file)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	defer out.Close()
-
-	size, err := io.Copy(out, file)
-	if err != nil {
+	size := int64(len(fileContents))
+	if err := a.storeCampaignImage(r.Context(), storedName, contentType, fileContents); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -1184,19 +1190,20 @@ func (a *app) handleCampaignImageUpload(w http.ResponseWriter, r *http.Request) 
 
 func (a *app) handleCampaignImageGet(w http.ResponseWriter, r *http.Request) {
 	storedName := strings.TrimSpace(r.PathValue("storedName"))
-	if storedName == "" {
+	if !isSafeStoredName(storedName) {
 		http.NotFound(w, r)
 		return
 	}
-
-	// Prevent path traversal by requiring a plain file name.
-	if filepath.Base(storedName) != storedName || strings.Contains(storedName, "..") {
-		http.NotFound(w, r)
+	if signedURL, ok, err := a.campaignImageReadURL(r.Context(), storedName, ""); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read campaign image"})
+		return
+	} else if ok {
+		http.Redirect(w, r, signedURL, http.StatusTemporaryRedirect)
 		return
 	}
 
-	targetPath := filepath.Join(a.campaignImageDir, storedName)
-	if _, err := os.Stat(targetPath); err != nil {
+	targetPath, _, _, err := a.resolveCampaignImageFile(r)
+	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			http.NotFound(w, r)
 			return
@@ -1205,6 +1212,169 @@ func (a *app) handleCampaignImageGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.ServeFile(w, r, targetPath)
+}
+
+func (a *app) handleCampaignImageDownload(w http.ResponseWriter, r *http.Request) {
+	storedName := strings.TrimSpace(r.PathValue("storedName"))
+	if !isSafeStoredName(storedName) {
+		http.NotFound(w, r)
+		return
+	}
+
+	requestedName := strings.TrimSpace(r.URL.Query().Get("filename"))
+	if requestedName == "" {
+		requestedName = storedName
+	}
+	safeName := strings.NewReplacer("\r", "", "\n", "", "\"", "'", "\\", "_").Replace(requestedName)
+	if signedURL, ok, err := a.campaignImageReadURL(r.Context(), storedName, fmt.Sprintf("attachment; filename=\"%s\"", safeName)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read campaign image"})
+		return
+	} else if ok {
+		http.Redirect(w, r, signedURL, http.StatusTemporaryRedirect)
+		return
+	}
+
+	targetPath, info, storedName, err := a.resolveCampaignImageFile(r)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read campaign image"})
+		return
+	}
+
+	file, err := os.Open(targetPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read campaign image"})
+		return
+	}
+	defer file.Close()
+
+	contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(safeName)))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", safeName))
+	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+	w.Header().Set("Accept-Ranges", "none")
+	w.Header().Set("Cache-Control", "no-store, no-transform")
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := io.Copy(w, file); err != nil {
+		log.Printf("campaign image download failed for %s: %v", storedName, err)
+	}
+}
+
+func (a *app) handleCampaignImageMeta(w http.ResponseWriter, r *http.Request) {
+	_, info, storedName, err := a.resolveCampaignImageFile(r)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read campaign image"})
+		return
+	}
+
+	contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(storedName)))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"storedName":   storedName,
+		"size":         info.Size(),
+		"contentType":  contentType,
+		"chunkMaxSize": 1024 * 1024,
+	})
+}
+
+func (a *app) handleCampaignImageChunk(w http.ResponseWriter, r *http.Request) {
+	targetPath, info, _, err := a.resolveCampaignImageFile(r)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read campaign image"})
+		return
+	}
+
+	offset, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("offset")), 10, 64)
+	if err != nil || offset < 0 || offset >= info.Size() {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid chunk offset"})
+		return
+	}
+
+	length, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("length")), 10, 64)
+	if err != nil || length <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid chunk length"})
+		return
+	}
+
+	const maxChunkSize int64 = 1024 * 1024
+	if length > maxChunkSize {
+		length = maxChunkSize
+	}
+
+	remaining := info.Size() - offset
+	if length > remaining {
+		length = remaining
+	}
+
+	file, err := os.Open(targetPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read campaign image"})
+		return
+	}
+	defer file.Close()
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", strconv.FormatInt(length, 10))
+	w.Header().Set("Cache-Control", "no-store, no-transform")
+	w.Header().Set("Accept-Ranges", "none")
+	w.Header().Set("X-File-Size", strconv.FormatInt(info.Size(), 10))
+	w.Header().Set("X-Chunk-Offset", strconv.FormatInt(offset, 10))
+	w.Header().Set("X-Chunk-Length", strconv.FormatInt(length, 10))
+	w.WriteHeader(http.StatusOK)
+
+	reader := io.NewSectionReader(file, offset, length)
+	if _, err := io.Copy(w, reader); err != nil {
+		log.Printf("campaign image chunk download failed (%s offset=%d length=%d): %v", targetPath, offset, length, err)
+	}
+}
+
+func (a *app) resolveCampaignImageFile(r *http.Request) (string, os.FileInfo, string, error) {
+	storedName := strings.TrimSpace(r.PathValue("storedName"))
+	if storedName == "" {
+		return "", nil, "", os.ErrNotExist
+	}
+
+	if !isSafeStoredName(storedName) {
+		return "", nil, "", os.ErrNotExist
+	}
+
+	targetPath := filepath.Join(a.campaignImageDir, storedName)
+	info, err := os.Stat(targetPath)
+	if err != nil {
+		return "", nil, "", err
+	}
+	return targetPath, info, storedName, nil
+}
+
+func isSafeStoredName(storedName string) bool {
+	return storedName != "" && filepath.Base(storedName) == storedName && !strings.Contains(storedName, "..")
 }
 
 func (a *app) handleListTenants(w http.ResponseWriter, _ *http.Request) {
