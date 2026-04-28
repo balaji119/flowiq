@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LoaderCircle, Shield, Truck } from 'lucide-react';
+import { LoaderCircle, Shield } from 'lucide-react';
 import { CalculatorMappingRecord, MarketAssetShippingCostInput, MarketAssetShippingCostRecord, MarketShippingRateRecord, TenantRecord } from '@flowiq/shared';
-import { Badge, Card, CardDescription, CardHeader, CardTitle, Input } from '@flowiq/ui';
+import { Card, CardDescription, CardHeader, CardTitle, Input } from '@flowiq/ui';
 import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -377,6 +377,7 @@ export function ShippingCostSettingsScreen({ onBack, onOpenMappings, onOpenPrint
       canAccessManagement
       canAccessShippingCosts={session?.user.role === 'super_admin'}
       canAccessPrintingCosts={session?.user.role === 'super_admin'}
+      pageTitle="Freight Rate Card"
       onBack={onBack}
       onOpenLanding={onBack}
       onOpenMappings={onOpenMappings}
@@ -386,18 +387,11 @@ export function ShippingCostSettingsScreen({ onBack, onOpenMappings, onOpenPrint
       onOpenUsers={onOpenUsers}
     >
     <main className="dense-main flex min-h-screen w-full flex-col gap-6">
-      <header>
-        <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
-          <Truck className="h-3.5 w-3.5" />
-          Freight Rate Card
-        </Badge>
-      </header>
-
       {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 
       <section className="flex flex-wrap gap-4">
         <div className="w-full sm:w-[320px]">
-          <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+          <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
             <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Tenant</span>
             <select
               id="shipping-cost-tenant"
@@ -412,7 +406,7 @@ export function ShippingCostSettingsScreen({ onBack, onOpenMappings, onOpenPrint
           </div>
         </div>
         <div className="w-full sm:w-[320px]">
-          <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+          <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
             <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
             <select
               id="shipping-cost-market-filter"
@@ -427,7 +421,7 @@ export function ShippingCostSettingsScreen({ onBack, onOpenMappings, onOpenPrint
           </div>
         </div>
         <div className="w-full sm:w-[220px]">
-          <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+          <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
             <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Use flat rate</span>
             <div className="inline-flex h-full flex-1 items-center gap-1 bg-slate-800 p-1">
               <button
@@ -703,4 +697,5 @@ export function ShippingCostSettingsScreen({ onBack, onOpenMappings, onOpenPrint
     </AdminWorkspaceShell>
   );
 }
+
 

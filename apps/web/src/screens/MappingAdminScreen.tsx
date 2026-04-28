@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Database, FileJson, LoaderCircle, Pencil, Plus, Shield, Trash2, Upload } from 'lucide-react';
+import { FileJson, LoaderCircle, Pencil, Plus, Shield, Trash2, Upload } from 'lucide-react';
 import { CalculatorMappingInput, CalculatorMappingRecord, MarketMetadata, TenantRecord, createEmptyBreakdown, formatKeys } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
@@ -281,6 +281,20 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
       canAccessManagement
       canAccessShippingCosts={session?.user.role === 'super_admin'}
       canAccessPrintingCosts={session?.user.role === 'super_admin'}
+      pageTitle="Quantity Mappings"
+      topBarActions={
+        <>
+          <Button className="h-10 min-w-[128px] rounded-md px-4 text-sm font-semibold" disabled={importing || !effectiveTenantId} onClick={() => fileInputRef.current?.click()} type="button" variant="outline">
+            {importing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {importing ? 'Importing...' : 'Import JSON'}
+          </Button>
+          <Button className="h-10 min-w-[130px] rounded-md px-4 text-sm font-semibold" disabled={!effectiveTenantId || !selectedMarketFilter} onClick={openAddMappingDialog} type="button">
+            <Plus className="h-4 w-4" />
+            Add Mapping
+          </Button>
+          <input ref={fileInputRef} accept="application/json" className="hidden" onChange={handleImport} type="file" />
+        </>
+      }
       onBack={onBack}
       onOpenLanding={onBack}
       onOpenMappings={() => {}}
@@ -290,15 +304,6 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
       onOpenUsers={onOpenUsers}
     >
     <main className="dense-main flex min-h-screen w-full flex-col gap-6">
-      <header>
-        <div>
-          <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
-            <Database className="h-3.5 w-3.5" />
-            Quantity Mappings
-          </Badge>
-        </div>
-      </header>
-
       {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
       {notice ? <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
@@ -348,7 +353,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
       <section className="space-y-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="w-full sm:w-[320px]">
-              <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+              <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
                 <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
               <select
                 id="market-filter"
@@ -364,17 +369,6 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
                 ))}
               </select>
               </div>
-            </div>
-            <div className="flex flex-wrap gap-2 sm:justify-end">
-              <Button className="h-11 min-w-[170px] px-5 text-base" disabled={importing || !effectiveTenantId} onClick={() => fileInputRef.current?.click()} type="button" variant="outline">
-                {importing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {importing ? 'Importing...' : 'Import JSON'}
-              </Button>
-              <Button className="h-11 min-w-[170px] px-6 text-base" disabled={!effectiveTenantId || !selectedMarketFilter} onClick={openAddMappingDialog} type="button">
-                <Plus className="h-4 w-4" />
-                Add Mapping
-              </Button>
-              <input ref={fileInputRef} accept="application/json" className="hidden" onChange={handleImport} type="file" />
             </div>
           </div>
 
@@ -493,7 +487,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
                 <Label htmlFor="mapping-maintenance-asset">Maintenance asset (optional)</Label>
                 <select
                   id="mapping-maintenance-asset"
-                  className="h-11 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+                  className="h-10 w-full rounded-md border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
@@ -549,4 +543,5 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
     </AdminWorkspaceShell>
   );
 }
+
 

@@ -20,6 +20,8 @@ type AdminWorkspaceShellProps = AdminWorkspaceHandlers & {
   canAccessManagement: boolean;
   canAccessShippingCosts: boolean;
   canAccessPrintingCosts: boolean;
+  pageTitle?: string;
+  topBarActions?: ReactNode;
   children: ReactNode;
 };
 
@@ -35,6 +37,8 @@ export function AdminWorkspaceShell({
   canAccessManagement,
   canAccessShippingCosts,
   canAccessPrintingCosts,
+  pageTitle,
+  topBarActions,
   onBack,
   onOpenLanding,
   onOpenUsers,
@@ -46,6 +50,7 @@ export function AdminWorkspaceShell({
 }: AdminWorkspaceShellProps) {
   const { session, logout } = useAuth();
   const [expanded, setExpanded] = useState(false);
+  const [collapsedSidebarHover, setCollapsedSidebarHover] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -77,43 +82,71 @@ export function AdminWorkspaceShell({
 
   const items: NavItem[] = [];
   if (onOpenLanding) {
-    items.push({ id: 'landing', label: 'Dashboard', icon: <Home className="h-4 w-4" />, onClick: onOpenLanding });
+    items.push({ id: 'landing', label: 'Dashboard', icon: <Home className="h-[22px] w-[22px]" />, onClick: onOpenLanding });
   }
   if (canAccessManagement && onOpenUsers) {
-    items.push({ id: 'users', label: 'User Management', icon: <Users className="h-4 w-4" />, onClick: onOpenUsers });
+    items.push({ id: 'users', label: 'User Management', icon: <Users className="h-[22px] w-[22px]" />, onClick: onOpenUsers });
   }
   if (canAccessManagement && onOpenMappings) {
-    items.push({ id: 'mappings', label: 'Quantity Mapping', icon: <Database className="h-4 w-4" />, onClick: onOpenMappings });
+    items.push({ id: 'mappings', label: 'Quantity Mapping', icon: <Database className="h-[22px] w-[22px]" />, onClick: onOpenMappings });
   }
   if (canAccessManagement && onOpenShippingSettings) {
-    items.push({ id: 'shipping', label: 'Shipping Address', icon: <MapPin className="h-4 w-4" />, onClick: onOpenShippingSettings });
+    items.push({ id: 'shipping', label: 'Shipping Address', icon: <MapPin className="h-[22px] w-[22px]" />, onClick: onOpenShippingSettings });
   }
   if (canAccessShippingCosts && onOpenShippingCosts) {
-    items.push({ id: 'shipping-costs', label: 'Shipping Cost', icon: <Truck className="h-4 w-4" />, onClick: onOpenShippingCosts });
+    items.push({ id: 'shipping-costs', label: 'Shipping Cost', icon: <Truck className="h-[22px] w-[22px]" />, onClick: onOpenShippingCosts });
   }
   if (canAccessPrintingCosts && onOpenPrintingCosts) {
-    items.push({ id: 'printing-costs', label: 'Printing Cost', icon: <CircleDollarSign className="h-4 w-4" />, onClick: onOpenPrintingCosts });
+    items.push({ id: 'printing-costs', label: 'Printing Cost', icon: <CircleDollarSign className="h-[22px] w-[22px]" />, onClick: onOpenPrintingCosts });
   }
 
   return (
     <main className="flex h-screen w-full overflow-hidden">
       <aside
         className={cn(
-          'flex h-screen shrink-0 flex-col border-r border-slate-700/80 bg-slate-950/65 transition-[width] duration-200',
+          'relative flex h-screen shrink-0 flex-col border-r border-slate-700/80 bg-slate-950/65 transition-[width] duration-200',
           expanded ? 'w-64' : 'w-[74px]',
         )}
+        onMouseEnter={() => setCollapsedSidebarHover(true)}
+        onMouseLeave={() => setCollapsedSidebarHover(false)}
       >
-        <div className={cn('flex h-14 items-center border-b border-slate-700/80', expanded ? 'justify-between px-3' : 'justify-center')}>
-          {expanded ? <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-300">Admin</span> : null}
+        <div className={cn('border-b border-slate-700/80', expanded ? 'px-3 py-2.5' : 'flex h-[74px] items-center justify-center px-2')}>
+          {expanded ? (
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-xs font-bold uppercase tracking-[0.2em] text-slate-100">ADS CONNECT</p>
+              </div>
+              <button
+                className="rounded-lg p-2 text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                onClick={toggleExpanded}
+                title="Collapse sidebar"
+                type="button"
+              >
+                <ChevronRight className="h-4 w-4 rotate-180 transition-transform" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-600 bg-slate-900/90 text-sm font-bold uppercase tracking-[0.1em] text-slate-100">
+                ADS
+              </div>
+            </div>
+          )}
+        </div>
+
+        {!expanded ? (
           <button
-            className="rounded-lg p-2 text-slate-300 transition hover:bg-slate-800 hover:text-white"
+            className={cn(
+              'absolute left-full top-[72px] z-20 -translate-x-1/2 rounded-full border border-slate-300/80 bg-slate-200 p-1.5 text-slate-700 shadow-md transition-all duration-150 hover:bg-white',
+              collapsedSidebarHover ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+            )}
             onClick={toggleExpanded}
-            title={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            title="Expand sidebar"
             type="button"
           >
-            <ChevronRight className={cn('h-4 w-4 transition-transform', expanded ? 'rotate-180' : 'rotate-0')} />
+            <ChevronRight className="h-4 w-4" />
           </button>
-        </div>
+        ) : null}
 
         <nav className="flex-1 space-y-1 p-2">
           {items
@@ -124,8 +157,8 @@ export function AdminWorkspaceShell({
                 <button
                   key={item.id}
                   className={cn(
-                    'flex w-full items-center rounded-xl px-3 py-2.5 text-sm font-semibold transition',
-                    expanded ? 'justify-start gap-3' : 'justify-center',
+                    'flex items-center rounded-xl text-sm font-semibold transition',
+                    expanded ? 'w-full justify-start gap-3 px-3 py-2.5' : 'mx-auto h-12 w-12 justify-center',
                     active
                       ? 'bg-slate-800 text-white shadow-[inset_0_0_0_1px_rgba(148,163,184,0.35)]'
                       : 'text-slate-300 hover:bg-slate-800/80 hover:text-white',
@@ -163,7 +196,7 @@ export function AdminWorkspaceShell({
             {profileMenuOpen ? (
               <div
                 className={cn(
-                  'absolute z-30 rounded-xl border border-slate-700 bg-slate-900/95 p-1 shadow-xl',
+                  'absolute z-30 rounded-md border border-slate-700 bg-slate-900/95 p-1 shadow-xl',
                   expanded ? 'bottom-full left-0 right-0 mb-2' : 'bottom-0 left-full ml-2 w-56',
                 )}
               >
@@ -190,7 +223,7 @@ export function AdminWorkspaceShell({
 
             <button
               className={cn(
-                'flex w-full items-center rounded-xl border border-slate-700/80 bg-slate-900/60 px-2 py-2 text-slate-200 transition hover:bg-slate-800/80 hover:text-white',
+                'flex w-full items-center rounded-md border border-slate-700/80 bg-slate-900/60 px-2 py-2 text-slate-200 transition hover:bg-slate-800/80 hover:text-white',
                 expanded ? 'gap-2.5' : 'justify-center',
               )}
               onClick={() => setProfileMenuOpen((current) => !current)}
@@ -211,7 +244,18 @@ export function AdminWorkspaceShell({
         </div>
       </aside>
 
-      <section className="min-w-0 flex-1 overflow-y-auto">{children}</section>
+      <section className="min-w-0 flex-1 overflow-y-auto">
+        {pageTitle || topBarActions ? (
+          <header className="border-b border-slate-700/80 bg-slate-900/70 backdrop-blur">
+            <div className="flex min-h-[72px] items-center justify-between gap-3 px-6">
+              <h1 className="truncate text-3xl font-semibold tracking-tight text-white">{pageTitle || ''}</h1>
+              {topBarActions ? <div className="flex flex-wrap items-center justify-end gap-2">{topBarActions}</div> : null}
+            </div>
+          </header>
+        ) : null}
+        {children}
+      </section>
     </main>
   );
 }
+

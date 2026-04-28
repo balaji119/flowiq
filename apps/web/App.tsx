@@ -129,13 +129,15 @@ function AppShell() {
   const canAccessManagement = session.user.role !== 'user';
   const canAccessSuperAdminPages = session.user.role === 'super_admin';
 
-  function renderGlobalSidebar(content: ReactNode) {
+  function renderGlobalSidebar(content: ReactNode, options?: { pageTitle?: string; topBarActions?: ReactNode }) {
     return (
       <AdminWorkspaceShell
         activeSection={view === 'quote' || view === 'artworks' ? 'landing' : view}
         canAccessManagement={canAccessManagement}
         canAccessPrintingCosts={canAccessSuperAdminPages}
         canAccessShippingCosts={canAccessSuperAdminPages}
+        pageTitle={options?.pageTitle}
+        topBarActions={options?.topBarActions}
         onOpenLanding={() => navigateTo('landing')}
         onOpenMappings={canAccessManagement ? () => navigateTo('mappings') : undefined}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
@@ -206,6 +208,7 @@ function AppShell() {
         onBack={() => navigateTo('landing')}
         tenantId={selectedAdminTenantId}
       />,
+      { pageTitle: 'Printing Cost' },
     );
   }
 

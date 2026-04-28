@@ -165,7 +165,7 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                   value={searchQuery}
                 />
               </div>
-              <div className="flex rounded-xl border border-slate-700 bg-slate-900/70 p-1">
+              <div className="flex rounded-md border border-slate-700 bg-slate-900/70 p-1">
                 <Button
                   aria-label="Thumbnail view"
                   className={`h-9 w-9 rounded-lg border border-transparent px-0 transition-colors focus-visible:ring-0 ${
@@ -420,4 +420,5 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
     </main>
   );
 }
+
 

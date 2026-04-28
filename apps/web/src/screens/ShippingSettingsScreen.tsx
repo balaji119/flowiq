@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LoaderCircle, MapPin, Pencil, Shield, Trash2 } from 'lucide-react';
+import { LoaderCircle, Pencil, Plus, Shield, Trash2 } from 'lucide-react';
 import { MarketDeliveryAddressRecord, MarketShippingRateRecord, TenantRecord } from '@flowiq/shared';
 import {
   Badge,
@@ -452,7 +452,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
             <Shield className="mx-auto h-8 w-8 text-amber-300" />
             <CardTitle>Access restricted</CardTitle>
             <CardDescription>Only admin and super admin users can manage shipping settings.</CardDescription>
-            <Button className="h-11 min-w-[110px] px-5 text-base" onClick={onBack} variant="secondary">
+            <Button className="h-10 min-w-[110px] px-5 text-base" onClick={onBack} variant="secondary">
               Back
             </Button>
           </CardContent>
@@ -467,6 +467,18 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
       canAccessManagement
       canAccessShippingCosts={session?.user.role === 'super_admin'}
       canAccessPrintingCosts={session?.user.role === 'super_admin'}
+      pageTitle="Shipping Address"
+      topBarActions={
+        <Button
+          className="h-10 min-w-[132px] rounded-md px-4 text-sm font-semibold"
+          disabled={!effectiveTenantId || !selectedMarketFilter}
+          onClick={openAddAddressDialog}
+          type="button"
+        >
+          <Plus className="h-4 w-4" />
+          Add Address
+        </Button>
+      }
       onBack={onBack}
       onOpenLanding={onBack}
       onOpenMappings={onOpenMappings}
@@ -476,13 +488,6 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
       onOpenUsers={onOpenUsers}
     >
     <main className="dense-main flex min-h-screen w-full flex-col gap-6">
-      <header>
-        <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
-          <MapPin className="h-3.5 w-3.5" />
-          Shipping Address
-        </Badge>
-      </header>
-
       {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
       {notice ? <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
@@ -532,7 +537,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 	      <section className="space-y-5">
 		        <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
 		          <div className="w-full xl:w-[320px]">
-		            <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+		            <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
 		              <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
 		              <select
 		                id="shipping-market-filter"
@@ -576,11 +581,6 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 	              </div>
 	            </div>
 	          ) : null}
-	          <div className="xl:ml-auto xl:self-end">
-	            <Button className="h-11 min-w-[140px] px-5 text-base" disabled={!effectiveTenantId || !selectedMarketFilter} onClick={openAddAddressDialog} type="button">
-	              Add Address
-	            </Button>
-	          </div>
 	        </div>
 
 	        {loading ? (
@@ -769,7 +769,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
                   value={addressForm.deliveryNotes}
                 />
               </div>
-              <label className="md:col-span-2 flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200">
+              <label className="md:col-span-2 flex items-center gap-3 rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-slate-200">
                 <input
                   checked={addressIsDefault}
                   onChange={(event) => setAddressIsDefault(event.target.checked)}
@@ -780,7 +780,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
             </div>
             <div className="flex justify-end gap-3">
               <Button
-                className="h-11 px-5 text-base"
+                className="h-10 px-5 text-base"
                 onClick={() => {
                   setAddressDialogOpen(false);
                   setAddressForm(emptyAddressForm());
@@ -794,7 +794,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
                 Cancel
               </Button>
               <Button
-                className="h-11 min-w-[160px] px-5 text-base"
+                className="h-10 min-w-[160px] px-5 text-base"
                 disabled={savingDeliveryAddress || !selectedMarketFilter}
                 onClick={() => void handleSaveDeliveryAddress()}
               >
@@ -809,4 +809,5 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
     </AdminWorkspaceShell>
   );
 }
+
 

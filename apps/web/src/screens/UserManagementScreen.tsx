@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LoaderCircle, Pencil, Plus, Shield, Trash2, Users } from 'lucide-react';
+import { LoaderCircle, Pencil, Plus, Shield, Trash2 } from 'lucide-react';
 import { AuthRole, AuthUser, TenantRecord } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
@@ -250,6 +250,13 @@ export function UserManagementScreen({ onBack, onOpenMappings, onOpenPrintingCos
       canAccessManagement
       canAccessShippingCosts={session?.user.role === 'super_admin'}
       canAccessPrintingCosts={session?.user.role === 'super_admin'}
+      pageTitle="User Management"
+      topBarActions={
+        <Button className="h-10 min-w-[126px] rounded-md px-4 text-sm font-semibold" disabled={!effectiveTenantId} onClick={openCreateUserDialog}>
+          <Plus className="h-4 w-4" />
+          Create User
+        </Button>
+      }
       onBack={onBack}
       onOpenLanding={onBack}
       onOpenMappings={onOpenMappings}
@@ -259,22 +266,13 @@ export function UserManagementScreen({ onBack, onOpenMappings, onOpenPrintingCos
       onOpenUsers={() => {}}
     >
     <main className="dense-main flex min-h-screen w-full flex-col gap-6">
-      <header className="space-y-3">
-        <div className="space-y-3">
-          <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
-            <Users className="h-3.5 w-3.5" />
-            User Management
-          </Badge>
-        </div>
-      </header>
-
       {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
       {notice ? <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
       <section className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="w-full md:w-auto">
-            <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800 md:w-[320px]">
+            <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800 md:w-[320px]">
               <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Tenant</span>
               <select
                 id="tenant-picker"
@@ -292,10 +290,6 @@ export function UserManagementScreen({ onBack, onOpenMappings, onOpenPrintingCos
               </select>
             </div>
           </div>
-          <Button className="h-11 min-w-[170px] px-6 text-base" disabled={!effectiveTenantId} onClick={openCreateUserDialog}>
-            <Plus className="h-4 w-4" />
-            Create User
-          </Button>
         </div>
 
         {loading ? (
@@ -454,4 +448,5 @@ export function UserManagementScreen({ onBack, onOpenMappings, onOpenPrintingCos
     </AdminWorkspaceShell>
   );
 }
+
 

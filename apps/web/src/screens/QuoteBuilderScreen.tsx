@@ -552,7 +552,7 @@ function SearchableSelect({
     <div ref={containerRef} className="relative space-y-2">
       {label ? <Label>{label}</Label> : null}
       <button
-        className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-600 bg-slate-800 px-3 text-left text-sm text-slate-100 transition hover:border-slate-500"
+        className="flex h-10 w-full items-center justify-between rounded-md border border-slate-600 bg-slate-800 px-3 text-left text-sm text-slate-100 transition hover:border-slate-500"
         onClick={() => setOpen((current) => !current)}
         type="button"
       >
@@ -2446,9 +2446,9 @@ export function QuoteBuilderScreen({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="week-count">Number of weeks</Label>
-                    <div className="flex h-11 overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+                    <div className="flex h-10 overflow-hidden rounded-md border border-slate-600 bg-slate-800">
                       <Input
-                        className="h-11 rounded-none border-0 pr-0 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        className="h-10 rounded-none border-0 pr-0 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                         id="week-count"
                         inputMode="numeric"
                         min={1}
@@ -2460,7 +2460,7 @@ export function QuoteBuilderScreen({
                         type="number"
                         value={numberOfWeeks}
                       />
-                      <div className="flex h-11 w-10 flex-col border-l border-slate-600">
+                      <div className="flex h-10 w-10 flex-col border-l border-slate-600">
                         <Button
                           className="h-[22px] w-10 rounded-none border-b border-slate-600 px-0"
                           onClick={() => updateWeekCount(numberOfWeeks + 1)}
@@ -2492,7 +2492,7 @@ export function QuoteBuilderScreen({
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-slate-400">{values.printImages.length} artwork{values.printImages.length === 1 ? '' : 's'} uploaded</p>
-                  <Button className="h-11 px-5" disabled={uploadingArtworks} onClick={handlePickPrintImages} type="button" variant="secondary">
+                  <Button className="h-10 px-5" disabled={uploadingArtworks} onClick={handlePickPrintImages} type="button" variant="secondary">
                     {uploadingArtworks ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                     {uploadingArtworks
                       ? `Uploading Artworks (${artworkUploadCompleted}/${Math.max(artworkUploadTotal, 1)})`
@@ -2578,7 +2578,7 @@ export function QuoteBuilderScreen({
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-                  <Button className="h-11 min-w-[220px] px-6 text-base" disabled={!canAdvanceFromCreative} onClick={() => navigateToStep(1)} type="button">
+                  <Button className="h-10 min-w-[220px] px-6 text-base" disabled={!canAdvanceFromCreative} onClick={() => navigateToStep(1)} type="button">
                     Continue To Schedule
                   </Button>
                 </div>
@@ -2779,12 +2779,12 @@ export function QuoteBuilderScreen({
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <div title={canAddMarket ? 'Add another market' : addMarketDisabledReason}>
-                    <Button className="h-11 min-w-[160px] px-5 text-base" disabled={!canAddMarket} onClick={addCampaignMarket} type="button" variant="secondary">
+                    <Button className="h-10 min-w-[160px] px-5 text-base" disabled={!canAddMarket} onClick={addCampaignMarket} type="button" variant="secondary">
                       <Plus className="h-4 w-4" />
                       Add Market
                     </Button>
                   </div>
-                  <Button className="h-11 min-w-[180px] px-6 text-base" disabled={calculating} onClick={reviewTotals} type="button">
+                  <Button className="h-10 min-w-[180px] px-6 text-base" disabled={calculating} onClick={reviewTotals} type="button">
                     {calculating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                     {calculating ? 'Calculating...' : 'Review Totals'}
                   </Button>
@@ -2884,7 +2884,7 @@ export function QuoteBuilderScreen({
                     </div>
 
                     <div className="flex gap-3">
-                      <Button className="h-11 min-w-[220px] px-6 text-base" onClick={() => setStepIndex(3)} type="button">
+                      <Button className="h-10 min-w-[220px] px-6 text-base" onClick={() => setStepIndex(3)} type="button">
                         Continue To Finalise
                       </Button>
                     </div>
@@ -3033,11 +3033,11 @@ export function QuoteBuilderScreen({
                         <p className="mt-1 text-sm text-slate-400">PDF upload stays unchanged. This only refreshes the interaction and layout.</p>
                       </div>
                       <div className="flex flex-col gap-3 sm:flex-row">
-                        <Button className="h-11 px-5 text-base" onClick={openPurchaseOrderPicker} type="button" variant="outline">
+                        <Button className="h-10 px-5 text-base" onClick={openPurchaseOrderPicker} type="button" variant="outline">
                           <Upload className="h-4 w-4" />
                           {selectedPurchaseOrderFile ? 'Change File' : 'Choose File'}
                         </Button>
-                        <Button className="h-11 min-w-[210px] px-5 text-base" disabled={uploadingPurchaseOrder} onClick={() => void handleUploadPurchaseOrder()} type="button">
+                        <Button className="h-10 min-w-[210px] px-5 text-base" disabled={uploadingPurchaseOrder} onClick={() => void handleUploadPurchaseOrder()} type="button">
                           {uploadingPurchaseOrder ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                           {uploadingPurchaseOrder ? 'Uploading...' : 'Upload Purchase Order'}
                         </Button>
@@ -3068,7 +3068,7 @@ export function QuoteBuilderScreen({
               <CardContent className="space-y-3 p-6">
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Button
-                    className="h-11 min-w-[180px] px-5 text-base"
+                    className="h-10 min-w-[180px] px-5 text-base"
                     disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates || sendingAdsEmail}
                     onClick={() => void downloadArtworkExcelTemplates()}
                     type="button"
@@ -3078,7 +3078,7 @@ export function QuoteBuilderScreen({
                     {exportingTemplates ? 'Generating Files...' : 'Download Visuals'}
                   </Button>
                   <Button
-                    className="h-11 min-w-[210px] px-6 text-base"
+                    className="h-10 min-w-[210px] px-6 text-base"
                     disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates || sendingAdsEmail}
                     onClick={() => void sendArtworkEmailToAds()}
                     title={hasUploadedPurchaseOrder ? undefined : 'Upload purchase order before sending to ADS'}
@@ -3103,7 +3103,7 @@ export function QuoteBuilderScreen({
               <CardContent className="space-y-6 p-6">
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Button
-                    className="h-11 px-5 text-base border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100"
+                    className="h-10 px-5 text-base border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100"
                     disabled
                     type="button"
                     variant="secondary"
@@ -3111,7 +3111,7 @@ export function QuoteBuilderScreen({
                     Create Quote In PrintIQ (Coming Soon)
                   </Button>
                   {onBack ? (
-                    <Button className="h-11 min-w-[180px] px-5 text-base" disabled={savingCampaign || submitting} onClick={() => void handleBackToDashboard()} type="button" variant="outline">
+                    <Button className="h-10 min-w-[180px] px-5 text-base" disabled={savingCampaign || submitting} onClick={() => void handleBackToDashboard()} type="button" variant="outline">
                       Go To Dashboard
                     </Button>
                   ) : null}
@@ -3239,6 +3239,7 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
+
 
 
 

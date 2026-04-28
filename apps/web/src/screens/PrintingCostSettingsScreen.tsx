@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CircleDollarSign, LoaderCircle, Shield } from 'lucide-react';
+import { LoaderCircle, Shield } from 'lucide-react';
 import { CalculatorMappingRecord, formatKeys, FormatKey, PrintingCostBreakdown, TenantRecord } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input } from '@flowiq/ui';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import { fetchCalculatorMappings, fetchMarketAssetPrintingCosts, fetchTenants, upsertMarketAssetPrintingCosts } from '../services/adminApi';
 
@@ -369,18 +369,11 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
 
   return (
     <main className="dense-main flex min-h-screen w-full flex-col gap-6">
-      <header>
-        <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
-          <CircleDollarSign className="h-3.5 w-3.5" />
-          Printing Cost
-        </Badge>
-      </header>
-
       {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 
       <section className="flex flex-wrap gap-4">
           <div className="w-full sm:w-[320px]">
-            <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+            <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
               <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Tenant</span>
             <select
               id="printing-cost-tenant"
@@ -395,7 +388,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
             </div>
           </div>
           <div className="w-full sm:w-[320px]">
-            <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+            <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
               <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
             <select
               id="printing-cost-market-filter"
@@ -412,7 +405,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
             </div>
           </div>
           <div className="w-full sm:w-[320px]">
-            <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+            <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
               <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Poster Cost</span>
               <div className="flex h-full flex-1 items-center gap-2 px-3">
                 <span className="text-slate-300">$</span>
@@ -497,4 +490,5 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     </main>
   );
 }
+
 
