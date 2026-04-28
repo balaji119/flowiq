@@ -141,7 +141,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
   const campaignName = campaign?.values.campaignName?.trim() || (campaign?.id ? `Untitled Campaign ${campaign.id.slice(0, 6)}` : 'Campaign');
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+    <main className="dense-main mx-auto flex min-h-screen w-full max-w-[1400px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
       <section className="relative overflow-hidden rounded-[32px] border border-slate-700/70 bg-slate-950/70 px-6 py-8 shadow-2xl shadow-slate-950/40">
         <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.2),transparent_52%)]" />
         <div className="relative flex flex-col gap-5">
@@ -187,7 +187,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
               </div>
             ) : (
               <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60">
-                <table className="w-full table-fixed border-collapse text-sm">
+                <table className="dense-table w-full table-fixed border-collapse text-sm">
                   <thead>
                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                       <th className="w-[36%] border border-slate-700 px-4 py-3 text-left">Name</th>
@@ -246,3 +246,4 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
     </main>
   );
 }
+

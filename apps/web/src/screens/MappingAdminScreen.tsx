@@ -1,7 +1,8 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Database, FileJson, LoaderCircle, Pencil, Plus, Shield, Trash2, Upload } from 'lucide-react';
+import { Database, FileJson, LoaderCircle, Pencil, Plus, Shield, Trash2, Upload } from 'lucide-react';
 import { CalculatorMappingInput, CalculatorMappingRecord, MarketMetadata, TenantRecord, createEmptyBreakdown, formatKeys } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
+import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
 import { useAuth } from '../context/AuthContext';
 import {
   createCalculatorMapping,
@@ -15,7 +16,7 @@ import {
 type MappingAdminScreenProps = {
   onBack: () => void;
   tenantId?: string | null;
-};
+} & Omit<AdminWorkspaceHandlers, 'onBack' | 'onOpenMappings'>;
 
 function emptyForm(): CalculatorMappingInput {
   return {
@@ -39,7 +40,7 @@ function formatSheetHeader(key: (typeof formatKeys)[number]) {
   return key.includes('-sheet') ? key.replace('-', ' ') : key;
 }
 
-export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps) {
+export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShippingCosts, onOpenShippingSettings, onOpenUsers, tenantId }: MappingAdminScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -261,7 +262,7 @@ export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps
 
   if (session?.user.role === 'user') {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-8">
+      <main className="dense-main mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-8">
         <Card className="w-full">
           <CardContent className="space-y-4 p-8 text-center">
             <Shield className="mx-auto h-8 w-8 text-amber-300" />
@@ -275,30 +276,26 @@ export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-3">
+    <AdminWorkspaceShell
+      activeSection="mappings"
+      canAccessManagement
+      canAccessShippingCosts={session?.user.role === 'super_admin'}
+      canAccessPrintingCosts={session?.user.role === 'super_admin'}
+      onBack={onBack}
+      onOpenLanding={onBack}
+      onOpenMappings={() => {}}
+      onOpenPrintingCosts={onOpenPrintingCosts}
+      onOpenShippingCosts={onOpenShippingCosts}
+      onOpenShippingSettings={onOpenShippingSettings}
+      onOpenUsers={onOpenUsers}
+    >
+    <main className="dense-main flex min-h-screen w-full flex-col gap-6">
+      <header>
+        <div>
           <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
             <Database className="h-3.5 w-3.5" />
-            Mapping Admin
+            Quantity Mappings
           </Badge>
-          <div className="space-y-2">
-            <h1 className="text-4xl font-black tracking-tight text-white">Quantity mappings</h1>
-            <p className="max-w-3xl text-sm leading-6 text-slate-400">
-              Manage the market and asset quantity template in the database. Import a JSON file to load starter data, or maintain individual mappings directly here.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={onBack} variant="secondary">
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
-          <Button disabled={importing || !effectiveTenantId} onClick={() => fileInputRef.current?.click()} variant="outline">
-            {importing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            {importing ? 'Importing...' : 'Import JSON'}
-          </Button>
-          <input ref={fileInputRef} accept="application/json" className="hidden" onChange={handleImport} type="file" />
         </div>
       </header>
 
@@ -348,22 +345,14 @@ export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader className="p-5 pb-0">
-          <CardTitle>Current mappings</CardTitle>
-          <CardDescription>
-            {mappings.length > 0
-              ? `${mappings.length} mapping${mappings.length === 1 ? '' : 's'} loaded${effectiveTenantId ? ' for this tenant' : ''}.`
-              : 'No mappings loaded yet. Import a JSON file to start.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+      <section className="space-y-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="w-full sm:max-w-sm space-y-2">
-              <Label htmlFor="market-filter">Market</Label>
+            <div className="w-full sm:w-[320px]">
+              <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+                <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
               <select
                 id="market-filter"
-                className="h-11 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+                  className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
                 onChange={(event) => setSelectedMarketFilter(event.target.value)}
                 value={selectedMarketFilter}
               >
@@ -374,11 +363,19 @@ export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps
                   </option>
                 ))}
               </select>
+              </div>
             </div>
-            <Button disabled={!effectiveTenantId || !selectedMarketFilter} onClick={openAddMappingDialog} type="button">
-              <Plus className="h-4 w-4" />
-              Add Mapping
-            </Button>
+            <div className="flex flex-wrap gap-2 sm:justify-end">
+              <Button className="h-11 min-w-[170px] px-5 text-base" disabled={importing || !effectiveTenantId} onClick={() => fileInputRef.current?.click()} type="button" variant="outline">
+                {importing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {importing ? 'Importing...' : 'Import JSON'}
+              </Button>
+              <Button className="h-11 min-w-[170px] px-6 text-base" disabled={!effectiveTenantId || !selectedMarketFilter} onClick={openAddMappingDialog} type="button">
+                <Plus className="h-4 w-4" />
+                Add Mapping
+              </Button>
+              <input ref={fileInputRef} accept="application/json" className="hidden" onChange={handleImport} type="file" />
+            </div>
           </div>
 
           {loading ? (
@@ -398,7 +395,7 @@ export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps
             </div>
           ) : (
             <div className="overflow-x-auto rounded-[24px] border border-slate-700 bg-slate-900/70">
-              <table className="min-w-[1180px] w-full border-collapse text-sm">
+              <table className="dense-table min-w-[1180px] w-full border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                     <th className="border border-slate-700 px-4 py-3 text-left">Asset</th>
@@ -453,8 +450,7 @@ export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps
               </table>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </section>
 
       <Dialog
         open={mappingDialogOpen}
@@ -550,5 +546,7 @@ export function MappingAdminScreen({ onBack, tenantId }: MappingAdminScreenProps
         </DialogContent>
       </Dialog>
     </main>
+    </AdminWorkspaceShell>
   );
 }
+

@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
-import { AdminScreen } from './src/screens/AdminScreen';
+import { AdminWorkspaceShell } from './src/components/AdminWorkspaceShell';
 import { CampaignArtworkFolderScreen } from './src/screens/CampaignArtworkFolderScreen';
 import { CampaignLandingScreen } from './src/screens/CampaignLandingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
@@ -14,7 +14,7 @@ import { ShippingCostSettingsScreen } from './src/screens/ShippingCostSettingsSc
 import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
 import { UserManagementScreen } from './src/screens/UserManagementScreen';
 
-type AppView = 'landing' | 'quote' | 'artworks' | 'admin' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs';
+type AppView = 'landing' | 'quote' | 'artworks' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs';
 
 type AppNavState = {
   view: AppView;
@@ -34,9 +34,14 @@ function buildUrlFromState(state: AppNavState) {
 }
 
 function parseView(raw: string | null): AppView {
-  if (raw === 'landing' || raw === 'quote' || raw === 'artworks' || raw === 'admin' || raw === 'users' || raw === 'mappings' || raw === 'shipping' || raw === 'shipping-costs' || raw === 'printing-costs') {
-    return raw;
-  }
+  if (raw === 'users') return 'users';
+  if (raw === 'mappings') return 'mappings';
+  if (raw === 'shipping') return 'shipping';
+  if (raw === 'shipping-costs') return 'shipping-costs';
+  if (raw === 'printing-costs') return 'printing-costs';
+  if (raw === 'quote') return 'quote';
+  if (raw === 'artworks') return 'artworks';
+  if (raw === 'admin') return 'users';
   return 'landing';
 }
 
@@ -76,6 +81,16 @@ function AppShell() {
     window.history.pushState(nextState, '', url);
   }
 
+  function navigateTo(nextView: AppView, overrides?: Partial<AppNavState>) {
+    navigate({
+      view: nextView,
+      selectedAdminTenantId,
+      selectedCampaignId,
+      startFreshCampaign,
+      ...overrides,
+    });
+  }
+
   useEffect(() => {
     if (loading || !session || hydratedHistoryRef.current) return;
     const defaultTenantId = session.user.tenantId ?? null;
@@ -101,7 +116,7 @@ function AppShell() {
       <div className="flex min-h-screen items-center justify-center px-6">
         <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-950/80 px-5 py-4 text-slate-100 shadow-2xl shadow-slate-950/40">
           <LoaderCircle className="h-5 w-5 animate-spin text-violet-300" />
-          <span className="text-sm font-medium">Loading your workspace…</span>
+          <span className="text-sm font-medium">Loading your workspace...</span>
         </div>
       </div>
     );
@@ -111,72 +126,36 @@ function AppShell() {
     return <LoginScreen />;
   }
 
-  if (view === 'admin') {
+  const canAccessManagement = session.user.role !== 'user';
+  const canAccessSuperAdminPages = session.user.role === 'super_admin';
+
+  function renderGlobalSidebar(content: ReactNode) {
     return (
-      <AdminScreen
-        onBack={() =>
-          navigate({
-            view: 'landing',
-            selectedAdminTenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          })
-        }
-        onOpenUsers={(tenantId) => {
-          navigate({
-            view: 'users',
-            selectedAdminTenantId: tenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          });
-        }}
-        onOpenMappings={(tenantId) => {
-          navigate({
-            view: 'mappings',
-            selectedAdminTenantId: tenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          });
-        }}
-        onOpenShippingSettings={(tenantId) => {
-          navigate({
-            view: 'shipping',
-            selectedAdminTenantId: tenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          });
-        }}
-        onOpenShippingCosts={(tenantId) => {
-          navigate({
-            view: 'shipping-costs',
-            selectedAdminTenantId: tenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          });
-        }}
-        onOpenPrintingCosts={(tenantId) => {
-          navigate({
-            view: 'printing-costs',
-            selectedAdminTenantId: tenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          });
-        }}
-      />
+      <AdminWorkspaceShell
+        activeSection={view === 'quote' || view === 'artworks' ? 'landing' : view}
+        canAccessManagement={canAccessManagement}
+        canAccessPrintingCosts={canAccessSuperAdminPages}
+        canAccessShippingCosts={canAccessSuperAdminPages}
+        onOpenLanding={() => navigateTo('landing')}
+        onOpenMappings={canAccessManagement ? () => navigateTo('mappings') : undefined}
+        onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
+        onOpenShippingSettings={canAccessManagement ? () => navigateTo('shipping') : undefined}
+        onOpenUsers={canAccessManagement ? () => navigateTo('users') : undefined}
+      >
+        {content}
+      </AdminWorkspaceShell>
     );
   }
 
   if (view === 'users') {
     return (
       <UserManagementScreen
-        onBack={() =>
-          navigate({
-            view: 'admin',
-            selectedAdminTenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          })
-        }
+        onBack={() => navigateTo('landing')}
+        onOpenMappings={() => navigateTo('mappings')}
+        onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
+        onOpenShippingSettings={() => navigateTo('shipping')}
         tenantId={selectedAdminTenantId ?? session.user.tenantId ?? ''}
       />
     );
@@ -185,14 +164,11 @@ function AppShell() {
   if (view === 'mappings') {
     return (
       <MappingAdminScreen
-        onBack={() =>
-          navigate({
-            view: 'admin',
-            selectedAdminTenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          })
-        }
+        onBack={() => navigateTo('landing')}
+        onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
+        onOpenShippingSettings={() => navigateTo('shipping')}
+        onOpenUsers={() => navigateTo('users')}
         tenantId={selectedAdminTenantId}
       />
     );
@@ -201,30 +177,11 @@ function AppShell() {
   if (view === 'shipping') {
     return (
       <ShippingSettingsScreen
-        onBack={() =>
-          navigate({
-            view: 'admin',
-            selectedAdminTenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          })
-        }
-        tenantId={selectedAdminTenantId}
-      />
-    );
-  }
-
-  if (view === 'printing-costs') {
-    return (
-      <PrintingCostSettingsScreen
-        onBack={() =>
-          navigate({
-            view: 'admin',
-            selectedAdminTenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          })
-        }
+        onBack={() => navigateTo('landing')}
+        onOpenMappings={() => navigateTo('mappings')}
+        onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
+        onOpenUsers={() => navigateTo('users')}
         tenantId={selectedAdminTenantId}
       />
     );
@@ -233,93 +190,60 @@ function AppShell() {
   if (view === 'shipping-costs') {
     return (
       <ShippingCostSettingsScreen
-        onBack={() =>
-          navigate({
-            view: 'admin',
-            selectedAdminTenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          })
-        }
+        onBack={() => navigateTo('landing')}
+        onOpenMappings={() => navigateTo('mappings')}
+        onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenShippingSettings={() => navigateTo('shipping')}
+        onOpenUsers={() => navigateTo('users')}
         tenantId={selectedAdminTenantId}
       />
     );
   }
 
+  if (view === 'printing-costs') {
+    return renderGlobalSidebar(
+      <PrintingCostSettingsScreen
+        onBack={() => navigateTo('landing')}
+        tenantId={selectedAdminTenantId}
+      />,
+    );
+  }
+
   if (view === 'quote') {
-    return (
+    return renderGlobalSidebar(
       <QuoteBuilderScreen
         campaignId={selectedCampaignId}
         startFresh={startFreshCampaign}
-        onBack={() =>
-          navigate({
-            view: 'landing',
-            selectedAdminTenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          })
-        }
-        onOpenAdmin={
-          session.user.role !== 'user'
-            ? () =>
-                navigate({
-                  view: 'admin',
-                  selectedAdminTenantId,
-                  selectedCampaignId,
-                  startFreshCampaign,
-                })
-            : undefined
-        }
-      />
+        onBack={() => navigateTo('landing')}
+        onOpenAdmin={canAccessManagement ? () => navigateTo('users') : undefined}
+      />,
     );
   }
 
   if (view === 'artworks') {
-    return (
+    return renderGlobalSidebar(
       <CampaignArtworkFolderScreen
         campaignId={selectedCampaignId}
-        onBack={() =>
-          navigate({
-            view: 'landing',
-            selectedAdminTenantId,
-            selectedCampaignId,
-            startFreshCampaign,
-          })
-        }
+        onBack={() => navigateTo('landing')}
         onOpenCampaign={(campaignId) =>
-          navigate({
-            view: 'quote',
-            selectedAdminTenantId,
+          navigateTo('quote', {
             selectedCampaignId: campaignId,
             startFreshCampaign: false,
           })
         }
-      />
+      />,
     );
   }
 
-  return (
+  return renderGlobalSidebar(
     <CampaignLandingScreen
-      onOpenAdmin={
-        session.user.role !== 'user'
-          ? () =>
-              navigate({
-                view: 'admin',
-                selectedAdminTenantId,
-                selectedCampaignId,
-                startFreshCampaign,
-              })
-          : undefined
-      }
       onOpenCampaign={(campaignId) => {
-        navigate({
-          view: 'quote',
-          selectedAdminTenantId,
+        navigateTo('quote', {
           selectedCampaignId: campaignId,
           startFreshCampaign: campaignId === null,
         });
       }}
-    />
+    />,
   );
 }
 

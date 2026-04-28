@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, LoaderCircle, Pencil, Shield, Trash2, Truck } from 'lucide-react';
+import { LoaderCircle, MapPin, Pencil, Shield, Trash2 } from 'lucide-react';
 import { MarketDeliveryAddressRecord, MarketShippingRateRecord, TenantRecord } from '@flowiq/shared';
 import {
   Badge,
@@ -18,6 +18,7 @@ import {
   Label,
   Textarea,
 } from '@flowiq/ui';
+import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
 import { useAuth } from '../context/AuthContext';
 import {
   deleteMarketDeliveryAddress,
@@ -32,7 +33,7 @@ import {
 type ShippingSettingsScreenProps = {
   onBack: () => void;
   tenantId?: string | null;
-};
+} & Omit<AdminWorkspaceHandlers, 'onBack' | 'onOpenShippingSettings'>;
 
 type AddressFormState = {
   name: string;
@@ -114,7 +115,7 @@ function parseDeliveryAddress(rawAddress: string): AddressFormState {
   };
 }
 
-export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScreenProps) {
+export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingCosts, onOpenShippingCosts, onOpenUsers, tenantId }: ShippingSettingsScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -445,13 +446,13 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
 
   if (session?.user.role === 'user') {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-8">
+      <main className="dense-main mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-8">
         <Card className="w-full">
           <CardContent className="space-y-4 p-8 text-center">
             <Shield className="mx-auto h-8 w-8 text-amber-300" />
             <CardTitle>Access restricted</CardTitle>
             <CardDescription>Only admin and super admin users can manage shipping settings.</CardDescription>
-            <Button onClick={onBack} variant="secondary">
+            <Button className="h-11 min-w-[110px] px-5 text-base" onClick={onBack} variant="secondary">
               Back
             </Button>
           </CardContent>
@@ -461,26 +462,25 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-3">
-          <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
-            <Truck className="h-3.5 w-3.5" />
-            Shipping Admin
-          </Badge>
-          <div className="space-y-2">
-            <h1 className="text-4xl font-black tracking-tight text-white">Shipping settings</h1>
-            <p className="max-w-3xl text-sm leading-6 text-slate-400">
-              Manage delivery addresses and market shipping rates in one place, separate from quantity mappings.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={onBack} variant="secondary">
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
-        </div>
+    <AdminWorkspaceShell
+      activeSection="shipping"
+      canAccessManagement
+      canAccessShippingCosts={session?.user.role === 'super_admin'}
+      canAccessPrintingCosts={session?.user.role === 'super_admin'}
+      onBack={onBack}
+      onOpenLanding={onBack}
+      onOpenMappings={onOpenMappings}
+      onOpenPrintingCosts={onOpenPrintingCosts}
+      onOpenShippingCosts={onOpenShippingCosts}
+      onOpenShippingSettings={() => {}}
+      onOpenUsers={onOpenUsers}
+    >
+    <main className="dense-main flex min-h-screen w-full flex-col gap-6">
+      <header>
+        <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
+          <MapPin className="h-3.5 w-3.5" />
+          Shipping Address
+        </Badge>
       </header>
 
       {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
@@ -529,138 +529,146 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader className="p-5 pb-0">
-          <CardTitle>Market shipping data</CardTitle>
-          <CardDescription>
-            {marketOptions.length > 0
-              ? `Configure settings for ${marketOptions.length} market${marketOptions.length === 1 ? '' : 's'}.`
-              : 'No markets available yet. Add quantity mappings first to define markets.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
-            <div className="w-full xl:w-[280px] space-y-2">
-              <Label htmlFor="shipping-market-filter">Market</Label>
-              <select
-                id="shipping-market-filter"
-                className="h-11 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
-                onChange={(event) => setSelectedMarketFilter(event.target.value)}
-                value={selectedMarketFilter}
-              >
-                {marketOptions.length === 0 ? <option value="">No markets available</option> : null}
-                {marketOptions.map((market) => (
-                  <option key={`shipping-market-filter-${market}`} value={market}>
-                    {market}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {canEditShippingRate ? (
-              <div className="grid w-full gap-3 xl:w-auto xl:grid-cols-2">
-                <div className="w-full xl:w-[260px] space-y-2">
-                    <Label htmlFor="shipping-rate-inline">Per Box Price ($)</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="shipping-rate-inline"
-                      inputMode="decimal"
-                      onChange={(event) => setShippingRateDraft(event.target.value)}
-                      placeholder="e.g. 45.50"
-                      value={shippingRateDraft}
-                    />
-                    {savingShippingRate ? <LoaderCircle className="h-4 w-4 animate-spin text-slate-300" /> : null}
-                  </div>
-                </div>
-                <div className="w-full xl:w-[220px] space-y-2">
-                  <Label htmlFor="posters-per-box-inline">No of Posters Per Box</Label>
-                  <Input
-                    id="posters-per-box-inline"
-                    inputMode="numeric"
-                    onChange={(event) => setPostersPerBoxDraft(event.target.value)}
-                    placeholder="60"
-                    value={postersPerBoxDraft}
-                  />
-                </div>
-              </div>
-            ) : null}
-            <div className="xl:ml-auto xl:self-end">
-              <Button disabled={!effectiveTenantId || !selectedMarketFilter} onClick={openAddAddressDialog} type="button">
-                Add Address
-              </Button>
-            </div>
-          </div>
+	      <section className="space-y-5">
+		        <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+		          <div className="w-full xl:w-[320px]">
+		            <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+		              <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
+		              <select
+		                id="shipping-market-filter"
+		                className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+		                onChange={(event) => setSelectedMarketFilter(event.target.value)}
+		                value={selectedMarketFilter}
+		              >
+		                {marketOptions.length === 0 ? <option value="">No markets available</option> : null}
+		                {marketOptions.map((market) => (
+		                  <option key={`shipping-market-filter-${market}`} value={market}>
+		                    {market}
+		                  </option>
+		                ))}
+		              </select>
+		            </div>
+		          </div>
+	          {canEditShippingRate ? (
+	            <div className="grid w-full gap-3 xl:w-auto xl:grid-cols-2">
+	              <div className="w-full xl:w-[260px] space-y-2">
+	                  <Label htmlFor="shipping-rate-inline">Per Box Price ($)</Label>
+	                <div className="flex items-center gap-2">
+	                  <Input
+	                    id="shipping-rate-inline"
+	                    inputMode="decimal"
+	                    onChange={(event) => setShippingRateDraft(event.target.value)}
+	                    placeholder="e.g. 45.50"
+	                    value={shippingRateDraft}
+	                  />
+	                  {savingShippingRate ? <LoaderCircle className="h-4 w-4 animate-spin text-slate-300" /> : null}
+	                </div>
+	              </div>
+	              <div className="w-full xl:w-[220px] space-y-2">
+	                <Label htmlFor="posters-per-box-inline">No of Posters Per Box</Label>
+	                <Input
+	                  id="posters-per-box-inline"
+	                  inputMode="numeric"
+	                  onChange={(event) => setPostersPerBoxDraft(event.target.value)}
+	                  placeholder="60"
+	                  value={postersPerBoxDraft}
+	                />
+	              </div>
+	            </div>
+	          ) : null}
+	          <div className="xl:ml-auto xl:self-end">
+	            <Button className="h-11 min-w-[140px] px-5 text-base" disabled={!effectiveTenantId || !selectedMarketFilter} onClick={openAddAddressDialog} type="button">
+	              Add Address
+	            </Button>
+	          </div>
+	        </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/60 px-6 py-14">
-              <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
-            </div>
-          ) : selectedMarketFilter ? (
-            <div className="space-y-2 rounded-2xl border border-slate-700 bg-slate-900/50 p-4">
-              <p className="text-sm font-semibold text-white">Delivery Address</p>
-              {selectedMarketAddresses.length > 0 ? (
-                <div className="grid gap-3 md:grid-cols-2">
-                  {selectedMarketAddresses.map((address) => {
-                    const parsed = parseDeliveryAddress(address.deliveryAddress);
-                    return (
-                      <div
-                        key={`${selectedMarketFilter}-${address.deliveryAddress}`}
-                        className={
-                          address.isDefault
-                            ? 'rounded-xl border border-violet-400 bg-violet-500/10 p-3 shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)]'
-                            : 'rounded-xl border border-slate-700 bg-slate-900/60 p-3'
-                        }
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-semibold text-white">{parsed.name || 'Delivery address'}</p>
-                            {address.isDefault ? <Badge className="px-2 py-0.5 text-[10px] font-bold">Default</Badge> : null}
-                          </div>
-                          <p className="text-sm text-slate-300">{formatAddressLine(parsed) || '-'}</p>
-                          <p className="text-sm text-slate-300">
-                            {[parsed.suburb, parsed.state, parsed.postcode].filter(Boolean).join(' ') || '-'}
-                          </p>
-                          {parsed.phoneNumber ? <p className="text-xs text-slate-400">Phone: {parsed.phoneNumber}</p> : null}
-                          {parsed.deliveryTime ? <p className="text-xs text-slate-400">Delivery time: {parsed.deliveryTime}</p> : null}
-                          {parsed.deliveryPoint ? <p className="text-xs text-slate-400">Delivery point: {parsed.deliveryPoint}</p> : null}
-                          {parsed.deliveryNotes ? <p className="text-xs text-slate-400">Notes: {parsed.deliveryNotes}</p> : null}
-                        </div>
-                        <div className="mt-3 flex items-center justify-end gap-1">
-                          <Button
-                            aria-label="Edit address"
-                            className="h-7 w-7 rounded-md border-0 p-0 hover:bg-slate-700/70"
-                            onClick={() => openEditAddressDialog(address)}
-                            type="button"
-                            variant="ghost"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            aria-label="Delete address"
-                            className="h-7 w-7 rounded-md border-0 p-0 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200"
-                            disabled={deletingAddress === address.deliveryAddress}
-                            onClick={() => void handleDeleteAddress(address.deliveryAddress)}
-                            type="button"
-                            variant="ghost"
-                          >
-                            {deletingAddress === address.deliveryAddress ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400">No addresses saved for this market yet.</p>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
-              <p className="text-base font-semibold text-white">No market selected</p>
-              <p className="mt-2 text-sm text-slate-400">Choose a market to manage addresses and rates.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+	        {loading ? (
+	          <div className="flex items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/60 px-6 py-14">
+	            <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
+	          </div>
+	        ) : selectedMarketFilter ? (
+	          <div className="space-y-2">
+	            {selectedMarketAddresses.length > 0 ? (
+	              <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-900/60">
+	                <table className="dense-table min-w-[1180px] w-full border-collapse text-sm">
+	                  <thead>
+	                    <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
+	                      <th className="border border-slate-700 px-4 py-3 text-left">Name</th>
+	                      <th className="border border-slate-700 px-4 py-3 text-left">Street</th>
+	                      <th className="border border-slate-700 px-4 py-3 text-left">Locality</th>
+	                      <th className="border border-slate-700 px-4 py-3 text-left">Phone</th>
+	                      <th className="border border-slate-700 px-4 py-3 text-left">Delivery Time</th>
+	                      <th className="border border-slate-700 px-4 py-3 text-left">Delivery Point</th>
+	                      <th className="border border-slate-700 px-4 py-3 text-left">Notes</th>
+	                      <th className="border border-slate-700 px-4 py-3 text-center">Default</th>
+	                      <th className="border border-slate-700 px-4 py-3 text-center">Actions</th>
+	                    </tr>
+	                  </thead>
+	                  <tbody>
+	                    {selectedMarketAddresses.map((address) => {
+	                      const parsed = parseDeliveryAddress(address.deliveryAddress);
+	                      return (
+	                        <tr
+	                          key={`${selectedMarketFilter}-${address.deliveryAddress}`}
+	                          className={address.isDefault ? 'bg-violet-500/10' : 'bg-slate-900/50'}
+	                        >
+	                          <td className="border border-slate-700 px-4 py-3 font-semibold text-white">{parsed.name || 'Delivery address'}</td>
+	                          <td className="border border-slate-700 px-4 py-3 text-slate-200">{formatAddressLine(parsed) || '-'}</td>
+	                          <td className="border border-slate-700 px-4 py-3 text-slate-200">
+	                            {[parsed.suburb, parsed.state, parsed.postcode].filter(Boolean).join(' ') || '-'}
+	                          </td>
+	                          <td className="border border-slate-700 px-4 py-3 text-slate-300">{parsed.phoneNumber || '-'}</td>
+	                          <td className="border border-slate-700 px-4 py-3 text-slate-300">{parsed.deliveryTime || '-'}</td>
+	                          <td className="border border-slate-700 px-4 py-3 text-slate-300">{parsed.deliveryPoint || '-'}</td>
+	                          <td className="border border-slate-700 px-4 py-3 text-slate-300">{parsed.deliveryNotes || '-'}</td>
+	                          <td className="border border-slate-700 px-4 py-3 text-center">
+	                            {address.isDefault ? <Badge className="px-2 py-0.5 text-[10px] font-bold">Default</Badge> : '-'}
+	                          </td>
+	                          <td className="border border-slate-700 px-4 py-3">
+	                            <div className="flex items-center justify-center gap-1">
+	                              <Button
+	                                aria-label="Edit address"
+	                                className="h-8 w-8 rounded-lg border-0 p-0 hover:bg-slate-700/70"
+	                                onClick={() => openEditAddressDialog(address)}
+	                                size="icon"
+	                                type="button"
+	                                variant="ghost"
+	                              >
+	                                <Pencil className="h-4 w-4" />
+	                              </Button>
+	                              <Button
+	                                aria-label="Delete address"
+	                                className="h-8 w-8 rounded-lg border-0 p-0 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200"
+	                                disabled={deletingAddress === address.deliveryAddress}
+	                                onClick={() => void handleDeleteAddress(address.deliveryAddress)}
+	                                size="icon"
+	                                type="button"
+	                                variant="ghost"
+	                              >
+	                                {deletingAddress === address.deliveryAddress ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+	                              </Button>
+	                            </div>
+	                          </td>
+	                        </tr>
+	                      );
+	                    })}
+	                  </tbody>
+	                </table>
+	              </div>
+	            ) : (
+	              <div className="rounded-2xl border border-slate-700 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-400">
+	                No addresses saved for this market yet.
+	              </div>
+	            )}
+	          </div>
+	        ) : (
+	          <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
+	            <p className="text-base font-semibold text-white">No market selected</p>
+	            <p className="mt-2 text-sm text-slate-400">Choose a market to manage addresses and rates.</p>
+	          </div>
+	        )}
+	      </section>
 
       <Dialog
         open={addressDialogOpen}
@@ -772,6 +780,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
             </div>
             <div className="flex justify-end gap-3">
               <Button
+                className="h-11 px-5 text-base"
                 onClick={() => {
                   setAddressDialogOpen(false);
                   setAddressForm(emptyAddressForm());
@@ -785,6 +794,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
                 Cancel
               </Button>
               <Button
+                className="h-11 min-w-[160px] px-5 text-base"
                 disabled={savingDeliveryAddress || !selectedMarketFilter}
                 onClick={() => void handleSaveDeliveryAddress()}
               >
@@ -796,5 +806,7 @@ export function ShippingSettingsScreen({ onBack, tenantId }: ShippingSettingsScr
         </DialogContent>
       </Dialog>
     </main>
+    </AdminWorkspaceShell>
   );
 }
+

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, LoaderCircle, Shield } from 'lucide-react';
-import { CalculatorMappingRecord, formatKeys, FormatKey, MarketAssetPrintingCostRecord, PrintingCostBreakdown, TenantRecord } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from '@flowiq/ui';
+import { CircleDollarSign, LoaderCircle, Shield } from 'lucide-react';
+import { CalculatorMappingRecord, formatKeys, FormatKey, PrintingCostBreakdown, TenantRecord } from '@flowiq/shared';
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import { fetchCalculatorMappings, fetchMarketAssetPrintingCosts, fetchTenants, upsertMarketAssetPrintingCosts } from '../services/adminApi';
 
@@ -76,7 +76,6 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(tenantId ?? session?.user.tenantId ?? null);
   const [mappings, setMappings] = useState<CalculatorMappingRecord[]>([]);
-  const [costRecords, setCostRecords] = useState<MarketAssetPrintingCostRecord[]>([]);
   const [draftsByAsset, setDraftsByAsset] = useState<Record<string, AssetCostDraft>>({});
   const [marketFilter, setMarketFilter] = useState<string>('');
   const [dirtyRows, setDirtyRows] = useState<Record<string, boolean>>({});
@@ -138,8 +137,6 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
           return left.asset.localeCompare(right.asset);
         });
         setMappings(sortedMappings);
-        setCostRecords(costResponse.costs);
-
         const costByKey = new Map(costResponse.costs.map((record) => [costKey(record.market, record.assetId), record.costs]));
         const nextDrafts: Record<string, AssetCostDraft> = {};
         sortedMappings.forEach((mapping) => {
@@ -323,7 +320,6 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
         });
 
       const response = await upsertMarketAssetPrintingCosts({ costs: payload }, selectedTenantId);
-      setCostRecords(response.costs);
       setDirtyRows((current) => {
         const next = { ...current };
         dirtyAssetIds.forEach((assetId) => {
@@ -355,11 +351,16 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
 
   if (!isSuperAdmin) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8">
+      <main className="dense-main flex min-h-screen w-full flex-col gap-6">
         <Card>
           <CardHeader className="p-6">
             <CardTitle className="flex items-center gap-3"><Shield className="h-5 w-5 text-violet-300" /> Printing Costs</CardTitle>
             <CardDescription>This section is available to super admin only.</CardDescription>
+            <div>
+              <Button className="mt-3" onClick={onBack} type="button" variant="secondary">
+                Back
+              </Button>
+            </div>
           </CardHeader>
         </Card>
       </main>
@@ -367,44 +368,38 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8">
-      <header className="space-y-4">
-        <Button onClick={onBack} variant="ghost">
-          <ArrowLeft className="h-4 w-4" />
-          Back to Admin
-        </Button>
+    <main className="dense-main flex min-h-screen w-full flex-col gap-6">
+      <header>
         <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
-          <Shield className="h-3.5 w-3.5" />
-          Printing Cost Admin
+          <CircleDollarSign className="h-3.5 w-3.5" />
+          Printing Cost
         </Badge>
       </header>
 
       {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 
-      <Card>
-        <CardHeader className="p-5 pb-0">
-          <CardTitle>Scope and Market Poster Cost</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 p-5 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor="printing-cost-tenant">Tenant</Label>
+      <section className="flex flex-wrap gap-4">
+          <div className="w-full sm:w-[320px]">
+            <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+              <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Tenant</span>
             <select
               id="printing-cost-tenant"
-              className="h-11 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100"
+                className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
               value={selectedTenantId ?? ''}
               onChange={(event) => setSelectedTenantId(event.target.value || null)}
             >
-              <option value="">Select tenant</option>
               {tenants.map((tenant) => (
                 <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
               ))}
             </select>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="printing-cost-market-filter">Market</Label>
+          <div className="w-full sm:w-[320px]">
+            <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+              <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
             <select
               id="printing-cost-market-filter"
-              className="h-11 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100"
+                className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
               value={marketFilter}
               onChange={(event) => setMarketFilter(event.target.value)}
             >
@@ -412,40 +407,36 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
                 <option key={`printing-cost-market-${market}`} value={market}>
                   {market}
                 </option>
-              ))}
-            </select>
-            <p className="text-xs text-slate-400">Loaded costs: {costRecords.length}</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="printing-cost-global-poster">Poster Cost ($)</Label>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-300">$</span>
-              <Input
-                id="printing-cost-global-poster"
-                className="h-11"
-                inputMode="decimal"
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder={marketFilter ? `Set for ${marketFilter}` : 'Select a market'}
-                value={marketPosterCost}
-                onChange={(event) => updateMarketPosterDraft(event.target.value)}
-              />
+                ))}
+              </select>
             </div>
-            <p className="text-xs text-slate-400">Applied to 8-sheet, 6-sheet, 4-sheet, 2-sheet, and QA0 for the selected market only.</p>
           </div>
-        </CardContent>
-      </Card>
+          <div className="w-full sm:w-[320px]">
+            <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+              <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Poster Cost</span>
+              <div className="flex h-full flex-1 items-center gap-2 px-3">
+                <span className="text-slate-300">$</span>
+                <Input
+                  id="printing-cost-global-poster"
+                  className="h-full border-0 bg-transparent px-0 text-sm [appearance:textfield] focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  inputMode="decimal"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={marketPosterCost}
+                  onChange={(event) => updateMarketPosterDraft(event.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+      </section>
 
-      <Card>
-        <CardHeader className="p-5 pb-0">
-          <CardTitle>Asset printing costs</CardTitle>
-          <CardDescription>
-            Poster Cost applies to the selected market. Mega pricing uses one value per asset for Mega, DOT M, and MP. Changes auto-save.
-            {saving ? ' Saving...' : ''}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 p-5">
+      <section className="space-y-4">
+        {saving ? (
+          <div className="flex justify-end">
+            <p className="text-sm text-slate-300">Saving...</p>
+          </div>
+        ) : null}
           {loading ? (
             <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
               <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
@@ -457,7 +448,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
             </div>
           ) : (
             <div className="rounded-2xl border border-slate-700 bg-slate-900/60">
-              <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
+              <table className="dense-table w-full table-fixed border-collapse text-xs sm:text-sm">
                 <colgroup>
                   <col className="w-[24%]" />
                   <col className="w-[52%]" />
@@ -502,8 +493,8 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
               </table>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </section>
     </main>
   );
 }
+

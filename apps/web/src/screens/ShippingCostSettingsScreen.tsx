@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, LoaderCircle, Shield, Truck } from 'lucide-react';
+import { LoaderCircle, Shield, Truck } from 'lucide-react';
 import { CalculatorMappingRecord, MarketAssetShippingCostInput, MarketAssetShippingCostRecord, MarketShippingRateRecord, TenantRecord } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from '@flowiq/ui';
+import { Badge, Card, CardDescription, CardHeader, CardTitle, Input } from '@flowiq/ui';
+import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
 import { useAuth } from '../context/AuthContext';
 import {
   fetchCalculatorMappings,
@@ -15,7 +16,7 @@ import {
 type ShippingCostSettingsScreenProps = {
   onBack: () => void;
   tenantId?: string | null;
-};
+} & Omit<AdminWorkspaceHandlers, 'onBack' | 'onOpenShippingCosts'>;
 
 type AssetShippingDraft = {
   megaShippingRate: string;
@@ -31,7 +32,7 @@ function emptyAssetShippingDraft(): AssetShippingDraft {
   };
 }
 
-export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSettingsScreenProps) {
+export function ShippingCostSettingsScreen({ onBack, onOpenMappings, onOpenPrintingCosts, onOpenShippingSettings, onOpenUsers, tenantId }: ShippingCostSettingsScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -359,7 +360,7 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
 
   if (!isSuperAdmin) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8">
+      <main className="dense-main mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8">
         <Card>
           <CardHeader className="p-6">
             <CardTitle className="flex items-center gap-3"><Shield className="h-5 w-5 text-violet-300" /> Shipping Costs</CardTitle>
@@ -371,41 +372,51 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8">
-      <header className="space-y-4">
-        <Button onClick={onBack} variant="ghost">
-          <ArrowLeft className="h-4 w-4" />
-          Back to Admin
-        </Button>
+    <AdminWorkspaceShell
+      activeSection="shipping-costs"
+      canAccessManagement
+      canAccessShippingCosts={session?.user.role === 'super_admin'}
+      canAccessPrintingCosts={session?.user.role === 'super_admin'}
+      onBack={onBack}
+      onOpenLanding={onBack}
+      onOpenMappings={onOpenMappings}
+      onOpenPrintingCosts={onOpenPrintingCosts}
+      onOpenShippingCosts={() => {}}
+      onOpenShippingSettings={onOpenShippingSettings}
+      onOpenUsers={onOpenUsers}
+    >
+    <main className="dense-main flex min-h-screen w-full flex-col gap-6">
+      <header>
         <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
           <Truck className="h-3.5 w-3.5" />
-          Shipping Cost Admin
+          Freight Rate Card
         </Badge>
       </header>
 
       {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 
-      <Card>
-        <CardContent className="grid gap-4 p-5 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="shipping-cost-tenant">Tenant</Label>
+      <section className="flex flex-wrap gap-4">
+        <div className="w-full sm:w-[320px]">
+          <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+            <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Tenant</span>
             <select
               id="shipping-cost-tenant"
-              className="h-11 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100"
+              className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
               value={selectedTenantId ?? ''}
               onChange={(event) => setSelectedTenantId(event.target.value || null)}
             >
-              <option value="">Select tenant</option>
               {tenants.map((tenant) => (
                 <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
               ))}
             </select>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="shipping-cost-market-filter">Market</Label>
+        </div>
+        <div className="w-full sm:w-[320px]">
+          <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+            <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
             <select
               id="shipping-cost-market-filter"
-              className="h-11 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100"
+              className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
               value={marketFilter}
               onChange={(event) => setMarketFilter(event.target.value)}
             >
@@ -414,207 +425,228 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
               ))}
             </select>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+        <div className="w-full sm:w-[220px]">
+          <div className="inline-flex h-11 w-full overflow-hidden rounded-xl border border-slate-600 bg-slate-800">
+            <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Use flat rate</span>
+            <div className="inline-flex h-full flex-1 items-center gap-1 bg-slate-800 p-1">
+              <button
+                type="button"
+                aria-pressed={!marketUseFlatRate}
+                className={`h-full flex-1 rounded-md text-sm font-medium transition ${
+                  !marketUseFlatRate
+                    ? 'bg-slate-600/70 text-white'
+                    : 'text-slate-300 hover:bg-slate-700/60'
+                }`}
+                onClick={() => {
+                  setMarketUseFlatRate(false);
+                  setMarketRateDirty(true);
+                }}
+              >
+                No
+              </button>
+              <button
+                type="button"
+                aria-pressed={marketUseFlatRate}
+                className={`h-full flex-1 rounded-md text-sm font-medium transition ${
+                  marketUseFlatRate
+                    ? 'bg-violet-500/80 text-white'
+                    : 'text-slate-300 hover:bg-slate-700/60'
+                }`}
+                onClick={() => {
+                  setMarketUseFlatRate(true);
+                  setMarketRateDirty(true);
+                }}
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 p-5 pb-0">
-          <CardTitle>Freight Rate Card</CardTitle>
-          <label className="inline-flex items-center gap-2 text-sm text-slate-200">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-slate-500 bg-slate-800"
-              checked={marketUseFlatRate}
-              onChange={(event) => {
-                setMarketUseFlatRate(event.target.checked);
-                setMarketRateDirty(true);
-              }}
-            />
-            Use flat rate
-          </label>
-        </CardHeader>
-        <CardContent className="space-y-4 p-5">
-          {loading ? (
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
-              <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
-              Loading shipping costs...
+      <section className="space-y-4">
+        {loading ? (
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
+            <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
+            Loading shipping costs...
+          </div>
+        ) : visibleMappings.length === 0 ? (
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-6 text-sm text-slate-400">
+            No assets found for the selected scope.
+          </div>
+        ) : (
+          <>
+            <div className="rounded-2xl border border-slate-700 bg-slate-900/60">
+              <table className="dense-table w-full table-fixed border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
+                    <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Market</th>
+                    <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Sheeters</th>
+                    <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-center sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3'}>Sheeters - Freight ($)</th>
+                    {!marketUseFlatRate ? (
+                      <th className="w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3">Sets / Shipping Box</th>
+                    ) : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t border-slate-700/70 bg-slate-800/65">
+                    <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
+                    <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">2 Sheeter</td>
+                    <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-300">$</span>
+                        <Input
+                          id="two-sheeter-price"
+                          className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                          inputMode="decimal"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={marketTwoSheeterPrice}
+                          onChange={(event) => {
+                            setMarketTwoSheeterPrice(event.target.value);
+                            setMarketRateDirty(true);
+                          }}
+                        />
+                      </div>
+                    </td>
+                    {!marketUseFlatRate ? (
+                      <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                        <Input
+                          className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                          inputMode="numeric"
+                          type="number"
+                          min={1}
+                          step="1"
+                          value={marketTwoSheeterSetsPerBox}
+                          onChange={(event) => {
+                            setMarketTwoSheeterSetsPerBox(event.target.value);
+                            setMarketRateDirty(true);
+                          }}
+                        />
+                      </td>
+                    ) : null}
+                  </tr>
+                  <tr className="border-t border-slate-700/70 bg-slate-800/65">
+                    <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
+                    <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">4 Sheeter</td>
+                    <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-300">$</span>
+                        <Input
+                          id="four-sheeter-price"
+                          className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                          inputMode="decimal"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={marketFourSheeterPrice}
+                          onChange={(event) => {
+                            setMarketFourSheeterPrice(event.target.value);
+                            setMarketRateDirty(true);
+                          }}
+                        />
+                      </div>
+                    </td>
+                    {!marketUseFlatRate ? (
+                      <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                        <Input
+                          className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                          inputMode="numeric"
+                          type="number"
+                          min={1}
+                          step="1"
+                          value={marketFourSheeterSetsPerBox}
+                          onChange={(event) => {
+                            setMarketFourSheeterSetsPerBox(event.target.value);
+                            setMarketRateDirty(true);
+                          }}
+                        />
+                      </td>
+                    ) : null}
+                  </tr>
+                  <tr className="border-t border-slate-700/70 bg-slate-800/65">
+                    <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
+                    <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">6 Sheeter</td>
+                    <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-300">$</span>
+                        <Input
+                          id="six-sheeter-price"
+                          className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                          inputMode="decimal"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={marketSixSheeterPrice}
+                          onChange={(event) => {
+                            setMarketSixSheeterPrice(event.target.value);
+                            setMarketRateDirty(true);
+                          }}
+                        />
+                      </div>
+                    </td>
+                    {!marketUseFlatRate ? (
+                      <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                        <Input
+                          className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                          inputMode="numeric"
+                          type="number"
+                          min={1}
+                          step="1"
+                          value={marketSixSheeterSetsPerBox}
+                          onChange={(event) => {
+                            setMarketSixSheeterSetsPerBox(event.target.value);
+                            setMarketRateDirty(true);
+                          }}
+                        />
+                      </td>
+                    ) : null}
+                  </tr>
+                  <tr className="border-t border-slate-700/70 bg-slate-800/65">
+                      <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
+                      <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">8 Sheeter</td>
+                      <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-slate-300">$</span>
+                          <Input
+                            id="eight-sheeter-price"
+                            className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                            inputMode="decimal"
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={marketEightSheeterPrice}
+                            onChange={(event) => {
+                              setMarketEightSheeterPrice(event.target.value);
+                              setMarketRateDirty(true);
+                            }}
+                          />
+                        </div>
+                      </td>
+                      {!marketUseFlatRate ? (
+                        <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                          <Input
+                            className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                            inputMode="numeric"
+                            type="number"
+                            min={1}
+                            step="1"
+                            value={marketEightSheeterSetsPerBox}
+                            onChange={(event) => {
+                              setMarketEightSheeterSetsPerBox(event.target.value);
+                              setMarketRateDirty(true);
+                            }}
+                          />
+                        </td>
+                      ) : null}
+                    </tr>
+                </tbody>
+              </table>
             </div>
-          ) : visibleMappings.length === 0 ? (
-            <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-6 text-sm text-slate-400">
-              No assets found for the selected scope.
-            </div>
-          ) : (
-            <>
               <div className="rounded-2xl border border-slate-700 bg-slate-900/60">
-                <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
-                  <thead>
-                    <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
-                      <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Market</th>
-                      <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Sheeters</th>
-                      <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-center sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3'}>Sheeters - Freight ($)</th>
-                      {!marketUseFlatRate ? (
-                        <th className="w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3">Sets / Shipping Box</th>
-                      ) : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-t border-slate-700/70 bg-slate-800/65">
-                      <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
-                      <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">2 Sheeter</td>
-                      <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-slate-300">$</span>
-                          <Input
-                            id="two-sheeter-price"
-                            className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
-                            inputMode="decimal"
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={marketTwoSheeterPrice}
-                            onChange={(event) => {
-                              setMarketTwoSheeterPrice(event.target.value);
-                              setMarketRateDirty(true);
-                            }}
-                          />
-                        </div>
-                      </td>
-                      {!marketUseFlatRate ? (
-                        <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                          <Input
-                            className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
-                            inputMode="numeric"
-                            type="number"
-                            min={1}
-                            step="1"
-                            value={marketTwoSheeterSetsPerBox}
-                            onChange={(event) => {
-                              setMarketTwoSheeterSetsPerBox(event.target.value);
-                              setMarketRateDirty(true);
-                            }}
-                          />
-                        </td>
-                      ) : null}
-                    </tr>
-                    <tr className="border-t border-slate-700/70 bg-slate-800/65">
-                      <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
-                      <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">4 Sheeter</td>
-                      <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-slate-300">$</span>
-                          <Input
-                            id="four-sheeter-price"
-                            className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
-                            inputMode="decimal"
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={marketFourSheeterPrice}
-                            onChange={(event) => {
-                              setMarketFourSheeterPrice(event.target.value);
-                              setMarketRateDirty(true);
-                            }}
-                          />
-                        </div>
-                      </td>
-                      {!marketUseFlatRate ? (
-                        <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                          <Input
-                            className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
-                            inputMode="numeric"
-                            type="number"
-                            min={1}
-                            step="1"
-                            value={marketFourSheeterSetsPerBox}
-                            onChange={(event) => {
-                              setMarketFourSheeterSetsPerBox(event.target.value);
-                              setMarketRateDirty(true);
-                            }}
-                          />
-                        </td>
-                      ) : null}
-                    </tr>
-                    <tr className="border-t border-slate-700/70 bg-slate-800/65">
-                      <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
-                      <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">6 Sheeter</td>
-                      <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-slate-300">$</span>
-                          <Input
-                            id="six-sheeter-price"
-                            className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
-                            inputMode="decimal"
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={marketSixSheeterPrice}
-                            onChange={(event) => {
-                              setMarketSixSheeterPrice(event.target.value);
-                              setMarketRateDirty(true);
-                            }}
-                          />
-                        </div>
-                      </td>
-                      {!marketUseFlatRate ? (
-                        <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                          <Input
-                            className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
-                            inputMode="numeric"
-                            type="number"
-                            min={1}
-                            step="1"
-                            value={marketSixSheeterSetsPerBox}
-                            onChange={(event) => {
-                              setMarketSixSheeterSetsPerBox(event.target.value);
-                              setMarketRateDirty(true);
-                            }}
-                          />
-                        </td>
-                      ) : null}
-                    </tr>
-                    <tr className="border-t border-slate-700/70 bg-slate-800/65">
-                        <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
-                        <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">8 Sheeter</td>
-                        <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-slate-300">$</span>
-                            <Input
-                              id="eight-sheeter-price"
-                              className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
-                              inputMode="decimal"
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              value={marketEightSheeterPrice}
-                              onChange={(event) => {
-                                setMarketEightSheeterPrice(event.target.value);
-                                setMarketRateDirty(true);
-                              }}
-                            />
-                          </div>
-                        </td>
-                        {!marketUseFlatRate ? (
-                          <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                            <Input
-                              className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
-                              inputMode="numeric"
-                              type="number"
-                              min={1}
-                              step="1"
-                              value={marketEightSheeterSetsPerBox}
-                              onChange={(event) => {
-                                setMarketEightSheeterSetsPerBox(event.target.value);
-                                setMarketRateDirty(true);
-                              }}
-                            />
-                          </td>
-                        ) : null}
-                      </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="rounded-2xl border border-slate-700 bg-slate-900/60">
-                <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
+                <table className="dense-table w-full table-fixed border-collapse text-xs sm:text-sm">
                   <thead>
                     <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
                       <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Market</th>
@@ -664,10 +696,11 @@ export function ShippingCostSettingsScreen({ onBack, tenantId }: ShippingCostSet
                   </tbody>
                 </table>
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+          </>
+        )}
+      </section>
     </main>
+    </AdminWorkspaceShell>
   );
 }
+

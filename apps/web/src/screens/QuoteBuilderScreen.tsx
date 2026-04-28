@@ -1,5 +1,5 @@
 import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LayoutGrid, LoaderCircle, LogOut, Pencil, Plus, Shield, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LayoutGrid, LoaderCircle, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignPrintImage,
@@ -34,7 +34,7 @@ import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 import ExcelJS from 'exceljs';
 
 const steps = [
-  { key: 'creative', title: 'Creative' },
+  { key: 'creative', title: 'Setup' },
   { key: 'schedule', title: 'Schedule' },
   { key: 'review', title: 'Review' },
   { key: 'finalize', title: 'Finalise' },
@@ -706,7 +706,7 @@ export function QuoteBuilderScreen({
   onBack?: () => void;
   onOpenAdmin?: () => void;
 }) {
-  const { session, logout } = useAuth();
+  const { session } = useAuth();
   const [values, setValues] = useState<OrderFormValues>(() => defaultValues);
   const [campaignId, setCampaignId] = useState<string | null>(selectedCampaignId ?? null);
   const [campaignStatus, setCampaignStatus] = useState<CampaignRecord['status']>('draft');
@@ -2361,49 +2361,29 @@ export function QuoteBuilderScreen({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-      <section className="relative overflow-hidden rounded-[32px] border border-slate-700/70 bg-slate-950/70 px-6 py-8 shadow-2xl shadow-slate-950/40">
+    <main className="dense-main flex min-h-screen w-full flex-col gap-6">
+      <section className="relative overflow-hidden rounded-[24px] border border-slate-700/70 bg-slate-950/70 px-5 py-5 shadow-2xl shadow-slate-950/40">
         <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.2),transparent_52%)]" />
         <div className="relative flex flex-col gap-5">
-          <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:gap-6">
-            <div className="space-y-3 lg:min-w-[260px]">
+          <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-6">
+            <div className="space-y-3 lg:justify-self-start">
               <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
                 <LayoutGrid className="h-3.5 w-3.5" />
                 Campaign Builder
               </Badge>
-              <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">ADS CONNECT</h1>
             </div>
-            <div className="min-w-0 px-1 py-1 lg:justify-self-stretch">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Active Campaign</p>
-              <p className="mt-1 max-w-full truncate text-xl font-semibold text-white sm:text-2xl" title={activeCampaignName}>
+            <div className="min-w-0 px-1 py-1 text-center lg:justify-self-center">
+              <p className="max-w-[min(70vw,820px)] truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400" title={activeCampaignName}>
                 {activeCampaignName}
               </p>
             </div>
-            <div className="flex flex-col gap-3 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-200 lg:justify-self-end">
-              <div>
-                <p className="font-semibold text-white">{session?.user.name}</p>
-                <p className="text-slate-400">
-                  {session?.user.role.replace('_', ' ')} • {session?.user.tenantName || 'Global'}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {onBack ? (
-                  <Button disabled={savingCampaign} onClick={() => void handleBackToDashboard()} size="sm" variant="ghost">
-                    <ArrowLeft className="h-4 w-4" />
-                    Campaigns
-                  </Button>
-                ) : null}
-                {onOpenAdmin ? (
-                  <Button onClick={onOpenAdmin} size="sm" variant="secondary">
-                    <Shield className="h-4 w-4" />
-                    Admin
-                  </Button>
-                ) : null}
-                <Button onClick={() => void logout()} size="sm" variant="outline">
-                  <LogOut className="h-4 w-4" />
-                  Sign Out
+            <div className="flex flex-wrap gap-2 lg:justify-self-end">
+              {onBack ? (
+                <Button disabled={savingCampaign} onClick={() => void handleBackToDashboard()} size="sm" variant="ghost">
+                  <ArrowLeft className="h-4 w-4" />
+                  Campaigns
                 </Button>
-              </div>
+              ) : null}
             </div>
           </div>
 
@@ -2439,11 +2419,7 @@ export function QuoteBuilderScreen({
         <section className="space-y-6">
           {currentStep.key === 'creative' ? (
             <Card>
-              <CardHeader className="p-6 pb-0">
-                <CardTitle>Campaign Setup</CardTitle>
-                <CardDescription>Set campaign details and upload one or more campaign artworks before planning markets.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6 p-6">
+              <CardContent className="space-y-5 p-6">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(320px,1.4fr)_220px_220px_160px]">
                   <TextField id="campaign-name" label="Campaign Name" value={values.campaignName} onChange={(value) => updateField('campaignName', value)} />
                   <div className="space-y-2">
@@ -2514,98 +2490,95 @@ export function QuoteBuilderScreen({
                   </p>
                 ) : null}
 
-                <div className="space-y-4 rounded-[24px] border border-slate-700 bg-slate-900/50 p-4 sm:p-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-base font-semibold text-white">Campaign Artworks</p>
-                      <p className="text-sm text-slate-400">Upload one or multiple files. You can edit the name, replace the file, or remove rows.</p>
-                    </div>
-                    <Button disabled={uploadingArtworks} onClick={handlePickPrintImages} type="button" variant="secondary">
-                      {uploadingArtworks ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                      {uploadingArtworks
-                        ? `Uploading Artworks (${artworkUploadCompleted}/${Math.max(artworkUploadTotal, 1)})`
-                        : 'Upload Artworks'}
-                    </Button>
-                  </div>
-                  {uploadingArtworks ? (
-                    <p className="text-sm text-slate-300" role="status">
-                      Uploading files in the background. Please wait...
-                    </p>
-                  ) : null}
-                  <input
-                    ref={imageUploadInputRef}
-                    className="hidden"
-                    disabled={uploadingArtworks}
-                    multiple
-                    onChange={(event) => void handlePrintImageSelection(event)}
-                    type="file"
-                  />
-                  <input ref={replaceImageInputRef} className="hidden" onChange={(event) => void handleReplacePrintImage(event)} type="file" />
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-slate-400">{values.printImages.length} artwork{values.printImages.length === 1 ? '' : 's'} uploaded</p>
+                  <Button className="h-11 px-5" disabled={uploadingArtworks} onClick={handlePickPrintImages} type="button" variant="secondary">
+                    {uploadingArtworks ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    {uploadingArtworks
+                      ? `Uploading Artworks (${artworkUploadCompleted}/${Math.max(artworkUploadTotal, 1)})`
+                      : 'Upload Artworks'}
+                  </Button>
+                </div>
+                {uploadingArtworks ? (
+                  <p className="text-sm text-slate-300" role="status">
+                    Uploading files in the background. Please wait...
+                  </p>
+                ) : null}
+                <input
+                  ref={imageUploadInputRef}
+                  className="hidden"
+                  disabled={uploadingArtworks}
+                  multiple
+                  onChange={(event) => void handlePrintImageSelection(event)}
+                  type="file"
+                />
+                <input ref={replaceImageInputRef} className="hidden" onChange={(event) => void handleReplacePrintImage(event)} type="file" />
 
-                  {values.printImages.length > 0 ? (
-                    <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-950/70">
-                      <table className="min-w-[860px] w-full border-collapse text-sm">
-                        <thead>
-                          <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
-                            <th className="border border-slate-700 px-4 py-3 text-left">Preview</th>
-                            <th className="border border-slate-700 px-4 py-3 text-left">Name</th>
-                            <th className="border border-slate-700 px-4 py-3 text-left">File</th>
-                            <th className="border border-slate-700 px-4 py-3 text-center">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {values.printImages.map((image) => (
-                            <tr key={image.id} className="border-t border-slate-700/70 bg-slate-800/60">
-                              <td className="border border-slate-700 px-4 py-3">
-                                <div className="h-14 w-20 overflow-hidden rounded-lg border border-slate-600 bg-slate-900">
-                                  {image.imageUrl &&
-                                  (image.mimeType.toLowerCase().startsWith('image/') ||
-                                    image.mimeType.toLowerCase() === 'application/pdf' ||
-                                    image.fileName.toLowerCase().endsWith('.pdf')) ? (
-                                    image.mimeType.toLowerCase().startsWith('image/') ? (
-                                    <img alt={image.name} className="h-full w-full object-cover" src={buildApiUrl(image.imageUrl)} />
-                                    ) : (
-                                      <iframe
-                                        className="h-full w-full bg-white"
-                                        src={`${buildApiUrl(image.imageUrl)}#toolbar=0&navpanes=0&scrollbar=0`}
-                                        title={`${image.name} preview`}
-                                      />
-                                    )
+                <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-950/70">
+                  <table className="dense-table min-w-[860px] w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
+                        <th className="border border-slate-700 px-4 py-3 text-left">Preview</th>
+                        <th className="border border-slate-700 px-4 py-3 text-left">Name</th>
+                        <th className="border border-slate-700 px-4 py-3 text-left">File</th>
+                        <th className="border border-slate-700 px-4 py-3 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {values.printImages.length > 0 ? (
+                        values.printImages.map((image) => (
+                          <tr key={image.id} className="border-t border-slate-700/70 bg-slate-800/60">
+                            <td className="border border-slate-700 px-4 py-3">
+                              <div className="h-14 w-20 overflow-hidden rounded-lg border border-slate-600 bg-slate-900">
+                                {image.imageUrl &&
+                                (image.mimeType.toLowerCase().startsWith('image/') ||
+                                  image.mimeType.toLowerCase() === 'application/pdf' ||
+                                  image.fileName.toLowerCase().endsWith('.pdf')) ? (
+                                  image.mimeType.toLowerCase().startsWith('image/') ? (
+                                  <img alt={image.name} className="h-full w-full object-cover" src={buildApiUrl(image.imageUrl)} />
                                   ) : (
-                                    <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                      File
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="border border-slate-700 px-4 py-3">
-                                <Input value={image.name} onChange={(event) => updatePrintImage(image.id, (current) => ({ ...current, name: event.target.value }))} />
-                              </td>
-                              <td className="border border-slate-700 px-4 py-3 text-slate-200">{image.fileName}</td>
-                              <td className="border border-slate-700 px-4 py-3">
-                                <div className="flex items-center justify-center gap-1">
-                                  <Button className="h-8 w-8" onClick={() => beginReplacePrintImage(image.id)} size="icon" type="button" variant="ghost">
-                                    <Pencil className="h-4 w-4 text-slate-200" />
-                                  </Button>
-                                  <Button className="h-8 w-8" onClick={() => removePrintImage(image.id)} size="icon" type="button" variant="ghost">
-                                    <Trash2 className="h-4 w-4 text-rose-300" />
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-6 text-center text-sm text-slate-400">
-                      No artworks uploaded yet.
-                    </div>
-                  )}
+                                    <iframe
+                                      className="h-full w-full bg-white"
+                                      src={`${buildApiUrl(image.imageUrl)}#toolbar=0&navpanes=0&scrollbar=0`}
+                                      title={`${image.name} preview`}
+                                    />
+                                  )
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                    File
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="border border-slate-700 px-4 py-3">
+                              <Input value={image.name} onChange={(event) => updatePrintImage(image.id, (current) => ({ ...current, name: event.target.value }))} />
+                            </td>
+                            <td className="border border-slate-700 px-4 py-3 text-slate-200">{image.fileName}</td>
+                            <td className="border border-slate-700 px-4 py-3">
+                              <div className="flex items-center justify-center gap-1">
+                                <Button className="h-8 w-8" onClick={() => beginReplacePrintImage(image.id)} size="icon" type="button" variant="ghost">
+                                  <Pencil className="h-4 w-4 text-slate-200" />
+                                </Button>
+                                <Button className="h-8 w-8" onClick={() => removePrintImage(image.id)} size="icon" type="button" variant="ghost">
+                                  <Trash2 className="h-4 w-4 text-rose-300" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr className="bg-slate-900/50">
+                          <td className="border border-slate-700 px-4 py-8 text-center text-sm text-slate-400" colSpan={4}>
+                            No artworks uploaded yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button disabled={!canAdvanceFromCreative} onClick={() => navigateToStep(1)} type="button">
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <Button className="h-11 min-w-[220px] px-6 text-base" disabled={!canAdvanceFromCreative} onClick={() => navigateToStep(1)} type="button">
                     Continue To Schedule
                   </Button>
                 </div>
@@ -2684,7 +2657,7 @@ export function QuoteBuilderScreen({
                           </div>
                           <div className="rounded-2xl border border-slate-700/80 bg-slate-900/45 lg:overflow-visible">
                             <div className="overflow-x-auto lg:overflow-visible">
-                              <table className="min-w-[780px] w-full border-collapse">
+                              <table className="dense-table min-w-[780px] w-full border-collapse">
                               <colgroup>
                                 <col />
                                 <col className="w-[1%]" />
@@ -2749,7 +2722,7 @@ export function QuoteBuilderScreen({
                           </div>
 
                           <div title={canAddAssetForMarket(market) ? 'Add another asset' : addAssetDisabledReasonForMarket(market)}>
-                            <Button disabled={!canAddAssetForMarket(market)} onClick={() => addCampaignAsset(market.id)} type="button" variant="outline">
+                            <Button className="h-10 min-w-[132px] px-4 text-[15px]" disabled={!canAddAssetForMarket(market)} onClick={() => addCampaignAsset(market.id)} type="button" variant="secondary">
                               <Plus className="h-4 w-4" />
                               Add Asset
                             </Button>
@@ -2759,7 +2732,7 @@ export function QuoteBuilderScreen({
                             <div className="space-y-3">
                               <p className="text-sm font-semibold text-white">Market Totals</p>
                               <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-900/65">
-                                <table className="min-w-[860px] w-full border-collapse text-sm">
+                                <table className="dense-table min-w-[860px] w-full border-collapse text-sm">
                                   <thead>
                                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                                       <th className="border border-slate-700 px-4 py-3 text-left">Type</th>
@@ -2804,16 +2777,16 @@ export function QuoteBuilderScreen({
                   })}
                 </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <div title={canAddMarket ? 'Add another market' : addMarketDisabledReason}>
-                    <Button disabled={!canAddMarket} onClick={addCampaignMarket} type="button" variant="secondary">
+                    <Button className="h-11 min-w-[160px] px-5 text-base" disabled={!canAddMarket} onClick={addCampaignMarket} type="button" variant="secondary">
                       <Plus className="h-4 w-4" />
                       Add Market
                     </Button>
                   </div>
-                  <Button disabled={calculating} onClick={reviewTotals} type="button">
+                  <Button className="h-11 min-w-[180px] px-6 text-base" disabled={calculating} onClick={reviewTotals} type="button">
                     {calculating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                    {calculating ? 'Calculating…' : 'Review Totals'}
+                    {calculating ? 'Calculating...' : 'Review Totals'}
                   </Button>
                 </div>
               </CardContent>
@@ -2830,7 +2803,7 @@ export function QuoteBuilderScreen({
                 {summary ? (
                   <>
                     <div className="overflow-x-auto rounded-[24px] border border-slate-700 bg-slate-900/70">
-                      <table className="min-w-[1120px] w-full border-collapse text-sm">
+                      <table className="dense-table min-w-[1120px] w-full border-collapse text-sm">
                         <thead>
                           <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                             <th className="border border-slate-700 px-4 py-3 text-left">Market</th>
@@ -2911,7 +2884,7 @@ export function QuoteBuilderScreen({
                     </div>
 
                     <div className="flex gap-3">
-                      <Button onClick={() => setStepIndex(3)} type="button">
+                      <Button className="h-11 min-w-[220px] px-6 text-base" onClick={() => setStepIndex(3)} type="button">
                         Continue To Finalise
                       </Button>
                     </div>
@@ -2946,7 +2919,7 @@ export function QuoteBuilderScreen({
                         <p className="text-sm font-semibold text-white">{market.market || 'Select a market in Schedule first'}</p>
                       </div>
                       <div className="overflow-visible">
-                        <table className="w-full border-collapse table-fixed">
+                        <table className="dense-table w-full border-collapse table-fixed">
                           <thead>
                             <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                               <th className="px-4 py-3 text-left">Asset</th>
@@ -2982,7 +2955,7 @@ export function QuoteBuilderScreen({
                                         <td className="px-4 py-3">
                                           {formatKey ? (
                                             <SearchableSelect
-                                              emptyMessage={values.printImages.length ? 'No matching artworks found.' : 'No artworks uploaded in Creative step.'}
+                                              emptyMessage={values.printImages.length ? 'No matching artworks found.' : 'No artworks uploaded in Setup step.'}
                                               items={creativeImageOptions}
                                               label=""
                                               onValueChange={(value) =>
@@ -3060,13 +3033,13 @@ export function QuoteBuilderScreen({
                         <p className="mt-1 text-sm text-slate-400">PDF upload stays unchanged. This only refreshes the interaction and layout.</p>
                       </div>
                       <div className="flex flex-col gap-3 sm:flex-row">
-                        <Button onClick={openPurchaseOrderPicker} type="button" variant="secondary">
+                        <Button className="h-11 px-5 text-base" onClick={openPurchaseOrderPicker} type="button" variant="outline">
                           <Upload className="h-4 w-4" />
                           {selectedPurchaseOrderFile ? 'Change File' : 'Choose File'}
                         </Button>
-                        <Button disabled={uploadingPurchaseOrder} onClick={() => void handleUploadPurchaseOrder()} type="button" variant="outline">
+                        <Button className="h-11 min-w-[210px] px-5 text-base" disabled={uploadingPurchaseOrder} onClick={() => void handleUploadPurchaseOrder()} type="button">
                           {uploadingPurchaseOrder ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                          {uploadingPurchaseOrder ? 'Uploading…' : 'Upload Purchase Order'}
+                          {uploadingPurchaseOrder ? 'Uploading...' : 'Upload Purchase Order'}
                         </Button>
                       </div>
                     </div>
@@ -3095,6 +3068,7 @@ export function QuoteBuilderScreen({
               <CardContent className="space-y-3 p-6">
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Button
+                    className="h-11 min-w-[180px] px-5 text-base"
                     disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates || sendingAdsEmail}
                     onClick={() => void downloadArtworkExcelTemplates()}
                     type="button"
@@ -3104,6 +3078,7 @@ export function QuoteBuilderScreen({
                     {exportingTemplates ? 'Generating Files...' : 'Download Visuals'}
                   </Button>
                   <Button
+                    className="h-11 min-w-[210px] px-6 text-base"
                     disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates || sendingAdsEmail}
                     onClick={() => void sendArtworkEmailToAds()}
                     title={hasUploadedPurchaseOrder ? undefined : 'Upload purchase order before sending to ADS'}
@@ -3128,7 +3103,7 @@ export function QuoteBuilderScreen({
               <CardContent className="space-y-6 p-6">
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Button
-                    className="border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100"
+                    className="h-11 px-5 text-base border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100"
                     disabled
                     type="button"
                     variant="secondary"
@@ -3136,7 +3111,7 @@ export function QuoteBuilderScreen({
                     Create Quote In PrintIQ (Coming Soon)
                   </Button>
                   {onBack ? (
-                    <Button disabled={savingCampaign || submitting} onClick={() => void handleBackToDashboard()} type="button" variant="outline">
+                    <Button className="h-11 min-w-[180px] px-5 text-base" disabled={savingCampaign || submitting} onClick={() => void handleBackToDashboard()} type="button" variant="outline">
                       Go To Dashboard
                     </Button>
                   ) : null}
@@ -3264,3 +3239,6 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
+
+
+

@@ -33,3 +33,25 @@ select {
 ::selection {
   background: rgba(139, 92, 246, 0.35);
 }
+
+.dense-main {
+  gap: 1rem;
+  padding: 1rem;
+}
+
+@media (min-width: 640px) {
+  .dense-main {
+    padding: 1.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .dense-main {
+    padding: 1.5rem;
+  }
+}
+
+.dense-table th,
+.dense-table td {
+  padding: 0.5rem 0.75rem;
+}

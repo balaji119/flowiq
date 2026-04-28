@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, FolderKanban, LayoutGrid, LoaderCircle, LogOut, Pencil, Plus, Rows3, Shield, Trash2 } from 'lucide-react';
+import { CalendarDays, FolderKanban, LayoutGrid, LoaderCircle, Pencil, Plus, Rows3, Search, Trash2 } from 'lucide-react';
 import { CampaignListItem } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
-import { useAuth } from '../context/AuthContext';
 import { fetchActiveUsersCount } from '../services/authApi';
 import { acquireCampaignEditLock, deleteCampaign, fetchCampaigns } from '../services/campaignApi';
 
 type CampaignLandingScreenProps = {
   onOpenCampaign: (campaignId: string | null) => void;
-  onOpenAdmin?: () => void;
 };
 
 function formatCampaignDate(value: string) {
@@ -28,8 +26,7 @@ function statusStyles(status: CampaignListItem['status']) {
   return 'border-slate-600 bg-slate-800 text-slate-200';
 }
 
-export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignLandingScreenProps) {
-  const { session, logout } = useAuth();
+export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenProps) {
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,7 +35,7 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [campaignPendingDelete, setCampaignPendingDelete] = useState<CampaignListItem | null>(null);
   const [deletingCampaign, setDeletingCampaign] = useState(false);
-  const [activeUsersCount, setActiveUsersCount] = useState<number | null>(session ? 1 : null);
+  const [activeUsersCount, setActiveUsersCount] = useState<number | null>(1);
 
   useEffect(() => {
     let active = true;
@@ -136,41 +133,15 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
   }, [campaigns, searchQuery]);
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-      <section className="relative overflow-hidden rounded-[32px] border border-slate-700/70 bg-slate-950/70 px-6 py-8 shadow-2xl shadow-slate-950/40">
+    <main className="dense-main flex min-h-screen w-full flex-col gap-6">
+      <section className="relative overflow-hidden rounded-[24px] border border-slate-700/70 bg-slate-950/70 px-5 py-5 shadow-2xl shadow-slate-950/40">
         <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.2),transparent_52%)]" />
         <div className="relative flex flex-col gap-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-3">
-              <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
-                <LayoutGrid className="h-3.5 w-3.5" />
-                Campaign Schedules
-              </Badge>
-              <div className="space-y-2">
-                <h1 className="text-4xl font-black tracking-tight text-white sm:text-5xl">ADS CONNECT</h1>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-200">
-              <div>
-                <p className="font-semibold text-white">{session?.user.name}</p>
-                <p className="text-slate-400">
-                  {session?.user.role.replace('_', ' ')} • {session?.user.tenantName || 'Tenant'}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {onOpenAdmin ? (
-                  <Button onClick={onOpenAdmin} size="sm" variant="secondary">
-                    <Shield className="h-4 w-4" />
-                    Admin
-                  </Button>
-                ) : null}
-                <Button onClick={() => void logout()} size="sm" variant="outline">
-                  <LogOut className="h-4 w-4" />
-                  Sign Out
-                </Button>
-              </div>
-            </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
+              <LayoutGrid className="h-3.5 w-3.5" />
+              Campaign Schedules
+            </Badge>
           </div>
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -181,13 +152,19 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
               Logged in users: <span className="font-semibold text-slate-100">{activeUsersCount ?? '--'}</span>
             </div>
             <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
-              <input
-                className="h-11 rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm text-slate-50 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70 sm:min-w-[260px]"
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search campaign name"
-                type="text"
-                value={searchQuery}
-              />
+              <div className="flex h-10 min-w-[340px] overflow-hidden rounded-lg border border-slate-600 bg-slate-800/70">
+                <span className="inline-flex items-center gap-2 border-r border-slate-600 px-3 text-sm font-semibold text-slate-300">
+                  Campaign
+                  <Search className="h-3.5 w-3.5 text-slate-400" />
+                </span>
+                <input
+                  className="h-full w-full bg-transparent px-3 text-sm text-slate-50 placeholder:text-slate-500 focus-visible:outline-none"
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search..."
+                  type="text"
+                  value={searchQuery}
+                />
+              </div>
               <div className="flex rounded-xl border border-slate-700 bg-slate-900/70 p-1">
                 <Button
                   aria-label="Thumbnail view"
@@ -327,7 +304,7 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
             </section>
           ) : (
             <section className="overflow-x-auto rounded-[24px] border border-slate-700 bg-slate-900/60">
-              <table className="min-w-[1080px] w-full border-collapse text-sm">
+              <table className="dense-table min-w-[1080px] w-full border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                     <th className="border border-slate-700 px-4 py-3 text-left">Campaign</th>
@@ -443,3 +420,4 @@ export function CampaignLandingScreen({ onOpenCampaign, onOpenAdmin }: CampaignL
     </main>
   );
 }
+

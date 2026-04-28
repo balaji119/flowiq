@@ -111,7 +111,7 @@ export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippin
 
   if (loading) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8">
+      <main className="dense-main mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8">
         <div className="flex items-center justify-center rounded-[28px] border border-slate-700 bg-slate-900/90 px-6 py-20">
           <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
         </div>
@@ -120,7 +120,7 @@ export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippin
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8">
+    <main className="dense-main mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8">
       <header className="space-y-4">
         <div>
           <Button onClick={onBack} variant="ghost">
@@ -315,3 +315,4 @@ export function AdminScreen({ onBack, onOpenUsers, onOpenMappings, onOpenShippin
     </main>
   );
 }
+
