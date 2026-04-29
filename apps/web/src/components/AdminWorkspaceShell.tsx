@@ -3,7 +3,7 @@ import { ArrowLeft, ChevronRight, CircleDollarSign, Database, Home, LogOut, MapP
 import { cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 
-export type AdminWorkspaceSection = 'landing' | 'quote' | 'artworks' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs';
+export type AdminWorkspaceSection = 'landing' | 'quote' | 'artwork' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs';
 
 export type AdminWorkspaceHandlers = {
   onBack?: () => void;
@@ -245,17 +245,24 @@ export function AdminWorkspaceShell({
       </aside>
 
       <section className="min-w-0 flex-1 overflow-y-auto">
-        {pageTitle || topBarActions ? (
-          <header className="border-b border-slate-700/80 bg-slate-900/70 backdrop-blur">
-            <div className="flex min-h-[72px] items-center justify-between gap-3 px-6">
-              <h1 className="truncate text-3xl font-semibold tracking-tight text-white">{pageTitle || ''}</h1>
-              {topBarActions ? <div className="flex flex-wrap items-center justify-end gap-2">{topBarActions}</div> : null}
+        <header>
+          <div className="border-b border-slate-700/80 bg-slate-900/70 backdrop-blur">
+            <div className="flex min-h-[72px] items-center justify-center px-6">
+              <p className="whitespace-nowrap text-sm font-bold uppercase tracking-[0.28em] text-slate-100">ADS Connect</p>
             </div>
-          </header>
-        ) : null}
+          </div>
+          <div className="border-b border-slate-700/80 bg-slate-800/85">
+            <div className="grid min-h-[56px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-6">
+              <h1 className="truncate text-lg font-semibold tracking-tight text-slate-100">{pageTitle || 'Workspace'}</h1>
+              <div className="min-w-0 px-1 text-center" id="workspace-topbar-center-slot" />
+              <div className="flex flex-wrap items-center justify-end gap-2" id="workspace-topbar-actions-slot">
+                {topBarActions}
+              </div>
+            </div>
+          </div>
+        </header>
         {children}
       </section>
     </main>
   );
 }
-

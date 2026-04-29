@@ -14,7 +14,7 @@ import { ShippingCostSettingsScreen } from './src/screens/ShippingCostSettingsSc
 import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
 import { UserManagementScreen } from './src/screens/UserManagementScreen';
 
-type AppView = 'landing' | 'quote' | 'artworks' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs';
+type AppView = 'landing' | 'quote' | 'artwork' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs';
 
 type AppNavState = {
   view: AppView;
@@ -40,7 +40,7 @@ function parseView(raw: string | null): AppView {
   if (raw === 'shipping-costs') return 'shipping-costs';
   if (raw === 'printing-costs') return 'printing-costs';
   if (raw === 'quote') return 'quote';
-  if (raw === 'artworks') return 'artworks';
+  if (raw === 'artwork') return 'artwork';
   if (raw === 'admin') return 'users';
   return 'landing';
 }
@@ -132,7 +132,7 @@ function AppShell() {
   function renderGlobalSidebar(content: ReactNode, options?: { pageTitle?: string; topBarActions?: ReactNode }) {
     return (
       <AdminWorkspaceShell
-        activeSection={view === 'quote' || view === 'artworks' ? 'landing' : view}
+        activeSection={view === 'quote' || view === 'artwork' ? 'landing' : view}
         canAccessManagement={canAccessManagement}
         canAccessPrintingCosts={canAccessSuperAdminPages}
         canAccessShippingCosts={canAccessSuperAdminPages}
@@ -220,10 +220,11 @@ function AppShell() {
         onBack={() => navigateTo('landing')}
         onOpenAdmin={canAccessManagement ? () => navigateTo('users') : undefined}
       />,
+      { pageTitle: 'Campaign Builder' },
     );
   }
 
-  if (view === 'artworks') {
+  if (view === 'artwork') {
     return renderGlobalSidebar(
       <CampaignArtworkFolderScreen
         campaignId={selectedCampaignId}
@@ -235,6 +236,7 @@ function AppShell() {
           })
         }
       />,
+      { pageTitle: 'Master Artwork Folder' },
     );
   }
 
@@ -247,6 +249,7 @@ function AppShell() {
         });
       }}
     />,
+    { pageTitle: 'Campaign Schedules' },
   );
 }
 

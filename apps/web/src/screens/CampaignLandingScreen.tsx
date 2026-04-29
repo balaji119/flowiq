@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, FolderKanban, LayoutGrid, LoaderCircle, Pencil, Plus, Rows3, Search, Trash2 } from 'lucide-react';
 import { CampaignListItem } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
+import { createPortal } from 'react-dom';
 import { fetchActiveUsersCount } from '../services/authApi';
 import { acquireCampaignEditLock, deleteCampaign, fetchCampaigns } from '../services/campaignApi';
 
@@ -36,6 +37,8 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
   const [campaignPendingDelete, setCampaignPendingDelete] = useState<CampaignListItem | null>(null);
   const [deletingCampaign, setDeletingCampaign] = useState(false);
   const [activeUsersCount, setActiveUsersCount] = useState<number | null>(1);
+  const [topBarCenterHost, setTopBarCenterHost] = useState<HTMLElement | null>(null);
+  const [topBarActionsHost, setTopBarActionsHost] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -59,6 +62,11 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    setTopBarCenterHost(document.getElementById('workspace-topbar-center-slot'));
+    setTopBarActionsHost(document.getElementById('workspace-topbar-actions-slot'));
   }, []);
 
   useEffect(() => {
@@ -132,75 +140,66 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
     });
   }, [campaigns, searchQuery]);
 
+  const topBarCenterContent = (
+    <p className="truncate text-xs text-slate-300">
+      Logged in users: <span className="font-semibold text-slate-100">{activeUsersCount ?? '--'}</span>
+    </p>
+  );
+
+  const topBarActions = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="flex h-9 min-w-[240px] overflow-hidden rounded-md border border-slate-600 bg-slate-900/60">
+        <span className="inline-flex items-center gap-2 border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">
+          Campaign
+          <Search className="h-3.5 w-3.5 text-slate-400" />
+        </span>
+        <input
+          className="h-full w-full bg-transparent px-3 text-sm text-slate-50 placeholder:text-slate-500 focus-visible:outline-none"
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search..."
+          type="text"
+          value={searchQuery}
+        />
+      </div>
+      <div className="flex rounded-md border border-slate-700 bg-slate-900/70 p-1">
+        <Button
+          aria-label="Thumbnail view"
+          className={`h-7 w-7 rounded-md border border-transparent px-0 transition-colors focus-visible:ring-0 ${
+            viewMode === 'thumbnail'
+              ? 'border border-violet-400/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/25'
+              : 'bg-transparent text-slate-300 hover:bg-slate-800/70 hover:text-white'
+          }`}
+          onClick={() => setViewMode('thumbnail')}
+          type="button"
+          variant="ghost"
+        >
+          <LayoutGrid className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          aria-label="Table view"
+          className={`h-7 w-7 rounded-md border border-transparent px-0 transition-colors focus-visible:ring-0 ${
+            viewMode === 'table'
+              ? 'border border-violet-400/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/25'
+              : 'bg-transparent text-slate-300 hover:bg-slate-800/70 hover:text-white'
+          }`}
+          onClick={() => setViewMode('table')}
+          type="button"
+          variant="ghost"
+        >
+          <Rows3 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <Button className="h-9 px-4" onClick={handleCreateCampaign}>
+        <Plus className="h-4 w-4" />
+        Create Campaign
+      </Button>
+    </div>
+  );
+
   return (
     <main className="dense-main flex min-h-screen w-full flex-col gap-6">
-      <section className="relative overflow-hidden rounded-[24px] border border-slate-700/70 bg-slate-950/70 px-5 py-5 shadow-2xl shadow-slate-950/40">
-        <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.2),transparent_52%)]" />
-        <div className="relative flex flex-col gap-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
-              <LayoutGrid className="h-3.5 w-3.5" />
-              Campaign Schedules
-            </Badge>
-          </div>
-
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="text-sm text-slate-400">
-              {filteredCampaigns.length} of {campaigns.length} campaign schedule{campaigns.length === 1 ? '' : 's'}
-            </div>
-            <div className="text-sm text-slate-400">
-              Logged in users: <span className="font-semibold text-slate-100">{activeUsersCount ?? '--'}</span>
-            </div>
-            <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
-              <div className="flex h-10 min-w-[340px] overflow-hidden rounded-lg border border-slate-600 bg-slate-800/70">
-                <span className="inline-flex items-center gap-2 border-r border-slate-600 px-3 text-sm font-semibold text-slate-300">
-                  Campaign
-                  <Search className="h-3.5 w-3.5 text-slate-400" />
-                </span>
-                <input
-                  className="h-full w-full bg-transparent px-3 text-sm text-slate-50 placeholder:text-slate-500 focus-visible:outline-none"
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search..."
-                  type="text"
-                  value={searchQuery}
-                />
-              </div>
-              <div className="flex rounded-md border border-slate-700 bg-slate-900/70 p-1">
-                <Button
-                  aria-label="Thumbnail view"
-                  className={`h-9 w-9 rounded-lg border border-transparent px-0 transition-colors focus-visible:ring-0 ${
-                    viewMode === 'thumbnail'
-                      ? 'border border-violet-400/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/25'
-                      : 'bg-transparent text-slate-300 hover:bg-slate-800/70 hover:text-white'
-                  }`}
-                  onClick={() => setViewMode('thumbnail')}
-                  type="button"
-                  variant="ghost"
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                </Button>
-                <Button
-                  aria-label="Table view"
-                  className={`h-9 w-9 rounded-lg border border-transparent px-0 transition-colors focus-visible:ring-0 ${
-                    viewMode === 'table'
-                      ? 'border border-violet-400/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/25'
-                      : 'bg-transparent text-slate-300 hover:bg-slate-800/70 hover:text-white'
-                  }`}
-                  onClick={() => setViewMode('table')}
-                  type="button"
-                  variant="ghost"
-                >
-                  <Rows3 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            <Button onClick={handleCreateCampaign} size="lg">
-              <Plus className="h-4 w-4" />
-              Create Campaign
-            </Button>
-          </div>
-        </div>
-      </section>
+      {topBarCenterHost ? createPortal(topBarCenterContent, topBarCenterHost) : null}
+      {topBarActionsHost ? createPortal(topBarActions, topBarActionsHost) : null}
 
       {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 

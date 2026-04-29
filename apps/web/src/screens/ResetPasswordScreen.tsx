@@ -52,7 +52,19 @@ export function ResetPasswordScreen({ token }: ResetPasswordScreenProps) {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-16">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 pb-16 pt-36">
+      <header className="absolute inset-x-0 top-0">
+        <div className="border-b border-slate-700/80 bg-slate-900/70 backdrop-blur">
+          <div className="flex min-h-[72px] items-center justify-center px-6">
+            <p className="whitespace-nowrap text-sm font-bold uppercase tracking-[0.28em] text-slate-100">ADS Connect</p>
+          </div>
+        </div>
+        <div className="border-b border-slate-700/80 bg-slate-800/85">
+          <div className="flex min-h-[56px] items-center px-6">
+            <p className="truncate text-lg font-semibold tracking-tight text-slate-100">Reset Password</p>
+          </div>
+        </div>
+      </header>
       <div className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.24),transparent_55%)]" />
       <Card className="relative w-full max-w-md overflow-hidden">
         <CardContent className="space-y-6 p-8">

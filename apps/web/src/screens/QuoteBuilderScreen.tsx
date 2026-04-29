@@ -1,5 +1,5 @@
 import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LayoutGrid, LoaderCircle, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LoaderCircle, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignPrintImage,
@@ -21,7 +21,8 @@ import {
   createDefaultFormValues,
   formatKeys,
 } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, Textarea, cn } from '@flowiq/ui';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, Textarea, cn } from '@flowiq/ui';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { buildApiUrl } from '../services/apiBase';
 import { acquireCampaignEditLock, createCampaign, fetchCampaign, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
@@ -37,10 +38,12 @@ const steps = [
   { key: 'creative', title: 'Setup' },
   { key: 'schedule', title: 'Schedule' },
   { key: 'review', title: 'Review' },
-  { key: 'finalize', title: 'Finalise' },
+  { key: 'finalize', title: 'Ready to order' },
 ] as const;
 
 const ACTIVE_CAMPAIGN_ID_KEY = 'adsconnect-active-campaign-id';
+const PREVIEW_CACHE_PREFIX = 'adsconnect-preview:';
+const previewMemoryCache = new Map<string, string>();
 
 async function setStoredCampaignId(value: string | null) {
   if (typeof window === 'undefined') return;
@@ -221,6 +224,45 @@ function createAllWeeks(weekCount: number) {
 
 function toFileBaseName(fileName: string) {
   return fileName.replace(/\.[^.]+$/, '');
+}
+
+function isPdfPreview(image: Pick<CampaignPrintImage, 'mimeType' | 'fileName'>) {
+  return image.mimeType.toLowerCase() === 'application/pdf' || image.fileName.toLowerCase().endsWith('.pdf');
+}
+
+function previewCacheKeyForImage(image: Pick<CampaignPrintImage, 'storedName' | 'fileName' | 'id'>) {
+  const stableKey = image.storedName?.trim() || image.fileName.trim() || image.id;
+  return `${PREVIEW_CACHE_PREFIX}${stableKey}`;
+}
+
+function readCachedPreview(cacheKey: string) {
+  const memoryHit = previewMemoryCache.get(cacheKey);
+  if (memoryHit) return memoryHit;
+  if (typeof window === 'undefined') return '';
+  try {
+    const sessionHit = window.sessionStorage.getItem(cacheKey) || '';
+    if (sessionHit) {
+      previewMemoryCache.set(cacheKey, sessionHit);
+    }
+    return sessionHit;
+  } catch {
+    return '';
+  }
+}
+
+function writeCachedPreview(cacheKey: string, dataUrl: string) {
+  previewMemoryCache.set(cacheKey, dataUrl);
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(cacheKey, dataUrl);
+  } catch {
+    // Ignore storage quota errors; in-memory cache still helps during this session.
+  }
+}
+
+function isPdfFile(file: File) {
+  const lowerName = file.name.toLowerCase();
+  return file.type === 'application/pdf' || lowerName.endsWith('.pdf');
 }
 
 function normalizeFormValues(values: OrderFormValues): OrderFormValues {
@@ -706,6 +748,11 @@ export function QuoteBuilderScreen({
   onBack?: () => void;
   onOpenAdmin?: () => void;
 }) {
+  type PreviewEntry = {
+    cacheKey: string;
+    dataUrl: string;
+  };
+
   const { session } = useAuth();
   const [values, setValues] = useState<OrderFormValues>(() => defaultValues);
   const [campaignId, setCampaignId] = useState<string | null>(selectedCampaignId ?? null);
@@ -732,7 +779,7 @@ export function QuoteBuilderScreen({
   const [selectedPurchaseOrderFile, setSelectedPurchaseOrderFile] = useState<File | null>(null);
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
   const [uploadedPurchaseOrderName, setUploadedPurchaseOrderName] = useState('');
-  const [uploadingArtworks, setUploadingArtworks] = useState(false);
+  const [uploadingArtwork, setUploadingArtwork] = useState(false);
   const [artworkUploadTotal, setArtworkUploadTotal] = useState(0);
   const [artworkUploadCompleted, setArtworkUploadCompleted] = useState(0);
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
@@ -741,6 +788,9 @@ export function QuoteBuilderScreen({
   const [newAddressTarget, setNewAddressTarget] = useState<{ marketId: string; assetId: string; marketName: string } | null>(null);
   const [newAddressForm, setNewAddressForm] = useState<AddressFormState>(() => emptyAddressForm());
   const [newAddressError, setNewAddressError] = useState('');
+  const [previewByImageId, setPreviewByImageId] = useState<Record<string, PreviewEntry>>({});
+  const [topBarCenterHost, setTopBarCenterHost] = useState<HTMLElement | null>(null);
+  const [topBarActionsHost, setTopBarActionsHost] = useState<HTMLElement | null>(null);
   const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
   const replaceImageInputRef = useRef<HTMLInputElement | null>(null);
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
@@ -1113,6 +1163,87 @@ export function QuoteBuilderScreen({
   const activeCampaignName = values.campaignName.trim() || (campaignId ? `Untitled Campaign ${campaignId.slice(0, 6)}` : 'Untitled Campaign');
 
   useEffect(() => {
+    setTopBarCenterHost(document.getElementById('workspace-topbar-center-slot'));
+    setTopBarActionsHost(document.getElementById('workspace-topbar-actions-slot'));
+  }, []);
+
+  useEffect(() => {
+    const activeImageIds = new Set(values.printImages.map((image) => image.id));
+    setPreviewByImageId((current) => {
+      let changed = false;
+      const next: Record<string, PreviewEntry> = {};
+      Object.entries(current).forEach(([imageId, entry]) => {
+        if (activeImageIds.has(imageId)) {
+          next[imageId] = entry;
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : current;
+    });
+  }, [values.printImages]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const missingPdfImages = values.printImages.filter((image) => {
+      if (!image.imageUrl || !isPdfPreview(image)) return false;
+      const cacheKey = previewCacheKeyForImage(image);
+      const existing = previewByImageId[image.id];
+      return !existing || existing.cacheKey !== cacheKey;
+    });
+    if (missingPdfImages.length === 0) return;
+
+    const cachedEntries: Record<string, PreviewEntry> = {};
+    const imagesToRender: CampaignPrintImage[] = [];
+    missingPdfImages.forEach((image) => {
+      const cacheKey = previewCacheKeyForImage(image);
+      const cached = readCachedPreview(cacheKey);
+      if (cached) {
+        cachedEntries[image.id] = { cacheKey, dataUrl: cached };
+      } else {
+        imagesToRender.push(image);
+      }
+    });
+
+    if (Object.keys(cachedEntries).length > 0) {
+      setPreviewByImageId((current) => ({ ...current, ...cachedEntries }));
+    }
+
+    if (imagesToRender.length === 0) return;
+
+    void (async () => {
+      for (const image of imagesToRender) {
+        if (cancelled) return;
+        try {
+          const sourceUrl = toAbsoluteUrl(buildApiUrl(image.imageUrl || ''));
+          if (!sourceUrl) continue;
+          const response = await fetch(sourceUrl, { cache: 'force-cache' });
+          if (!response.ok) continue;
+          const blob = await response.blob();
+          const previewDataUrl = await pdfFirstPageToDataUrl(blob, 220);
+          if (!previewDataUrl || cancelled) continue;
+          const cacheKey = previewCacheKeyForImage(image);
+          writeCachedPreview(cacheKey, previewDataUrl);
+          setPreviewByImageId((current) => ({
+            ...current,
+            [image.id]: {
+              cacheKey,
+              dataUrl: previewDataUrl,
+            },
+          }));
+        } catch {
+          // Keep UI responsive even when one preview fails.
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [previewByImageId, values.printImages]);
+
+  useEffect(() => {
     if (loadingCampaign) return;
 
     setValues((current) => {
@@ -1385,8 +1516,13 @@ export function QuoteBuilderScreen({
       setError('Please choose at least one valid file');
       return;
     }
+    const nonPdfFiles = files.filter((file) => !isPdfFile(file));
+    if (nonPdfFiles.length > 0) {
+      setError('Only PDF files are allowed');
+      return;
+    }
 
-    setUploadingArtworks(true);
+    setUploadingArtwork(true);
     setArtworkUploadTotal(files.length);
     setArtworkUploadCompleted(0);
     try {
@@ -1408,14 +1544,14 @@ export function QuoteBuilderScreen({
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload file(s)');
     } finally {
-      setUploadingArtworks(false);
+      setUploadingArtwork(false);
       setArtworkUploadTotal(0);
       setArtworkUploadCompleted(0);
     }
   }
 
   function handlePickPrintImages() {
-    if (uploadingArtworks) return;
+    if (uploadingArtwork) return;
     imageUploadInputRef.current?.click();
   }
 
@@ -1447,6 +1583,12 @@ export function QuoteBuilderScreen({
   async function handleReplacePrintImage(event: React.ChangeEvent<HTMLInputElement>) {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile || !replacingImageId) {
+      setReplacingImageId(null);
+      event.target.value = '';
+      return;
+    }
+    if (!isPdfFile(selectedFile)) {
+      setError('Only PDF files are allowed');
       setReplacingImageId(null);
       event.target.value = '';
       return;
@@ -1969,7 +2111,7 @@ export function QuoteBuilderScreen({
         const masterArtworkFolderCell = sheet.getCell('B8');
         const masterArtworkFolderLabel = (masterArtworkFolderCell.text || '').trim() || 'MASTER ARTWORK FOLDER';
         const artworkFolderUrl = campaignId
-          ? toAbsoluteUrl(`/?view=artworks&campaignId=${encodeURIComponent(campaignId)}`)
+          ? toAbsoluteUrl(`/?view=artwork&campaignId=${encodeURIComponent(campaignId)}`)
           : '';
         // Keep template styling while wiring the campaign artwork-folder link when campaign id is available.
         masterArtworkFolderCell.value = artworkFolderUrl
@@ -2362,31 +2504,26 @@ export function QuoteBuilderScreen({
 
   return (
     <main className="dense-main flex min-h-screen w-full flex-col gap-6">
+      {topBarCenterHost
+        ? createPortal(
+            <p className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300" title={activeCampaignName}>
+              {activeCampaignName}
+            </p>,
+            topBarCenterHost,
+          )
+        : null}
+      {topBarActionsHost && onBack
+        ? createPortal(
+            <Button disabled={savingCampaign} onClick={() => void handleBackToDashboard()} size="sm" variant="ghost">
+              <ArrowLeft className="h-4 w-4" />
+              Campaigns
+            </Button>,
+            topBarActionsHost,
+          )
+        : null}
       <section className="relative overflow-hidden rounded-[24px] border border-slate-700/70 bg-slate-950/70 px-5 py-5 shadow-2xl shadow-slate-950/40">
         <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.2),transparent_52%)]" />
         <div className="relative flex flex-col gap-5">
-          <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-6">
-            <div className="space-y-3 lg:justify-self-start">
-              <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">
-                <LayoutGrid className="h-3.5 w-3.5" />
-                Campaign Builder
-              </Badge>
-            </div>
-            <div className="min-w-0 px-1 py-1 text-center lg:justify-self-center">
-              <p className="max-w-[min(70vw,820px)] truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400" title={activeCampaignName}>
-                {activeCampaignName}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 lg:justify-self-end">
-              {onBack ? (
-                <Button disabled={savingCampaign} onClick={() => void handleBackToDashboard()} size="sm" variant="ghost">
-                  <ArrowLeft className="h-4 w-4" />
-                  Campaigns
-                </Button>
-              ) : null}
-            </div>
-          </div>
-
           <div className="space-y-3">
             <div className="h-2 overflow-hidden rounded-full bg-slate-800">
               <div className="h-full rounded-full bg-violet-500 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
@@ -2492,27 +2629,34 @@ export function QuoteBuilderScreen({
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-slate-400">{values.printImages.length} artwork{values.printImages.length === 1 ? '' : 's'} uploaded</p>
-                  <Button className="h-10 px-5" disabled={uploadingArtworks} onClick={handlePickPrintImages} type="button" variant="secondary">
-                    {uploadingArtworks ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                    {uploadingArtworks
-                      ? `Uploading Artworks (${artworkUploadCompleted}/${Math.max(artworkUploadTotal, 1)})`
-                      : 'Upload Artworks'}
+                  <Button className="h-10 px-5" disabled={uploadingArtwork} onClick={handlePickPrintImages} type="button" variant="secondary">
+                    {uploadingArtwork ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    {uploadingArtwork
+                      ? `Uploading Artwork (${artworkUploadCompleted}/${Math.max(artworkUploadTotal, 1)})`
+                      : 'Upload Artwork'}
                   </Button>
                 </div>
-                {uploadingArtworks ? (
+                {uploadingArtwork ? (
                   <p className="text-sm text-slate-300" role="status">
                     Uploading files in the background. Please wait...
                   </p>
                 ) : null}
                 <input
                   ref={imageUploadInputRef}
+                  accept="application/pdf,.pdf"
                   className="hidden"
-                  disabled={uploadingArtworks}
+                  disabled={uploadingArtwork}
                   multiple
                   onChange={(event) => void handlePrintImageSelection(event)}
                   type="file"
                 />
-                <input ref={replaceImageInputRef} className="hidden" onChange={(event) => void handleReplacePrintImage(event)} type="file" />
+                <input
+                  ref={replaceImageInputRef}
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  onChange={(event) => void handleReplacePrintImage(event)}
+                  type="file"
+                />
 
                 <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-950/70">
                   <table className="dense-table min-w-[860px] w-full border-collapse text-sm">
@@ -2526,50 +2670,55 @@ export function QuoteBuilderScreen({
                     </thead>
                     <tbody>
                       {values.printImages.length > 0 ? (
-                        values.printImages.map((image) => (
-                          <tr key={image.id} className="border-t border-slate-700/70 bg-slate-800/60">
-                            <td className="border border-slate-700 px-4 py-3">
-                              <div className="h-14 w-20 overflow-hidden rounded-lg border border-slate-600 bg-slate-900">
-                                {image.imageUrl &&
-                                (image.mimeType.toLowerCase().startsWith('image/') ||
-                                  image.mimeType.toLowerCase() === 'application/pdf' ||
-                                  image.fileName.toLowerCase().endsWith('.pdf')) ? (
-                                  image.mimeType.toLowerCase().startsWith('image/') ? (
-                                  <img alt={image.name} className="h-full w-full object-cover" src={buildApiUrl(image.imageUrl)} />
+                        values.printImages.map((image) => {
+                          const isImage = image.mimeType.toLowerCase().startsWith('image/');
+                          const isPdf = isPdfPreview(image);
+                          const previewEntry = previewByImageId[image.id];
+                          const expectedPreviewCacheKey = previewCacheKeyForImage(image);
+                          const previewDataUrl = previewEntry?.cacheKey === expectedPreviewCacheKey ? previewEntry.dataUrl : '';
+
+                          return (
+                            <tr key={image.id} className="border-t border-slate-700/70 bg-slate-800/60">
+                              <td className="border border-slate-700 px-4 py-3">
+                                <div className="h-14 w-20 overflow-hidden rounded-lg border border-slate-600 bg-slate-900">
+                                  {image.imageUrl && (isImage || isPdf) ? (
+                                    isImage ? (
+                                      <img alt={image.name} className="h-full w-full object-cover" src={buildApiUrl(image.imageUrl)} />
+                                    ) : previewDataUrl ? (
+                                      <img alt={`${image.name} preview`} className="h-full w-full object-cover" src={previewDataUrl} />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                        Loading
+                                      </div>
+                                    )
                                   ) : (
-                                    <iframe
-                                      className="h-full w-full bg-white"
-                                      src={`${buildApiUrl(image.imageUrl)}#toolbar=0&navpanes=0&scrollbar=0`}
-                                      title={`${image.name} preview`}
-                                    />
-                                  )
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                    File
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="border border-slate-700 px-4 py-3">
-                              <Input value={image.name} onChange={(event) => updatePrintImage(image.id, (current) => ({ ...current, name: event.target.value }))} />
-                            </td>
-                            <td className="border border-slate-700 px-4 py-3 text-slate-200">{image.fileName}</td>
-                            <td className="border border-slate-700 px-4 py-3">
-                              <div className="flex items-center justify-center gap-1">
-                                <Button className="h-8 w-8" onClick={() => beginReplacePrintImage(image.id)} size="icon" type="button" variant="ghost">
-                                  <Pencil className="h-4 w-4 text-slate-200" />
-                                </Button>
-                                <Button className="h-8 w-8" onClick={() => removePrintImage(image.id)} size="icon" type="button" variant="ghost">
-                                  <Trash2 className="h-4 w-4 text-rose-300" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
+                                    <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                      File
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="border border-slate-700 px-4 py-3">
+                                <Input value={image.name} onChange={(event) => updatePrintImage(image.id, (current) => ({ ...current, name: event.target.value }))} />
+                              </td>
+                              <td className="border border-slate-700 px-4 py-3 text-slate-200">{image.fileName}</td>
+                              <td className="border border-slate-700 px-4 py-3">
+                                <div className="flex items-center justify-center gap-1">
+                                  <Button className="h-8 w-8" onClick={() => beginReplacePrintImage(image.id)} size="icon" type="button" variant="ghost">
+                                    <Pencil className="h-4 w-4 text-slate-200" />
+                                  </Button>
+                                  <Button className="h-8 w-8" onClick={() => removePrintImage(image.id)} size="icon" type="button" variant="ghost">
+                                    <Trash2 className="h-4 w-4 text-rose-300" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr className="bg-slate-900/50">
                           <td className="border border-slate-700 px-4 py-8 text-center text-sm text-slate-400" colSpan={4}>
-                            No artworks uploaded yet.
+                            No artwork uploaded yet.
                           </td>
                         </tr>
                       )}
@@ -2908,7 +3057,7 @@ export function QuoteBuilderScreen({
             <Card>
               <CardHeader className="p-6 pb-0">
                 <CardTitle>Creative & Delivery Mapping</CardTitle>
-                <CardDescription>Assign artworks and delivery addresses for each asset before exporting.</CardDescription>
+                <CardDescription>Assign artwork and delivery addresses for each asset before exporting.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5 p-6">
                 {values.campaignMarkets.map((market) => {
@@ -2955,7 +3104,7 @@ export function QuoteBuilderScreen({
                                         <td className="px-4 py-3">
                                           {formatKey ? (
                                             <SearchableSelect
-                                              emptyMessage={values.printImages.length ? 'No matching artworks found.' : 'No artworks uploaded in Setup step.'}
+                                              emptyMessage={values.printImages.length ? 'No matching artwork found.' : 'No artwork uploaded in Setup step.'}
                                               items={creativeImageOptions}
                                               label=""
                                               onValueChange={(value) =>
@@ -2974,7 +3123,7 @@ export function QuoteBuilderScreen({
                                                   };
                                                 })
                                               }
-                                              placeholder={values.printImages.length ? 'Attach artwork' : 'No artworks available'}
+                                              placeholder={values.printImages.length ? 'Attach artwork' : 'No artwork available'}
                                               selectedLabel={values.printImages.find((image) => image.id === selectedCreativeId)?.name}
                                               selectedValue={selectedCreativeId || ''}
                                             />
@@ -3045,9 +3194,14 @@ export function QuoteBuilderScreen({
                     </div>
                     <input
                       ref={purchaseOrderInputRef}
+                      accept="application/pdf,.pdf"
                       className="hidden"
                       onChange={(event) => {
                         const nextFile = event.target.files?.[0] ?? null;
+                        if (nextFile && !isPdfFile(nextFile)) {
+                          setError('Only PDF files are allowed');
+                          return;
+                        }
                         setSelectedPurchaseOrderFile(nextFile);
                       }}
                       type="file"
