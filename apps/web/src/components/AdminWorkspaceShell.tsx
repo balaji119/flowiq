@@ -32,6 +32,8 @@ type NavItem = {
   onClick: () => void;
 };
 
+const SIDEBAR_EXPANDED_STORAGE_KEY = 'adsconnect-sidebar-expanded';
+
 export function AdminWorkspaceShell({
   activeSection,
   canAccessManagement,
@@ -53,6 +55,25 @@ export function AdminWorkspaceShell({
   const [collapsedSidebarHover, setCollapsedSidebarHover] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    try {
+      const savedValue = window.localStorage.getItem(SIDEBAR_EXPANDED_STORAGE_KEY);
+      if (savedValue === '1') {
+        setExpanded(true);
+      }
+    } catch {
+      // Ignore storage access issues and keep default.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_EXPANDED_STORAGE_KEY, expanded ? '1' : '0');
+    } catch {
+      // Ignore storage access issues.
+    }
+  }, [expanded]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -113,8 +134,11 @@ export function AdminWorkspaceShell({
         <div className={cn('border-b border-slate-700/80', expanded ? 'px-3 py-2.5' : 'flex h-[74px] items-center justify-center px-2')}>
           {expanded ? (
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate text-xs font-bold uppercase tracking-[0.2em] text-slate-100">ADS CONNECT</p>
+              <div className="min-w-0 flex items-center gap-1.5">
+                <div className="h-8 w-8 overflow-hidden border border-slate-600 bg-slate-900/90">
+                  <img alt="ADS logo" className="h-full w-full object-contain" src="/ads-logo.webp" />
+                </div>
+                <p className="truncate text-xs font-bold uppercase leading-none tracking-[0.16em] text-orange-300">Connect</p>
               </div>
               <button
                 className="rounded-lg p-2 text-slate-300 transition hover:bg-slate-800 hover:text-white"
@@ -127,8 +151,8 @@ export function AdminWorkspaceShell({
             </div>
           ) : (
             <div className="flex items-center justify-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-600 bg-slate-900/90 text-sm font-bold uppercase tracking-[0.1em] text-slate-100">
-                ADS
+              <div className="h-10 w-10 overflow-hidden border border-slate-600 bg-slate-900/90">
+                <img alt="ADS logo" className="h-full w-full object-contain" src="/ads-logo.webp" />
               </div>
             </div>
           )}
@@ -148,7 +172,7 @@ export function AdminWorkspaceShell({
           </button>
         ) : null}
 
-        <nav className="flex-1 space-y-1 p-2">
+        <nav className="flex-1 space-y-3 py-2">
           {items
             .filter((item) => (item.id === 'shipping-costs' ? canAccessShippingCosts : true))
             .map((item) => {
@@ -157,18 +181,18 @@ export function AdminWorkspaceShell({
                 <button
                   key={item.id}
                   className={cn(
-                    'flex items-center rounded-xl text-sm font-semibold transition',
-                    expanded ? 'w-full justify-start gap-3 px-3 py-2.5' : 'mx-auto h-12 w-12 justify-center',
+                    'flex items-center text-[8px] font-semibold uppercase leading-none tracking-[0.02em] transition',
+                    expanded ? 'h-12 w-full justify-start gap-2.5 px-2.5' : 'mx-auto h-12 w-12 justify-center',
                     active
-                      ? 'bg-slate-800 text-white shadow-[inset_0_0_0_1px_rgba(148,163,184,0.35)]'
-                      : 'text-slate-300 hover:bg-slate-800/80 hover:text-white',
+                      ? 'bg-slate-700/55 text-white'
+                      : 'text-slate-300 hover:bg-slate-800/65 hover:text-white',
                   )}
                   onClick={item.onClick}
                   title={!expanded ? item.label : undefined}
                   type="button"
                 >
                   {item.icon}
-                  {expanded ? <span className="truncate">{item.label}</span> : null}
+                  {expanded ? <span className="truncate text-[12px]">{item.label}</span> : null}
                 </button>
               );
             })}
