@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { LoaderCircle, Pencil, Plus, Shield, Trash2, X } from "lucide-react";
+import { LoaderCircle, Pencil, Plus, Shield, Trash2 } from "lucide-react";
 import { AuthRole, AuthUser, TenantRecord } from "@flowiq/shared";
 import {
   Badge,
@@ -234,6 +234,12 @@ export function UserManagementScreen({
     setUserDialogOpen(true);
   }
 
+  function closeUserDialog() {
+    setUserDialogOpen(false);
+    setEditingUserId(null);
+    setUserForm(emptyUserForm());
+  }
+
   async function handleSaveUser() {
     if (!effectiveTenantId) return;
     setSavingUser(true);
@@ -266,9 +272,7 @@ export function UserManagementScreen({
         setUsers((current) => [...current, response.user]);
         setNotice(`User ${response.user.name} created.`);
       }
-      setUserDialogOpen(false);
-      setEditingUserId(null);
-      setUserForm(emptyUserForm());
+      closeUserDialog();
     } catch (saveError) {
       setError(
         saveError instanceof Error ? saveError.message : "Unable to save user",
@@ -499,21 +503,17 @@ export function UserManagementScreen({
           )}
         </section>
 
-        <Dialog open={userDialogOpen} onOpenChange={setUserDialogOpen}>
-          <DialogContent className="relative">
-            {/* 🔥 Close Button (Top Right) */}
-            <button
-              onClick={() => {
-                setUserDialogOpen(false);
-                setEditingUserId(null);
-                setUserForm(emptyUserForm());
-              }}
-              className="absolute right-4 top-4 rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-white transition"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
-
+        <Dialog
+          open={userDialogOpen}
+          onOpenChange={(open) => {
+            if (open) {
+              setUserDialogOpen(true);
+              return;
+            }
+            closeUserDialog();
+          }}
+        >
+          <DialogContent>
             {/* Header */}
             <DialogHeader className="pr-8">
               <DialogTitle>
@@ -647,14 +647,7 @@ export function UserManagementScreen({
               ) : null}
 
               <div className="flex justify-end gap-3">
-                <Button
-                  onClick={() => {
-                    setUserDialogOpen(false);
-                    setEditingUserId(null);
-                    setUserForm(emptyUserForm());
-                  }}
-                  variant="ghost"
-                >
+                <Button onClick={closeUserDialog} variant="ghost">
                   Cancel
                 </Button>
 
