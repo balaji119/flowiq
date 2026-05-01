@@ -37,12 +37,15 @@ type contactDetails struct {
 }
 
 type campaignPrintImage struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	FileName   string `json:"fileName"`
-	MimeType   string `json:"mimeType"`
-	StoredName string `json:"storedName,omitempty"`
-	ImageURL   string `json:"imageUrl,omitempty"`
+	ID                  string `json:"id"`
+	Name                string `json:"name"`
+	FileName            string `json:"fileName"`
+	MimeType            string `json:"mimeType"`
+	StoredName          string `json:"storedName,omitempty"`
+	ImageURL            string `json:"imageUrl,omitempty"`
+	ThumbnailFileName   string `json:"thumbnailFileName,omitempty"`
+	ThumbnailStoredName string `json:"thumbnailStoredName,omitempty"`
+	ThumbnailURL        string `json:"thumbnailUrl,omitempty"`
 }
 
 type orderFormValues struct {

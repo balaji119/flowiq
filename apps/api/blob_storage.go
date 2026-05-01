@@ -118,3 +118,22 @@ func (a *app) campaignImageReadURL(ctx context.Context, storedName, contentDispo
 
 	return blobClient.URL() + "?" + queryParams.Encode(), true, nil
 }
+
+func (a *app) deleteCampaignImage(ctx context.Context, storedName string) error {
+	if a.blobStorage != nil {
+		_, err := a.blobStorage.client.DeleteBlob(ctx, a.blobStorage.container, storedName, nil)
+		if err != nil {
+			if bloberror.HasCode(err, bloberror.BlobNotFound, bloberror.ResourceNotFound, bloberror.ContainerNotFound) {
+				return os.ErrNotExist
+			}
+			return fmt.Errorf("delete image from Azure blob: %w", err)
+		}
+		return nil
+	}
+
+	targetPath := filepath.Join(a.campaignImageDir, storedName)
+	if err := os.Remove(targetPath); err != nil {
+		return err
+	}
+	return nil
+}

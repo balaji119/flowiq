@@ -87,6 +87,9 @@ export type CampaignPrintImage = {
   mimeType: string;
   storedName?: string;
   imageUrl?: string;
+  thumbnailFileName?: string;
+  thumbnailStoredName?: string;
+  thumbnailUrl?: string;
 };
 
 export type CampaignLine = CampaignAsset & { market: string };

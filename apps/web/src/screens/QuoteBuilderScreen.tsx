@@ -1,5 +1,5 @@
 import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, Eye, LoaderCircle, Maximize2, Pencil, Plus, Upload, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, Eye, LoaderCircle, Maximize2, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignPrintImage,
@@ -26,7 +26,7 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { buildApiUrl } from '../services/apiBase';
 import { acquireCampaignEditLock, createCampaign, fetchCampaign, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
-import { uploadCampaignImage } from '../services/campaignImageApi';
+import { deleteCampaignImage, uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
 import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
@@ -223,6 +223,11 @@ function isPdfFile(file: File) {
 }
 
 function normalizeFormValues(values: OrderFormValues): OrderFormValues {
+  const normalizeCampaignImageUrl = (url?: string) =>
+    url && url.startsWith('/uploads/campaign-images/')
+      ? url.replace('/uploads/campaign-images/', '/api/campaign-images/')
+      : url;
+
   return {
     ...values,
     campaignMarkets: (values.campaignMarkets ?? []).map((market) => ({
@@ -242,10 +247,10 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
       fileName: image.fileName,
       mimeType: image.mimeType,
       storedName: image.storedName,
-      imageUrl:
-        image.imageUrl && image.imageUrl.startsWith('/uploads/campaign-images/')
-          ? image.imageUrl.replace('/uploads/campaign-images/', '/api/campaign-images/')
-          : image.imageUrl,
+      imageUrl: normalizeCampaignImageUrl(image.imageUrl),
+      thumbnailFileName: image.thumbnailFileName,
+      thumbnailStoredName: image.thumbnailStoredName,
+      thumbnailUrl: normalizeCampaignImageUrl(image.thumbnailUrl),
     })),
   };
 }
@@ -479,7 +484,7 @@ async function loadPdfJsRuntime() {
   return pdfjs;
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement) {
+function canvasToBlob(canvas: HTMLCanvasElement, mimeType = 'image/png', quality?: number) {
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -489,8 +494,8 @@ function canvasToBlob(canvas: HTMLCanvasElement) {
         }
         resolve(blob);
       },
-      'image/png',
-      1,
+      mimeType,
+      quality,
     );
   });
 }
@@ -504,17 +509,27 @@ function buildArtworkPageFileName(fileName: string, pageNumber: number, totalPag
   return `${baseName}-page-${String(pageNumber).padStart(digits, '0')}.png`;
 }
 
+function buildArtworkThumbnailFileName(fileName: string, pageNumber: number, totalPages: number) {
+  const baseName = toFileBaseName(fileName);
+  if (totalPages <= 1) {
+    return `${baseName}.thumb.webp`;
+  }
+  const digits = Math.max(2, String(totalPages).length);
+  return `${baseName}-page-${String(pageNumber).padStart(digits, '0')}.thumb.webp`;
+}
+
 async function convertPdfToArtworkPages(
   pdfFile: File,
   uploadMaxWidth = 2400,
-): Promise<Array<{ file: File; pageNumber: number; totalPages: number }>> {
+  thumbnailMaxWidth = 320,
+): Promise<Array<{ file: File; thumbnailFile: File; pageNumber: number; totalPages: number }>> {
   const pdfjs = await loadPdfJsRuntime();
   const objectUrl = URL.createObjectURL(pdfFile);
   try {
     const loadingTask = pdfjs.getDocument({ url: objectUrl });
     const pdf = await loadingTask.promise;
     const totalPages = Number(pdf.numPages ?? 0);
-    const pages: Array<{ file: File; pageNumber: number; totalPages: number }> = [];
+    const pages: Array<{ file: File; thumbnailFile: File; pageNumber: number; totalPages: number }> = [];
 
     for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
@@ -533,8 +548,25 @@ async function convertPdfToArtworkPages(
       const uploadBlob = await canvasToBlob(uploadCanvas);
       const uploadFile = new File([uploadBlob], buildArtworkPageFileName(pdfFile.name, pageNumber, totalPages), { type: 'image/png' });
 
+      const thumbnailScale = Math.min(1, thumbnailMaxWidth / Math.max(uploadCanvas.width, 1));
+      const thumbnailCanvas = document.createElement('canvas');
+      thumbnailCanvas.width = Math.max(1, Math.ceil(uploadCanvas.width * thumbnailScale));
+      thumbnailCanvas.height = Math.max(1, Math.ceil(uploadCanvas.height * thumbnailScale));
+      const thumbnailContext = thumbnailCanvas.getContext('2d');
+      if (!thumbnailContext) {
+        throw new Error('Unable to prepare artwork thumbnail');
+      }
+      thumbnailContext.drawImage(uploadCanvas, 0, 0, thumbnailCanvas.width, thumbnailCanvas.height);
+      const thumbnailBlob = await canvasToBlob(thumbnailCanvas, 'image/webp', 0.7);
+      const thumbnailFile = new File(
+        [thumbnailBlob],
+        buildArtworkThumbnailFileName(pdfFile.name, pageNumber, totalPages),
+        { type: 'image/webp' },
+      );
+
       pages.push({
         file: uploadFile,
+        thumbnailFile,
         pageNumber,
         totalPages,
       });
@@ -725,6 +757,55 @@ function WeekSelector({
   );
 }
 
+function ConfirmationDialog({
+  open,
+  title,
+  description,
+  confirmLabel,
+  cancelLabel = 'Cancel',
+  confirming = false,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  confirming?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !confirming) onCancel();
+      }}
+    >
+      <DialogContent className="[&>button]:hidden" style={{ width: 'min(calc(100vw - 2rem), 30rem)' }}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <div className="flex items-start gap-3 rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>This action is permanent and cannot be undone.</p>
+        </div>
+        <div className="flex justify-end gap-3">
+          <Button disabled={confirming} onClick={onCancel} type="button" variant="ghost">
+            {cancelLabel}
+          </Button>
+          <Button disabled={confirming} onClick={onConfirm} type="button" variant="destructive">
+            {confirming ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+            {confirming ? 'Deleting...' : confirmLabel}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: number): CampaignMarket[] {
   const allWeeks = createAllWeeks(maxWeeks);
   return campaignMarkets.map((market) => ({
@@ -811,11 +892,17 @@ export function QuoteBuilderScreen({
   const [selectedPurchaseOrderFile, setSelectedPurchaseOrderFile] = useState<File | null>(null);
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
   const [uploadedPurchaseOrderName, setUploadedPurchaseOrderName] = useState('');
+  const [purchaseOrderUploadSuccessOpen, setPurchaseOrderUploadSuccessOpen] = useState(false);
+  const [purchaseOrderUploadSuccessMessage, setPurchaseOrderUploadSuccessMessage] = useState('');
   const [assignArtworkDialogOpen, setAssignArtworkDialogOpen] = useState(false);
   const [assignArtworkTarget, setAssignArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey } | null>(null);
   const [previewArtworkDialogOpen, setPreviewArtworkDialogOpen] = useState(false);
   const [previewArtworkTarget, setPreviewArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey } | null>(null);
+  const [previewArtworkFullLoaded, setPreviewArtworkFullLoaded] = useState(false);
   const [uploadingArtworkPages, setUploadingArtworkPages] = useState(false);
+  const [deletingArtworkIds, setDeletingArtworkIds] = useState<string[]>([]);
+  const [deleteArtworkCandidate, setDeleteArtworkCandidate] = useState<CampaignPrintImage | null>(null);
+  const [confirmingArtworkDelete, setConfirmingArtworkDelete] = useState(false);
   const [artworkDialogError, setArtworkDialogError] = useState('');
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
   const [newAddressDialogOpen, setNewAddressDialogOpen] = useState(false);
@@ -1246,6 +1333,29 @@ export function QuoteBuilderScreen({
     if (!assignedImageId) return null;
     return values.printImages.find((image) => image.id === assignedImageId) ?? null;
   }, [previewArtworkTarget, values.campaignMarkets, values.printImages]);
+  const previewArtworkThumbnailSrc = useMemo(
+    () => (previewArtworkImage?.thumbnailUrl ? buildApiUrl(previewArtworkImage.thumbnailUrl) : ''),
+    [previewArtworkImage],
+  );
+  const previewArtworkFullSrc = useMemo(
+    () => (previewArtworkImage?.imageUrl ? buildApiUrl(previewArtworkImage.imageUrl) : ''),
+    [previewArtworkImage],
+  );
+  const assignedArtworkIdSet = useMemo(() => {
+    const assignedIds = new Set<string>();
+    values.campaignMarkets.forEach((market) => {
+      market.assets.forEach((asset) => {
+        const mappedCreativeImageIds = normalizeCreativeImageIds(asset);
+        creativeFormatKeys.forEach((formatKey) => {
+          const mappedId = (mappedCreativeImageIds[formatKey] || '').trim();
+          if (mappedId) assignedIds.add(mappedId);
+        });
+        const legacyMappedId = (asset.creativeImageId || '').trim();
+        if (legacyMappedId) assignedIds.add(legacyMappedId);
+      });
+    });
+    return assignedIds;
+  }, [values.campaignMarkets]);
 
   useEffect(() => {
     setTopBarCenterHost(document.getElementById('workspace-topbar-center-slot'));
@@ -1263,6 +1373,10 @@ export function QuoteBuilderScreen({
       setError('');
     }
   }, [error, isCampaignStartDatePast, isDeliveryDueDatePast]);
+
+  useEffect(() => {
+    setPreviewArtworkFullLoaded(false);
+  }, [previewArtworkImage?.id]);
 
   useEffect(() => {
     if (loadingCampaign) return;
@@ -1585,12 +1699,14 @@ export function QuoteBuilderScreen({
 
   function openArtworkPreviewDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey) {
     setPreviewArtworkTarget({ marketId, assetId, formatKey });
+    setPreviewArtworkFullLoaded(false);
     setPreviewArtworkDialogOpen(true);
   }
 
   function closeArtworkPreviewDialog() {
     setPreviewArtworkDialogOpen(false);
     setPreviewArtworkTarget(null);
+    setPreviewArtworkFullLoaded(false);
   }
 
   function openChangeArtworkFromPreview() {
@@ -1633,6 +1749,73 @@ export function QuoteBuilderScreen({
     });
   }
 
+  function isDeleteNotFoundError(error: unknown) {
+    if (!(error instanceof Error)) return false;
+    const message = error.message.toLowerCase();
+    return message.includes('(404)') || message.includes('not found');
+  }
+
+  function handleDeleteArtwork(image: CampaignPrintImage) {
+    if (deletingArtworkIds.includes(image.id)) return;
+    if (assignedArtworkIdSet.has(image.id)) {
+      setArtworkDialogError('Cannot delete artwork that is assigned to an asset category.');
+      return;
+    }
+    setDeleteArtworkCandidate(image);
+  }
+
+  function cancelDeleteArtwork() {
+    if (confirmingArtworkDelete) return;
+    setDeleteArtworkCandidate(null);
+  }
+
+  async function confirmDeleteArtwork() {
+    const image = deleteArtworkCandidate;
+    if (!image) return;
+
+    setConfirmingArtworkDelete(true);
+    setDeletingArtworkIds((current) => [...current, image.id]);
+    setArtworkDialogError('');
+    try {
+      const storedNames = Array.from(
+        new Set(
+          [image.storedName, image.thumbnailStoredName]
+            .map((value) => (value || '').trim())
+            .filter(Boolean),
+        ),
+      );
+      if (storedNames.length === 0) {
+        throw new Error('Unable to delete artwork because storage info is missing.');
+      }
+
+      await Promise.all(
+        storedNames.map(async (storedName) => {
+          try {
+            await deleteCampaignImage(storedName);
+          } catch (deleteError) {
+            if (isDeleteNotFoundError(deleteError)) return;
+            throw deleteError;
+          }
+        }),
+      );
+
+      setValues((current) => ({
+        ...current,
+        printImages: current.printImages.filter((entry) => entry.id !== image.id),
+      }));
+
+      if (previewArtworkImage?.id === image.id) {
+        closeArtworkPreviewDialog();
+      }
+      setDeleteArtworkCandidate(null);
+    } catch (deleteError) {
+      setArtworkDialogError(deleteError instanceof Error ? deleteError.message : 'Unable to delete artwork.');
+    } finally {
+      setConfirmingArtworkDelete(false);
+      setDeletingArtworkIds((current) => current.filter((id) => id !== image.id));
+    }
+  }
+
   async function uploadArtworkPdfFiles(files: File[]) {
     if (!files.length) return;
     const nonPdfFile = files.find((file) => !isPdfFile(file));
@@ -1654,7 +1837,10 @@ export function QuoteBuilderScreen({
       for (const pdfFile of files) {
         const pageImages = await convertPdfToArtworkPages(pdfFile);
         for (const pageImage of pageImages) {
-          const uploadResponse = await uploadCampaignImage(pageImage.file);
+          const [uploadResponse, thumbnailUploadResponse] = await Promise.all([
+            uploadCampaignImage(pageImage.file),
+            uploadCampaignImage(pageImage.thumbnailFile),
+          ]);
           const baseName = toFileBaseName(pdfFile.name) || 'Artwork';
           const imageName = pageImage.totalPages > 1
             ? `${baseName} (Page ${pageImage.pageNumber})`
@@ -1666,6 +1852,9 @@ export function QuoteBuilderScreen({
             mimeType: uploadResponse.mimeType || pageImage.file.type || 'image/png',
             storedName: uploadResponse.storedName,
             imageUrl: uploadResponse.url || `/api/campaign-images/${uploadResponse.storedName}`,
+            thumbnailFileName: thumbnailUploadResponse.originalName || pageImage.thumbnailFile.name,
+            thumbnailStoredName: thumbnailUploadResponse.storedName,
+            thumbnailUrl: thumbnailUploadResponse.url || `/api/campaign-images/${thumbnailUploadResponse.storedName}`,
           });
         }
       }
@@ -1894,7 +2083,8 @@ export function QuoteBuilderScreen({
       if (!savedCampaignId) return;
       const response = await uploadPurchaseOrderFile(purchaseOrderFile, savedCampaignId);
       setUploadedPurchaseOrderName(response.originalName);
-      window.alert('Purchase order file uploaded successfully.');
+      setPurchaseOrderUploadSuccessMessage(`Purchase order file uploaded successfully: ${response.originalName}`);
+      setPurchaseOrderUploadSuccessOpen(true);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload purchase order');
     } finally {
@@ -3740,12 +3930,31 @@ export function QuoteBuilderScreen({
               <>
                 <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900">
                   <div className="max-h-[62vh] overflow-auto bg-slate-950/60 p-2">
-                    {previewArtworkImage.imageUrl ? (
-                      <img
-                        alt={previewArtworkImage.name}
-                        className="mx-auto h-auto max-w-full rounded-sm"
-                        src={buildApiUrl(previewArtworkImage.imageUrl)}
-                      />
+                    {previewArtworkThumbnailSrc || previewArtworkFullSrc ? (
+                      <div className="relative mx-auto w-fit">
+                        {previewArtworkThumbnailSrc ? (
+                          <img
+                            alt={previewArtworkImage.name}
+                            className={cn(
+                              'mx-auto h-auto max-w-full rounded-sm transition-opacity duration-150',
+                              previewArtworkFullLoaded ? 'opacity-0' : 'opacity-100',
+                            )}
+                            src={previewArtworkThumbnailSrc}
+                          />
+                        ) : null}
+                        {previewArtworkFullSrc ? (
+                          <img
+                            alt={previewArtworkImage.name}
+                            className={cn(
+                              'mx-auto h-auto max-w-full rounded-sm transition-opacity duration-200',
+                              previewArtworkThumbnailSrc ? 'absolute inset-0 opacity-0' : '',
+                              previewArtworkFullLoaded ? 'opacity-100' : 'opacity-0',
+                            )}
+                            onLoad={() => setPreviewArtworkFullLoaded(true)}
+                            src={previewArtworkFullSrc}
+                          />
+                        ) : null}
+                      </div>
                     ) : (
                       <div className="flex min-h-[220px] items-center justify-center text-sm text-slate-400">
                         Preview unavailable
@@ -3814,34 +4023,60 @@ export function QuoteBuilderScreen({
               <div className="max-h-[56vh] overflow-auto rounded-md border border-slate-700 bg-slate-900/65 p-3">
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
                   {values.printImages.map((image) => {
+                    const thumbnailSrc = image.thumbnailUrl ? buildApiUrl(image.thumbnailUrl) : '';
                     const imageSrc = image.imageUrl ? buildApiUrl(image.imageUrl) : '';
+                    const displaySrc = thumbnailSrc || imageSrc;
                     const selected = image.id === selectedArtworkImageIdForTarget;
+                    const assigned = assignedArtworkIdSet.has(image.id);
+                    const deleting = deletingArtworkIds.includes(image.id);
                     return (
-                      <button
+                      <div
                         key={`artwork-thumb-${image.id}`}
                         className={cn(
-                          'group flex flex-col overflow-hidden rounded-md border text-left transition',
+                          'group relative overflow-hidden rounded-md border text-left transition',
                           selected ? 'border-violet-400 bg-violet-500/10' : 'border-slate-700 bg-slate-950 hover:border-slate-500',
                         )}
-                        onClick={() => assignArtworkImageToTarget(image.id)}
-                        type="button"
                       >
-                        <div className="aspect-[4/3] w-full overflow-hidden bg-slate-900">
-                          {imageSrc ? (
-                            <img
-                              alt={image.name}
-                              className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.02]"
-                              src={imageSrc}
-                            />
-                          ) : (
-                            <div className="flex h-full items-center justify-center px-2 text-center text-xs text-slate-400">Preview unavailable</div>
+                        <button
+                          className="flex w-full flex-col overflow-hidden text-left"
+                          disabled={deleting}
+                          onClick={() => assignArtworkImageToTarget(image.id)}
+                          type="button"
+                        >
+                          <div className="aspect-[4/3] w-full overflow-hidden bg-slate-900">
+                            {displaySrc ? (
+                              <img
+                                alt={image.name}
+                                className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.02]"
+                                loading="lazy"
+                                src={displaySrc}
+                              />
+                            ) : (
+                              <div className="flex h-full items-center justify-center px-2 text-center text-xs text-slate-400">Preview unavailable</div>
+                            )}
+                          </div>
+                          <div className="space-y-1 px-2 py-2">
+                            <p className="truncate text-xs font-semibold text-slate-100">{image.name || image.fileName}</p>
+                            <p className="truncate text-[11px] text-slate-400">{image.fileName}</p>
+                          </div>
+                        </button>
+                        <Button
+                          className={cn(
+                            'absolute right-1.5 top-1.5 h-7 w-7 rounded-full border p-0',
+                            assigned
+                              ? 'cursor-not-allowed border-slate-800 bg-slate-900/70 text-slate-600 hover:bg-slate-900/70 hover:text-slate-600'
+                              : 'border-slate-700 bg-slate-950/90 text-rose-200 hover:bg-rose-500/20 hover:text-rose-100',
                           )}
-                        </div>
-                        <div className="space-y-1 px-2 py-2">
-                          <p className="truncate text-xs font-semibold text-slate-100">{image.name || image.fileName}</p>
-                          <p className="truncate text-[11px] text-slate-400">{image.fileName}</p>
-                        </div>
-                      </button>
+                          disabled={deleting || assigned}
+                          onClick={() => void handleDeleteArtwork(image)}
+                          size="icon"
+                          title={assigned ? 'Cannot delete while assigned to an asset category' : 'Delete artwork'}
+                          type="button"
+                          variant="ghost"
+                        >
+                          {deleting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        </Button>
+                      </div>
                     );
                   })}
                 </div>
@@ -3883,6 +4118,42 @@ export function QuoteBuilderScreen({
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={purchaseOrderUploadSuccessOpen}
+        onOpenChange={setPurchaseOrderUploadSuccessOpen}
+      >
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 30rem)' }}>
+          <DialogHeader>
+            <DialogTitle>Purchase Order Uploaded</DialogTitle>
+            <DialogDescription>{purchaseOrderUploadSuccessMessage || 'Purchase order file uploaded successfully.'}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <Button
+              onClick={() => setPurchaseOrderUploadSuccessOpen(false)}
+              type="button"
+              variant="secondary"
+            >
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmationDialog
+        cancelLabel="Keep Artwork"
+        confirmLabel="Delete Artwork"
+        confirming={confirmingArtworkDelete}
+        description={
+          deleteArtworkCandidate
+            ? `Delete "${deleteArtworkCandidate.name || deleteArtworkCandidate.fileName || 'this artwork'}"? This permanently removes the file from storage.`
+            : ''
+        }
+        onCancel={cancelDeleteArtwork}
+        onConfirm={() => void confirmDeleteArtwork()}
+        open={Boolean(deleteArtworkCandidate)}
+        title="Delete Artwork"
+      />
     </main>
   );
 }

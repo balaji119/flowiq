@@ -256,6 +256,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("POST /api/purchase-orders/upload", a.withAuth(http.HandlerFunc(a.handlePurchaseOrderUpload)))
 	mux.Handle("POST /api/finalize/send-email-to-ads", a.withAuth(http.HandlerFunc(a.handleSendEmailToADS)))
 	mux.Handle("POST /api/campaign-images/upload", a.withAuth(http.HandlerFunc(a.handleCampaignImageUpload)))
+	mux.Handle("DELETE /api/campaign-images/{storedName}", a.withAuth(http.HandlerFunc(a.handleCampaignImageDelete)))
 	mux.Handle("GET /api/campaign-images/{storedName}", http.HandlerFunc(a.handleCampaignImageGet))
 	mux.Handle("GET /api/campaign-images/{storedName}/download", http.HandlerFunc(a.handleCampaignImageDownload))
 	mux.Handle("GET /api/campaign-images/{storedName}/meta", http.HandlerFunc(a.handleCampaignImageMeta))
@@ -1186,6 +1187,25 @@ func (a *app) handleCampaignImageUpload(w http.ResponseWriter, r *http.Request) 
 		URL:          "/api/campaign-images/" + storedName,
 	}
 	writeJSON(w, http.StatusCreated, response)
+}
+
+func (a *app) handleCampaignImageDelete(w http.ResponseWriter, r *http.Request) {
+	storedName := strings.TrimSpace(r.PathValue("storedName"))
+	if !isSafeStoredName(storedName) {
+		http.NotFound(w, r)
+		return
+	}
+
+	if err := a.deleteCampaignImage(r.Context(), storedName); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to delete campaign image"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 func (a *app) handleCampaignImageGet(w http.ResponseWriter, r *http.Request) {
