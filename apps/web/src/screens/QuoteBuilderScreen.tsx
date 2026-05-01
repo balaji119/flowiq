@@ -1,5 +1,5 @@
 import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LoaderCircle, Plus, Upload, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LoaderCircle, Maximize2, Plus, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignPrintImage,
@@ -749,6 +749,7 @@ export function QuoteBuilderScreen({
   const [treatDefaultMarketAsPlaceholder, setTreatDefaultMarketAsPlaceholder] = useState(false);
   const [marketPopupManagedFlow, setMarketPopupManagedFlow] = useState(false);
   const [hasSavedMarketViaPopup, setHasSavedMarketViaPopup] = useState(false);
+  const [postersExpandedOpen, setPostersExpandedOpen] = useState(false);
   const [newAddressTarget, setNewAddressTarget] = useState<{ marketId: string; assetId: string; marketName: string } | null>(null);
   const [newAddressForm, setNewAddressForm] = useState<AddressFormState>(() => emptyAddressForm());
   const [newAddressError, setNewAddressError] = useState('');
@@ -2822,12 +2823,23 @@ export function QuoteBuilderScreen({
             </div>
 
           <aside className="space-y-3 lg:sticky lg:top-24">
-              <div>
-                <h3 className="text-lg font-black tracking-tight text-white">Posters</h3>
-              </div>
               {summary ? (
                     <>
-                    <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/70">
+                    <div className="rounded-md border border-slate-700 bg-slate-900/70">
+                      <div className="flex items-center justify-between border-b border-slate-700/70 px-2 py-1.5">
+                        <h3 className="px-1 text-lg font-black tracking-tight text-white">Posters</h3>
+                        <Button
+                          aria-label="Expand posters table"
+                          className="h-7 w-7 rounded-sm border border-transparent px-0 transition hover:border-slate-600 hover:bg-slate-800/80 hover:text-white focus-visible:border-slate-500 focus-visible:bg-slate-800/80"
+                          onClick={() => setPostersExpandedOpen(true)}
+                          title="Expand"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Maximize2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="overflow-x-auto">
                       <table className="dense-table w-max min-w-full border-collapse text-sm">
                         <colgroup>
                           <col className="w-[112px]" />
@@ -2890,6 +2902,7 @@ export function QuoteBuilderScreen({
                           })()}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                     <div>
                       <h3 className="mb-2 text-lg font-black tracking-tight text-white">Cost</h3>
@@ -2992,6 +3005,70 @@ export function QuoteBuilderScreen({
         </section>
 
       </div>
+
+      <Dialog open={postersExpandedOpen} onOpenChange={setPostersExpandedOpen}>
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 82rem)', maxHeight: '90vh' }}>
+          <DialogHeader>
+            <DialogTitle>Posters</DialogTitle>
+          </DialogHeader>
+          {summary ? (
+            <div className="overflow-auto rounded-md border border-slate-700 bg-slate-900/70">
+              <table className="dense-table w-full table-fixed border-collapse text-sm">
+                <thead>
+                  <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
+                    <th className="border border-slate-700 px-3 py-2 text-left">Market</th>
+                    <th className="border border-slate-700 px-3 py-2 text-left">Type</th>
+                    {visibleReviewFormatKeys.map((key) => (
+                      <th key={`expanded-review-head-${key}`} className="border border-slate-700 px-3 py-2 text-center">{formatKeyLabel(key)}</th>
+                    ))}
+                    <th className="border border-slate-700 px-3 py-2 text-center">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleReviewMarkets.map((marketSummary) => {
+                    const rows = buildReviewRows(marketSummary);
+                    return rows.map((row, rowIndex) => (
+                      <tr key={`expanded-review-row-${marketSummary.market}-${row.label}`} className={cn('bg-slate-800/70', rowIndex > 0 ? 'border-t border-slate-700/70' : 'border-t-2 border-slate-600')}>
+                        {rowIndex === 0 ? (
+                          <th rowSpan={rows.length} className="border border-slate-700 px-3 py-2 text-left font-semibold text-slate-100">
+                            {marketSummary.market}
+                          </th>
+                        ) : null}
+                        <th className="border border-slate-700 px-3 py-2 text-left font-semibold text-slate-100">{row.label}</th>
+                        {visibleReviewFormatKeys.map((key) => (
+                          <td key={`expanded-review-cell-${marketSummary.market}-${row.label}-${key}`} className="border border-slate-700 px-3 py-2 text-center font-semibold text-white">
+                            {row.breakdown[key]}
+                          </td>
+                        ))}
+                        <td className="border border-slate-700 px-3 py-2 text-center font-black text-white">{row.total}</td>
+                      </tr>
+                    ));
+                  })}
+                  {(() => {
+                    const grandRows = buildReviewRows(summary.grandTotal);
+                    return grandRows.map((row, rowIndex, allRows) => (
+                      <tr key={`expanded-review-grand-${row.label}`} className={cn('bg-violet-500/10', rowIndex === 0 ? 'border-t-4 border-violet-400/40' : 'border-t border-violet-400/20')}>
+                        {rowIndex === 0 ? (
+                          <th rowSpan={allRows.length} className="border border-violet-300/30 px-3 py-2 text-left font-semibold text-violet-100">
+                            All Markets
+                          </th>
+                        ) : null}
+                        <th className="border border-violet-300/30 px-3 py-2 text-left font-semibold text-violet-100">{row.label}</th>
+                        {visibleReviewFormatKeys.map((key) => (
+                          <td key={`expanded-review-grand-cell-${row.label}-${key}`} className="border border-violet-300/30 px-3 py-2 text-center font-semibold text-violet-100">
+                            {row.breakdown[key]}
+                          </td>
+                        ))}
+                        <td className="border border-violet-300/30 px-3 py-2 text-center font-black text-violet-100">{row.total}</td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={addMarketDialogOpen}
