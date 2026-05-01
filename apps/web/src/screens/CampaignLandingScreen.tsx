@@ -197,7 +197,7 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
   );
 
   return (
-    <main className="dense-main flex min-h-screen w-full flex-col gap-6">
+    <main className="dense-main flex min-h-0 w-full flex-col gap-6">
       {topBarCenterHost ? createPortal(topBarCenterContent, topBarCenterHost) : null}
       {topBarActionsHost ? createPortal(topBarActions, topBarActionsHost) : null}
 

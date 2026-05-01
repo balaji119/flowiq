@@ -351,7 +351,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
 
   if (!isSuperAdmin) {
     return (
-      <main className="dense-main flex min-h-screen w-full flex-col gap-6">
+      <main className="dense-main flex min-h-0 w-full flex-col gap-6">
         <Card>
           <CardHeader className="p-6">
             <CardTitle className="flex items-center gap-3"><Shield className="h-5 w-5 text-violet-300" /> Printing Costs</CardTitle>
@@ -368,7 +368,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
   }
 
   return (
-    <main className="dense-main flex min-h-screen w-full flex-col gap-6">
+    <main className="dense-main flex min-h-0 w-full flex-col gap-6">
       {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 
       <section className="flex flex-wrap gap-4">

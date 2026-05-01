@@ -1,5 +1,5 @@
 import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LoaderCircle, Maximize2, Plus, Upload, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LoaderCircle, Maximize2, Pencil, Plus, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignPrintImage,
@@ -745,6 +745,7 @@ export function QuoteBuilderScreen({
   const [draftMarket, setDraftMarket] = useState<CampaignMarket | null>(null);
   const [draftMarketSummary, setDraftMarketSummary] = useState<CampaignCalculationSummary['perMarket'][number] | null>(null);
   const [draftMarketCalculating, setDraftMarketCalculating] = useState(false);
+  const [editingMarketId, setEditingMarketId] = useState<string | null>(null);
   const [hiddenInlineMarketIds, setHiddenInlineMarketIds] = useState<string[]>([]);
   const [treatDefaultMarketAsPlaceholder, setTreatDefaultMarketAsPlaceholder] = useState(false);
   const [marketPopupManagedFlow, setMarketPopupManagedFlow] = useState(false);
@@ -1214,6 +1215,13 @@ export function QuoteBuilderScreen({
 
   useEffect(() => {
     if (loadingCampaign || loadingMetadata || metadataError) return;
+    if (values.campaignMarkets.length === 0) {
+      setSummary(null);
+      setCalculating(false);
+      setValues((current) => ({ ...current, quantity: '0' }));
+      setError('');
+      return;
+    }
 
     let active = true;
     const timeoutId = setTimeout(async () => {
@@ -1248,7 +1256,9 @@ export function QuoteBuilderScreen({
     setDraftMarketCalculating(true);
     const timeoutId = window.setTimeout(async () => {
       try {
-        const allMarkets = [...values.campaignMarkets, draftMarket];
+        const allMarkets = editingMarketId
+          ? values.campaignMarkets.map((market) => (market.id === editingMarketId ? draftMarket : market))
+          : [...values.campaignMarkets, draftMarket];
         const flatLines: CampaignLine[] = allMarkets.flatMap((market) => market.assets.map((asset) => ({ ...asset, market: market.market })));
         const result = await calculateCampaign(flatLines);
         if (!active) return;
@@ -1265,7 +1275,7 @@ export function QuoteBuilderScreen({
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [addMarketDialogOpen, draftMarket, loadingCampaign, loadingMetadata, metadataError, values.campaignMarkets]);
+  }, [addMarketDialogOpen, draftMarket, editingMarketId, loadingCampaign, loadingMetadata, metadataError, values.campaignMarkets]);
 
   function updateField<K extends keyof OrderFormValues>(field: K, value: OrderFormValues[K]) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -1294,15 +1304,47 @@ export function QuoteBuilderScreen({
         selectedWeeks: createAllWeeks(numberOfWeeks),
       })),
     });
+    setEditingMarketId(null);
+    setDraftMarketSummary(null);
+    setAddMarketDialogOpen(true);
+  }
+
+  function openEditMarketDialog(marketId: string) {
+    const targetMarket = values.campaignMarkets.find((market) => market.id === marketId);
+    if (!targetMarket) return;
+    setDraftMarket({
+      ...targetMarket,
+      assets: targetMarket.assets.map((asset) => ({
+        ...asset,
+        selectedWeeks: [...asset.selectedWeeks],
+        creativeImageIds: { ...(asset.creativeImageIds ?? {}) },
+      })),
+    });
+    setEditingMarketId(marketId);
     setDraftMarketSummary(null);
     setAddMarketDialogOpen(true);
   }
 
   function handleSaveAddMarket() {
-    if (!canAddMarket || !draftMarket) return;
+    if (!draftMarket) return;
     const savedDraftMarketId = draftMarket.id;
     setValues((current) => {
       const realMarkets = current.campaignMarkets.filter((market) => !isDefaultPlaceholderMarket(market));
+
+      if (editingMarketId) {
+        const selectedInOtherMarkets = new Set(realMarkets.filter((market) => market.id !== editingMarketId).map((market) => market.market));
+        if (!draftMarket.market.trim() || selectedInOtherMarkets.has(draftMarket.market)) return current;
+        const hasTarget = realMarkets.some((market) => market.id === editingMarketId);
+        const nextMarkets = hasTarget
+          ? realMarkets.map((market) => (market.id === editingMarketId ? draftMarket : market))
+          : [...realMarkets, draftMarket];
+        return {
+          ...current,
+          campaignMarkets: nextMarkets,
+        };
+      }
+
+      if (!canAddMarket) return current;
       const selectedMarketNames = new Set(
         marketPopupManagedFlow && !hasSavedMarketViaPopup ? [] : realMarkets.map((market) => market.market),
       );
@@ -1315,7 +1357,25 @@ export function QuoteBuilderScreen({
     setHiddenInlineMarketIds((current) => (current.includes(savedDraftMarketId) ? current : [...current, savedDraftMarketId]));
     setTreatDefaultMarketAsPlaceholder(false);
     setHasSavedMarketViaPopup(true);
+    setEditingMarketId(null);
     setAddMarketDialogOpen(false);
+    setDraftMarket(null);
+    setDraftMarketSummary(null);
+  }
+
+  function handleDeleteEditingMarket() {
+    if (!editingMarketId) return;
+    const remainingRealMarketsCount = values.campaignMarkets.filter((market) => !isDefaultPlaceholderMarket(market) && market.id !== editingMarketId).length;
+    setValues((current) => ({
+      ...current,
+      campaignMarkets: current.campaignMarkets.filter((market) => market.id !== editingMarketId),
+    }));
+    setHiddenInlineMarketIds((current) => current.filter((id) => id !== editingMarketId));
+    if (remainingRealMarketsCount === 0) {
+      setHasSavedMarketViaPopup(false);
+    }
+    setAddMarketDialogOpen(false);
+    setEditingMarketId(null);
     setDraftMarket(null);
     setDraftMarketSummary(null);
   }
@@ -2720,6 +2780,16 @@ export function QuoteBuilderScreen({
                             {market.market || 'Market'}
                           </span>
                         </div>
+                        <Button
+                          className="absolute right-2 top-2 h-7 w-7"
+                          onClick={() => openEditMarketDialog(market.id)}
+                          size="icon"
+                          title="Edit market"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
                         <div className="space-y-3 p-4 pl-14">
                           <div className="overflow-visible">
                             <table className="dense-table w-full border-collapse table-fixed">
@@ -2824,7 +2894,7 @@ export function QuoteBuilderScreen({
               </div>
             </div>
 
-          <aside className="space-y-3 lg:sticky lg:top-24">
+          <aside className="space-y-3 lg:sticky lg:top-2">
               {summary ? (
                     <>
                     <div className="rounded-md border border-slate-700 bg-slate-900/70">
@@ -3107,6 +3177,7 @@ export function QuoteBuilderScreen({
         onOpenChange={(open) => {
           setAddMarketDialogOpen(open);
           if (!open) {
+            setEditingMarketId(null);
             setDraftMarket(null);
             setDraftMarketSummary(null);
           }
@@ -3297,10 +3368,24 @@ export function QuoteBuilderScreen({
             </div>
           ) : null}
           <div className="shrink-0 border-t border-slate-700 bg-slate-950 px-5 py-4">
+            <div className="flex items-center justify-between gap-3">
+            <div>
+              {editingMarketId ? (
+                <Button
+                  className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+                  onClick={handleDeleteEditingMarket}
+                  type="button"
+                  variant="ghost"
+                >
+                  Delete Market
+                </Button>
+              ) : null}
+            </div>
             <div className="flex justify-end gap-3">
             <Button
               onClick={() => {
                 setAddMarketDialogOpen(false);
+                setEditingMarketId(null);
                 setDraftMarket(null);
                 setDraftMarketSummary(null);
               }}
@@ -3309,9 +3394,10 @@ export function QuoteBuilderScreen({
             >
               Cancel
             </Button>
-            <Button disabled={!canAddMarket || !draftMarket?.market.trim()} onClick={handleSaveAddMarket} type="button">
+            <Button disabled={!draftMarket?.market.trim() || (!editingMarketId && !canAddMarket)} onClick={handleSaveAddMarket} type="button">
               Save
             </Button>
+            </div>
             </div>
           </div>
         </DialogContent>

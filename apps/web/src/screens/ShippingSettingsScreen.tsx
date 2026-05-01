@@ -446,7 +446,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 
   if (session?.user.role === 'user') {
     return (
-      <main className="dense-main mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-8">
+      <main className="dense-main mx-auto flex min-h-0 w-full max-w-3xl items-center px-6 py-8">
         <Card className="w-full">
           <CardContent className="space-y-4 p-8 text-center">
             <Shield className="mx-auto h-8 w-8 text-amber-300" />
@@ -487,7 +487,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
       onOpenShippingSettings={() => {}}
       onOpenUsers={onOpenUsers}
     >
-    <main className="dense-main flex min-h-screen w-full flex-col gap-6">
+    <main className="dense-main flex min-h-0 w-full flex-col gap-6">
       {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
       {notice ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
