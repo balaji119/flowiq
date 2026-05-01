@@ -1,5 +1,5 @@
 import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LoaderCircle, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LoaderCircle, Plus, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignPrintImage,
@@ -26,7 +26,6 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { buildApiUrl } from '../services/apiBase';
 import { acquireCampaignEditLock, createCampaign, fetchCampaign, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
-import { uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
 import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
@@ -34,16 +33,7 @@ import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 import ExcelJS from 'exceljs';
 
-const steps = [
-  { key: 'creative', title: 'Setup' },
-  { key: 'schedule', title: 'Schedule' },
-  { key: 'review', title: 'Review' },
-  { key: 'finalize', title: 'Ready to order' },
-] as const;
-
 const ACTIVE_CAMPAIGN_ID_KEY = 'adsconnect-active-campaign-id';
-const PREVIEW_CACHE_PREFIX = 'adsconnect-preview:';
-const previewMemoryCache = new Map<string, string>();
 
 async function setStoredCampaignId(value: string | null) {
   if (typeof window === 'undefined') return;
@@ -224,40 +214,6 @@ function createAllWeeks(weekCount: number) {
 
 function toFileBaseName(fileName: string) {
   return fileName.replace(/\.[^.]+$/, '');
-}
-
-function isPdfPreview(image: Pick<CampaignPrintImage, 'mimeType' | 'fileName'>) {
-  return image.mimeType.toLowerCase() === 'application/pdf' || image.fileName.toLowerCase().endsWith('.pdf');
-}
-
-function previewCacheKeyForImage(image: Pick<CampaignPrintImage, 'storedName' | 'fileName' | 'id'>) {
-  const stableKey = image.storedName?.trim() || image.fileName.trim() || image.id;
-  return `${PREVIEW_CACHE_PREFIX}${stableKey}`;
-}
-
-function readCachedPreview(cacheKey: string) {
-  const memoryHit = previewMemoryCache.get(cacheKey);
-  if (memoryHit) return memoryHit;
-  if (typeof window === 'undefined') return '';
-  try {
-    const sessionHit = window.sessionStorage.getItem(cacheKey) || '';
-    if (sessionHit) {
-      previewMemoryCache.set(cacheKey, sessionHit);
-    }
-    return sessionHit;
-  } catch {
-    return '';
-  }
-}
-
-function writeCachedPreview(cacheKey: string, dataUrl: string) {
-  previewMemoryCache.set(cacheKey, dataUrl);
-  if (typeof window === 'undefined') return;
-  try {
-    window.sessionStorage.setItem(cacheKey, dataUrl);
-  } catch {
-    // Ignore storage quota errors; in-memory cache still helps during this session.
-  }
 }
 
 function isPdfFile(file: File) {
@@ -551,6 +507,8 @@ function SearchableSelect({
   actionLabel,
   onAction,
   actionDisabled = false,
+  triggerClassName,
+  menuItemClassName,
 }: {
   label: string;
   selectedValue: string;
@@ -562,6 +520,8 @@ function SearchableSelect({
   actionLabel?: string;
   onAction?: () => void;
   actionDisabled?: boolean;
+  triggerClassName?: string;
+  menuItemClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -594,7 +554,7 @@ function SearchableSelect({
     <div ref={containerRef} className="relative space-y-2">
       {label ? <Label>{label}</Label> : null}
       <button
-        className="flex h-10 w-full items-center justify-between rounded-md border border-slate-600 bg-slate-800 px-3 text-left text-sm text-slate-100 transition hover:border-slate-500"
+        className={cn('flex h-10 w-full items-center justify-between rounded-md border border-slate-600 bg-slate-800 px-3 text-left text-sm text-slate-100 transition hover:border-slate-500', triggerClassName)}
         onClick={() => setOpen((current) => !current)}
         type="button"
       >
@@ -602,7 +562,7 @@ function SearchableSelect({
         <ChevronDown className={cn('h-4 w-4 text-slate-400 transition-transform', open ? 'rotate-180' : '')} />
       </button>
       {open ? (
-        <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-md border border-slate-700 bg-slate-950 p-4 shadow-2xl shadow-slate-950/60">
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 rounded-md border border-slate-700 bg-slate-950 p-4 shadow-2xl shadow-slate-950/60">
           <div className="space-y-3">
             <Input autoFocus placeholder={`Search ${label || 'items'}`} value={query} onChange={(event) => setQuery(event.target.value)} />
             <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
@@ -611,7 +571,11 @@ function SearchableSelect({
                 return (
                   <button
                     key={item.value}
-                    className={cn('flex w-full items-center justify-between rounded-md border px-4 py-3 text-left text-sm transition', active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500')}
+                    className={cn(
+                      'flex w-full items-center justify-between rounded-md border px-4 py-3 text-left text-sm transition',
+                      active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500',
+                      menuItemClassName,
+                    )}
                     onClick={() => {
                       onValueChange(item.value);
                       setOpen(false);
@@ -652,6 +616,7 @@ function WeekSelector({
   selectedWeeks,
   startDate,
   compact = false,
+  small = false,
   readOnly = false,
   onToggleWeek,
 }: {
@@ -659,6 +624,7 @@ function WeekSelector({
   selectedWeeks: number[];
   startDate: string;
   compact?: boolean;
+  small?: boolean;
   readOnly?: boolean;
   onToggleWeek?: (week: number) => void;
 }) {
@@ -671,7 +637,7 @@ function WeekSelector({
             key={week}
             className={cn(
               'rounded-full border font-semibold transition',
-              compact ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs',
+              compact ? 'px-2.5 py-1 text-[11px]' : small ? 'px-2 py-1 text-[10px]' : 'px-3 py-1.5 text-xs',
               selected ? 'border-violet-400 bg-violet-500 text-white' : 'border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500',
             )}
             aria-pressed={selected}
@@ -748,11 +714,6 @@ export function QuoteBuilderScreen({
   onBack?: () => void;
   onOpenAdmin?: () => void;
 }) {
-  type PreviewEntry = {
-    cacheKey: string;
-    dataUrl: string;
-  };
-
   const { session } = useAuth();
   const [values, setValues] = useState<OrderFormValues>(() => defaultValues);
   const [campaignId, setCampaignId] = useState<string | null>(selectedCampaignId ?? null);
@@ -775,24 +736,24 @@ export function QuoteBuilderScreen({
   const [exportingTemplates, setExportingTemplates] = useState(false);
   const [sendingAdsEmail, setSendingAdsEmail] = useState(false);
   const [exportProgressMessage, setExportProgressMessage] = useState('');
-  const [stepIndex, setStepIndex] = useState(0);
   const [selectedPurchaseOrderFile, setSelectedPurchaseOrderFile] = useState<File | null>(null);
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
   const [uploadedPurchaseOrderName, setUploadedPurchaseOrderName] = useState('');
-  const [uploadingArtwork, setUploadingArtwork] = useState(false);
-  const [artworkUploadTotal, setArtworkUploadTotal] = useState(0);
-  const [artworkUploadCompleted, setArtworkUploadCompleted] = useState(0);
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
-  const [replacingImageId, setReplacingImageId] = useState<string | null>(null);
   const [newAddressDialogOpen, setNewAddressDialogOpen] = useState(false);
+  const [addMarketDialogOpen, setAddMarketDialogOpen] = useState(false);
+  const [draftMarket, setDraftMarket] = useState<CampaignMarket | null>(null);
+  const [draftMarketSummary, setDraftMarketSummary] = useState<CampaignCalculationSummary['perMarket'][number] | null>(null);
+  const [draftMarketCalculating, setDraftMarketCalculating] = useState(false);
+  const [hiddenInlineMarketIds, setHiddenInlineMarketIds] = useState<string[]>([]);
+  const [treatDefaultMarketAsPlaceholder, setTreatDefaultMarketAsPlaceholder] = useState(false);
+  const [marketPopupManagedFlow, setMarketPopupManagedFlow] = useState(false);
+  const [hasSavedMarketViaPopup, setHasSavedMarketViaPopup] = useState(false);
   const [newAddressTarget, setNewAddressTarget] = useState<{ marketId: string; assetId: string; marketName: string } | null>(null);
   const [newAddressForm, setNewAddressForm] = useState<AddressFormState>(() => emptyAddressForm());
   const [newAddressError, setNewAddressError] = useState('');
-  const [previewByImageId, setPreviewByImageId] = useState<Record<string, PreviewEntry>>({});
   const [topBarCenterHost, setTopBarCenterHost] = useState<HTMLElement | null>(null);
   const [topBarActionsHost, setTopBarActionsHost] = useState<HTMLElement | null>(null);
-  const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
-  const replaceImageInputRef = useRef<HTMLInputElement | null>(null);
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
   const campaignHydratedRef = useRef(false);
   const lastPersistedValuesRef = useRef('');
@@ -823,6 +784,9 @@ export function QuoteBuilderScreen({
             const response = await fetchCampaign(storedCampaignId);
             if (!active) return;
             applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
+            setTreatDefaultMarketAsPlaceholder(false);
+            setMarketPopupManagedFlow(false);
+            setHasSavedMarketViaPopup(true);
             lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
             campaignHydratedRef.current = true;
             await setStoredCampaignId(response.campaign.id);
@@ -845,6 +809,9 @@ export function QuoteBuilderScreen({
         setUploadedPurchaseOrderName('');
         setCampaignId(null);
         setCampaignStatus('draft');
+        setTreatDefaultMarketAsPlaceholder(true);
+        setMarketPopupManagedFlow(true);
+        setHasSavedMarketViaPopup(false);
         lastPersistedValuesRef.current = defaultValuesSerialized;
         campaignHydratedRef.current = true;
         await setStoredCampaignId(null);
@@ -1017,17 +984,33 @@ export function QuoteBuilderScreen({
   const payload = useMemo(() => buildPrintIqPayload(values, summary), [summary, values]);
   const canAddAddressInFinalize = session?.user.role === 'admin' || session?.user.role === 'super_admin';
   const numberOfWeeks = Math.max(1, Math.min(20, Math.floor(Number(values.numberOfWeeks) || 1)));
-  const currentStep = steps[stepIndex];
-  const progressPercent = ((stepIndex + 1) / steps.length) * 100;
   const marketNames = useMemo(() => markets.map((market) => market.name), [markets]);
   const creativeImageOptions = useMemo(
     () => [{ label: 'No artwork attached', value: '' }, ...values.printImages.map((image) => ({ label: image.name, value: image.id }))],
     [values.printImages],
   );
+  const isDefaultPlaceholderMarket = useMemo(
+    () => (market: CampaignMarket) => {
+      if (!treatDefaultMarketAsPlaceholder) return false;
+      if (market.market !== 'Sydney') return false;
+      if (market.assets.length !== 1) return false;
+      const onlyAsset = market.assets[0];
+      return !onlyAsset.assetId && !onlyAsset.assetSearch && !onlyAsset.deliveryAddress;
+    },
+    [treatDefaultMarketAsPlaceholder],
+  );
+  const effectiveCampaignMarkets = useMemo(
+    () => values.campaignMarkets.filter((market) => !isDefaultPlaceholderMarket(market)),
+    [isDefaultPlaceholderMarket, values.campaignMarkets],
+  );
+  const selectedMarketsForPopup = useMemo(() => {
+    if (marketPopupManagedFlow && !hasSavedMarketViaPopup) return [];
+    return effectiveCampaignMarkets;
+  }, [effectiveCampaignMarkets, hasSavedMarketViaPopup, marketPopupManagedFlow]);
   const remainingMarketNames = useMemo(() => {
-    const selectedMarketNames = new Set(values.campaignMarkets.map((market) => market.market));
+    const selectedMarketNames = new Set(selectedMarketsForPopup.map((market) => market.market));
     return marketNames.filter((marketName) => !selectedMarketNames.has(marketName));
-  }, [marketNames, values.campaignMarkets]);
+  }, [marketNames, selectedMarketsForPopup]);
   const canAddMarket = remainingMarketNames.length > 0;
   const addMarketDisabledReason = loadingMetadata
     ? 'Market options are still loading.'
@@ -1038,13 +1021,21 @@ export function QuoteBuilderScreen({
     if (values.campaignMarkets.length === 0) return null;
     return values.campaignMarkets.find((market) => market.id === activeMarketId) ?? values.campaignMarkets[0];
   }, [activeMarketId, values.campaignMarkets]);
+  const hiddenInlineMarketIdSet = useMemo(
+    () => new Set([...hiddenInlineMarketIds, ...values.campaignMarkets.map((market) => market.id)]),
+    [hiddenInlineMarketIds, values.campaignMarkets],
+  );
+  const visiblePlanningMarkets = useMemo(
+    () => values.campaignMarkets.filter((market) => !hiddenInlineMarketIdSet.has(market.id)),
+    [hiddenInlineMarketIdSet, values.campaignMarkets],
+  );
   const marketSummaryByName = useMemo(() => {
     if (!summary) return new Map<string, CampaignCalculationSummary['perMarket'][number]>();
     return new Map(summary.perMarket.map((entry) => [entry.market, entry]));
   }, [summary]);
   const selectedCampaignMarketNames = useMemo(
-    () => new Set(values.campaignMarkets.map((market) => market.market.trim()).filter(Boolean)),
-    [values.campaignMarkets],
+    () => new Set(effectiveCampaignMarkets.map((market) => market.market.trim()).filter(Boolean)),
+    [effectiveCampaignMarkets],
   );
   const visibleReviewMarkets = useMemo(
     () => (summary ? summary.perMarket.filter((entry) => selectedCampaignMarketNames.has(entry.market)) : []),
@@ -1168,82 +1159,6 @@ export function QuoteBuilderScreen({
   }, []);
 
   useEffect(() => {
-    const activeImageIds = new Set(values.printImages.map((image) => image.id));
-    setPreviewByImageId((current) => {
-      let changed = false;
-      const next: Record<string, PreviewEntry> = {};
-      Object.entries(current).forEach(([imageId, entry]) => {
-        if (activeImageIds.has(imageId)) {
-          next[imageId] = entry;
-        } else {
-          changed = true;
-        }
-      });
-      return changed ? next : current;
-    });
-  }, [values.printImages]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const missingPdfImages = values.printImages.filter((image) => {
-      if (!image.imageUrl || !isPdfPreview(image)) return false;
-      const cacheKey = previewCacheKeyForImage(image);
-      const existing = previewByImageId[image.id];
-      return !existing || existing.cacheKey !== cacheKey;
-    });
-    if (missingPdfImages.length === 0) return;
-
-    const cachedEntries: Record<string, PreviewEntry> = {};
-    const imagesToRender: CampaignPrintImage[] = [];
-    missingPdfImages.forEach((image) => {
-      const cacheKey = previewCacheKeyForImage(image);
-      const cached = readCachedPreview(cacheKey);
-      if (cached) {
-        cachedEntries[image.id] = { cacheKey, dataUrl: cached };
-      } else {
-        imagesToRender.push(image);
-      }
-    });
-
-    if (Object.keys(cachedEntries).length > 0) {
-      setPreviewByImageId((current) => ({ ...current, ...cachedEntries }));
-    }
-
-    if (imagesToRender.length === 0) return;
-
-    void (async () => {
-      for (const image of imagesToRender) {
-        if (cancelled) return;
-        try {
-          const sourceUrl = toAbsoluteUrl(buildApiUrl(image.imageUrl || ''));
-          if (!sourceUrl) continue;
-          const response = await fetch(sourceUrl, { cache: 'force-cache' });
-          if (!response.ok) continue;
-          const blob = await response.blob();
-          const previewDataUrl = await pdfFirstPageToDataUrl(blob, 220);
-          if (!previewDataUrl || cancelled) continue;
-          const cacheKey = previewCacheKeyForImage(image);
-          writeCachedPreview(cacheKey, previewDataUrl);
-          setPreviewByImageId((current) => ({
-            ...current,
-            [image.id]: {
-              cacheKey,
-              dataUrl: previewDataUrl,
-            },
-          }));
-        } catch {
-          // Keep UI responsive even when one preview fails.
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [previewByImageId, values.printImages]);
-
-  useEffect(() => {
     if (loadingCampaign) return;
 
     setValues((current) => {
@@ -1320,30 +1235,37 @@ export function QuoteBuilderScreen({
     };
   }, [loadingCampaign, loadingMetadata, metadataError, values.campaignMarkets]);
 
-  function updateField<K extends keyof OrderFormValues>(field: K, value: OrderFormValues[K]) {
-    setValues((current) => ({ ...current, [field]: value }));
-  }
-
-  function validateCreativeStepRequirements() {
-    if (!hasCampaignStartDate || !hasDeliveryDueDate) {
-      setError('Please select both Campaign start date and Delivery Due Date to continue.');
-      return false;
-    }
-    if (isCampaignStartDatePast || isDeliveryDueDatePast) {
-      setError('Campaign start date and Delivery Due Date must be today or a future date.');
-      return false;
-    }
-    return true;
-  }
-
-  function navigateToStep(nextStepIndex: number) {
-    if (nextStepIndex <= stepIndex) {
-      setStepIndex(nextStepIndex);
+  useEffect(() => {
+    if (!addMarketDialogOpen || !draftMarket || loadingCampaign || loadingMetadata || metadataError) {
+      setDraftMarketCalculating(false);
       return;
     }
-    if (stepIndex === 0 && !validateCreativeStepRequirements()) return;
-    setError('');
-    setStepIndex(nextStepIndex);
+
+    let active = true;
+    setDraftMarketCalculating(true);
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const allMarkets = [...values.campaignMarkets, draftMarket];
+        const flatLines: CampaignLine[] = allMarkets.flatMap((market) => market.assets.map((asset) => ({ ...asset, market: market.market })));
+        const result = await calculateCampaign(flatLines);
+        if (!active) return;
+        const nextSummary = result.perMarket.find((entry) => entry.market === draftMarket.market) ?? null;
+        setDraftMarketSummary(nextSummary);
+      } catch {
+        if (active) setDraftMarketSummary(null);
+      } finally {
+        if (active) setDraftMarketCalculating(false);
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+    };
+  }, [addMarketDialogOpen, draftMarket, loadingCampaign, loadingMetadata, metadataError, values.campaignMarkets]);
+
+  function updateField<K extends keyof OrderFormValues>(field: K, value: OrderFormValues[K]) {
+    setValues((current) => ({ ...current, [field]: value }));
   }
 
   function updateWeekCount(nextValue: number) {
@@ -1355,28 +1277,92 @@ export function QuoteBuilderScreen({
     setValues((current) => ({ ...current, campaignMarkets: current.campaignMarkets.map((market) => (market.id === marketId ? updater(market) : market)) }));
   }
 
-  function addCampaignMarket() {
+  function openAddMarketDialog() {
     if (!canAddMarket) return;
+    const nextMarketName = remainingMarketNames[0] || '';
+    const nextMarket = createCampaignMarket(`market-draft-${Date.now()}`);
+    const preferredAddress = preferredDeliveryAddressByMarket.get(nextMarketName) || '';
+    setDraftMarket({
+      ...nextMarket,
+      market: nextMarketName,
+      assets: nextMarket.assets.map((asset) => ({
+        ...asset,
+        deliveryAddress: preferredAddress,
+        selectedWeeks: createAllWeeks(numberOfWeeks),
+      })),
+    });
+    setDraftMarketSummary(null);
+    setAddMarketDialogOpen(true);
+  }
 
+  function handleSaveAddMarket() {
+    if (!canAddMarket || !draftMarket) return;
+    const savedDraftMarketId = draftMarket.id;
     setValues((current) => {
-      const selectedMarketNames = new Set(current.campaignMarkets.map((market) => market.market));
-      const nextMarketName = marketNames.find((marketName) => !selectedMarketNames.has(marketName));
-      if (!nextMarketName) return current;
-
-      const nextMarket = createCampaignMarket(`market-${Date.now()}`);
-      const preferredAddress = preferredDeliveryAddressByMarket.get(nextMarketName) || '';
+      const realMarkets = current.campaignMarkets.filter((market) => !isDefaultPlaceholderMarket(market));
+      const selectedMarketNames = new Set(
+        marketPopupManagedFlow && !hasSavedMarketViaPopup ? [] : realMarkets.map((market) => market.market),
+      );
+      if (!draftMarket.market.trim() || selectedMarketNames.has(draftMarket.market)) return current;
       return {
         ...current,
-        campaignMarkets: [
-          ...current.campaignMarkets,
+        campaignMarkets: marketPopupManagedFlow && !hasSavedMarketViaPopup ? [draftMarket] : [...realMarkets, draftMarket],
+      };
+    });
+    setHiddenInlineMarketIds((current) => (current.includes(savedDraftMarketId) ? current : [...current, savedDraftMarketId]));
+    setTreatDefaultMarketAsPlaceholder(false);
+    setHasSavedMarketViaPopup(true);
+    setAddMarketDialogOpen(false);
+    setDraftMarket(null);
+    setDraftMarketSummary(null);
+  }
+
+  function updateDraftMarket(updater: (market: CampaignMarket) => CampaignMarket) {
+    setDraftMarket((current) => (current ? updater(current) : current));
+  }
+
+  function updateDraftAsset(assetId: string, updater: (asset: CampaignAsset) => CampaignAsset) {
+    updateDraftMarket((market) => ({
+      ...market,
+      assets: market.assets.map((asset) => (asset.id === assetId ? updater(asset) : asset)),
+    }));
+  }
+
+  function toggleDraftAssetWeek(assetId: string, week: number) {
+    updateDraftAsset(assetId, (asset) => {
+      const selectedWeekSet = new Set(asset.selectedWeeks);
+      if (selectedWeekSet.has(week)) selectedWeekSet.delete(week);
+      else selectedWeekSet.add(week);
+      return { ...asset, selectedWeeks: Array.from(selectedWeekSet).sort((left, right) => left - right) };
+    });
+  }
+
+  function addDraftAsset() {
+    updateDraftMarket((market) => {
+      const availableAssets = assetsForMarket(market.market);
+      const nextAsset = availableAssets[0];
+      if (!nextAsset) return market;
+      const preferredAddress = preferredDeliveryAddressByMarket.get(market.market) || '';
+      return {
+        ...market,
+        assets: [
+          ...market.assets,
           {
-            ...nextMarket,
-            market: nextMarketName,
-            assets: nextMarket.assets.map((asset) => ({ ...asset, deliveryAddress: preferredAddress, selectedWeeks: createAllWeeks(numberOfWeeks) })),
+            ...createCampaignAsset(`asset-${Date.now()}`, numberOfWeeks),
+            assetId: nextAsset.id,
+            assetSearch: nextAsset.label,
+            deliveryAddress: preferredAddress,
           },
         ],
       };
     });
+  }
+
+  function removeDraftAsset(assetId: string) {
+    updateDraftMarket((market) => ({
+      ...market,
+      assets: market.assets.length === 1 ? market.assets : market.assets.filter((asset) => asset.id !== assetId),
+    }));
   }
 
   function removeCampaignMarket(marketId: string) {
@@ -1511,108 +1497,6 @@ export function QuoteBuilderScreen({
     setNewAddressError('');
   }
 
-  async function appendPrintImages(files: File[]) {
-    if (files.length === 0) {
-      setError('Please choose at least one valid file');
-      return;
-    }
-    const nonPdfFiles = files.filter((file) => !isPdfFile(file));
-    if (nonPdfFiles.length > 0) {
-      setError('Only PDF files are allowed');
-      return;
-    }
-
-    setUploadingArtwork(true);
-    setArtworkUploadTotal(files.length);
-    setArtworkUploadCompleted(0);
-    try {
-      const uploadedImages: CampaignPrintImage[] = [];
-      for (const [index, file] of files.entries()) {
-        const uploadResult = await uploadCampaignImage(file);
-        uploadedImages.push({
-          id: `print-image-${Date.now()}-${index}`,
-          name: toFileBaseName(file.name),
-          fileName: uploadResult.originalName || file.name,
-          mimeType: uploadResult.mimeType || file.type || 'application/octet-stream',
-          storedName: uploadResult.storedName,
-          imageUrl: uploadResult.url,
-        });
-        setArtworkUploadCompleted(index + 1);
-      }
-      setValues((current) => ({ ...current, printImages: [...current.printImages, ...uploadedImages] }));
-      setError('');
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload file(s)');
-    } finally {
-      setUploadingArtwork(false);
-      setArtworkUploadTotal(0);
-      setArtworkUploadCompleted(0);
-    }
-  }
-
-  function handlePickPrintImages() {
-    if (uploadingArtwork) return;
-    imageUploadInputRef.current?.click();
-  }
-
-  async function handlePrintImageSelection(event: React.ChangeEvent<HTMLInputElement>) {
-    const selectedFiles = event.target.files ? Array.from(event.target.files) : [];
-    if (selectedFiles.length > 0) await appendPrintImages(selectedFiles);
-    event.target.value = '';
-  }
-
-  function updatePrintImage(imageId: string, updater: (image: CampaignPrintImage) => CampaignPrintImage) {
-    setValues((current) => ({
-      ...current,
-      printImages: current.printImages.map((image) => (image.id === imageId ? updater(image) : image)),
-    }));
-  }
-
-  function removePrintImage(imageId: string) {
-    setValues((current) => ({
-      ...current,
-      printImages: current.printImages.filter((image) => image.id !== imageId),
-    }));
-  }
-
-  function beginReplacePrintImage(imageId: string) {
-    setReplacingImageId(imageId);
-    replaceImageInputRef.current?.click();
-  }
-
-  async function handleReplacePrintImage(event: React.ChangeEvent<HTMLInputElement>) {
-    const selectedFile = event.target.files?.[0];
-    if (!selectedFile || !replacingImageId) {
-      setReplacingImageId(null);
-      event.target.value = '';
-      return;
-    }
-    if (!isPdfFile(selectedFile)) {
-      setError('Only PDF files are allowed');
-      setReplacingImageId(null);
-      event.target.value = '';
-      return;
-    }
-
-    try {
-      const uploadResult = await uploadCampaignImage(selectedFile);
-      updatePrintImage(replacingImageId, (current) => ({
-        ...current,
-        fileName: uploadResult.originalName || selectedFile.name,
-        mimeType: uploadResult.mimeType || selectedFile.type || current.mimeType,
-        name: current.name.trim() ? current.name : toFileBaseName(selectedFile.name),
-        storedName: uploadResult.storedName,
-        imageUrl: uploadResult.url,
-      }));
-      setError('');
-    } catch (replaceError) {
-      setError(replaceError instanceof Error ? replaceError.message : 'Unable to replace file');
-    } finally {
-      setReplacingImageId(null);
-      event.target.value = '';
-    }
-  }
-
   async function saveCampaignDraft(options?: { fromAutoSave?: boolean }) {
     const fromAutoSave = options?.fromAutoSave ?? false;
     const currentValuesSerialized = stableSerialize(values);
@@ -1717,8 +1601,9 @@ export function QuoteBuilderScreen({
     }
   }
 
-  async function handleUploadPurchaseOrder() {
-    if (!selectedPurchaseOrderFile) {
+  async function handleUploadPurchaseOrder(fileToUpload?: File | null) {
+    const purchaseOrderFile = fileToUpload ?? selectedPurchaseOrderFile;
+    if (!purchaseOrderFile) {
       setError('Please choose a purchase order file to upload');
       return;
     }
@@ -1728,8 +1613,9 @@ export function QuoteBuilderScreen({
     try {
       const savedCampaignId = await saveCampaignDraft();
       if (!savedCampaignId) return;
-      const response = await uploadPurchaseOrderFile(selectedPurchaseOrderFile, savedCampaignId);
+      const response = await uploadPurchaseOrderFile(purchaseOrderFile, savedCampaignId);
       setUploadedPurchaseOrderName(response.originalName);
+      window.alert('Purchase order file uploaded successfully.');
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload purchase order');
     } finally {
@@ -1822,15 +1708,6 @@ export function QuoteBuilderScreen({
   function calculateMarketPrintingCost(marketName: string) {
     const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
     return marketLines.reduce((total, line) => total + calculateLinePrintingCost(line), 0);
-  }
-
-  async function reviewTotals() {
-    if (!summary) {
-      setError('No totals yet');
-      return;
-    }
-    setError('');
-    setStepIndex(2);
   }
 
   async function generateArtworkExcelTemplates(downloadFiles: boolean) {
@@ -2503,7 +2380,7 @@ export function QuoteBuilderScreen({
   }
 
   return (
-    <main className="dense-main flex min-h-screen w-full flex-col gap-6">
+    <main className="dense-main flex min-h-0 w-full flex-col gap-6">
       {topBarCenterHost
         ? createPortal(
             <p className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300" title={activeCampaignName}>
@@ -2521,227 +2398,131 @@ export function QuoteBuilderScreen({
             topBarActionsHost,
           )
         : null}
-      <section className="relative overflow-hidden rounded-md border border-slate-700/70 bg-slate-950/70 px-5 py-5 shadow-2xl shadow-slate-950/40">
-        <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.2),transparent_52%)]" />
-        <div className="relative flex flex-col gap-5">
-          <div className="space-y-3">
-            <div className="h-2 overflow-hidden rounded-full bg-slate-800">
-              <div className="h-full rounded-full bg-violet-500 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
-            </div>
-            <div className="grid gap-2 sm:grid-cols-4">
-              {steps.map((step, index) => {
-                const active = index === stepIndex;
-                return (
-                  <button
-                    key={step.key}
-                    className={cn('rounded-md border px-4 py-2.5 text-left text-sm font-semibold transition', active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-500')}
-                    onClick={() => navigateToStep(index)}
-                    type="button"
-                  >
-                    <span className="block text-base leading-tight">{step.title}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-
       {(error || metadataError) ? (
         <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error || metadataError}</div>
       ) : null}
       {quoteResponseMessage ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{quoteResponseMessage}</div> : null}
 
       <div className="grid gap-6">
-        <section className="space-y-6">
-          {currentStep.key === 'creative' ? (
-            <Card>
-              <CardContent className="space-y-5 p-6">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(320px,1.4fr)_220px_220px_160px]">
-                  <TextField id="campaign-name" label="Campaign Name" value={values.campaignName} onChange={(value) => updateField('campaignName', value)} />
-                  <div className="space-y-2">
-                    <Label htmlFor="campaign-start">Campaign start date</Label>
-                    <Input
-                      className="pr-1 [&::-webkit-calendar-picker-indicator]:-mr-0.5 [&::-webkit-calendar-picker-indicator]:ml-auto"
-                      id="campaign-start"
-                      min={minSelectableDate}
-                      type="date"
-                      value={values.campaignStartDate}
-                      onChange={(event) => updateField('campaignStartDate', event.target.value)}
+        <section>
+          <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
+            <div className="space-y-6 lg:col-span-2">
+              <div className="space-y-4">
+                <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_226px_226px_136px]">
+              <div className="flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">Campaign Name</span>
+                <Input
+                  className="h-10 rounded-none border-0 bg-transparent"
+                  id="campaign-name"
+                  type="text"
+                  value={values.campaignName}
+                  onChange={(event) => updateField('campaignName', event.target.value)}
+                />
+              </div>
+              <div className="flex h-10 w-[226px] overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                <span className="inline-flex items-center whitespace-nowrap border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">Start Date</span>
+                <Input
+                  className="h-10 w-[148px] flex-none rounded-none border-0 bg-transparent px-2 pr-2 [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:block [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100"
+                  id="campaign-start"
+                  min={minSelectableDate}
+                  type="date"
+                  value={values.campaignStartDate}
+                  onChange={(event) => updateField('campaignStartDate', event.target.value)}
+                />
+              </div>
+              <div className="flex h-10 w-[226px] overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                <span className="inline-flex items-center whitespace-nowrap border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">Due Date</span>
+                <Input
+                  className="h-10 w-[148px] flex-none rounded-none border-0 bg-transparent px-2 pr-2 [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:block [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100"
+                  id="due-date"
+                  min={minSelectableDate}
+                  type="date"
+                  value={values.dueDate}
+                  onChange={(event) => updateField('dueDate', event.target.value)}
+                />
+              </div>
+              <div className="flex h-10 w-[136px] overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                <span className="inline-flex items-center whitespace-nowrap border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">Weeks</span>
+                <Input
+                  className="h-10 w-10 flex-none rounded-none border-0 bg-transparent px-0 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  id="week-count"
+                  inputMode="numeric"
+                  min={1}
+                  onChange={(event) => {
+                    const rawValue = event.target.value.trim();
+                    const parsedValue = Number(rawValue);
+                    updateWeekCount(Number.isFinite(parsedValue) ? parsedValue : 1);
+                  }}
+                  type="number"
+                  value={numberOfWeeks}
+                />
+                <div className="flex h-10 w-8 flex-col border-l border-slate-600">
+                  <Button
+                    className="h-[22px] w-8 rounded-none border-b border-slate-600 px-0"
+                    onClick={() => updateWeekCount(numberOfWeeks + 1)}
+                    type="button"
+                    variant="ghost"
+                  >
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    className="h-[22px] w-8 rounded-none px-0"
+                    disabled={numberOfWeeks <= 1}
+                    onClick={() => updateWeekCount(numberOfWeeks - 1)}
+                    type="button"
+                    variant="ghost"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_226px_226px_136px]">
+                  <div className="flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                    <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">Purchase Order</span>
+                    <button
+                      className="h-10 min-w-0 flex-1 truncate border-0 bg-transparent px-3 text-left text-sm font-semibold text-slate-100 transition hover:bg-slate-700/40"
+                      disabled={uploadingPurchaseOrder}
+                      onClick={openPurchaseOrderPicker}
+                      type="button"
+                    >
+                      {uploadingPurchaseOrder
+                        ? 'Uploading...'
+                        : uploadedPurchaseOrderName
+                          ? `Uploaded: ${uploadedPurchaseOrderName}`
+                          : 'Choose File'}
+                    </button>
+                    <input
+                      ref={purchaseOrderInputRef}
+                      accept="application/pdf,.pdf"
+                      className="hidden"
+                      onChange={(event) => {
+                        const nextFile = event.target.files?.[0] ?? null;
+                        if (nextFile && !isPdfFile(nextFile)) {
+                          setError('Only PDF files are allowed');
+                          return;
+                        }
+                        setSelectedPurchaseOrderFile(nextFile);
+                        if (nextFile) {
+                          void handleUploadPurchaseOrder(nextFile);
+                        }
+                      }}
+                      type="file"
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="due-date">Delivery Due Date</Label>
-                    <Input
-                      className="pr-1 [&::-webkit-calendar-picker-indicator]:-mr-0.5 [&::-webkit-calendar-picker-indicator]:ml-auto"
-                      id="due-date"
-                      min={minSelectableDate}
-                      type="date"
-                      value={values.dueDate}
-                      onChange={(event) => updateField('dueDate', event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="week-count">Number of weeks</Label>
-                    <div className="flex h-10 overflow-hidden rounded-md border border-slate-600 bg-slate-800">
-                      <Input
-                        className="h-10 rounded-none border-0 pr-0 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                        id="week-count"
-                        inputMode="numeric"
-                        min={1}
-                        onChange={(event) => {
-                          const rawValue = event.target.value.trim();
-                          const parsedValue = Number(rawValue);
-                          updateWeekCount(Number.isFinite(parsedValue) ? parsedValue : 1);
-                        }}
-                        type="number"
-                        value={numberOfWeeks}
-                      />
-                      <div className="flex h-10 w-10 flex-col border-l border-slate-600">
-                        <Button
-                          className="h-[22px] w-10 rounded-none border-b border-slate-600 px-0"
-                          onClick={() => updateWeekCount(numberOfWeeks + 1)}
-                          type="button"
-                          variant="ghost"
-                        >
-                          <ChevronUp className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          className="h-[22px] w-10 rounded-none px-0"
-                          disabled={numberOfWeeks <= 1}
-                          onClick={() => updateWeekCount(numberOfWeeks - 1)}
-                          type="button"
-                          variant="ghost"
-                        >
-                          <ChevronDown className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
                   </div>
                 </div>
-                {!canAdvanceFromCreative ? (
-                  <p className="text-sm font-medium text-amber-200">
-                    {(!hasCampaignStartDate || !hasDeliveryDueDate)
-                      ? 'Campaign start date and Delivery Due Date are required before continuing.'
-                      : 'Campaign start date and Delivery Due Date must be today or a future date.'}
-                  </p>
-                ) : null}
+              </div>
 
+              <div className="space-y-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-slate-400">{values.printImages.length} artwork{values.printImages.length === 1 ? '' : 's'} uploaded</p>
-                  <Button className="h-10 px-5" disabled={uploadingArtwork} onClick={handlePickPrintImages} type="button" variant="secondary">
-                    {uploadingArtwork ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                    {uploadingArtwork
-                      ? `Uploading Artwork (${artworkUploadCompleted}/${Math.max(artworkUploadTotal, 1)})`
-                      : 'Upload Artwork'}
-                  </Button>
+                  <h3 className="text-lg font-black tracking-tight text-white">Market Planning</h3>
+                  <div title={canAddMarket ? 'Add another market' : addMarketDisabledReason}>
+                    <Button className="h-10 min-w-[160px] px-5 text-base" disabled={!canAddMarket} onClick={openAddMarketDialog} type="button" variant="secondary">
+                      <Plus className="h-4 w-4" />
+                      Add Market
+                    </Button>
+                  </div>
                 </div>
-                {uploadingArtwork ? (
-                  <p className="text-sm text-slate-300" role="status">
-                    Uploading files in the background. Please wait...
-                  </p>
-                ) : null}
-                <input
-                  ref={imageUploadInputRef}
-                  accept="application/pdf,.pdf"
-                  className="hidden"
-                  disabled={uploadingArtwork}
-                  multiple
-                  onChange={(event) => void handlePrintImageSelection(event)}
-                  type="file"
-                />
-                <input
-                  ref={replaceImageInputRef}
-                  accept="application/pdf,.pdf"
-                  className="hidden"
-                  onChange={(event) => void handleReplacePrintImage(event)}
-                  type="file"
-                />
-
-                <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-950/70">
-                  <table className="dense-table min-w-[860px] w-full border-collapse text-sm">
-                    <thead>
-                      <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
-                        <th className="border border-slate-700 px-4 py-3 text-left">Preview</th>
-                        <th className="border border-slate-700 px-4 py-3 text-left">Name</th>
-                        <th className="border border-slate-700 px-4 py-3 text-left">File</th>
-                        <th className="border border-slate-700 px-4 py-3 text-center">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {values.printImages.length > 0 ? (
-                        values.printImages.map((image) => {
-                          const isImage = image.mimeType.toLowerCase().startsWith('image/');
-                          const isPdf = isPdfPreview(image);
-                          const previewEntry = previewByImageId[image.id];
-                          const expectedPreviewCacheKey = previewCacheKeyForImage(image);
-                          const previewDataUrl = previewEntry?.cacheKey === expectedPreviewCacheKey ? previewEntry.dataUrl : '';
-
-                          return (
-                            <tr key={image.id} className="border-t border-slate-700/70 bg-slate-800/60">
-                              <td className="border border-slate-700 px-4 py-3">
-                                <div className="h-14 w-20 overflow-hidden rounded-md border border-slate-600 bg-slate-900">
-                                  {image.imageUrl && (isImage || isPdf) ? (
-                                    isImage ? (
-                                      <img alt={image.name} className="h-full w-full object-cover" src={buildApiUrl(image.imageUrl)} />
-                                    ) : previewDataUrl ? (
-                                      <img alt={`${image.name} preview`} className="h-full w-full object-cover" src={previewDataUrl} />
-                                    ) : (
-                                      <div className="flex h-full w-full items-center justify-center text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                        Loading
-                                      </div>
-                                    )
-                                  ) : (
-                                    <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                      File
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="border border-slate-700 px-4 py-3">
-                                <Input value={image.name} onChange={(event) => updatePrintImage(image.id, (current) => ({ ...current, name: event.target.value }))} />
-                              </td>
-                              <td className="border border-slate-700 px-4 py-3 text-slate-200">{image.fileName}</td>
-                              <td className="border border-slate-700 px-4 py-3">
-                                <div className="flex items-center justify-center gap-1">
-                                  <Button className="h-8 w-8" onClick={() => beginReplacePrintImage(image.id)} size="icon" type="button" variant="ghost">
-                                    <Pencil className="h-4 w-4 text-slate-200" />
-                                  </Button>
-                                  <Button className="h-8 w-8" onClick={() => removePrintImage(image.id)} size="icon" type="button" variant="ghost">
-                                    <Trash2 className="h-4 w-4 text-rose-300" />
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      ) : (
-                        <tr className="bg-slate-900/50">
-                          <td className="border border-slate-700 px-4 py-8 text-center text-sm text-slate-400" colSpan={4}>
-                            No artwork uploaded yet.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-                  <Button className="h-10 min-w-[220px] px-6 text-base" disabled={!canAdvanceFromCreative} onClick={() => navigateToStep(1)} type="button">
-                    Continue To Schedule
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {currentStep.key === 'schedule' ? (
-            <Card>
-              <CardHeader className="p-6 pb-0">
-                <CardTitle>Market Planning</CardTitle>
-                <CardDescription>Select markets and assets, then let quantity mappings update totals automatically.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6 p-6">
                 {loadingMetadata ? (
                   <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
                     <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
@@ -2750,9 +2531,9 @@ export function QuoteBuilderScreen({
                 ) : null}
 
                 <div className="space-y-4">
-                  {values.campaignMarkets.map((market, marketIndex) => {
+                  {visiblePlanningMarkets.map((market, marketIndex) => {
                     const availableAssets = assetsForMarket(market.market);
-                    const canRemoveMarket = values.campaignMarkets.length > 1;
+                    const canRemoveMarket = visiblePlanningMarkets.length > 1;
                     const availableMarkets = marketOptionsFor(market.id, market.market);
                     const isActiveMarket = market.id === activeMarket?.id;
                     const marketSummary = marketSummaryByName.get(market.market);
@@ -2926,295 +2707,252 @@ export function QuoteBuilderScreen({
                   })}
                 </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <div title={canAddMarket ? 'Add another market' : addMarketDisabledReason}>
-                    <Button className="h-10 min-w-[160px] px-5 text-base" disabled={!canAddMarket} onClick={addCampaignMarket} type="button" variant="secondary">
-                      <Plus className="h-4 w-4" />
-                      Add Market
-                    </Button>
-                  </div>
-                  <Button className="h-10 min-w-[180px] px-6 text-base" disabled={calculating} onClick={reviewTotals} type="button">
-                    {calculating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                    {calculating ? 'Calculating...' : 'Review Totals'}
-                  </Button>
+                <div className="space-y-5">
+                  {values.campaignMarkets.map((market) => {
+                    const deliveryAddressOptions = deliveryAddressOptionsFor(market.market);
+                    return (
+                      <div key={`finalize-map-${market.id}`} className="relative rounded-md border border-slate-700 bg-slate-900/45">
+                        <div className="absolute inset-y-0 left-0 flex w-12 items-center justify-center border-r border-slate-700/70 bg-slate-900/65">
+                          <span className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-300 [writing-mode:vertical-rl] rotate-180">
+                            {market.market || 'Market'}
+                          </span>
+                        </div>
+                        <div className="space-y-3 p-4 pl-14">
+                          <div className="overflow-visible">
+                            <table className="dense-table w-full border-collapse table-fixed">
+                            <thead>
+                              <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                                <th className="px-4 py-3 text-left">Asset</th>
+                                <th className="px-4 py-3 text-left">Category</th>
+                                <th className="px-4 py-3 text-left">Creative</th>
+                                <th className="px-4 py-3 text-left">Delivery Address</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {market.assets.map((asset) => {
+                                const line = summaryLineByAssetId.get(asset.id);
+                                const requiredFormats = getCreativeFormatsForBreakdown(line?.breakdown);
+                                const displayFormats = requiredFormats.length > 0 ? requiredFormats : [null];
+                                const rowSpan = displayFormats.length;
+                                return (
+                                  <Fragment key={`finalize-map-group-${asset.id}`}>
+                                    {displayFormats.map((formatKey, index) => {
+                                      const selectedCreativeId = formatKey ? getCreativeImageIdForFormat(asset, formatKey) : '';
+                                      return (
+                                        <tr key={`finalize-map-row-${asset.id}-${formatKey ?? 'none'}-${index}`} className="border-b border-slate-700/70 align-top last:border-b-0">
+                                          {index === 0 ? (
+                                            <td className="px-4 py-3" rowSpan={rowSpan}>
+                                              <p className="text-sm font-semibold text-white">{asset.assetSearch || asset.assetId || 'Asset not selected'}</p>
+                                            </td>
+                                          ) : null}
+                                          <td className="px-4 py-3">
+                                            {formatKey ? (
+                                              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">{creativeFormatLabel(formatKey)}</p>
+                                            ) : (
+                                              <p className="text-sm text-slate-400">No active quantity formats</p>
+                                            )}
+                                          </td>
+                                          <td className="px-4 py-3">
+                                            {formatKey ? (
+                                              <SearchableSelect
+                                                emptyMessage={values.printImages.length ? 'No matching artwork found.' : 'No artwork uploaded yet.'}
+                                                items={creativeImageOptions}
+                                                label=""
+                                                onValueChange={(value) =>
+                                                  updateCampaignAsset(market.id, asset.id, (current) => {
+                                                    const nextCreativeImageIds = {
+                                                      ...normalizeCreativeImageIds(current),
+                                                      [formatKey]: value,
+                                                    };
+                                                    if (!value) {
+                                                      delete nextCreativeImageIds[formatKey];
+                                                    }
+                                                    return {
+                                                      ...current,
+                                                      creativeImageIds: nextCreativeImageIds,
+                                                      creativeImageId: getCreativeImageIdForFormat({ ...current, creativeImageIds: nextCreativeImageIds }, '8-sheet') || '',
+                                                    };
+                                                  })
+                                                }
+                                                placeholder={values.printImages.length ? 'Attach artwork' : 'No artwork available'}
+                                                selectedLabel={values.printImages.find((image) => image.id === selectedCreativeId)?.name}
+                                                selectedValue={selectedCreativeId || ''}
+                                              />
+                                            ) : (
+                                              <p className="text-sm text-slate-500">-</p>
+                                            )}
+                                          </td>
+                                          {index === 0 ? (
+                                            <td className="px-4 py-3" rowSpan={rowSpan}>
+                                              <SearchableSelect
+                                                actionDisabled={!market.market}
+                                                actionLabel={canAddAddressInFinalize ? 'Add new address' : undefined}
+                                                emptyMessage={deliveryAddressOptions.length ? 'No matching addresses found.' : 'No addresses saved for this market yet.'}
+                                                items={deliveryAddressOptions}
+                                                label=""
+                                                onAction={() => openAddAddressDialog(market.id, asset.id, market.market)}
+                                                onValueChange={(value) =>
+                                                  updateCampaignAsset(market.id, asset.id, (current) => ({
+                                                    ...current,
+                                                    deliveryAddress: value,
+                                                  }))
+                                                }
+                                                placeholder={deliveryAddressOptions.length ? 'Choose delivery address' : 'No addresses available'}
+                                                selectedLabel={asset.deliveryAddress || ''}
+                                                selectedValue={asset.deliveryAddress || ''}
+                                              />
+                                            </td>
+                                          ) : null}
+                                        </tr>
+                                      );
+                                    })}
+                                  </Fragment>
+                                );
+                              })}
+                            </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </CardContent>
-            </Card>
-          ) : null}
 
-          {currentStep.key === 'review' ? (
-            <Card>
-              <CardHeader className="p-6 pb-0">
-                <CardTitle>Review Totals</CardTitle>
-                <CardDescription>Confirm the calculated totals before creating the quote.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5 p-6">
-                {summary ? (
-                  <>
+              </div>
+            </div>
+
+          <aside className="space-y-3 lg:sticky lg:top-24">
+              <div>
+                <h3 className="text-lg font-black tracking-tight text-white">Posters</h3>
+              </div>
+              {summary ? (
+                    <>
                     <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/70">
-                      <table className="dense-table min-w-[1120px] w-full border-collapse text-sm">
+                      <table className="dense-table w-max min-w-full border-collapse text-sm">
+                        <colgroup>
+                          <col className="w-[112px]" />
+                          <col className="w-[88px]" />
+                          {visibleReviewFormatKeys.map((key) => (
+                            <col key={`review-col-${key}`} className="w-[88px]" />
+                          ))}
+                          <col className="w-[92px]" />
+                        </colgroup>
                         <thead>
                           <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
-                            <th className="border border-slate-700 px-4 py-3 text-left">Market</th>
-                            <th className="border border-slate-700 px-4 py-3 text-left">Type</th>
+                            <th className="sticky left-0 z-40 border border-slate-700 bg-slate-950 px-3 py-2 text-left whitespace-nowrap">Market</th>
+                            <th className="sticky left-[112px] z-40 border border-slate-700 bg-slate-950 px-3 py-2 text-left whitespace-nowrap">Type</th>
                             {visibleReviewFormatKeys.map((key) => (
-                              <th key={`review-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatKeyLabel(key)}</th>
+                              <th key={`review-head-${key}`} className="border border-slate-700 px-3 py-2 text-center">{formatKeyLabel(key)}</th>
                             ))}
-                            <th className="border border-slate-700 px-4 py-3 text-center">Total</th>
-                          <th className="border border-slate-700 px-4 py-3 text-center">Printing Cost ($)</th>
-                          <th className="border border-slate-700 px-4 py-3 text-center">Shipping Cost ($)</th>
+                            <th className="sticky right-0 z-40 border border-slate-700 bg-slate-950 px-3 py-2 text-center whitespace-nowrap">Total</th>
                           </tr>
                         </thead>
                         <tbody>
                           {visibleReviewMarkets.map((marketSummary) => {
-                            const marketPrintingCost = calculateMarketPrintingCost(marketSummary.market);
-                            const marketShippingCost = calculateMarketShippingCost(marketSummary.market);
-                            const rows = buildReviewRows(marketSummary).map((row) =>
-                              row.label === 'Posters'
-                                ? { ...row, printingCost: marketPrintingCost, shippingCost: marketShippingCost }
-                                : row,
-                            );
+                            const rows = buildReviewRows(marketSummary);
                             return rows.map((row, rowIndex) => (
                               <tr key={`review-row-${marketSummary.market}-${row.label}`} className={cn('bg-slate-800/70', rowIndex > 0 ? 'border-t border-slate-700/70' : 'border-t-2 border-slate-600')}>
                                 {rowIndex === 0 ? (
-                                  <th rowSpan={rows.length} className="border border-slate-700 px-4 py-3 text-left text-base font-black text-white">
+                                  <th rowSpan={rows.length} className="sticky left-0 z-30 border border-slate-700 bg-slate-800 px-3 py-2 text-left font-semibold text-slate-100">
                                     {marketSummary.market}
                                   </th>
                                 ) : null}
-                                <th className="border border-slate-700 px-4 py-3 text-left font-semibold text-slate-100">{row.label}</th>
+                                <th className="sticky left-[112px] z-30 border border-slate-700 bg-slate-800 px-3 py-2 text-left font-semibold text-slate-100">{row.label}</th>
                                 {visibleReviewFormatKeys.map((key) => (
-                                  <td key={`review-cell-${marketSummary.market}-${row.label}-${key}`} className="border border-slate-700 px-4 py-3 text-center font-semibold text-white">
+                                  <td key={`review-cell-${marketSummary.market}-${row.label}-${key}`} className="border border-slate-700 px-3 py-2 text-center font-semibold text-white">
                                     {row.breakdown[key]}
                                   </td>
                                 ))}
-                                <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">{row.total}</td>
-                                <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">
-                                  {'printingCost' in row ? formatCurrency(row.printingCost) : '—'}
-                                </td>
-                                <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">
-                                  {row.shippingCost === null ? '—' : formatCurrency(row.shippingCost)}
-                                </td>
+                                <td className="sticky right-0 z-30 border border-slate-700 bg-slate-800 px-3 py-2 text-center font-black text-white">{row.total}</td>
                               </tr>
                             ));
                           })}
 
                           {(() => {
-                            const grandPosterPrintingCost = visibleReviewMarkets.reduce((total, marketSummary) => total + calculateMarketPrintingCost(marketSummary.market), 0);
-                            const grandPosterShippingCost = visibleReviewMarkets.reduce((total, marketSummary) => total + calculateMarketShippingCost(marketSummary.market), 0);
-                            const grandRows = buildReviewRows(summary.grandTotal).map((row) =>
-                              row.label === 'Posters' ? { ...row, printingCost: grandPosterPrintingCost, shippingCost: grandPosterShippingCost } : row,
-                            );
+                            const grandRows = buildReviewRows(summary.grandTotal);
 
                             return grandRows.map((row, rowIndex, allRows) => (
                               <tr key={`review-grand-${row.label}`} className={cn('bg-violet-500/10', rowIndex === 0 ? 'border-t-4 border-violet-400/40' : 'border-t border-violet-400/20')}>
                                 {rowIndex === 0 ? (
-                                  <th rowSpan={allRows.length} className="border border-violet-300/30 px-4 py-3 text-left text-base font-black text-violet-100">
+                                  <th rowSpan={allRows.length} className="sticky left-0 z-30 border border-violet-300/30 bg-[#2a2450] px-3 py-2 text-left font-semibold text-violet-100">
                                     All Markets
                                   </th>
                                 ) : null}
-                                <th className="border border-violet-300/30 px-4 py-3 text-left font-semibold text-violet-100">{row.label}</th>
+                                <th className="sticky left-[112px] z-30 border border-violet-300/30 bg-[#2a2450] px-3 py-2 text-left font-semibold text-violet-100">{row.label}</th>
                                 {visibleReviewFormatKeys.map((key) => (
-                                  <td key={`review-grand-cell-${row.label}-${key}`} className="border border-violet-300/30 px-4 py-3 text-center font-semibold text-violet-100">
+                                  <td key={`review-grand-cell-${row.label}-${key}`} className="border border-violet-300/30 px-3 py-2 text-center font-semibold text-violet-100">
                                     {row.breakdown[key]}
                                   </td>
                                 ))}
-                                <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">{row.total}</td>
-                                <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
-                                  {'printingCost' in row ? formatCurrency(row.printingCost) : '—'}
-                                </td>
-                                <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
-                                  {row.shippingCost === null ? '—' : formatCurrency(row.shippingCost)}
-                                </td>
+                                <td className="sticky right-0 z-30 border border-violet-300/30 bg-[#2a2450] px-3 py-2 text-center font-black text-violet-100">{row.total}</td>
                               </tr>
                             ));
                           })()}
                         </tbody>
                       </table>
                     </div>
-
-                    <div className="flex gap-3">
-                      <Button className="h-10 min-w-[220px] px-6 text-base" onClick={() => setStepIndex(3)} type="button">
-                        Continue To Finalise
-                      </Button>
+                    <div>
+                      <h3 className="mb-2 text-lg font-black tracking-tight text-white">Cost</h3>
                     </div>
-                  </>
-                ) : (
+                    <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/70">
+                      <table className="dense-table w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
+                            <th className="border border-slate-700 px-4 py-3 text-left">Market</th>
+                            <th className="border border-slate-700 px-4 py-3 text-center">Printing Cost ($)</th>
+                            <th className="border border-slate-700 px-4 py-3 text-center">Shipping Cost ($)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleReviewMarkets.map((marketSummary) => (
+                            <tr key={`review-cost-${marketSummary.market}`} className="border-t border-slate-700/70 bg-slate-800/70">
+                              <th className="border border-slate-700 px-4 py-3 text-left font-semibold text-slate-100">{marketSummary.market}</th>
+                              <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">
+                                {formatCurrency(calculateMarketPrintingCost(marketSummary.market))}
+                              </td>
+                              <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">
+                                {formatCurrency(calculateMarketShippingCost(marketSummary.market))}
+                              </td>
+                            </tr>
+                          ))}
+                          <tr className="border-t-4 border-violet-400/40 bg-violet-500/10">
+                            <th className="border border-violet-300/30 px-4 py-3 text-left font-black text-violet-100">All Markets</th>
+                            <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
+                              {formatCurrency(
+                                visibleReviewMarkets.reduce(
+                                  (total, marketSummary) => total + calculateMarketPrintingCost(marketSummary.market),
+                                  0,
+                                ),
+                              )}
+                            </td>
+                            <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
+                              {formatCurrency(
+                                visibleReviewMarkets.reduce(
+                                  (total, marketSummary) => total + calculateMarketShippingCost(marketSummary.market),
+                                  0,
+                                ),
+                              )}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    </>
+
+              ) : (
                   <div className="rounded-md border border-slate-700 bg-slate-800/70 p-6">
                     <div className="flex items-start gap-3">
                       <CircleAlert className="mt-0.5 h-5 w-5 text-amber-300" />
                       <div>
                         <p className="font-semibold text-white">No totals yet</p>
-                        <p className="mt-1 text-sm text-slate-400">Go back to Schedule and configure campaign assets first.</p>
+                        <p className="mt-1 text-sm text-slate-400">Configure campaign assets above to generate totals.</p>
                       </div>
                     </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {currentStep.key === 'finalize' ? (
-            <Card>
-              <CardHeader className="p-6 pb-0">
-                <CardTitle>Creative & Delivery Mapping</CardTitle>
-                <CardDescription>Assign artwork and delivery addresses for each asset before exporting.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5 p-6">
-                {values.campaignMarkets.map((market) => {
-                  const deliveryAddressOptions = deliveryAddressOptionsFor(market.market);
-                  return (
-                    <div key={`finalize-map-${market.id}`} className="space-y-3 rounded-md border border-slate-700 bg-slate-900/45 p-4">
-                      <div>
-                        <p className="text-sm font-semibold text-white">{market.market || 'Select a market in Schedule first'}</p>
-                      </div>
-                      <div className="overflow-visible">
-                        <table className="dense-table w-full border-collapse table-fixed">
-                          <thead>
-                            <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                              <th className="px-4 py-3 text-left">Asset</th>
-                              <th className="px-4 py-3 text-left">Category</th>
-                              <th className="px-4 py-3 text-left">Creative</th>
-                              <th className="px-4 py-3 text-left">Delivery Address</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {market.assets.map((asset) => {
-                              const line = summaryLineByAssetId.get(asset.id);
-                              const requiredFormats = getCreativeFormatsForBreakdown(line?.breakdown);
-                              const displayFormats = requiredFormats.length > 0 ? requiredFormats : [null];
-                              const rowSpan = displayFormats.length;
-                              return (
-                                <Fragment key={`finalize-map-group-${asset.id}`}>
-                                  {displayFormats.map((formatKey, index) => {
-                                    const selectedCreativeId = formatKey ? getCreativeImageIdForFormat(asset, formatKey) : '';
-                                    return (
-                                      <tr key={`finalize-map-row-${asset.id}-${formatKey ?? 'none'}-${index}`} className="border-b border-slate-700/70 align-top last:border-b-0">
-                                        {index === 0 ? (
-                                          <td className="px-4 py-3" rowSpan={rowSpan}>
-                                            <p className="text-sm font-semibold text-white">{asset.assetSearch || asset.assetId || 'Asset not selected'}</p>
-                                          </td>
-                                        ) : null}
-                                        <td className="px-4 py-3">
-                                          {formatKey ? (
-                                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">{creativeFormatLabel(formatKey)}</p>
-                                          ) : (
-                                            <p className="text-sm text-slate-400">No active quantity formats</p>
-                                          )}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                          {formatKey ? (
-                                            <SearchableSelect
-                                              emptyMessage={values.printImages.length ? 'No matching artwork found.' : 'No artwork uploaded in Setup step.'}
-                                              items={creativeImageOptions}
-                                              label=""
-                                              onValueChange={(value) =>
-                                                updateCampaignAsset(market.id, asset.id, (current) => {
-                                                  const nextCreativeImageIds = {
-                                                    ...normalizeCreativeImageIds(current),
-                                                    [formatKey]: value,
-                                                  };
-                                                  if (!value) {
-                                                    delete nextCreativeImageIds[formatKey];
-                                                  }
-                                                  return {
-                                                    ...current,
-                                                    creativeImageIds: nextCreativeImageIds,
-                                                    creativeImageId: getCreativeImageIdForFormat({ ...current, creativeImageIds: nextCreativeImageIds }, '8-sheet') || '',
-                                                  };
-                                                })
-                                              }
-                                              placeholder={values.printImages.length ? 'Attach artwork' : 'No artwork available'}
-                                              selectedLabel={values.printImages.find((image) => image.id === selectedCreativeId)?.name}
-                                              selectedValue={selectedCreativeId || ''}
-                                            />
-                                          ) : (
-                                            <p className="text-sm text-slate-500">-</p>
-                                          )}
-                                        </td>
-                                        {index === 0 ? (
-                                          <td className="px-4 py-3" rowSpan={rowSpan}>
-                                            <SearchableSelect
-                                              actionDisabled={!market.market}
-                                              actionLabel={canAddAddressInFinalize ? 'Add new address' : undefined}
-                                              emptyMessage={deliveryAddressOptions.length ? 'No matching addresses found.' : 'No addresses saved for this market yet.'}
-                                              items={deliveryAddressOptions}
-                                              label=""
-                                              onAction={() => openAddAddressDialog(market.id, asset.id, market.market)}
-                                              onValueChange={(value) =>
-                                                updateCampaignAsset(market.id, asset.id, (current) => ({
-                                                  ...current,
-                                                  deliveryAddress: value,
-                                                }))
-                                              }
-                                              placeholder={deliveryAddressOptions.length ? 'Choose delivery address' : 'No addresses available'}
-                                              selectedLabel={asset.deliveryAddress || ''}
-                                              selectedValue={asset.deliveryAddress || ''}
-                                            />
-                                          </td>
-                                        ) : null}
-                                      </tr>
-                                    );
-                                  })}
-                                </Fragment>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {currentStep.key === 'finalize' ? (
-            <Card>
-              <CardHeader className="p-6 pb-0">
-                <CardTitle>Purchase Order</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6 p-6">
-                <div className="space-y-3">
-                  <div className="rounded-md border border-dashed border-slate-600 bg-slate-800/60 p-4">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-white">{selectedPurchaseOrderFile ? selectedPurchaseOrderFile.name : 'No file selected'}</p>
-                        <p className="mt-1 text-sm text-slate-400">PDF upload stays unchanged. This only refreshes the interaction and layout.</p>
-                      </div>
-                      <div className="flex flex-col gap-3 sm:flex-row">
-                        <Button className="h-10 px-5 text-base" onClick={openPurchaseOrderPicker} type="button" variant="outline">
-                          <Upload className="h-4 w-4" />
-                          {selectedPurchaseOrderFile ? 'Change File' : 'Choose File'}
-                        </Button>
-                        <Button className="h-10 min-w-[210px] px-5 text-base" disabled={uploadingPurchaseOrder} onClick={() => void handleUploadPurchaseOrder()} type="button">
-                          {uploadingPurchaseOrder ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                          {uploadingPurchaseOrder ? 'Uploading...' : 'Upload Purchase Order'}
-                        </Button>
-                      </div>
-                    </div>
-                    <input
-                      ref={purchaseOrderInputRef}
-                      accept="application/pdf,.pdf"
-                      className="hidden"
-                      onChange={(event) => {
-                        const nextFile = event.target.files?.[0] ?? null;
-                        if (nextFile && !isPdfFile(nextFile)) {
-                          setError('Only PDF files are allowed');
-                          return;
-                        }
-                        setSelectedPurchaseOrderFile(nextFile);
-                      }}
-                      type="file"
-                    />
-                  </div>
-                  {uploadedPurchaseOrderName ? <p className="text-sm font-medium text-emerald-300">Uploaded: {uploadedPurchaseOrderName}</p> : null}
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {currentStep.key === 'finalize' ? (
-            <Card>
+              )}
+            </aside>
+          </div>
+          <Card>
               <CardHeader className="p-6 pb-0">
                 <CardTitle>Export For ADS</CardTitle>
                 <CardDescription>Export the details to send to ADS.</CardDescription>
@@ -3250,32 +2988,225 @@ export function QuoteBuilderScreen({
                 ) : null}
               </CardContent>
             </Card>
-          ) : null}
 
-          {currentStep.key === 'finalize' ? (
-            <Card>
-              <CardContent className="space-y-6 p-6">
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button
-                    className="h-10 px-5 text-base border-slate-700 bg-slate-900/45 text-slate-500 hover:border-slate-700 hover:bg-slate-900/45 hover:text-slate-500 disabled:opacity-100"
-                    disabled
-                    type="button"
-                    variant="secondary"
-                  >
-                    Create Quote In PrintIQ (Coming Soon)
-                  </Button>
-                  {onBack ? (
-                    <Button className="h-10 min-w-[180px] px-5 text-base" disabled={savingCampaign || submitting} onClick={() => void handleBackToDashboard()} type="button" variant="outline">
-                      Go To Dashboard
-                    </Button>
-                  ) : null}
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
         </section>
 
       </div>
+
+      <Dialog
+        open={addMarketDialogOpen}
+        onOpenChange={(open) => {
+          setAddMarketDialogOpen(open);
+          if (!open) {
+            setDraftMarket(null);
+            setDraftMarketSummary(null);
+          }
+        }}
+      >
+        <DialogContent
+          className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0"
+          style={{ width: 'min(calc(100vw - 2rem), 72rem)', maxHeight: '90vh' }}
+        >
+          <DialogHeader className="shrink-0 border-b border-slate-700 px-5 py-4">
+            <DialogTitle>Add Market</DialogTitle>
+          </DialogHeader>
+          {draftMarket ? (
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <div className="space-y-4">
+                <div className="flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                  <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">Market</span>
+                  <div className="relative flex-1">
+                    <select
+                      className="h-10 w-full appearance-none border-0 bg-transparent px-3 pr-10 text-sm text-slate-50 focus:outline-none focus:ring-0"
+                      onChange={(event) =>
+                        updateDraftMarket((current) => {
+                          const value = event.target.value;
+                          const preferredAddress = preferredDeliveryAddressByMarket.get(value) || '';
+                          return {
+                            ...current,
+                            market: value,
+                            assets: current.assets.map((asset) => ({
+                              ...asset,
+                              assetId: '',
+                              assetSearch: '',
+                              deliveryAddress: preferredAddress,
+                              selectedWeeks: createAllWeeks(numberOfWeeks),
+                            })),
+                          };
+                        })
+                      }
+                      value={draftMarket.market}
+                    >
+                      {Array.from(new Set([draftMarket.market, ...remainingMarketNames].filter(Boolean))).map((marketName) => (
+                        <option
+                          key={`draft-market-option-${marketName}`}
+                          value={marketName}
+                          style={{ backgroundColor: '#1e293b', color: '#f8fafc' }}
+                        >
+                          {marketName}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-md border border-slate-700/80 bg-slate-900/45">
+                    <div className="overflow-visible">
+                      <table className="dense-table w-full table-fixed border-collapse">
+                        <colgroup>
+                          <col className="w-[38%]" />
+                          <col className="w-[48%]" />
+                          <col className="w-[4%]" />
+                        </colgroup>
+                        <thead>
+                          <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                            <th className="px-4 py-3 text-left">Asset</th>
+                            <th className="px-4 py-3 text-left">Active Weeks</th>
+                            <th className="px-3 py-3 text-center">
+                              <span className="sr-only">Actions</span>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {draftMarket.assets.map((asset) => {
+                            const canRemoveAsset = draftMarket.assets.length > 1;
+                            const availableAssets = assetsForMarket(draftMarket.market);
+                            const availableAssetOptions = assetOptionsFor(draftMarket, asset.id, asset.assetId);
+                            return (
+                              <tr key={asset.id} className="border-b border-slate-700/70 align-top last:border-b-0">
+                                <td className="px-4 py-3">
+                                  <SearchableSelect
+                                    emptyMessage={availableAssets.length ? 'No assets available for this row.' : 'No assets available for this market.'}
+                                    items={availableAssetOptions}
+                                    label=""
+                                    menuItemClassName="text-[11px]"
+                                    onValueChange={(value) =>
+                                      updateDraftAsset(asset.id, (current) => ({
+                                        ...current,
+                                        assetId: value,
+                                        assetSearch: availableAssets.find((entry) => entry.id === value)?.label ?? '',
+                                      }))
+                                    }
+                                    placeholder={availableAssets.length ? 'Choose an asset' : 'No assets available'}
+                                    selectedLabel={asset.assetSearch}
+                                    selectedValue={asset.assetId}
+                                    triggerClassName="text-[11px]"
+                                  />
+                                </td>
+                                <td className="px-2 py-3">
+                                  <div className="flex justify-start">
+                                    <WeekSelector
+                                      small
+                                      weekCount={numberOfWeeks}
+                                      startDate={values.campaignStartDate}
+                                      onToggleWeek={(week) => toggleDraftAssetWeek(asset.id, week)}
+                                      selectedWeeks={asset.selectedWeeks}
+                                    />
+                                  </div>
+                                </td>
+                                <td className="px-1 py-3 text-center">
+                                  {canRemoveAsset ? (
+                                    <Button className="h-7 w-7" onClick={() => removeDraftAsset(asset.id)} size="icon" type="button" variant="ghost">
+                                      <X className="h-3.5 w-3.5 text-rose-300" />
+                                    </Button>
+                                  ) : null}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div title={canAddAssetForMarket(draftMarket) ? 'Add another asset' : addAssetDisabledReasonForMarket(draftMarket)}>
+                    <Button className="h-10 min-w-[132px] px-4 text-[15px]" disabled={!canAddAssetForMarket(draftMarket)} onClick={addDraftAsset} type="button" variant="secondary">
+                      <Plus className="h-4 w-4" />
+                      Add Asset
+                    </Button>
+                  </div>
+
+                  {draftMarketSummary ? (
+                    <div className="space-y-3">
+                      <p className="text-sm font-semibold text-white">Market Totals</p>
+                      <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/65">
+                        <table className="dense-table w-full table-fixed border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
+                              <th className="border border-slate-700 px-4 py-3 text-left">Type</th>
+                              {formatKeys
+                                .filter((key) => (draftMarketSummary.breakdown[key] ?? 0) > 0)
+                                .map((key) => (
+                                  <th key={`draft-market-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatKeyLabel(key)}</th>
+                                ))}
+                              <th className="border border-slate-700 px-4 py-3 text-center">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {buildReviewRows(draftMarketSummary).map((row) => (
+                              <tr key={`draft-market-row-${row.label}`} className="bg-slate-800/70 border-t border-slate-700/70">
+                                <th className="border border-slate-700 px-4 py-3 text-left font-semibold text-slate-100">{row.label}</th>
+                                {formatKeys
+                                  .filter((key) => (draftMarketSummary.breakdown[key] ?? 0) > 0)
+                                  .map((key) => (
+                                    <td key={`draft-market-cell-${row.label}-${key}`} className="border border-slate-700 px-4 py-3 text-center font-semibold text-white">
+                                      {row.breakdown[key]}
+                                    </td>
+                                  ))}
+                                <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">{row.total}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-violet-500/10 border-t border-violet-400/30">
+                              <th
+                                colSpan={formatKeys.filter((key) => (draftMarketSummary.breakdown[key] ?? 0) > 0).length + 1}
+                                className="border border-violet-300/30 px-4 py-3 text-right font-black uppercase tracking-[0.12em] text-violet-100"
+                              >
+                                Total
+                              </th>
+                              <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
+                                {draftMarketSummary.posterTotal + draftMarketSummary.frameTotal}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  ) : draftMarketCalculating ? (
+                    <div className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
+                      <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
+                      Calculating market totals...
+                    </div>
+                  ) : (
+                    <p className="text-sm leading-6 text-slate-400">Configure assets in this market to see its sheet-level mix and totals here.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <div className="shrink-0 border-t border-slate-700 bg-slate-950 px-5 py-4">
+            <div className="flex justify-end gap-3">
+            <Button
+              onClick={() => {
+                setAddMarketDialogOpen(false);
+                setDraftMarket(null);
+                setDraftMarketSummary(null);
+              }}
+              type="button"
+              variant="ghost"
+            >
+              Cancel
+            </Button>
+            <Button disabled={!canAddMarket || !draftMarket?.market.trim()} onClick={handleSaveAddMarket} type="button">
+              Save
+            </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={newAddressDialogOpen}
@@ -3393,6 +3324,3 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
-
-
-
