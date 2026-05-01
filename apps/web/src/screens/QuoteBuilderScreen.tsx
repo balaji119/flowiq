@@ -1,5 +1,5 @@
 import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, LoaderCircle, Maximize2, Pencil, Plus, Upload, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, Eye, LoaderCircle, Maximize2, Pencil, Plus, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignPrintImage,
@@ -26,6 +26,7 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { buildApiUrl } from '../services/apiBase';
 import { acquireCampaignEditLock, createCampaign, fetchCampaign, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
+import { uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
 import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
@@ -451,9 +452,7 @@ function stripSharedFormulaClones(workbook: any) {
 }
 
 async function pdfFirstPageToDataUrl(blob: Blob, maxWidth = 560) {
-  const pdfjs = await (new Function("return import('/pdf.min.mjs')")() as Promise<any>);
-  (pdfjs as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
-    '/pdf.worker.min.mjs';
+  const pdfjs = await loadPdfJsRuntime();
 
   const objectUrl = URL.createObjectURL(blob);
   try {
@@ -468,6 +467,79 @@ async function pdfFirstPageToDataUrl(blob: Blob, maxWidth = 560) {
     canvas.height = Math.ceil(viewport.height);
     await page.render({ canvas, viewport }).promise;
     return canvas.toDataURL('image/png');
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function loadPdfJsRuntime() {
+  const pdfjs = await (new Function("return import('/pdf.min.mjs')")() as Promise<any>);
+  (pdfjs as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
+    '/pdf.worker.min.mjs';
+  return pdfjs;
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error('Unable to render artwork image'));
+          return;
+        }
+        resolve(blob);
+      },
+      'image/png',
+      1,
+    );
+  });
+}
+
+function buildArtworkPageFileName(fileName: string, pageNumber: number, totalPages: number) {
+  const baseName = toFileBaseName(fileName);
+  if (totalPages <= 1) {
+    return `${baseName}.png`;
+  }
+  const digits = Math.max(2, String(totalPages).length);
+  return `${baseName}-page-${String(pageNumber).padStart(digits, '0')}.png`;
+}
+
+async function convertPdfToArtworkPages(
+  pdfFile: File,
+  uploadMaxWidth = 2400,
+): Promise<Array<{ file: File; pageNumber: number; totalPages: number }>> {
+  const pdfjs = await loadPdfJsRuntime();
+  const objectUrl = URL.createObjectURL(pdfFile);
+  try {
+    const loadingTask = pdfjs.getDocument({ url: objectUrl });
+    const pdf = await loadingTask.promise;
+    const totalPages = Number(pdf.numPages ?? 0);
+    const pages: Array<{ file: File; pageNumber: number; totalPages: number }> = [];
+
+    for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const baseViewport = page.getViewport({ scale: 1 });
+
+      const uploadScale = Math.min(1, uploadMaxWidth / Math.max(baseViewport.width, 1));
+      const uploadViewport = page.getViewport({ scale: uploadScale });
+      const uploadCanvas = document.createElement('canvas');
+      uploadCanvas.width = Math.max(1, Math.ceil(uploadViewport.width));
+      uploadCanvas.height = Math.max(1, Math.ceil(uploadViewport.height));
+      const uploadContext = uploadCanvas.getContext('2d');
+      if (!uploadContext) {
+        throw new Error('Unable to prepare artwork upload');
+      }
+      await page.render({ canvasContext: uploadContext, viewport: uploadViewport }).promise;
+      const uploadBlob = await canvasToBlob(uploadCanvas);
+      const uploadFile = new File([uploadBlob], buildArtworkPageFileName(pdfFile.name, pageNumber, totalPages), { type: 'image/png' });
+
+      pages.push({
+        file: uploadFile,
+        pageNumber,
+        totalPages,
+      });
+    }
+    return pages;
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
@@ -739,6 +811,12 @@ export function QuoteBuilderScreen({
   const [selectedPurchaseOrderFile, setSelectedPurchaseOrderFile] = useState<File | null>(null);
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
   const [uploadedPurchaseOrderName, setUploadedPurchaseOrderName] = useState('');
+  const [assignArtworkDialogOpen, setAssignArtworkDialogOpen] = useState(false);
+  const [assignArtworkTarget, setAssignArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey } | null>(null);
+  const [previewArtworkDialogOpen, setPreviewArtworkDialogOpen] = useState(false);
+  const [previewArtworkTarget, setPreviewArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey } | null>(null);
+  const [uploadingArtworkPages, setUploadingArtworkPages] = useState(false);
+  const [artworkDialogError, setArtworkDialogError] = useState('');
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
   const [newAddressDialogOpen, setNewAddressDialogOpen] = useState(false);
   const [addMarketDialogOpen, setAddMarketDialogOpen] = useState(false);
@@ -758,6 +836,7 @@ export function QuoteBuilderScreen({
   const [topBarActionsHost, setTopBarActionsHost] = useState<HTMLElement | null>(null);
   const [bottomBarHost, setBottomBarHost] = useState<HTMLElement | null>(null);
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
+  const artworkPdfInputRef = useRef<HTMLInputElement | null>(null);
   const campaignHydratedRef = useRef(false);
   const lastPersistedValuesRef = useRef('');
   const lastAutoSaveFailedValuesRef = useRef<string | null>(null);
@@ -988,10 +1067,6 @@ export function QuoteBuilderScreen({
   const canAddAddressInFinalize = session?.user.role === 'admin' || session?.user.role === 'super_admin';
   const numberOfWeeks = Math.max(1, Math.min(20, Math.floor(Number(values.numberOfWeeks) || 1)));
   const marketNames = useMemo(() => markets.map((market) => market.name), [markets]);
-  const creativeImageOptions = useMemo(
-    () => [{ label: 'No artwork attached', value: '' }, ...values.printImages.map((image) => ({ label: image.name, value: image.id }))],
-    [values.printImages],
-  );
   const isDefaultPlaceholderMarket = useMemo(
     () => (market: CampaignMarket) => {
       if (!treatDefaultMarketAsPlaceholder) return false;
@@ -1155,12 +1230,39 @@ export function QuoteBuilderScreen({
   const canAdvanceFromCreative = hasValidCampaignStartDate && hasValidDeliveryDueDate;
   const minSelectableDate = getTodayDateInputValue();
   const activeCampaignName = values.campaignName.trim() || (campaignId ? `Untitled Campaign ${campaignId.slice(0, 6)}` : 'Untitled Campaign');
+  const selectedArtworkImageIdForTarget = useMemo(() => {
+    if (!assignArtworkTarget) return '';
+    const targetMarket = values.campaignMarkets.find((market) => market.id === assignArtworkTarget.marketId);
+    const targetAsset = targetMarket?.assets.find((asset) => asset.id === assignArtworkTarget.assetId);
+    if (!targetAsset) return '';
+    return getCreativeImageIdForFormat(targetAsset, assignArtworkTarget.formatKey);
+  }, [assignArtworkTarget, values.campaignMarkets]);
+  const previewArtworkImage = useMemo(() => {
+    if (!previewArtworkTarget) return null;
+    const targetMarket = values.campaignMarkets.find((market) => market.id === previewArtworkTarget.marketId);
+    const targetAsset = targetMarket?.assets.find((asset) => asset.id === previewArtworkTarget.assetId);
+    if (!targetAsset) return null;
+    const assignedImageId = getCreativeImageIdForFormat(targetAsset, previewArtworkTarget.formatKey);
+    if (!assignedImageId) return null;
+    return values.printImages.find((image) => image.id === assignedImageId) ?? null;
+  }, [previewArtworkTarget, values.campaignMarkets, values.printImages]);
 
   useEffect(() => {
     setTopBarCenterHost(document.getElementById('workspace-topbar-center-slot'));
     setTopBarActionsHost(document.getElementById('workspace-topbar-actions-slot'));
     setBottomBarHost(document.getElementById('workspace-bottom-bar-slot'));
   }, []);
+
+  useEffect(() => {
+    const normalizedError = error.trim().toLowerCase();
+    const hasPastDateError =
+      normalizedError.includes('campaign start date cannot be in the past')
+      || normalizedError.includes('delivery due date cannot be in the past');
+    if (!hasPastDateError) return;
+    if (!isCampaignStartDatePast && !isDeliveryDueDatePast) {
+      setError('');
+    }
+  }, [error, isCampaignStartDatePast, isDeliveryDueDatePast]);
 
   useEffect(() => {
     if (loadingCampaign) return;
@@ -1473,6 +1575,120 @@ export function QuoteBuilderScreen({
       const nextSelectedWeeks = Array.from(selectedWeekSet).sort((left, right) => left - right);
       return { ...asset, selectedWeeks: nextSelectedWeeks };
     });
+  }
+
+  function openAssignArtworkDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey) {
+    setAssignArtworkTarget({ marketId, assetId, formatKey });
+    setArtworkDialogError('');
+    setAssignArtworkDialogOpen(true);
+  }
+
+  function openArtworkPreviewDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey) {
+    setPreviewArtworkTarget({ marketId, assetId, formatKey });
+    setPreviewArtworkDialogOpen(true);
+  }
+
+  function closeArtworkPreviewDialog() {
+    setPreviewArtworkDialogOpen(false);
+    setPreviewArtworkTarget(null);
+  }
+
+  function openChangeArtworkFromPreview() {
+    if (!previewArtworkTarget) return;
+    const { marketId, assetId, formatKey } = previewArtworkTarget;
+    openAssignArtworkDialog(marketId, assetId, formatKey);
+  }
+
+  function closeAssignArtworkDialog() {
+    setAssignArtworkDialogOpen(false);
+    setAssignArtworkTarget(null);
+    setArtworkDialogError('');
+    if (artworkPdfInputRef.current) {
+      artworkPdfInputRef.current.value = '';
+    }
+  }
+
+  function assignArtworkImageToTarget(imageId: string) {
+    if (!assignArtworkTarget) return;
+    const { marketId, assetId, formatKey } = assignArtworkTarget;
+    assignArtworkToFormat(marketId, assetId, formatKey, imageId);
+    closeAssignArtworkDialog();
+    closeArtworkPreviewDialog();
+  }
+
+  function assignArtworkToFormat(marketId: string, assetId: string, formatKey: CreativeFormatKey, imageId: string) {
+    updateCampaignAsset(marketId, assetId, (current) => {
+      const nextCreativeImageIds = {
+        ...normalizeCreativeImageIds(current),
+        [formatKey]: imageId,
+      };
+      if (!imageId) {
+        delete nextCreativeImageIds[formatKey];
+      }
+      return {
+        ...current,
+        creativeImageIds: nextCreativeImageIds,
+        creativeImageId: getCreativeImageIdForFormat({ ...current, creativeImageIds: nextCreativeImageIds }, '8-sheet') || '',
+      };
+    });
+  }
+
+  async function uploadArtworkPdfFiles(files: File[]) {
+    if (!files.length) return;
+    const nonPdfFile = files.find((file) => !isPdfFile(file));
+    if (nonPdfFile) {
+      setArtworkDialogError('Only PDF files are allowed.');
+      return;
+    }
+
+    setUploadingArtworkPages(true);
+    setArtworkDialogError('');
+    try {
+      const savedCampaignId = await saveCampaignDraft();
+      if (!savedCampaignId) {
+        setArtworkDialogError('Save the campaign before uploading artwork.');
+        return;
+      }
+
+      const uploadedImages: CampaignPrintImage[] = [];
+      for (const pdfFile of files) {
+        const pageImages = await convertPdfToArtworkPages(pdfFile);
+        for (const pageImage of pageImages) {
+          const uploadResponse = await uploadCampaignImage(pageImage.file);
+          const baseName = toFileBaseName(pdfFile.name) || 'Artwork';
+          const imageName = pageImage.totalPages > 1
+            ? `${baseName} (Page ${pageImage.pageNumber})`
+            : baseName;
+          uploadedImages.push({
+            id: uploadResponse.storedName,
+            name: imageName,
+            fileName: uploadResponse.originalName || pageImage.file.name,
+            mimeType: uploadResponse.mimeType || pageImage.file.type || 'image/png',
+            storedName: uploadResponse.storedName,
+            imageUrl: uploadResponse.url || `/api/campaign-images/${uploadResponse.storedName}`,
+          });
+        }
+      }
+
+      if (uploadedImages.length > 0) {
+        setValues((current) => {
+          const byId = new Map<string, CampaignPrintImage>();
+          current.printImages.forEach((image) => byId.set(image.id, image));
+          uploadedImages.forEach((image) => byId.set(image.id, image));
+          return {
+            ...current,
+            printImages: Array.from(byId.values()),
+          };
+        });
+      }
+    } catch (uploadError) {
+      setArtworkDialogError(uploadError instanceof Error ? uploadError.message : 'Unable to upload artwork PDFs');
+    } finally {
+      setUploadingArtworkPages(false);
+      if (artworkPdfInputRef.current) {
+        artworkPdfInputRef.current.value = '';
+      }
+    }
   }
 
   function assetsForMarket(marketName: string) {
@@ -2371,6 +2587,10 @@ export function QuoteBuilderScreen({
       setError('Upload a purchase order file before downloading visuals');
       return;
     }
+    if (!hasMappedCreatives) {
+      setError('Map at least one creative to a market asset before downloading visuals');
+      return;
+    }
 
     setError('');
     setExportingTemplates(true);
@@ -2393,6 +2613,10 @@ export function QuoteBuilderScreen({
     if (sendingAdsEmail || exportingTemplates) return;
     if (!hasUploadedPurchaseOrder) {
       setError('Upload a purchase order file before sending email to ADS');
+      return;
+    }
+    if (!hasMappedCreatives) {
+      setError('Map at least one creative to a market asset before sending email to ADS');
       return;
     }
 
@@ -2440,6 +2664,10 @@ export function QuoteBuilderScreen({
 
   function openPurchaseOrderPicker() {
     purchaseOrderInputRef.current?.click();
+  }
+
+  function openArtworkPdfPicker() {
+    artworkPdfInputRef.current?.click();
   }
 
   return (
@@ -2793,6 +3021,12 @@ export function QuoteBuilderScreen({
                         <div className="space-y-3 p-4 pl-14">
                           <div className="overflow-visible">
                             <table className="dense-table w-full border-collapse table-fixed">
+                            <colgroup>
+                              <col className="w-[32%]" />
+                              <col className="w-[16%]" />
+                              <col className="w-[14%]" />
+                              <col className="w-[38%]" />
+                            </colgroup>
                             <thead>
                               <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
                                 <th className="px-4 py-3 text-left">Asset</th>
@@ -2827,30 +3061,27 @@ export function QuoteBuilderScreen({
                                           </td>
                                           <td className="px-4 py-3">
                                             {formatKey ? (
-                                              <SearchableSelect
-                                                emptyMessage={values.printImages.length ? 'No matching artwork found.' : 'No artwork uploaded yet.'}
-                                                items={creativeImageOptions}
-                                                label=""
-                                                onValueChange={(value) =>
-                                                  updateCampaignAsset(market.id, asset.id, (current) => {
-                                                    const nextCreativeImageIds = {
-                                                      ...normalizeCreativeImageIds(current),
-                                                      [formatKey]: value,
-                                                    };
-                                                    if (!value) {
-                                                      delete nextCreativeImageIds[formatKey];
-                                                    }
-                                                    return {
-                                                      ...current,
-                                                      creativeImageIds: nextCreativeImageIds,
-                                                      creativeImageId: getCreativeImageIdForFormat({ ...current, creativeImageIds: nextCreativeImageIds }, '8-sheet') || '',
-                                                    };
-                                                  })
-                                                }
-                                                placeholder={values.printImages.length ? 'Attach artwork' : 'No artwork available'}
-                                                selectedLabel={values.printImages.find((image) => image.id === selectedCreativeId)?.name}
-                                                selectedValue={selectedCreativeId || ''}
-                                              />
+                                              <div className="flex items-center">
+                                                <Button
+                                                  className="h-9 w-24 px-3 text-xs font-semibold"
+                                                  onClick={() =>
+                                                    selectedCreativeId
+                                                      ? openArtworkPreviewDialog(market.id, asset.id, formatKey)
+                                                      : openAssignArtworkDialog(market.id, asset.id, formatKey)
+                                                  }
+                                                  type="button"
+                                                  variant={selectedCreativeId ? 'outline' : 'secondary'}
+                                                >
+                                                  {selectedCreativeId ? (
+                                                    <>
+                                                      <Eye className="h-3.5 w-3.5" />
+                                                      Show
+                                                    </>
+                                                  ) : (
+                                                    '+ Assign'
+                                                  )}
+                                                </Button>
+                                              </div>
                                             ) : (
                                               <p className="text-sm text-slate-500">-</p>
                                             )}
@@ -3051,8 +3282,9 @@ export function QuoteBuilderScreen({
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Button
                     className="h-10 min-w-[180px] px-5 text-base"
-                    disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates || sendingAdsEmail}
+                    disabled={exportingTemplates || sendingAdsEmail}
                     onClick={() => void downloadArtworkExcelTemplates()}
+                    title={!hasUploadedPurchaseOrder ? 'Upload purchase order before downloading visuals' : undefined}
                     type="button"
                     variant="outline"
                   >
@@ -3061,7 +3293,7 @@ export function QuoteBuilderScreen({
                   </Button>
                   <Button
                     className="h-10 min-w-[210px] px-6 text-base"
-                    disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates || sendingAdsEmail}
+                    disabled={exportingTemplates || sendingAdsEmail}
                     onClick={() => void sendArtworkEmailToAds()}
                     title={hasUploadedPurchaseOrder ? undefined : 'Upload purchase order before sending to ADS'}
                     type="button"
@@ -3084,8 +3316,9 @@ export function QuoteBuilderScreen({
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Button
                     className="h-10 min-w-[180px] px-5 text-base"
-                    disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates || sendingAdsEmail}
+                    disabled={exportingTemplates || sendingAdsEmail}
                     onClick={() => void downloadArtworkExcelTemplates()}
+                    title={!hasUploadedPurchaseOrder ? 'Upload purchase order before downloading visuals' : undefined}
                     type="button"
                     variant="outline"
                   >
@@ -3094,7 +3327,7 @@ export function QuoteBuilderScreen({
                   </Button>
                   <Button
                     className="h-10 min-w-[210px] px-6 text-base"
-                    disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates || sendingAdsEmail}
+                    disabled={exportingTemplates || sendingAdsEmail}
                     onClick={() => void sendArtworkEmailToAds()}
                     title={hasUploadedPurchaseOrder ? undefined : 'Upload purchase order before sending to ADS'}
                     type="button"
@@ -3484,6 +3717,140 @@ export function QuoteBuilderScreen({
             <Button onClick={handleSaveNewAddress} type="button">
               Save Address
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={previewArtworkDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setPreviewArtworkDialogOpen(true);
+            return;
+          }
+          closeArtworkPreviewDialog();
+        }}
+      >
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 42rem)' }}>
+          <DialogHeader>
+            <DialogTitle>Artwork</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {previewArtworkImage ? (
+              <>
+                <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900">
+                  <div className="max-h-[62vh] overflow-auto bg-slate-950/60 p-2">
+                    {previewArtworkImage.imageUrl ? (
+                      <img
+                        alt={previewArtworkImage.name}
+                        className="mx-auto h-auto max-w-full rounded-sm"
+                        src={buildApiUrl(previewArtworkImage.imageUrl)}
+                      />
+                    ) : (
+                      <div className="flex min-h-[220px] items-center justify-center text-sm text-slate-400">
+                        Preview unavailable
+                      </div>
+                    )}
+                  </div>
+                  <div className="border-t border-slate-700 px-3 py-2">
+                    <p className="truncate text-sm font-semibold text-slate-100">{previewArtworkImage.name || previewArtworkImage.fileName}</p>
+                    <p className="truncate text-xs text-slate-400">{previewArtworkImage.fileName}</p>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={openChangeArtworkFromPreview} type="button" variant="secondary">
+                    Change
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-md border border-slate-700 bg-slate-900 px-4 py-6 text-center text-sm text-slate-400">
+                No artwork assigned.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={assignArtworkDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setAssignArtworkDialogOpen(true);
+            return;
+          }
+          closeAssignArtworkDialog();
+        }}
+      >
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 64rem)', maxHeight: '90vh' }}>
+          <DialogHeader>
+            <DialogTitle>Artwork</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button disabled={uploadingArtworkPages} onClick={openArtworkPdfPicker} type="button" variant="secondary">
+                {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {uploadingArtworkPages ? 'Uploading Artwork...' : 'Upload Artwork PDFs'}
+              </Button>
+              <input
+                ref={artworkPdfInputRef}
+                accept="application/pdf,.pdf"
+                className="hidden"
+                multiple
+                onChange={(event) => {
+                  const nextFiles = Array.from(event.target.files ?? []);
+                  if (!nextFiles.length) return;
+                  void uploadArtworkPdfFiles(nextFiles);
+                }}
+                type="file"
+              />
+            </div>
+            {artworkDialogError ? (
+              <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200">
+                {artworkDialogError}
+              </div>
+            ) : null}
+            {values.printImages.length > 0 ? (
+              <div className="max-h-[56vh] overflow-auto rounded-md border border-slate-700 bg-slate-900/65 p-3">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
+                  {values.printImages.map((image) => {
+                    const imageSrc = image.imageUrl ? buildApiUrl(image.imageUrl) : '';
+                    const selected = image.id === selectedArtworkImageIdForTarget;
+                    return (
+                      <button
+                        key={`artwork-thumb-${image.id}`}
+                        className={cn(
+                          'group flex flex-col overflow-hidden rounded-md border text-left transition',
+                          selected ? 'border-violet-400 bg-violet-500/10' : 'border-slate-700 bg-slate-950 hover:border-slate-500',
+                        )}
+                        onClick={() => assignArtworkImageToTarget(image.id)}
+                        type="button"
+                      >
+                        <div className="aspect-[4/3] w-full overflow-hidden bg-slate-900">
+                          {imageSrc ? (
+                            <img
+                              alt={image.name}
+                              className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.02]"
+                              src={imageSrc}
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center px-2 text-center text-xs text-slate-400">Preview unavailable</div>
+                          )}
+                        </div>
+                        <div className="space-y-1 px-2 py-2">
+                          <p className="truncate text-xs font-semibold text-slate-100">{image.name || image.fileName}</p>
+                          <p className="truncate text-[11px] text-slate-400">{image.fileName}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-md border border-slate-700 bg-slate-900 px-4 py-6 text-center text-sm text-slate-400">
+                No artwork uploaded yet. Upload PDFs to generate selectable thumbnails.
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
