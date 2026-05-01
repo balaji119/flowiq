@@ -73,7 +73,7 @@ export function LoginScreen() {
             Forgot your password?
           </a>
 
-          {error ? <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</p> : null}
+          {error ? <p className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</p> : null}
         </CardContent>
       </Card>
     </main>

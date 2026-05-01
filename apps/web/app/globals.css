@@ -36,18 +36,18 @@ select {
 
 .dense-main {
   gap: 1rem;
-  padding: 1rem;
+  padding: 0.75rem;
 }
 
 @media (min-width: 640px) {
   .dense-main {
-    padding: 1.25rem;
+    padding: 1rem;
   }
 }
 
 @media (min-width: 1024px) {
   .dense-main {
-    padding: 1.5rem;
+    padding: 1.25rem;
   }
 }
 

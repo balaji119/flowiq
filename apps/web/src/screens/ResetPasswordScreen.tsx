@@ -117,8 +117,8 @@ export function ResetPasswordScreen({ token }: ResetPasswordScreenProps) {
             Back to sign in
           </a>
 
-          {message ? <p className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{message}</p> : null}
-          {error || tokenError ? <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error || tokenError}</p> : null}
+          {message ? <p className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{message}</p> : null}
+          {error || tokenError ? <p className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error || tokenError}</p> : null}
         </CardContent>
       </Card>
     </main>

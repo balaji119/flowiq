@@ -369,7 +369,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
 
   return (
     <main className="dense-main flex min-h-screen w-full flex-col gap-6">
-      {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
+      {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 
       <section className="flex flex-wrap gap-4">
           <div className="w-full sm:w-[320px]">
@@ -431,16 +431,16 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
           </div>
         ) : null}
           {loading ? (
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
+            <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
               <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
               Loading assets and costs...
             </div>
           ) : visibleMappings.length === 0 ? (
-            <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-6 text-sm text-slate-400">
+            <div className="rounded-md border border-slate-700 bg-slate-900/60 px-4 py-6 text-sm text-slate-400">
               No assets found for this market.
             </div>
           ) : (
-            <div className="rounded-2xl border border-slate-700 bg-slate-900/60">
+            <div className="rounded-md border border-slate-700 bg-slate-900/60">
               <table className="dense-table w-full table-fixed border-collapse text-xs sm:text-sm">
                 <colgroup>
                   <col className="w-[24%]" />

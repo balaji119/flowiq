@@ -25,7 +25,7 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'relative z-50 grid gap-3 overflow-y-auto rounded-3xl border border-slate-700 bg-slate-950 p-5 shadow-2xl shadow-slate-950/60',
+        'relative z-50 grid gap-3 overflow-y-auto rounded-md border border-slate-700 bg-slate-950 p-5 shadow-2xl shadow-slate-950/60',
         className,
       )}
       style={{

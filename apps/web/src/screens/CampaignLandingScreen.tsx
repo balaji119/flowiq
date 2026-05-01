@@ -201,10 +201,10 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
       {topBarCenterHost ? createPortal(topBarCenterContent, topBarCenterHost) : null}
       {topBarActionsHost ? createPortal(topBarActions, topBarActionsHost) : null}
 
-      {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
+      {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 
       {loading ? (
-        <div className="flex items-center justify-center rounded-[28px] border border-slate-700 bg-slate-900/90 px-6 py-20">
+        <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-900/90 px-6 py-20">
           <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
         </div>
       ) : filteredCampaigns.length === 0 ? (
@@ -253,11 +253,11 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                   </CardHeader>
                   <CardContent className="space-y-5 p-6">
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4">
+                      <div className="rounded-md border border-slate-700 bg-slate-900/70 p-4">
                         <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Markets</p>
                         <p className="mt-2 text-2xl font-black text-white">{campaign.marketCount}</p>
                       </div>
-                      <div className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4">
+                      <div className="rounded-md border border-slate-700 bg-slate-900/70 p-4">
                         <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assets</p>
                         <p className="mt-2 text-2xl font-black text-white">{campaign.assetCount}</p>
                       </div>
@@ -302,7 +302,7 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
               ))}
             </section>
           ) : (
-            <section className="overflow-x-auto rounded-[24px] border border-slate-700 bg-slate-900/60">
+            <section className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/60">
               <table className="dense-table min-w-[1080px] w-full border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">

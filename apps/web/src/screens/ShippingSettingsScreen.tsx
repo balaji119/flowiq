@@ -488,8 +488,8 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
       onOpenUsers={onOpenUsers}
     >
     <main className="dense-main flex min-h-screen w-full flex-col gap-6">
-      {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
-      {notice ? <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
+      {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
+      {notice ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
       {canSwitchTenant ? (
         <Card>
@@ -498,7 +498,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
             <CardDescription>Super admins must choose a tenant before they can manage shipping data.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-2xl border border-slate-700 bg-slate-800/70 p-4">
+            <div className="rounded-md border border-slate-700 bg-slate-800/70 p-4">
               <p className="text-sm font-semibold text-white">
                 {selectedTenant ? `Managing shipping settings for ${selectedTenant.name}` : 'No tenant selected'}
               </p>
@@ -513,8 +513,8 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
                   <button
                     key={tenant.id}
                     className={active
-                      ? 'rounded-2xl border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)] transition'
-                      : 'rounded-2xl border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
+                      ? 'rounded-md border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)] transition'
+                      : 'rounded-md border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
                     onClick={() => setSelectedTenantId(tenant.id)}
                     type="button"
                   >
@@ -584,13 +584,13 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 	        </div>
 
 	        {loading ? (
-	          <div className="flex items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/60 px-6 py-14">
+	          <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
 	            <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
 	          </div>
 	        ) : selectedMarketFilter ? (
 	          <div className="space-y-2">
 	            {selectedMarketAddresses.length > 0 ? (
-	              <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-900/60">
+	              <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/60">
 	                <table className="dense-table min-w-[1180px] w-full border-collapse text-sm">
 	                  <thead>
 	                    <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -629,7 +629,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 	                            <div className="flex items-center justify-center gap-1">
 	                              <Button
 	                                aria-label="Edit address"
-	                                className="h-8 w-8 rounded-lg border-0 p-0 hover:bg-slate-700/70"
+	                                className="h-8 w-8 rounded-md border-0 p-0 hover:bg-slate-700/70"
 	                                onClick={() => openEditAddressDialog(address)}
 	                                size="icon"
 	                                type="button"
@@ -639,7 +639,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 	                              </Button>
 	                              <Button
 	                                aria-label="Delete address"
-	                                className="h-8 w-8 rounded-lg border-0 p-0 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200"
+	                                className="h-8 w-8 rounded-md border-0 p-0 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200"
 	                                disabled={deletingAddress === address.deliveryAddress}
 	                                onClick={() => void handleDeleteAddress(address.deliveryAddress)}
 	                                size="icon"
@@ -657,13 +657,13 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 	                </table>
 	              </div>
 	            ) : (
-	              <div className="rounded-2xl border border-slate-700 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-400">
+	              <div className="rounded-md border border-slate-700 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-400">
 	                No addresses saved for this market yet.
 	              </div>
 	            )}
 	          </div>
 	        ) : (
-	          <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
+	          <div className="rounded-md border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
 	            <p className="text-base font-semibold text-white">No market selected</p>
 	            <p className="mt-2 text-sm text-slate-400">Choose a market to manage addresses and rates.</p>
 	          </div>
@@ -690,7 +690,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
             </DialogDescription>
           </DialogHeader>
           {addressDialogError ? (
-            <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200">
+            <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200">
               {addressDialogError}
             </div>
           ) : null}

@@ -304,8 +304,8 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
       onOpenUsers={onOpenUsers}
     >
     <main className="dense-main flex min-h-screen w-full flex-col gap-6">
-      {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
-      {notice ? <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
+      {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
+      {notice ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
       {canSwitchTenant ? (
         <Card>
@@ -314,7 +314,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
             <CardDescription>Super admins must choose a tenant before they can add or import quantity mappings.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-2xl border border-slate-700 bg-slate-800/70 p-4">
+            <div className="rounded-md border border-slate-700 bg-slate-800/70 p-4">
               <p className="text-sm font-semibold text-white">
                 {selectedTenant ? `Managing mappings for ${selectedTenant.name}` : 'No tenant selected'}
               </p>
@@ -329,8 +329,8 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
                   <button
                     key={tenant.id}
                     className={active
-                      ? 'rounded-2xl border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)] transition'
-                      : 'rounded-2xl border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
+                      ? 'rounded-md border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)] transition'
+                      : 'rounded-md border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
                     onClick={() => setSelectedTenantId(tenant.id)}
                     type="button"
                   >
@@ -373,22 +373,22 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/60 px-6 py-14">
+            <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
               <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
             </div>
           ) : marketOptions.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
+            <div className="rounded-md border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
               <FileJson className="mx-auto h-8 w-8 text-slate-400" />
               <p className="mt-4 text-base font-semibold text-white">No mapping data yet</p>
               <p className="mt-2 text-sm text-slate-400">Import the checked-in JSON template or add records one by one.</p>
             </div>
           ) : filteredMappings.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
+            <div className="rounded-md border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
               <p className="text-base font-semibold text-white">No assets for this market yet</p>
               <p className="mt-2 text-sm text-slate-400">Choose Add Mapping to create the first asset mapping for {selectedMarketFilter}.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-[24px] border border-slate-700 bg-slate-900/70">
+            <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/70">
               <table className="dense-table min-w-[1180px] w-full border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -543,5 +543,4 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
     </AdminWorkspaceShell>
   );
 }
-
 

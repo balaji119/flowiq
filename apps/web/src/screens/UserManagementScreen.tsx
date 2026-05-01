@@ -352,12 +352,12 @@ export function UserManagementScreen({
     >
       <main className="dense-main flex min-h-screen w-full flex-col gap-6">
         {error ? (
-          <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">
+          <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">
             {error}
           </div>
         ) : null}
         {notice ? (
-          <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">
+          <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">
             {notice}
           </div>
         ) : null}
@@ -393,11 +393,11 @@ export function UserManagementScreen({
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/60 px-6 py-14">
+            <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
               <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-900/60">
+            <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/60">
               <table className="dense-table min-w-[980px] w-full border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -601,7 +601,7 @@ export function UserManagementScreen({
               </div>
 
               {editingUserId ? (
-                <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-800/70 px-4 py-3">
+                <div className="space-y-3 rounded-md border border-slate-700 bg-slate-800/70 px-4 py-3">
                   <div>
                     <p className="text-sm font-semibold text-white">
                       User status

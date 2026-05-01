@@ -141,7 +141,7 @@ export function AdminWorkspaceShell({
                 <p className="truncate text-xs font-bold uppercase leading-none tracking-[0.16em] text-orange-300">Connect</p>
               </div>
               <button
-                className="rounded-lg p-2 text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                className="rounded-md p-2 text-slate-300 transition hover:bg-slate-800 hover:text-white"
                 onClick={toggleExpanded}
                 title="Collapse sidebar"
                 type="button"
@@ -202,7 +202,7 @@ export function AdminWorkspaceShell({
           <div className="border-t border-slate-700/80 p-2">
             <button
               className={cn(
-                'flex w-full items-center rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800/80 hover:text-white',
+                'flex w-full items-center rounded-md px-3 py-2.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800/80 hover:text-white',
                 expanded ? 'justify-start gap-3' : 'justify-center',
               )}
               onClick={onBack}
@@ -224,7 +224,7 @@ export function AdminWorkspaceShell({
                   expanded ? 'bottom-full left-0 right-0 mb-2' : 'bottom-0 left-full ml-2 w-56',
                 )}
               >
-                <div className="rounded-lg px-3 py-2 text-left">
+                <div className="rounded-md px-3 py-2 text-left">
                   <p className="truncate text-sm font-semibold text-white">{session?.user.name || 'User'}</p>
                   <p className="truncate text-[11px] text-slate-400">
                     {session?.user.role ? session.user.role.replace('_', ' ') : 'user'} - {session?.user.tenantName || 'Tenant'}
@@ -232,7 +232,7 @@ export function AdminWorkspaceShell({
                 </div>
                 <div className="my-1 h-px bg-slate-700/80" />
                 <button
-                  className="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-white"
+                  className="flex w-full items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-left text-sm font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-white"
                   onClick={() => {
                     setProfileMenuOpen(false);
                     void logout();
@@ -272,7 +272,7 @@ export function AdminWorkspaceShell({
         <header>
           <div className="border-b border-slate-700/80 bg-slate-900/70 backdrop-blur">
             <div className="flex min-h-[72px] items-center justify-center px-6">
-              <p className="whitespace-nowrap text-sm font-bold uppercase tracking-[0.28em] text-slate-100">ADS Connect</p>
+              <p className="whitespace-nowrap text-3xl font-black tracking-tight text-white">ADS Connect</p>
             </div>
           </div>
           <div className="border-b border-slate-700/80 bg-slate-800/85">

@@ -168,10 +168,10 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
         </div>
       </section>
 
-      {error ? <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
+      {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 
       {loading ? (
-        <div className="flex items-center justify-center rounded-[28px] border border-slate-700 bg-slate-900/90 px-6 py-20">
+        <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-900/90 px-6 py-20">
           <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
         </div>
       ) : (
@@ -182,11 +182,11 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
           </CardHeader>
           <CardContent className="space-y-3 p-6">
             {artworkFiles.length === 0 ? (
-              <div className="rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-8 text-center text-sm text-slate-300">
+              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-4 py-8 text-center text-sm text-slate-300">
                 No artwork files uploaded for this campaign.
               </div>
             ) : (
-              <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60">
+              <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
                 <table className="dense-table w-full table-fixed border-collapse text-sm">
                   <thead>
                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">

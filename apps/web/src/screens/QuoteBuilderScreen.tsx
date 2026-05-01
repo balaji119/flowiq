@@ -75,7 +75,7 @@ function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBre
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {formatKeys.map((key) => (
-        <div key={key} className={cn('rounded-2xl border px-4 py-3', inverse ? 'border-slate-700 bg-slate-900' : 'border-slate-700/70 bg-slate-800/80')}>
+        <div key={key} className={cn('rounded-md border px-4 py-3', inverse ? 'border-slate-700 bg-slate-900' : 'border-slate-700/70 bg-slate-800/80')}>
           <p className={cn('text-xs font-bold uppercase tracking-[0.18em]', inverse ? 'text-violet-200' : 'text-slate-300')}>{key}</p>
           <p className="mt-2 text-xl font-black text-white">{breakdown[key]}</p>
         </div>
@@ -602,7 +602,7 @@ function SearchableSelect({
         <ChevronDown className={cn('h-4 w-4 text-slate-400 transition-transform', open ? 'rotate-180' : '')} />
       </button>
       {open ? (
-        <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-3xl border border-slate-700 bg-slate-950 p-4 shadow-2xl shadow-slate-950/60">
+        <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-md border border-slate-700 bg-slate-950 p-4 shadow-2xl shadow-slate-950/60">
           <div className="space-y-3">
             <Input autoFocus placeholder={`Search ${label || 'items'}`} value={query} onChange={(event) => setQuery(event.target.value)} />
             <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
@@ -611,7 +611,7 @@ function SearchableSelect({
                 return (
                   <button
                     key={item.value}
-                    className={cn('flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition', active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500')}
+                    className={cn('flex w-full items-center justify-between rounded-md border px-4 py-3 text-left text-sm transition', active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500')}
                     onClick={() => {
                       onValueChange(item.value);
                       setOpen(false);
@@ -623,7 +623,7 @@ function SearchableSelect({
                   </button>
                 );
               })}
-              {filteredItems.length === 0 ? <p className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-6 text-center text-sm text-slate-400">{emptyMessage}</p> : null}
+              {filteredItems.length === 0 ? <p className="rounded-md border border-slate-700 bg-slate-900 px-4 py-6 text-center text-sm text-slate-400">{emptyMessage}</p> : null}
             </div>
             {actionLabel && onAction ? (
               <Button
@@ -2521,7 +2521,7 @@ export function QuoteBuilderScreen({
             topBarActionsHost,
           )
         : null}
-      <section className="relative overflow-hidden rounded-[24px] border border-slate-700/70 bg-slate-950/70 px-5 py-5 shadow-2xl shadow-slate-950/40">
+      <section className="relative overflow-hidden rounded-md border border-slate-700/70 bg-slate-950/70 px-5 py-5 shadow-2xl shadow-slate-950/40">
         <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.2),transparent_52%)]" />
         <div className="relative flex flex-col gap-5">
           <div className="space-y-3">
@@ -2534,7 +2534,7 @@ export function QuoteBuilderScreen({
                 return (
                   <button
                     key={step.key}
-                    className={cn('rounded-2xl border px-4 py-2.5 text-left text-sm font-semibold transition', active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-500')}
+                    className={cn('rounded-md border px-4 py-2.5 text-left text-sm font-semibold transition', active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-500')}
                     onClick={() => navigateToStep(index)}
                     type="button"
                   >
@@ -2548,9 +2548,9 @@ export function QuoteBuilderScreen({
       </section>
 
       {(error || metadataError) ? (
-        <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error || metadataError}</div>
+        <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error || metadataError}</div>
       ) : null}
-      {quoteResponseMessage ? <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{quoteResponseMessage}</div> : null}
+      {quoteResponseMessage ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{quoteResponseMessage}</div> : null}
 
       <div className="grid gap-6">
         <section className="space-y-6">
@@ -2658,7 +2658,7 @@ export function QuoteBuilderScreen({
                   type="file"
                 />
 
-                <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-950/70">
+                <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-950/70">
                   <table className="dense-table min-w-[860px] w-full border-collapse text-sm">
                     <thead>
                       <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -2680,7 +2680,7 @@ export function QuoteBuilderScreen({
                           return (
                             <tr key={image.id} className="border-t border-slate-700/70 bg-slate-800/60">
                               <td className="border border-slate-700 px-4 py-3">
-                                <div className="h-14 w-20 overflow-hidden rounded-lg border border-slate-600 bg-slate-900">
+                                <div className="h-14 w-20 overflow-hidden rounded-md border border-slate-600 bg-slate-900">
                                   {image.imageUrl && (isImage || isPdf) ? (
                                     isImage ? (
                                       <img alt={image.name} className="h-full w-full object-cover" src={buildApiUrl(image.imageUrl)} />
@@ -2743,7 +2743,7 @@ export function QuoteBuilderScreen({
               </CardHeader>
               <CardContent className="space-y-6 p-6">
                 {loadingMetadata ? (
-                  <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
+                  <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
                     <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
                     Loading campaign mappings…
                   </div>
@@ -2762,7 +2762,7 @@ export function QuoteBuilderScreen({
                     return (
                       <div
                         key={market.id}
-                        className={cn('rounded-[24px] border bg-slate-800/60 p-4 sm:p-5', isActiveMarket ? 'border-violet-400/60 shadow-[0_0_0_1px_rgba(167,139,250,0.25)]' : 'border-slate-700')}
+                        className={cn('rounded-md border bg-slate-800/60 p-4 sm:p-5', isActiveMarket ? 'border-violet-400/60 shadow-[0_0_0_1px_rgba(167,139,250,0.25)]' : 'border-slate-700')}
                         onClick={() => setActiveMarketId(market.id)}
                         onFocusCapture={() => setActiveMarketId(market.id)}
                       >
@@ -2804,7 +2804,7 @@ export function QuoteBuilderScreen({
                             <p className="text-sm font-semibold text-white">Assets</p>
                             <p className="text-xs text-slate-400">Attach the assets you want to run in this market. All campaign weeks are selected automatically.</p>
                           </div>
-                          <div className="rounded-2xl border border-slate-700/80 bg-slate-900/45 lg:overflow-visible">
+                          <div className="rounded-md border border-slate-700/80 bg-slate-900/45 lg:overflow-visible">
                             <div className="overflow-x-auto lg:overflow-visible">
                               <table className="dense-table min-w-[780px] w-full border-collapse">
                               <colgroup>
@@ -2880,7 +2880,7 @@ export function QuoteBuilderScreen({
                           {marketSummary ? (
                             <div className="space-y-3">
                               <p className="text-sm font-semibold text-white">Market Totals</p>
-                              <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-900/65">
+                              <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/65">
                                 <table className="dense-table min-w-[860px] w-full border-collapse text-sm">
                                   <thead>
                                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -2951,7 +2951,7 @@ export function QuoteBuilderScreen({
               <CardContent className="space-y-5 p-6">
                 {summary ? (
                   <>
-                    <div className="overflow-x-auto rounded-[24px] border border-slate-700 bg-slate-900/70">
+                    <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/70">
                       <table className="dense-table min-w-[1120px] w-full border-collapse text-sm">
                         <thead>
                           <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -3039,7 +3039,7 @@ export function QuoteBuilderScreen({
                     </div>
                   </>
                 ) : (
-                  <div className="rounded-[24px] border border-slate-700 bg-slate-800/70 p-6">
+                  <div className="rounded-md border border-slate-700 bg-slate-800/70 p-6">
                     <div className="flex items-start gap-3">
                       <CircleAlert className="mt-0.5 h-5 w-5 text-amber-300" />
                       <div>
@@ -3063,7 +3063,7 @@ export function QuoteBuilderScreen({
                 {values.campaignMarkets.map((market) => {
                   const deliveryAddressOptions = deliveryAddressOptionsFor(market.market);
                   return (
-                    <div key={`finalize-map-${market.id}`} className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900/45 p-4">
+                    <div key={`finalize-map-${market.id}`} className="space-y-3 rounded-md border border-slate-700 bg-slate-900/45 p-4">
                       <div>
                         <p className="text-sm font-semibold text-white">{market.market || 'Select a market in Schedule first'}</p>
                       </div>
@@ -3175,7 +3175,7 @@ export function QuoteBuilderScreen({
               </CardHeader>
               <CardContent className="space-y-6 p-6">
                 <div className="space-y-3">
-                  <div className="rounded-[24px] border border-dashed border-slate-600 bg-slate-800/60 p-4">
+                  <div className="rounded-md border border-dashed border-slate-600 bg-slate-800/60 p-4">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-white">{selectedPurchaseOrderFile ? selectedPurchaseOrderFile.name : 'No file selected'}</p>
@@ -3296,7 +3296,7 @@ export function QuoteBuilderScreen({
             </DialogDescription>
           </DialogHeader>
           {newAddressError ? (
-            <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200">
+            <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200">
               {newAddressError}
             </div>
           ) : null}
@@ -3393,7 +3393,6 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
-
 
 
 
