@@ -7,13 +7,38 @@ const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
 const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;
+let openDialogOverlayCount = 0;
 
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
-  <DialogPrimitive.Overlay ref={ref} className={cn('fixed inset-0 bg-slate-950/70 backdrop-blur-sm', className)} {...props} />
-));
+>(({ className, style, ...props }, ref) => {
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    openDialogOverlayCount += 1;
+    document.body.classList.add('flowiq-dialog-open');
+    return () => {
+      openDialogOverlayCount = Math.max(0, openDialogOverlayCount - 1);
+      if (openDialogOverlayCount === 0) {
+        document.body.classList.remove('flowiq-dialog-open');
+      }
+    };
+  }, []);
+
+  return (
+    <DialogPrimitive.Overlay
+      ref={ref}
+      className={cn('fixed inset-0 z-[2147483646] backdrop-blur-2xl', className)}
+      style={{
+        backgroundColor: 'rgba(2, 6, 23, 0.55)',
+        backdropFilter: 'blur(22px)',
+        WebkitBackdropFilter: 'blur(22px)',
+        ...style,
+      }}
+      {...props}
+    />
+  );
+});
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const DialogContent = React.forwardRef<
@@ -25,7 +50,7 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'relative z-50 grid gap-3 overflow-y-auto rounded-md border border-slate-700 bg-slate-950 p-5 shadow-2xl shadow-slate-950/60',
+        'relative z-[2147483647] grid gap-3 overflow-y-auto rounded-md border border-slate-700 bg-slate-950 p-5 shadow-2xl shadow-slate-950/60',
         className,
       )}
       style={{

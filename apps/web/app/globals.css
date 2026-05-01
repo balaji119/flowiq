@@ -19,6 +19,14 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+.flowiq-dialog-blur-target {
+  transition: filter 180ms ease, opacity 180ms ease;
+}
+
+body.flowiq-dialog-open .flowiq-dialog-blur-target {
+  filter: blur(8px) brightness(0.9) saturate(0.95);
+}
+
 * {
   box-sizing: border-box;
 }

@@ -296,7 +296,7 @@ export function AdminWorkspaceShell({
             </div>
           </div>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flowiq-dialog-blur-target min-h-0 flex-1 overflow-y-auto">
           {children}
         </div>
         <div className="shrink-0" id="workspace-bottom-bar-slot" />
