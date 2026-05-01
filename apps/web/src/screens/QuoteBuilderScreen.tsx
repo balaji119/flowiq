@@ -755,6 +755,7 @@ export function QuoteBuilderScreen({
   const [newAddressError, setNewAddressError] = useState('');
   const [topBarCenterHost, setTopBarCenterHost] = useState<HTMLElement | null>(null);
   const [topBarActionsHost, setTopBarActionsHost] = useState<HTMLElement | null>(null);
+  const [bottomBarHost, setBottomBarHost] = useState<HTMLElement | null>(null);
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
   const campaignHydratedRef = useRef(false);
   const lastPersistedValuesRef = useRef('');
@@ -1157,6 +1158,7 @@ export function QuoteBuilderScreen({
   useEffect(() => {
     setTopBarCenterHost(document.getElementById('workspace-topbar-center-slot'));
     setTopBarActionsHost(document.getElementById('workspace-topbar-actions-slot'));
+    setBottomBarHost(document.getElementById('workspace-bottom-bar-slot'));
   }, []);
 
   useEffect(() => {
@@ -2404,7 +2406,7 @@ export function QuoteBuilderScreen({
       ) : null}
       {quoteResponseMessage ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{quoteResponseMessage}</div> : null}
 
-      <div className="grid gap-6">
+      <div className="grid gap-6 pb-0">
         <section>
           <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
             <div className="space-y-6 lg:col-span-2">
@@ -2965,12 +2967,17 @@ export function QuoteBuilderScreen({
               )}
             </aside>
           </div>
-          <Card>
-              <CardHeader className="p-6 pb-0">
-                <CardTitle>Export For ADS</CardTitle>
-                <CardDescription>Export the details to send to ADS.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 p-6">
+        </section>
+
+      </div>
+
+      {(bottomBarHost
+        ? createPortal(
+            <div className="z-20 border-t border-slate-700/80 bg-slate-950/95 backdrop-blur">
+              <div className="flex w-full items-center justify-between gap-4 px-6 py-3">
+                <div className="min-h-[20px] text-sm text-slate-300" role="status">
+                  {exportProgressMessage || ''}
+                </div>
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Button
                     className="h-10 min-w-[180px] px-5 text-base"
@@ -2994,17 +3001,42 @@ export function QuoteBuilderScreen({
                     {sendingAdsEmail ? 'Sending Email...' : 'Send Email To ADS'}
                   </Button>
                 </div>
-                {exportProgressMessage ? (
-                  <p className="text-sm text-slate-300" role="status">
-                    {exportProgressMessage}
-                  </p>
-                ) : null}
-              </CardContent>
-            </Card>
-
-        </section>
-
-      </div>
+              </div>
+            </div>,
+            bottomBarHost,
+          )
+        : (
+            <div className="z-20 border-t border-slate-700/80 bg-slate-950/95 backdrop-blur">
+              <div className="flex w-full items-center justify-between gap-4 px-6 py-3">
+                <div className="min-h-[20px] text-sm text-slate-300" role="status">
+                  {exportProgressMessage || ''}
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button
+                    className="h-10 min-w-[180px] px-5 text-base"
+                    disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates || sendingAdsEmail}
+                    onClick={() => void downloadArtworkExcelTemplates()}
+                    type="button"
+                    variant="outline"
+                  >
+                    {exportingTemplates ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                    {exportingTemplates ? 'Generating Files...' : 'Download Visuals'}
+                  </Button>
+                  <Button
+                    className="h-10 min-w-[210px] px-6 text-base"
+                    disabled={!hasMappedCreatives || !hasUploadedPurchaseOrder || exportingTemplates || sendingAdsEmail}
+                    onClick={() => void sendArtworkEmailToAds()}
+                    title={hasUploadedPurchaseOrder ? undefined : 'Upload purchase order before sending to ADS'}
+                    type="button"
+                    variant="secondary"
+                  >
+                    {sendingAdsEmail ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                    {sendingAdsEmail ? 'Sending Email...' : 'Send Email To ADS'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
 
       <Dialog open={postersExpandedOpen} onOpenChange={setPostersExpandedOpen}>
         <DialogContent style={{ width: 'min(calc(100vw - 2rem), 82rem)', maxHeight: '90vh' }}>

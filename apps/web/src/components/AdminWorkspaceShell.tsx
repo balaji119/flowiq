@@ -279,8 +279,8 @@ export function AdminWorkspaceShell({
         </div>
       </aside>
 
-      <section className="min-w-0 flex-1 overflow-y-auto">
-        <header>
+      <section className="min-w-0 flex h-screen flex-1 flex-col overflow-hidden">
+        <header className="shrink-0">
           <div className="border-b border-slate-700/80 bg-slate-900/70 backdrop-blur">
             <div className="flex min-h-[72px] items-center justify-center px-6">
               <p className="whitespace-nowrap text-3xl font-black tracking-tight text-white">ADS Connect</p>
@@ -296,7 +296,10 @@ export function AdminWorkspaceShell({
             </div>
           </div>
         </header>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {children}
+        </div>
+        <div className="shrink-0" id="workspace-bottom-bar-slot" />
       </section>
     </main>
   );
