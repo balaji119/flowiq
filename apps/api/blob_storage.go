@@ -1,79 +1,88 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 )
 
-type azureBlobStorage struct {
-	client     *azblob.Client
-	credential *azblob.SharedKeyCredential
-	account    string
-	container  string
+type campaignObjectStorage struct {
+	client   *s3.Client
+	presign  *s3.PresignClient
+	bucket   string
+	endpoint string
 }
 
-func (a *app) initCampaignBlobStorage(ctx context.Context) error {
-	account := strings.TrimSpace(os.Getenv("AZURE_STORAGE_ACCOUNT"))
-	key := strings.TrimSpace(os.Getenv("AZURE_STORAGE_KEY"))
-	container := strings.TrimSpace(os.Getenv("AZURE_STORAGE_CONTAINER"))
+func (a *app) initCampaignObjectStorage(ctx context.Context) error {
+	accessKey := strings.TrimSpace(os.Getenv("DO_SPACES_KEY"))
+	secretKey := strings.TrimSpace(os.Getenv("DO_SPACES_SECRET"))
+	region := strings.TrimSpace(os.Getenv("DO_SPACES_REGION"))
+	bucket := strings.TrimSpace(os.Getenv("DO_SPACES_BUCKET"))
+	rawEndpoint := strings.TrimSpace(os.Getenv("DO_SPACES_ENDPOINT"))
 
-	if account == "" && key == "" && container == "" {
+	if accessKey == "" && secretKey == "" && region == "" && bucket == "" && rawEndpoint == "" {
 		return nil
 	}
-	if account == "" || key == "" || container == "" {
-		return fmt.Errorf("AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, and AZURE_STORAGE_CONTAINER must all be set")
+	if accessKey == "" || secretKey == "" || region == "" || bucket == "" {
+		return fmt.Errorf("DO_SPACES_KEY, DO_SPACES_SECRET, DO_SPACES_REGION, and DO_SPACES_BUCKET must all be set")
 	}
 
-	credential, err := azblob.NewSharedKeyCredential(account, key)
+	endpoint, err := normalizeSpacesEndpoint(rawEndpoint, region)
 	if err != nil {
-		return fmt.Errorf("create Azure shared key credential: %w", err)
+		return err
 	}
-	serviceURL := fmt.Sprintf("https://%s.blob.core.windows.net/", account)
-	client, err := azblob.NewClientWithSharedKeyCredential(serviceURL, credential, nil)
+
+	awsCfg, err := config.LoadDefaultConfig(
+		ctx,
+		config.WithRegion(region),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")),
+	)
 	if err != nil {
-		return fmt.Errorf("create Azure blob client: %w", err)
+		return fmt.Errorf("load AWS-compatible config for DigitalOcean Spaces: %w", err)
 	}
 
-	if _, err := client.CreateContainer(ctx, container, nil); err != nil && !bloberror.HasCode(err, bloberror.ContainerAlreadyExists) {
-		return fmt.Errorf("create Azure container %q: %w", container, err)
+	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(endpoint)
+	})
+
+	if _, err := client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(bucket)}); err != nil {
+		return fmt.Errorf("access DigitalOcean Space %q: %w", bucket, err)
 	}
 
-	a.blobStorage = &azureBlobStorage{
-		client:     client,
-		credential: credential,
-		account:    account,
-		container:  container,
+	a.objectStorage = &campaignObjectStorage{
+		client:   client,
+		presign:  s3.NewPresignClient(client),
+		bucket:   bucket,
+		endpoint: endpoint,
 	}
-	log.Printf("campaign artwork storage using Azure Blob (account=%s, container=%s)", account, container)
+	log.Printf("campaign artwork storage using DigitalOcean Spaces (bucket=%s, endpoint=%s)", bucket, endpoint)
 	return nil
 }
 
 func (a *app) storeCampaignImage(ctx context.Context, storedName, contentType string, content []byte) error {
-	if a.blobStorage != nil {
+	if a.objectStorage != nil {
 		ctype := contentType
-		_, err := a.blobStorage.client.UploadBuffer(
-			ctx,
-			a.blobStorage.container,
-			storedName,
-			content,
-			&azblob.UploadBufferOptions{
-				HTTPHeaders: &blob.HTTPHeaders{
-					BlobContentType: &ctype,
-				},
-			},
-		)
+		_, err := a.objectStorage.client.PutObject(ctx, &s3.PutObjectInput{
+			Bucket:      aws.String(a.objectStorage.bucket),
+			Key:         aws.String(storedName),
+			Body:        bytes.NewReader(content),
+			ContentType: aws.String(ctype),
+		})
 		if err != nil {
-			return fmt.Errorf("upload image to Azure blob: %w", err)
+			return fmt.Errorf("upload image to DigitalOcean Spaces: %w", err)
 		}
 		return nil
 	}
@@ -86,47 +95,55 @@ func (a *app) storeCampaignImage(ctx context.Context, storedName, contentType st
 }
 
 func (a *app) campaignImageReadURL(ctx context.Context, storedName, contentDisposition string) (string, bool, error) {
-	if a.blobStorage == nil {
+	if a.objectStorage == nil {
 		return "", false, nil
 	}
 
-	containerClient := a.blobStorage.client.ServiceClient().NewContainerClient(a.blobStorage.container)
-	blobClient := containerClient.NewBlobClient(storedName)
-	if _, err := blobClient.GetProperties(ctx, nil); err != nil {
-		if bloberror.HasCode(err, bloberror.BlobNotFound, bloberror.ResourceNotFound, bloberror.ContainerNotFound) {
+	if _, err := a.objectStorage.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(a.objectStorage.bucket),
+		Key:    aws.String(storedName),
+	}); err != nil {
+		if isMissingObjectStorageObject(err) {
 			return "", false, nil
 		}
-		return "", false, fmt.Errorf("get Azure blob properties: %w", err)
+		return "", false, fmt.Errorf("get DigitalOcean Spaces object metadata: %w", err)
 	}
 
-	perms := sas.BlobPermissions{Read: true}
-	start := time.Now().UTC().Add(-5 * time.Minute)
-	expiry := time.Now().UTC().Add(45 * time.Minute)
-	values := sas.BlobSignatureValues{
-		Protocol:           sas.ProtocolHTTPS,
-		StartTime:          start,
-		ExpiryTime:         expiry,
-		ContainerName:      a.blobStorage.container,
-		BlobName:           storedName,
-		Permissions:        perms.String(),
-		ContentDisposition: strings.TrimSpace(contentDisposition),
+	input := &s3.GetObjectInput{
+		Bucket: aws.String(a.objectStorage.bucket),
+		Key:    aws.String(storedName),
 	}
-	queryParams, err := values.SignWithSharedKey(a.blobStorage.credential)
+	if disposition := strings.TrimSpace(contentDisposition); disposition != "" {
+		input.ResponseContentDisposition = aws.String(disposition)
+	}
+
+	presigned, err := a.objectStorage.presign.PresignGetObject(ctx, input, func(po *s3.PresignOptions) {
+		po.Expires = 45 * time.Minute
+	})
 	if err != nil {
-		return "", false, fmt.Errorf("sign Azure SAS URL: %w", err)
+		return "", false, fmt.Errorf("sign DigitalOcean Spaces URL: %w", err)
 	}
 
-	return blobClient.URL() + "?" + queryParams.Encode(), true, nil
+	return presigned.URL, true, nil
 }
 
 func (a *app) deleteCampaignImage(ctx context.Context, storedName string) error {
-	if a.blobStorage != nil {
-		_, err := a.blobStorage.client.DeleteBlob(ctx, a.blobStorage.container, storedName, nil)
-		if err != nil {
-			if bloberror.HasCode(err, bloberror.BlobNotFound, bloberror.ResourceNotFound, bloberror.ContainerNotFound) {
+	if a.objectStorage != nil {
+		if _, err := a.objectStorage.client.HeadObject(ctx, &s3.HeadObjectInput{
+			Bucket: aws.String(a.objectStorage.bucket),
+			Key:    aws.String(storedName),
+		}); err != nil {
+			if isMissingObjectStorageObject(err) {
 				return os.ErrNotExist
 			}
-			return fmt.Errorf("delete image from Azure blob: %w", err)
+			return fmt.Errorf("check DigitalOcean Spaces object before delete: %w", err)
+		}
+
+		if _, err := a.objectStorage.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+			Bucket: aws.String(a.objectStorage.bucket),
+			Key:    aws.String(storedName),
+		}); err != nil {
+			return fmt.Errorf("delete image from DigitalOcean Spaces: %w", err)
 		}
 		return nil
 	}
@@ -136,4 +153,32 @@ func (a *app) deleteCampaignImage(ctx context.Context, storedName string) error 
 		return err
 	}
 	return nil
+}
+
+func normalizeSpacesEndpoint(rawEndpoint, region string) (string, error) {
+	endpoint := strings.TrimSpace(rawEndpoint)
+	if endpoint == "" {
+		endpoint = fmt.Sprintf("%s.digitaloceanspaces.com", strings.TrimSpace(region))
+	}
+	if endpoint == "" {
+		return "", errors.New("DigitalOcean Spaces endpoint is required")
+	}
+	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+		endpoint = "https://" + endpoint
+	}
+	return strings.TrimRight(endpoint, "/"), nil
+}
+
+func isMissingObjectStorageObject(err error) bool {
+	var apiErr smithy.APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+
+	switch strings.ToLower(strings.TrimSpace(apiErr.ErrorCode())) {
+	case "nosuchkey", "nosuchbucket", "notfound":
+		return true
+	}
+	status, parseErr := strconv.Atoi(strings.TrimSpace(apiErr.ErrorCode()))
+	return parseErr == nil && status == 404
 }

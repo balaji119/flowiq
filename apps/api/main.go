@@ -37,7 +37,7 @@ type app struct {
 	uploadDir        string
 	campaignImageDir string
 	printIQBaseURL   string
-	blobStorage      *azureBlobStorage
+	objectStorage    *campaignObjectStorage
 }
 
 type authClaims struct {
@@ -92,8 +92,8 @@ func main() {
 	if err := os.MkdirAll(api.campaignImageDir, 0o755); err != nil {
 		log.Fatalf("failed to create campaign image directory: %v", err)
 	}
-	if err := api.initCampaignBlobStorage(ctx); err != nil {
-		log.Fatalf("failed to initialize Azure blob storage: %v", err)
+	if err := api.initCampaignObjectStorage(ctx); err != nil {
+		log.Fatalf("failed to initialize campaign object storage: %v", err)
 	}
 
 	address := fmt.Sprintf(":%s", envOrDefault("PORT", "4000"))
