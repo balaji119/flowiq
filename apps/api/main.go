@@ -687,7 +687,7 @@ func (a *app) handleUpdateCampaign(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) handleDeleteCampaign(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r.Context())
-	err := a.campaignStore.deleteCampaign(r.Context(), *user, r.PathValue("campaignId"))
+	campaign, err := a.campaignStore.getCampaign(r.Context(), *user, r.PathValue("campaignId"))
 	if err != nil {
 		status := http.StatusBadRequest
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
@@ -696,6 +696,23 @@ func (a *app) handleDeleteCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
+
+	storedNames := collectCampaignImageStoredNames(campaign)
+	err = a.campaignStore.deleteCampaign(r.Context(), *user, r.PathValue("campaignId"))
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := a.deleteCampaignStoredImages(r.Context(), storedNames); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Campaign deleted, but failed to clean up one or more campaign images"})
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
@@ -1395,6 +1412,41 @@ func (a *app) resolveCampaignImageFile(r *http.Request) (string, os.FileInfo, st
 
 func isSafeStoredName(storedName string) bool {
 	return storedName != "" && filepath.Base(storedName) == storedName && !strings.Contains(storedName, "..")
+}
+
+func collectCampaignImageStoredNames(campaign *campaignRecord) []string {
+	if campaign == nil {
+		return nil
+	}
+
+	storedNameSet := map[string]struct{}{}
+	for _, image := range campaign.Values.PrintImages {
+		candidates := []string{
+			strings.TrimSpace(image.StoredName),
+			strings.TrimSpace(image.ThumbnailStoredName),
+		}
+		for _, candidate := range candidates {
+			if candidate == "" || !isSafeStoredName(candidate) {
+				continue
+			}
+			storedNameSet[candidate] = struct{}{}
+		}
+	}
+
+	storedNames := make([]string, 0, len(storedNameSet))
+	for storedName := range storedNameSet {
+		storedNames = append(storedNames, storedName)
+	}
+	return storedNames
+}
+
+func (a *app) deleteCampaignStoredImages(ctx context.Context, storedNames []string) error {
+	for _, storedName := range storedNames {
+		if err := a.deleteCampaignImage(ctx, storedName); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a *app) handleListTenants(w http.ResponseWriter, _ *http.Request) {
