@@ -154,6 +154,8 @@ function normalizeCreativeImageIds(asset: CampaignAsset): Partial<Record<Creativ
 function getCreativeImageIdForFormat(asset: CampaignAsset, format: CreativeFormatKey) {
   const mapped = (asset.creativeImageIds?.[format] || '').trim();
   if (mapped) return mapped;
+  const hasExplicitFormatMappings = Object.values(asset.creativeImageIds ?? {}).some((value) => (value || '').trim().length > 0);
+  if (hasExplicitFormatMappings) return '';
   return (asset.creativeImageId || '').trim();
 }
 
@@ -1715,6 +1717,13 @@ export function QuoteBuilderScreen({
     openAssignArtworkDialog(marketId, assetId, formatKey);
   }
 
+  function removeArtworkFromPreview() {
+    if (!previewArtworkTarget) return;
+    const { marketId, assetId, formatKey } = previewArtworkTarget;
+    assignArtworkToFormat(marketId, assetId, formatKey, '');
+    closeArtworkPreviewDialog();
+  }
+
   function closeAssignArtworkDialog() {
     setAssignArtworkDialogOpen(false);
     setAssignArtworkTarget(null);
@@ -1741,10 +1750,19 @@ export function QuoteBuilderScreen({
       if (!imageId) {
         delete nextCreativeImageIds[formatKey];
       }
+      const nextLegacyCreativeImageId =
+        nextCreativeImageIds['8-sheet']
+        || nextCreativeImageIds['6-sheet']
+        || nextCreativeImageIds['4-sheet']
+        || nextCreativeImageIds['2-sheet']
+        || nextCreativeImageIds.Mega
+        || nextCreativeImageIds['DOT M']
+        || nextCreativeImageIds.MP
+        || '';
       return {
         ...current,
         creativeImageIds: nextCreativeImageIds,
-        creativeImageId: getCreativeImageIdForFormat({ ...current, creativeImageIds: nextCreativeImageIds }, '8-sheet') || '',
+        creativeImageId: nextLegacyCreativeImageId,
       };
     });
   }
@@ -3966,7 +3984,10 @@ export function QuoteBuilderScreen({
                     <p className="truncate text-xs text-slate-400">{previewArtworkImage.fileName}</p>
                   </div>
                 </div>
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  <Button onClick={removeArtworkFromPreview} type="button" variant="destructive">
+                    Remove
+                  </Button>
                   <Button onClick={openChangeArtworkFromPreview} type="button" variant="secondary">
                     Change
                   </Button>
