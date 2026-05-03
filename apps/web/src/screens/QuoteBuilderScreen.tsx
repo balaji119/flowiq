@@ -485,6 +485,20 @@ function toAbsoluteUrl(url: string) {
   return trimmed;
 }
 
+function withCampaignImageProxy(url: string) {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  try {
+    const parsed = new URL(trimmed, window.location.origin);
+    if (parsed.pathname.startsWith('/api/campaign-images/')) {
+      parsed.searchParams.set('proxy', '1');
+    }
+    return parsed.toString();
+  } catch {
+    return trimmed;
+  }
+}
+
 function detectStateMarkerColumns(sheet: any, headerRow: number, fromColumn: number, toColumn: number) {
   const markerColumnByState = new Map<ExportState, number>();
   for (let col = fromColumn; col <= toColumn; col += 1) {
@@ -2560,7 +2574,7 @@ export function QuoteBuilderScreen({
             const isPdf = mimeType === 'application/pdf' || image.fileName.toLowerCase().endsWith('.pdf');
             const isImage = mimeType.startsWith('image/');
             try {
-              const sourceUrl = toAbsoluteUrl(buildApiUrl(image.imageUrl));
+              const sourceUrl = withCampaignImageProxy(toAbsoluteUrl(buildApiUrl(image.imageUrl)));
               if (!sourceUrl) return;
               const response = await fetch(sourceUrl);
               if (!response.ok) return;
@@ -2577,7 +2591,9 @@ export function QuoteBuilderScreen({
                   const parsed = previewDataUrl ? dataUrlToBytes(previewDataUrl) : null;
                   if (parsed) creativePreviewById.set(imageId, parsed);
                 } else if (isImage) {
-                  const previewUrl = image.thumbnailUrl ? toAbsoluteUrl(buildApiUrl(image.thumbnailUrl)) : '';
+                  const previewUrl = image.thumbnailUrl
+                    ? withCampaignImageProxy(toAbsoluteUrl(buildApiUrl(image.thumbnailUrl)))
+                    : '';
                   const previewResponse = previewUrl ? await fetch(previewUrl) : response;
                   const previewBlob = previewResponse.ok ? await previewResponse.blob() : blob;
                   const normalizedPreview = await normalizePreviewBlobForWord(

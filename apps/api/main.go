@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 )
@@ -1231,6 +1233,20 @@ func (a *app) handleCampaignImageGet(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if wantsCampaignImageProxy(r) {
+		handled, err := a.streamCampaignImageFromObjectStorage(w, r, storedName, "", storedName)
+		if handled {
+			if err == nil {
+				return
+			}
+			if errors.Is(err, os.ErrNotExist) {
+				http.NotFound(w, r)
+				return
+			}
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read campaign image"})
+			return
+		}
+	}
 	if signedURL, ok, err := a.campaignImageReadURL(r.Context(), storedName, ""); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read campaign image"})
 		return
@@ -1263,6 +1279,20 @@ func (a *app) handleCampaignImageDownload(w http.ResponseWriter, r *http.Request
 		requestedName = storedName
 	}
 	safeName := strings.NewReplacer("\r", "", "\n", "", "\"", "'", "\\", "_").Replace(requestedName)
+	if wantsCampaignImageProxy(r) {
+		handled, err := a.streamCampaignImageFromObjectStorage(w, r, storedName, fmt.Sprintf("attachment; filename=\"%s\"", safeName), safeName)
+		if handled {
+			if err == nil {
+				return
+			}
+			if errors.Is(err, os.ErrNotExist) {
+				http.NotFound(w, r)
+				return
+			}
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read campaign image"})
+			return
+		}
+	}
 	if signedURL, ok, err := a.campaignImageReadURL(r.Context(), storedName, fmt.Sprintf("attachment; filename=\"%s\"", safeName)); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read campaign image"})
 		return
@@ -1414,6 +1444,60 @@ func isSafeStoredName(storedName string) bool {
 	return storedName != "" && filepath.Base(storedName) == storedName && !strings.Contains(storedName, "..")
 }
 
+func wantsCampaignImageProxy(r *http.Request) bool {
+	value := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("proxy")))
+	return value == "1" || value == "true" || value == "yes" || value == "on"
+}
+
+func (a *app) streamCampaignImageFromObjectStorage(
+	w http.ResponseWriter,
+	r *http.Request,
+	storedName string,
+	contentDisposition string,
+	fileNameHint string,
+) (bool, error) {
+	if a.objectStorage == nil {
+		return false, nil
+	}
+
+	result, err := a.objectStorage.client.GetObject(r.Context(), &s3.GetObjectInput{
+		Bucket: aws.String(a.objectStorage.bucket),
+		Key:    aws.String(storedName),
+	})
+	if err != nil {
+		if isMissingObjectStorageObject(err) {
+			return true, os.ErrNotExist
+		}
+		return true, fmt.Errorf("get DigitalOcean Spaces object: %w", err)
+	}
+	defer result.Body.Close()
+
+	contentType := strings.TrimSpace(aws.ToString(result.ContentType))
+	if contentType == "" {
+		contentType = mime.TypeByExtension(strings.ToLower(filepath.Ext(fileNameHint)))
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "no-store, no-transform")
+	w.Header().Set("Accept-Ranges", "none")
+	if contentDisposition != "" {
+		w.Header().Set("Content-Disposition", contentDisposition)
+	}
+	if result.ContentLength != nil && *result.ContentLength > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(*result.ContentLength, 10))
+	}
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := io.Copy(w, result.Body); err != nil {
+		log.Printf("campaign image object stream failed for %s: %v", storedName, err)
+		return true, err
+	}
+	return true, nil
+}
+
 func collectCampaignImageStoredNames(campaign *campaignRecord) []string {
 	if campaign == nil {
 		return nil
@@ -1424,6 +1508,7 @@ func collectCampaignImageStoredNames(campaign *campaignRecord) []string {
 		candidates := []string{
 			strings.TrimSpace(image.StoredName),
 			strings.TrimSpace(image.ThumbnailStoredName),
+			strings.TrimSpace(image.SourcePDFStoredName),
 		}
 		for _, candidate := range candidates {
 			if candidate == "" || !isSafeStoredName(candidate) {

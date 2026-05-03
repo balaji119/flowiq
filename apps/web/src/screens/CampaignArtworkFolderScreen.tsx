@@ -36,14 +36,6 @@ function triggerDownload(href: string, fileName: string) {
   link.remove();
 }
 
-function campaignFileDownloadUrl(url: string) {
-  const resolvedUrl = new URL(url, window.location.origin);
-  const segments = resolvedUrl.pathname.split('/').filter(Boolean);
-  const storedName = segments[segments.length - 1];
-  if (!storedName) return '';
-  return new URL(`/campaign-files/${encodeURIComponent(storedName)}`, window.location.origin).toString();
-}
-
 function apiFileDownloadUrl(url: string, fileName: string) {
   const resolvedUrl = new URL(url, window.location.origin);
   const segments = resolvedUrl.pathname.split('/').filter(Boolean);
@@ -52,6 +44,20 @@ function apiFileDownloadUrl(url: string, fileName: string) {
   const apiUrl = new URL(`/api/campaign-images/${encodeURIComponent(storedName)}/download`, window.location.origin);
   apiUrl.searchParams.set('filename', fileName);
   return apiUrl.toString();
+}
+
+function withCampaignImageProxy(url: string) {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  try {
+    const parsed = new URL(trimmed, window.location.origin);
+    if (parsed.pathname.startsWith('/api/campaign-images/')) {
+      parsed.searchParams.set('proxy', '1');
+    }
+    return parsed.toString();
+  } catch {
+    return trimmed;
+  }
 }
 
 function toPdfGroupKey(name: string, fileName: string) {
@@ -82,7 +88,7 @@ async function createPdfFromImagePages(
 ) {
   const pdfDoc = await PDFDocument.create();
   for (const page of pages) {
-    const response = await fetch(page.url, { cache: 'no-store' });
+    const response = await fetch(withCampaignImageProxy(page.url), { cache: 'no-store' });
     if (!response.ok) continue;
     const bytes = new Uint8Array(await response.arrayBuffer());
     const mimeType = (page.mimeType || '').toLowerCase();
@@ -143,27 +149,41 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
     }>();
 
     (campaign?.values.printImages ?? []).forEach((image) => {
-      const fileName = image.fileName || image.name || 'Artwork';
-      const url = toAbsoluteUrl(buildApiUrl(image.imageUrl || ''));
+      const sourcePdfFileName = (image.sourcePdfFileName || '').trim();
+      const sourcePdfStoredName = (image.sourcePdfStoredName || '').trim();
+      const sourcePdfUrl = (image.sourcePdfUrl || '').trim();
+      const hasSourcePdf = Boolean(sourcePdfFileName || sourcePdfStoredName || sourcePdfUrl);
+      const groupBaseName = toPdfGroupKey(image.name || '', image.fileName || image.name || 'Artwork');
+      const groupKey = hasSourcePdf
+        ? (sourcePdfStoredName || sourcePdfFileName || groupBaseName)
+        : groupBaseName;
+      const fileName = hasSourcePdf
+        ? (sourcePdfFileName || toPdfFileName(groupBaseName))
+        : (image.fileName || image.name || 'Artwork');
+      const rawUrl = hasSourcePdf ? sourcePdfUrl : (image.imageUrl || '');
+      const url = toAbsoluteUrl(buildApiUrl(rawUrl));
       if (!url) return;
-      const key = toPdfGroupKey(image.name || '', fileName);
-      const pageNumber = getPageNumber(image.name || '', fileName);
+      const key = groupKey.trim() || groupBaseName;
+      const pageNumber = hasSourcePdf ? 1 : getPageNumber(image.name || '', image.fileName || fileName);
       const current = grouped.get(key) ?? {
         key,
-        fileName: toPdfFileName(key),
+        fileName: hasSourcePdf ? fileName : toPdfFileName(key),
         thumbnailUrl: image.thumbnailUrl ? toAbsoluteUrl(buildApiUrl(image.thumbnailUrl)) : '',
         pages: [],
       };
       if (!current.thumbnailUrl && image.thumbnailUrl) {
         current.thumbnailUrl = toAbsoluteUrl(buildApiUrl(image.thumbnailUrl));
       }
-      current.pages.push({
+      const nextPage = {
         id: image.id,
         url,
         fileName,
-        mimeType: image.mimeType || 'application/octet-stream',
+        mimeType: hasSourcePdf ? 'application/pdf' : (image.mimeType || 'application/octet-stream'),
         pageNumber,
-      });
+      };
+      if (!current.pages.some((page) => page.url === nextPage.url)) {
+        current.pages.push(nextPage);
+      }
       grouped.set(key, current);
     });
 
@@ -200,22 +220,12 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
       setError('');
       try {
         if (group.pages.length === 1 && group.pages[0].mimeType.toLowerCase() === 'application/pdf') {
-          const directDownloadUrl = campaignFileDownloadUrl(group.pages[0].url);
-          const fallbackApiUrl = apiFileDownloadUrl(group.pages[0].url, group.fileName);
-          if (!directDownloadUrl || !fallbackApiUrl) {
+          const downloadUrl = apiFileDownloadUrl(group.pages[0].url, group.fileName);
+          if (!downloadUrl) {
             setError('Invalid file URL');
             return;
           }
-          try {
-            const probe = await fetch(directDownloadUrl, { method: 'HEAD', cache: 'no-store' });
-            if (probe.ok) {
-              triggerDownload(directDownloadUrl, group.fileName);
-              return;
-            }
-          } catch {
-            // fall through to fallback
-          }
-          triggerDownload(fallbackApiUrl, group.fileName);
+          triggerDownload(downloadUrl, group.fileName);
           return;
         }
         const pdfBytes = await createPdfFromImagePages(group.pages);
