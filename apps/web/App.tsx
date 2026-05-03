@@ -117,7 +117,7 @@ function AppShell() {
     return (
       <div className="flex min-h-screen items-center justify-center px-6">
         <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-950/80 px-5 py-4 text-slate-100 shadow-2xl shadow-slate-950/40">
-          <LoaderCircle className="h-5 w-5 animate-spin text-violet-300" />
+          <LoaderCircle className="h-5 w-5 animate-spin text-orange-300" />
           <span className="text-sm font-medium">Loading your workspace...</span>
         </div>
       </div>

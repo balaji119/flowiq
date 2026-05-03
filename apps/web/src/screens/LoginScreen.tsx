@@ -29,7 +29,7 @@ export function LoginScreen() {
       <Card className="relative w-full max-w-md overflow-hidden">
         <CardContent className="space-y-6 p-8">
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-violet-200">
+            <div className="inline-flex items-center gap-2 rounded-full border border-orange-400/30 bg-orange-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-orange-200">
               <ShieldCheck className="h-3.5 w-3.5" />
               Secure Access
             </div>
@@ -64,7 +64,7 @@ export function LoginScreen() {
             </div>
 
             <Button className="w-full" size="lg" disabled={submitting} type="submit">
-              {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+              {submitting ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
               {submitting ? 'Signing in…' : 'Sign In'}
             </Button>
           </form>

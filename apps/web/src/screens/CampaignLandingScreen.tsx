@@ -166,7 +166,7 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
           aria-label="Thumbnail view"
           className={`h-7 w-7 rounded-md border border-transparent px-0 transition-colors focus-visible:ring-0 ${
             viewMode === 'thumbnail'
-              ? 'border border-violet-400/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/25'
+              ? 'border border-orange-400/60 bg-orange-500/20 text-orange-100 hover:bg-orange-500/25'
               : 'bg-transparent text-slate-300 hover:bg-slate-800/70 hover:text-white'
           }`}
           onClick={() => setViewMode('thumbnail')}
@@ -179,7 +179,7 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
           aria-label="Table view"
           className={`h-7 w-7 rounded-md border border-transparent px-0 transition-colors focus-visible:ring-0 ${
             viewMode === 'table'
-              ? 'border border-violet-400/60 bg-violet-500/20 text-violet-100 hover:bg-violet-500/25'
+              ? 'border border-orange-400/60 bg-orange-500/20 text-orange-100 hover:bg-orange-500/25'
               : 'bg-transparent text-slate-300 hover:bg-slate-800/70 hover:text-white'
           }`}
           onClick={() => setViewMode('table')}
@@ -205,12 +205,12 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
 
       {loading ? (
         <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-900/90 px-6 py-20">
-          <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
+          <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
         </div>
       ) : filteredCampaigns.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-4 px-6 py-16 text-center">
-            <FolderKanban className="h-12 w-12 text-violet-300" />
+            <FolderKanban className="h-12 w-12 text-orange-300" />
             <div className="space-y-2">
               <h2 className="text-2xl font-black text-white">{campaigns.length === 0 ? 'No campaign schedules yet' : 'No matching campaigns'}</h2>
               <p className="max-w-xl text-sm leading-6 text-slate-400">
@@ -228,15 +228,15 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
       ) : (
         <>
           {viewMode === 'thumbnail' ? (
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {filteredCampaigns.map((campaign) => (
                 <Card key={campaign.id} className="overflow-hidden">
-                  <CardHeader className="space-y-4 p-6 pb-0">
+                  <CardHeader className="space-y-3 p-4 pb-0">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-2">
-                        <CardTitle className="text-2xl">
+                      <div className="space-y-1.5">
+                        <CardTitle className="text-xl leading-tight">
                           <button
-                            className="w-full whitespace-normal break-words text-left text-white transition hover:text-violet-200"
+                            className="w-full whitespace-normal break-words text-left text-white transition hover:text-orange-200"
                             onClick={() => void handleOpenCampaign(campaign.id)}
                             title="Open campaign for editing"
                             type="button"
@@ -244,28 +244,28 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                             {campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}`}
                           </button>
                         </CardTitle>
-                        <CardDescription>Updated {new Date(campaign.updatedAt).toLocaleString()}</CardDescription>
+                        <CardDescription className="text-xs">Updated {new Date(campaign.updatedAt).toLocaleString()}</CardDescription>
                       </div>
-                      <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${statusStyles(campaign.status)}`}>
+                      <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] ${statusStyles(campaign.status)}`}>
                         {campaign.status}
                       </span>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-5 p-6">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-md border border-slate-700 bg-slate-900/70 p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Markets</p>
-                        <p className="mt-2 text-2xl font-black text-white">{campaign.marketCount}</p>
+                  <CardContent className="space-y-3 p-4">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="rounded-md border border-slate-700 bg-slate-900/70 p-3">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Markets</p>
+                        <p className="mt-1 text-xl font-black text-white">{campaign.marketCount}</p>
                       </div>
-                      <div className="rounded-md border border-slate-700 bg-slate-900/70 p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assets</p>
-                        <p className="mt-2 text-2xl font-black text-white">{campaign.assetCount}</p>
+                      <div className="rounded-md border border-slate-700 bg-slate-900/70 p-3">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Assets</p>
+                        <p className="mt-1 text-xl font-black text-white">{campaign.assetCount}</p>
                       </div>
                     </div>
 
-                    <div className="space-y-2 text-sm text-slate-300">
-                      <div className="flex items-center gap-2">
-                        <CalendarDays className="h-4 w-4 text-slate-400" />
+                    <div className="space-y-1.5 text-sm text-slate-300">
+                      <div className="flex items-center gap-1.5">
+                        <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
                         <span>Start: {formatCampaignDate(campaign.campaignStartDate)}</span>
                       </div>
                       <p>Due: {formatCampaignDate(campaign.dueDate)}</p>
@@ -273,7 +273,7 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                       <p>Latest quote: {campaign.latestQuoteAmount ?? 'N/A'}</p>
                     </div>
 
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-1.5 pt-1">
                         <Button
                           aria-label="Edit campaign"
                           className="h-7 w-7 rounded-md border-0 p-0 hover:bg-slate-700/70"
@@ -323,7 +323,7 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                     <tr key={`campaign-table-${campaign.id}`} className="bg-slate-800/70 border-t border-slate-700/70">
                       <td className="border border-slate-700 px-4 py-3 font-semibold text-white">
                         <button
-                          className="w-full whitespace-normal break-words text-left text-white transition hover:text-violet-200"
+                          className="w-full whitespace-normal break-words text-left text-white transition hover:text-orange-200"
                           onClick={() => void handleOpenCampaign(campaign.id)}
                           title="Open campaign for editing"
                           type="button"
@@ -409,7 +409,7 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                 Cancel
               </Button>
               <Button disabled={deletingCampaign} onClick={() => void handleConfirmDeleteCampaign()}>
-                {deletingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {deletingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Trash2 className="h-4 w-4" />}
                 {deletingCampaign ? 'Deleting...' : 'Delete Campaign'}
               </Button>
             </div>

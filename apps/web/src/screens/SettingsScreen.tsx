@@ -195,8 +195,8 @@ export function SettingsScreen({
       canAccessPrintingCosts={session?.user.role === 'super_admin'}
       pageTitle="Settings"
       topBarActions={
-        <Button className="h-10 min-w-[138px] rounded-md px-4 text-sm font-semibold" disabled={!effectiveTenantId || saving || loading} onClick={() => void handleSave()} type="button">
-          {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        <Button className="h-9 min-w-[132px] rounded-md px-3 text-sm font-semibold" disabled={!effectiveTenantId || saving || loading} onClick={() => void handleSave()} type="button">
+          {saving ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Save className="h-4 w-4" />}
           {saving ? 'Saving...' : 'Save Changes'}
         </Button>
       }
@@ -235,7 +235,7 @@ export function SettingsScreen({
                     <button
                       key={tenant.id}
                       className={active
-                        ? 'rounded-md border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)] transition'
+                        ? 'rounded-md border border-orange-400 bg-orange-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(249,115,22,0.85)] transition'
                         : 'rounded-md border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
                       onClick={() => setSelectedTenantId(tenant.id)}
                       type="button"
@@ -255,104 +255,101 @@ export function SettingsScreen({
           </Card>
         ) : null}
 
-        <Card>
-          <CardHeader className="p-5 pb-0">
-            <CardTitle>Sheet Name Overrides</CardTitle>
-            <CardDescription>
-              Set custom display names for sheet sizes. If a mapping is blank, the existing default name is used.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {loading ? (
-              <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
-                <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/70">
-                  <table className="min-w-[700px] w-full border-collapse text-sm">
-                    <thead>
-                      <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
-                        <th className="border border-slate-700 px-4 py-3 text-left">Current Name</th>
-                        <th className="border border-slate-700 px-4 py-3 text-left">Override Name</th>
+        <section className="max-w-5xl space-y-5">
+          <h2 className="text-lg font-semibold tracking-tight text-slate-100">Sheet Name Overrides</h2>
+          {loading ? (
+            <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
+              <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/70">
+                <table className="w-full table-fixed border-collapse text-sm">
+                  <colgroup>
+                    <col className="w-[260px]" />
+                    <col className="w-[420px]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
+                      <th className="border border-slate-700 px-4 py-3 text-left">Current Name</th>
+                      <th className="border border-slate-700 px-4 py-3 text-left">Override Name</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sheetNamePresetEntries.map((entry) => (
+                      <tr key={entry.key} className="border-t border-slate-700/70 bg-slate-800/70">
+                        <td className="border border-slate-700 px-4 py-3 font-semibold text-white">{entry.label}</td>
+                        <td className="border border-slate-700 px-4 py-3">
+                          <Input
+                            className="h-9 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-orange-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+                            onChange={(event) =>
+                              setPresetOverrides((current) => ({
+                                ...current,
+                                [entry.key]: event.target.value,
+                              }))
+                            }
+                            placeholder={`Override for ${entry.label}`}
+                            value={presetOverrides[entry.key] || ''}
+                          />
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {sheetNamePresetEntries.map((entry) => (
-                        <tr key={entry.key} className="border-t border-slate-700/70 bg-slate-800/70">
-                          <td className="border border-slate-700 px-4 py-3 font-semibold text-white">{entry.label}</td>
-                          <td className="border border-slate-700 px-4 py-3">
-                            <Input
-                              className="h-9"
-                              onChange={(event) =>
-                                setPresetOverrides((current) => ({
-                                  ...current,
-                                  [entry.key]: event.target.value,
-                                }))
-                              }
-                              placeholder={`Override for ${entry.label}`}
-                              value={presetOverrides[entry.key] || ''}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-semibold text-slate-100">Additional custom sizes</Label>
-                    <Button
-                      className="h-8 px-3"
-                      onClick={() => setCustomOverrides((current) => [...current, createCustomRow()])}
-                      size="sm"
-                      type="button"
-                      variant="secondary"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add Custom
-                    </Button>
-                  </div>
-                  {customOverrides.length === 0 ? (
-                    <p className="text-sm text-slate-400">No additional custom size mappings added.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {customOverrides.map((row) => (
-                        <div key={row.id} className="grid gap-2 rounded-md border border-slate-700 bg-slate-800/60 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                          <Input
-                            className="h-9"
-                            onChange={(event) =>
-                              setCustomOverrides((current) => current.map((item) => (item.id === row.id ? { ...item, source: event.target.value } : item)))
-                            }
-                            placeholder="Current name (for example 3 Sheet)"
-                            value={row.source}
-                          />
-                          <Input
-                            className="h-9"
-                            onChange={(event) =>
-                              setCustomOverrides((current) => current.map((item) => (item.id === row.id ? { ...item, name: event.target.value } : item)))
-                            }
-                            placeholder="Override name"
-                            value={row.name}
-                          />
-                          <Button
-                            className="h-9 px-3"
-                            onClick={() => setCustomOverrides((current) => current.filter((item) => item.id !== row.id))}
-                            type="button"
-                            variant="ghost"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold text-slate-100">Additional custom sizes</Label>
+                  <Button
+                    className="h-8 px-3"
+                    onClick={() => setCustomOverrides((current) => [...current, createCustomRow()])}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Custom
+                  </Button>
                 </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                {customOverrides.length === 0 ? (
+                  <p className="text-sm text-slate-400">No additional custom size mappings added.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {customOverrides.map((row) => (
+                      <div key={row.id} className="grid gap-2 rounded-md border border-slate-700 bg-slate-800/60 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                        <Input
+                          className="h-9 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-orange-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+                          onChange={(event) =>
+                            setCustomOverrides((current) => current.map((item) => (item.id === row.id ? { ...item, source: event.target.value } : item)))
+                          }
+                          placeholder="Current name (for example 3 Sheet)"
+                          value={row.source}
+                        />
+                        <Input
+                          className="h-9 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-orange-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+                          onChange={(event) =>
+                            setCustomOverrides((current) => current.map((item) => (item.id === row.id ? { ...item, name: event.target.value } : item)))
+                          }
+                          placeholder="Override name"
+                          value={row.name}
+                        />
+                        <Button
+                          className="h-9 px-3"
+                          onClick={() => setCustomOverrides((current) => current.filter((item) => item.id !== row.id))}
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </section>
       </main>
     </AdminWorkspaceShell>
   );

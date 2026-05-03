@@ -304,7 +304,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
 
       {loading ? (
         <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-900/90 px-6 py-20">
-          <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
+          <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
         </div>
       ) : artworkFiles.length === 0 ? (
         <div className="rounded-md border border-slate-700 bg-slate-900/70 px-4 py-8 text-center text-sm text-slate-300">
@@ -356,7 +356,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
                         aria-label={openBusy ? 'Opening PDF' : 'Open PDF'}
                         className="h-9 w-9 px-0 2xl:h-9 2xl:w-auto 2xl:px-3"
                       >
-                        {openBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                        {openBusy ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <ExternalLink className="h-4 w-4" />}
                         <span className="sr-only 2xl:not-sr-only 2xl:ml-2">{openBusy ? 'Opening...' : 'Open'}</span>
                       </Button>
                       <Button
@@ -368,7 +368,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
                         aria-label={downloadBusy ? 'Downloading PDF' : 'Download PDF'}
                         className="h-9 w-9 px-0 2xl:h-9 2xl:w-auto 2xl:px-3"
                       >
-                        {downloadBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        {downloadBusy ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Download className="h-4 w-4" />}
                         <span className="sr-only 2xl:not-sr-only 2xl:ml-2">{downloadBusy ? 'Downloading...' : 'Download'}</span>
                       </Button>
                     </div>

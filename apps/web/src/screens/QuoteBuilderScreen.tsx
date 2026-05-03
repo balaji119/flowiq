@@ -85,7 +85,7 @@ function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBre
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {formatKeys.map((key) => (
         <div key={key} className={cn('rounded-md border px-4 py-3', inverse ? 'border-slate-700 bg-slate-900' : 'border-slate-700/70 bg-slate-800/80')}>
-          <p className={cn('text-xs font-bold uppercase tracking-[0.18em]', inverse ? 'text-violet-200' : 'text-slate-300')}>{key}</p>
+          <p className={cn('text-xs font-bold uppercase tracking-[0.18em]', inverse ? 'text-orange-200' : 'text-slate-300')}>{key}</p>
           <p className="mt-2 text-xl font-black text-white">{breakdown[key]}</p>
         </div>
       ))}
@@ -759,7 +759,7 @@ function SearchableSelect({
                     key={item.value}
                     className={cn(
                       'flex w-full items-center justify-between rounded-md border px-4 py-3 text-left text-sm transition',
-                      active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500',
+                      active ? 'border-orange-400 bg-orange-500/10 text-white' : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500',
                       menuItemClassName,
                     )}
                     onClick={() => {
@@ -769,7 +769,7 @@ function SearchableSelect({
                     type="button"
                   >
                     <span>{item.label}</span>
-                    {active ? <Check className="h-4 w-4 text-violet-300" /> : null}
+                    {active ? <Check className="h-4 w-4 text-orange-300" /> : null}
                   </button>
                 );
               })}
@@ -824,7 +824,7 @@ function WeekSelector({
             className={cn(
               'rounded-full border font-semibold transition',
               compact ? 'px-2.5 py-1 text-[11px]' : small ? 'px-2 py-1 text-[10px]' : 'px-3 py-1.5 text-xs',
-              selected ? 'border-violet-400 bg-violet-500 text-white' : 'border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500',
+              selected ? 'border-orange-400 bg-orange-500 text-white' : 'border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500',
             )}
             aria-pressed={selected}
             disabled={readOnly}
@@ -879,7 +879,7 @@ function ConfirmationDialog({
             {cancelLabel}
           </Button>
           <Button disabled={confirming} onClick={onConfirm} type="button" variant="destructive">
-            {confirming ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+            {confirming ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
             {confirming ? 'Deleting...' : confirmLabel}
           </Button>
         </div>
@@ -3782,7 +3782,7 @@ export function QuoteBuilderScreen({
                       type="button"
                       variant="outline"
                     >
-                      {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Upload className="h-4 w-4" />}
                       {uploadingArtworkPages ? 'Uploading Artwork...' : values.printImages.length > 0 ? 'Manage Artwork' : 'Upload Artwork'}
                     </Button>
                     <div title={canAddMarket ? 'Add another market' : addMarketDisabledReason}>
@@ -3795,7 +3795,7 @@ export function QuoteBuilderScreen({
                 </div>
                 {loadingMetadata ? (
                   <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
-                    <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
+                    <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" />
                     Loading campaign mappings…
                   </div>
                 ) : null}
@@ -3813,7 +3813,7 @@ export function QuoteBuilderScreen({
                     return (
                       <div
                         key={market.id}
-                        className={cn('rounded-md border bg-slate-800/60 p-4 sm:p-5', isActiveMarket ? 'border-violet-400/60 shadow-[0_0_0_1px_rgba(167,139,250,0.25)]' : 'border-slate-700')}
+                        className={cn('rounded-md border bg-slate-800/60 p-4 sm:p-5', isActiveMarket ? 'border-orange-400/60 shadow-[0_0_0_1px_rgba(251,146,60,0.28)]' : 'border-slate-700')}
                         onClick={() => setActiveMarketId(market.id)}
                         onFocusCapture={() => setActiveMarketId(market.id)}
                       >
@@ -3956,11 +3956,11 @@ export function QuoteBuilderScreen({
                                     ))}
                                   </tbody>
                                   <tfoot>
-                                    <tr className="bg-violet-500/10 border-t border-violet-400/30">
-                                      <th colSpan={visibleMarketFormatKeys.length + 1} className="border border-violet-300/30 px-4 py-3 text-right font-black uppercase tracking-[0.12em] text-violet-100">
+                                    <tr className="bg-orange-500/10 border-t border-orange-400/30">
+                                      <th colSpan={visibleMarketFormatKeys.length + 1} className="border border-orange-300/30 px-4 py-3 text-right font-black uppercase tracking-[0.12em] text-orange-100">
                                         Total
                                       </th>
-                                      <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
+                                      <td className="border border-orange-300/30 px-4 py-3 text-center font-black text-orange-100">
                                         {marketSummary.posterTotal + marketSummary.frameTotal}
                                       </td>
                                     </tr>
@@ -4166,19 +4166,19 @@ export function QuoteBuilderScreen({
                             const grandRows = buildReviewRows(summary.grandTotal);
 
                             return grandRows.map((row, rowIndex, allRows) => (
-                              <tr key={`review-grand-${row.label}`} className={cn('bg-violet-500/10', rowIndex === 0 ? 'border-t-4 border-violet-400/40' : 'border-t border-violet-400/20')}>
+                              <tr key={`review-grand-${row.label}`} className={cn('bg-orange-500/10', rowIndex === 0 ? 'border-t-4 border-orange-400/40' : 'border-t border-orange-400/20')}>
                                 {rowIndex === 0 ? (
-                                  <th rowSpan={allRows.length} className="sticky left-0 z-30 border border-violet-300/30 bg-[#2a2450] px-3 py-2 text-left font-semibold text-violet-100">
+                                  <th rowSpan={allRows.length} className="sticky left-0 z-30 border border-orange-300/30 bg-[#3a2317] px-3 py-2 text-left font-semibold text-orange-100">
                                     All Markets
                                   </th>
                                 ) : null}
-                                <th className="sticky left-[112px] z-30 border border-violet-300/30 bg-[#2a2450] px-3 py-2 text-left font-semibold text-violet-100">{row.label}</th>
+                                <th className="sticky left-[112px] z-30 border border-orange-300/30 bg-[#3a2317] px-3 py-2 text-left font-semibold text-orange-100">{row.label}</th>
                                 {visibleReviewFormatKeys.map((key) => (
-                                  <td key={`review-grand-cell-${row.label}-${key}`} className="border border-violet-300/30 px-3 py-2 text-center font-semibold text-violet-100">
+                                  <td key={`review-grand-cell-${row.label}-${key}`} className="border border-orange-300/30 px-3 py-2 text-center font-semibold text-orange-100">
                                     {row.breakdown[key]}
                                   </td>
                                 ))}
-                                <td className="sticky right-0 z-30 border border-violet-300/30 bg-[#2a2450] px-3 py-2 text-center font-black text-violet-100">{row.total}</td>
+                                <td className="sticky right-0 z-30 border border-orange-300/30 bg-[#3a2317] px-3 py-2 text-center font-black text-orange-100">{row.total}</td>
                               </tr>
                             ));
                           })()}
@@ -4210,9 +4210,9 @@ export function QuoteBuilderScreen({
                               </td>
                             </tr>
                           ))}
-                          <tr className="border-t-4 border-violet-400/40 bg-violet-500/10">
-                            <th className="border border-violet-300/30 px-4 py-3 text-left font-black text-violet-100">All Markets</th>
-                            <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
+                          <tr className="border-t-4 border-orange-400/40 bg-orange-500/10">
+                            <th className="border border-orange-300/30 px-4 py-3 text-left font-black text-orange-100">All Markets</th>
+                            <td className="border border-orange-300/30 px-4 py-3 text-center font-black text-orange-100">
                               {formatCurrency(
                                 visibleReviewMarkets.reduce(
                                   (total, marketSummary) => total + calculateMarketPrintingCost(marketSummary.market),
@@ -4220,7 +4220,7 @@ export function QuoteBuilderScreen({
                                 ),
                               )}
                             </td>
-                            <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
+                            <td className="border border-orange-300/30 px-4 py-3 text-center font-black text-orange-100">
                               {formatCurrency(
                                 visibleReviewMarkets.reduce(
                                   (total, marketSummary) => total + calculateMarketShippingCost(marketSummary.market),
@@ -4267,7 +4267,7 @@ export function QuoteBuilderScreen({
                     type="button"
                     variant="outline"
                   >
-                    {exportingTemplates ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                    {exportingTemplates ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
                     {exportingTemplates ? 'Generating Files...' : 'Download Visuals'}
                   </Button>
                   <Button
@@ -4278,7 +4278,7 @@ export function QuoteBuilderScreen({
                     type="button"
                     variant="secondary"
                   >
-                    {sendingAdsEmail ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                    {sendingAdsEmail ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
                     {sendingAdsEmail ? 'Sending Email...' : 'Send Email To ADS'}
                   </Button>
                 </div>
@@ -4301,7 +4301,7 @@ export function QuoteBuilderScreen({
                     type="button"
                     variant="outline"
                   >
-                    {exportingTemplates ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                    {exportingTemplates ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
                     {exportingTemplates ? 'Generating Files...' : 'Download Visuals'}
                   </Button>
                   <Button
@@ -4312,7 +4312,7 @@ export function QuoteBuilderScreen({
                     type="button"
                     variant="secondary"
                   >
-                    {sendingAdsEmail ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                    {sendingAdsEmail ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
                     {sendingAdsEmail ? 'Sending Email...' : 'Send Email To ADS'}
                   </Button>
                 </div>
@@ -4361,19 +4361,19 @@ export function QuoteBuilderScreen({
                   {(() => {
                     const grandRows = buildReviewRows(summary.grandTotal);
                     return grandRows.map((row, rowIndex, allRows) => (
-                      <tr key={`expanded-review-grand-${row.label}`} className={cn('bg-violet-500/10', rowIndex === 0 ? 'border-t-4 border-violet-400/40' : 'border-t border-violet-400/20')}>
+                      <tr key={`expanded-review-grand-${row.label}`} className={cn('bg-orange-500/10', rowIndex === 0 ? 'border-t-4 border-orange-400/40' : 'border-t border-orange-400/20')}>
                         {rowIndex === 0 ? (
-                          <th rowSpan={allRows.length} className="border border-violet-300/30 px-3 py-2 text-left font-semibold text-violet-100">
+                          <th rowSpan={allRows.length} className="border border-orange-300/30 px-3 py-2 text-left font-semibold text-orange-100">
                             All Markets
                           </th>
                         ) : null}
-                        <th className="border border-violet-300/30 px-3 py-2 text-left font-semibold text-violet-100">{row.label}</th>
+                        <th className="border border-orange-300/30 px-3 py-2 text-left font-semibold text-orange-100">{row.label}</th>
                         {visibleReviewFormatKeys.map((key) => (
-                          <td key={`expanded-review-grand-cell-${row.label}-${key}`} className="border border-violet-300/30 px-3 py-2 text-center font-semibold text-violet-100">
+                          <td key={`expanded-review-grand-cell-${row.label}-${key}`} className="border border-orange-300/30 px-3 py-2 text-center font-semibold text-orange-100">
                             {row.breakdown[key]}
                           </td>
                         ))}
-                        <td className="border border-violet-300/30 px-3 py-2 text-center font-black text-violet-100">{row.total}</td>
+                        <td className="border border-orange-300/30 px-3 py-2 text-center font-black text-orange-100">{row.total}</td>
                       </tr>
                     ));
                   })()}
@@ -4552,14 +4552,14 @@ export function QuoteBuilderScreen({
                             ))}
                           </tbody>
                           <tfoot>
-                            <tr className="bg-violet-500/10 border-t border-violet-400/30">
+                            <tr className="bg-orange-500/10 border-t border-orange-400/30">
                               <th
                                 colSpan={formatKeys.filter((key) => (draftMarketSummary.breakdown[key] ?? 0) > 0).length + 1}
-                                className="border border-violet-300/30 px-4 py-3 text-right font-black uppercase tracking-[0.12em] text-violet-100"
+                                className="border border-orange-300/30 px-4 py-3 text-right font-black uppercase tracking-[0.12em] text-orange-100"
                               >
                                 Total
                               </th>
-                              <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
+                              <td className="border border-orange-300/30 px-4 py-3 text-center font-black text-orange-100">
                                 {draftMarketSummary.posterTotal + draftMarketSummary.frameTotal}
                               </td>
                             </tr>
@@ -4569,7 +4569,7 @@ export function QuoteBuilderScreen({
                     </div>
                   ) : draftMarketCalculating ? (
                     <div className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900/65 px-3 py-2 text-sm text-slate-300">
-                      <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
+                      <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" />
                       Calculating market totals...
                     </div>
                   ) : (
@@ -4789,7 +4789,7 @@ export function QuoteBuilderScreen({
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
               <Button disabled={uploadingArtworkPages} onClick={openArtworkPdfPicker} type="button" variant="secondary">
-                {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Upload className="h-4 w-4" />}
                 {uploadingArtworkPages ? 'Uploading Artwork...' : 'Upload Artwork'}
               </Button>
             </div>
@@ -4813,7 +4813,7 @@ export function QuoteBuilderScreen({
                         key={`artwork-thumb-${image.id}`}
                         className={cn(
                           'group relative overflow-hidden rounded-md border text-left transition',
-                          selected ? 'border-violet-400 bg-violet-500/10' : 'border-slate-700 bg-slate-950 hover:border-slate-500',
+                          selected ? 'border-orange-400 bg-orange-500/10' : 'border-slate-700 bg-slate-950 hover:border-slate-500',
                         )}
                       >
                         <button
@@ -4853,7 +4853,7 @@ export function QuoteBuilderScreen({
                           type="button"
                           variant="ghost"
                         >
-                          {deleting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          {deleting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-orange-300" /> : <Trash2 className="h-3.5 w-3.5" />}
                         </Button>
                       </div>
                     );
@@ -4896,7 +4896,7 @@ export function QuoteBuilderScreen({
               Discard
             </Button>
             <Button disabled={savingCampaign} onClick={() => void handleSaveAndLeave()} type="button">
-              {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+              {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
               {savingCampaign ? 'Saving…' : 'Save'}
             </Button>
           </div>

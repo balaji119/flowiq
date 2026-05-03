@@ -514,7 +514,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
                   <button
                     key={tenant.id}
                     className={active
-                      ? 'rounded-md border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)] transition'
+                      ? 'rounded-md border border-orange-400 bg-orange-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(249,115,22,0.85)] transition'
                       : 'rounded-md border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
                     onClick={() => setSelectedTenantId(tenant.id)}
                     type="button"
@@ -542,7 +542,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 		              <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
 		              <select
 		                id="shipping-market-filter"
-		                className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+		                className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
 		                onChange={(event) => setSelectedMarketFilter(event.target.value)}
 		                value={selectedMarketFilter}
 		              >
@@ -567,7 +567,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 	                    placeholder="e.g. 45.50"
 	                    value={shippingRateDraft}
 	                  />
-	                  {savingShippingRate ? <LoaderCircle className="h-4 w-4 animate-spin text-slate-300" /> : null}
+	                  {savingShippingRate ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
 	                </div>
 	              </div>
 	              <div className="w-full xl:w-[220px] space-y-2">
@@ -586,7 +586,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 
 	        {loading ? (
 	          <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
-	            <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
+	            <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
 	          </div>
 	        ) : selectedMarketFilter ? (
 	          <div className="space-y-2">
@@ -612,7 +612,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 	                      return (
 	                        <tr
 	                          key={`${selectedMarketFilter}-${address.deliveryAddress}`}
-	                          className={address.isDefault ? 'bg-violet-500/10' : 'bg-slate-900/50'}
+	                          className={address.isDefault ? 'bg-orange-500/10' : 'bg-slate-900/50'}
 	                        >
 	                          <td className="border border-slate-700 px-4 py-3 font-semibold text-white">{parsed.name || 'Delivery address'}</td>
 	                          <td className="border border-slate-700 px-4 py-3 text-slate-200">{formatAddressLine(parsed) || '-'}</td>
@@ -647,7 +647,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 	                                type="button"
 	                                variant="ghost"
 	                              >
-	                                {deletingAddress === address.deliveryAddress ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+	                                {deletingAddress === address.deliveryAddress ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Trash2 className="h-4 w-4" />}
 	                              </Button>
 	                            </div>
 	                          </td>
@@ -799,7 +799,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
                 disabled={savingDeliveryAddress || !selectedMarketFilter}
                 onClick={() => void handleSaveDeliveryAddress()}
               >
-                {savingDeliveryAddress ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                {savingDeliveryAddress ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
                 {savingDeliveryAddress ? 'Saving...' : editingDeliveryAddress ? 'Save Changes' : 'Add Address'}
               </Button>
             </div>

@@ -65,11 +65,11 @@ export function ResetPasswordScreen({ token }: ResetPasswordScreenProps) {
           </div>
         </div>
       </header>
-      <div className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.24),transparent_55%)]" />
+        <div className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_top,rgba(249,115,22,0.24),transparent_55%)]" />
       <Card className="relative w-full max-w-md overflow-hidden">
         <CardContent className="space-y-6 p-8">
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-violet-200">
+            <div className="inline-flex items-center gap-2 rounded-full border border-orange-400/30 bg-orange-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-orange-200">
               <KeyRound className="h-3.5 w-3.5" />
               Set New Password
             </div>
@@ -107,7 +107,7 @@ export function ResetPasswordScreen({ token }: ResetPasswordScreenProps) {
             </div>
 
             <Button className="w-full" size="lg" disabled={submitting || Boolean(tokenError)} type="submit">
-              {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+              {submitting ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
               {submitting ? 'Updating password...' : 'Update Password'}
             </Button>
           </form>

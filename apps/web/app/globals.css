@@ -12,8 +12,8 @@ body {
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top right, rgba(139, 92, 246, 0.16), transparent 28%),
-    radial-gradient(circle at bottom left, rgba(14, 165, 233, 0.12), transparent 22%),
+    radial-gradient(circle at top right, rgba(249, 115, 22, 0.18), transparent 28%),
+    radial-gradient(circle at bottom left, rgba(251, 146, 60, 0.1), transparent 22%),
     linear-gradient(180deg, #1b2330 0%, #111827 100%);
   color: #f8fafc;
   font-family: Arial, Helvetica, sans-serif;
@@ -39,7 +39,7 @@ select {
 }
 
 ::selection {
-  background: rgba(139, 92, 246, 0.35);
+  background: rgba(249, 115, 22, 0.35);
 }
 
 .dense-main {

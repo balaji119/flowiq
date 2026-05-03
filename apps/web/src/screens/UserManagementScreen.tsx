@@ -69,7 +69,7 @@ function PickerChip({
       className={[
         "rounded-full border px-4 py-2 text-sm font-semibold capitalize transition",
         active
-          ? "border-violet-400 bg-violet-500 text-white shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)]"
+          ? "border-orange-400 bg-orange-500 text-white shadow-[0_10px_25px_-12px_rgba(249,115,22,0.85)]"
           : "border-slate-600 bg-slate-800 text-slate-200 hover:border-slate-500 hover:bg-slate-700",
       ].join(" ")}
       onClick={onPress}
@@ -373,7 +373,7 @@ export function UserManagementScreen({
                 </span>
                 <select
                   id="tenant-picker"
-                  className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70 disabled:opacity-70"
+                  className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70 disabled:opacity-70"
                   disabled={!isSuperAdmin || tenantOptions.length === 0}
                   onChange={(event) => setSelectedTenantId(event.target.value)}
                   value={effectiveTenantId}
@@ -396,7 +396,7 @@ export function UserManagementScreen({
 
           {loading ? (
             <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
-              <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
+              <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
             </div>
           ) : (
             <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/60">
@@ -472,7 +472,7 @@ export function UserManagementScreen({
                                     variant="destructive"
                                   >
                                     {deletingUserId === user.id ? (
-                                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                                      <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" />
                                     ) : (
                                       <Trash2 className="h-4 w-4" />
                                     )}
@@ -617,7 +617,7 @@ export function UserManagementScreen({
                       className={[
                         "rounded-full border px-4 py-2 text-sm font-semibold transition",
                         userForm.active
-                          ? "border-violet-400 bg-violet-500 text-white shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)]"
+                          ? "border-orange-400 bg-orange-500 text-white shadow-[0_10px_25px_-12px_rgba(249,115,22,0.85)]"
                           : "border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500 hover:bg-slate-700",
                       ].join(" ")}
                       onClick={() =>
@@ -631,7 +631,7 @@ export function UserManagementScreen({
                       className={[
                         "rounded-full border px-4 py-2 text-sm font-semibold transition",
                         !userForm.active
-                          ? "border-violet-400 bg-violet-500 text-white shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)]"
+                          ? "border-orange-400 bg-orange-500 text-white shadow-[0_10px_25px_-12px_rgba(249,115,22,0.85)]"
                           : "border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500 hover:bg-slate-700",
                       ].join(" ")}
                       onClick={() =>
@@ -663,7 +663,7 @@ export function UserManagementScreen({
                   onClick={() => void handleSaveUser()}
                 >
                   {savingUser ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" />
                   ) : editingUserId ? (
                     <Pencil className="h-4 w-4" />
                   ) : (

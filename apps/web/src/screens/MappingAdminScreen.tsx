@@ -285,7 +285,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
       topBarActions={
         <>
           <Button className="h-10 min-w-[128px] rounded-md px-4 text-sm font-semibold" disabled={importing || !effectiveTenantId} onClick={() => fileInputRef.current?.click()} type="button" variant="outline">
-            {importing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {importing ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Upload className="h-4 w-4" />}
             {importing ? 'Importing...' : 'Import JSON'}
           </Button>
           <Button className="h-10 min-w-[130px] rounded-md px-4 text-sm font-semibold" disabled={!effectiveTenantId || !selectedMarketFilter} onClick={openAddMappingDialog} type="button">
@@ -330,7 +330,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                   <button
                     key={tenant.id}
                     className={active
-                      ? 'rounded-md border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(139,92,246,0.9)] transition'
+                      ? 'rounded-md border border-orange-400 bg-orange-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(249,115,22,0.85)] transition'
                       : 'rounded-md border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
                     onClick={() => setSelectedTenantId(tenant.id)}
                     type="button"
@@ -358,7 +358,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                 <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
               <select
                 id="market-filter"
-                  className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+                  className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
                 onChange={(event) => setSelectedMarketFilter(event.target.value)}
                 value={selectedMarketFilter}
               >
@@ -375,7 +375,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
 
           {loading ? (
             <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
-              <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
+              <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
             </div>
           ) : marketOptions.length === 0 ? (
             <div className="rounded-md border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
@@ -488,7 +488,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                 <Label htmlFor="mapping-maintenance-asset">Maintenance asset (optional)</Label>
                 <select
                   id="mapping-maintenance-asset"
-                  className="h-10 w-full rounded-md border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+                  className="h-10 w-full rounded-md border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
@@ -533,7 +533,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                 Cancel
               </Button>
               <Button disabled={saving || !effectiveTenantId} onClick={() => void handleSubmit()}>
-                {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : editingId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                {saving ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : editingId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                 {saving ? 'Saving...' : editingId ? 'Update Mapping' : 'Add Mapping'}
               </Button>
             </div>
