@@ -13,6 +13,13 @@ type CampaignArtworkFolderScreenProps = {
   onOpenCampaign: (campaignId: string) => void;
 };
 
+type ArtworkFileGroup = {
+  key: string;
+  fileName: string;
+  thumbnailUrl: string;
+  pages: Array<{ id: string; url: string; fileName: string; mimeType: string; pageNumber: number }>;
+};
+
 function toAbsoluteUrl(url: string) {
   const trimmed = url.trim();
   if (!trimmed) return '';
@@ -113,6 +120,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
   const [campaign, setCampaign] = useState<CampaignRecord | null>(null);
   const [topBarCenterHost, setTopBarCenterHost] = useState<HTMLElement | null>(null);
   const [topBarActionsHost, setTopBarActionsHost] = useState<HTMLElement | null>(null);
+  const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -149,12 +157,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
   }, []);
 
   const artworkFiles = useMemo(() => {
-    const grouped = new Map<string, {
-      key: string;
-      fileName: string;
-      thumbnailUrl: string;
-      pages: Array<{ id: string; url: string; fileName: string; mimeType: string; pageNumber: number }>;
-    }>();
+    const grouped = new Map<string, ArtworkFileGroup>();
 
     (campaign?.values.printImages ?? []).forEach((image) => {
       const sourcePdfFileName = (image.sourcePdfFileName || '').trim();
@@ -203,9 +206,12 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
       .sort((a, b) => a.fileName.localeCompare(b.fileName));
   }, [campaign]);
 
-  function openFile(group: { fileName: string; pages: Array<{ url: string; fileName: string; mimeType: string }> }) {
+  function openFile(group: ArtworkFileGroup) {
     void (async () => {
       setError('');
+      const actionKey = `${group.key}:open`;
+      const startedAt = Date.now();
+      setPendingActionKey(actionKey);
       try {
         if (group.pages.length === 1 && group.pages[0].mimeType.toLowerCase() === 'application/pdf') {
           window.open(group.pages[0].url, '_blank', 'noopener,noreferrer');
@@ -219,13 +225,23 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
         window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
       } catch (openError) {
         setError(openError instanceof Error ? openError.message : 'Unable to open artwork PDF');
+      } finally {
+        const elapsed = Date.now() - startedAt;
+        const minFeedbackMs = 600;
+        if (elapsed < minFeedbackMs) {
+          await new Promise((resolve) => window.setTimeout(resolve, minFeedbackMs - elapsed));
+        }
+        setPendingActionKey((current) => (current === actionKey ? null : current));
       }
     })();
   }
 
-  function downloadFile(group: { fileName: string; pages: Array<{ url: string; fileName: string; mimeType: string }> }) {
+  function downloadFile(group: ArtworkFileGroup) {
     void (async () => {
       setError('');
+      const actionKey = `${group.key}:download`;
+      const startedAt = Date.now();
+      setPendingActionKey(actionKey);
       try {
         if (group.pages.length === 1 && group.pages[0].mimeType.toLowerCase() === 'application/pdf') {
           const downloadUrl = apiFileDownloadUrl(group.pages[0].url, group.fileName);
@@ -244,6 +260,13 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
         window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
       } catch (downloadError) {
         setError(downloadError instanceof Error ? downloadError.message : 'Unable to download artwork PDF');
+      } finally {
+        const elapsed = Date.now() - startedAt;
+        const minFeedbackMs = 900;
+        if (elapsed < minFeedbackMs) {
+          await new Promise((resolve) => window.setTimeout(resolve, minFeedbackMs - elapsed));
+        }
+        setPendingActionKey((current) => (current === actionKey ? null : current));
       }
     })();
   }
@@ -317,31 +340,40 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
                   </td>
                   <td className="border border-slate-700 px-4 py-3 text-slate-200 break-words whitespace-normal">{file.fileName}</td>
                   <td className="border border-slate-700 px-4 py-3">
+                    {(() => {
+                      const openBusy = pendingActionKey === `${file.key}:open`;
+                      const downloadBusy = pendingActionKey === `${file.key}:download`;
+                      const rowBusy = openBusy || downloadBusy;
+                      return (
                     <div className="flex items-center justify-center gap-2 whitespace-nowrap">
                       <Button
                         onClick={() => openFile(file)}
+                        disabled={rowBusy}
                         size="sm"
                         type="button"
                         variant="outline"
-                        title="Open PDF"
-                        aria-label="Open PDF"
+                        title={openBusy ? 'Opening PDF...' : 'Open PDF'}
+                        aria-label={openBusy ? 'Opening PDF' : 'Open PDF'}
                         className="h-9 w-9 px-0 2xl:h-9 2xl:w-auto 2xl:px-3"
                       >
-                        <ExternalLink className="h-4 w-4" />
-                        <span className="sr-only 2xl:not-sr-only 2xl:ml-2">Open</span>
+                        {openBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                        <span className="sr-only 2xl:not-sr-only 2xl:ml-2">{openBusy ? 'Opening...' : 'Open'}</span>
                       </Button>
                       <Button
                         onClick={() => downloadFile(file)}
+                        disabled={rowBusy}
                         size="sm"
                         type="button"
-                        title="Download PDF"
-                        aria-label="Download PDF"
+                        title={downloadBusy ? 'Downloading PDF...' : 'Download PDF'}
+                        aria-label={downloadBusy ? 'Downloading PDF' : 'Download PDF'}
                         className="h-9 w-9 px-0 2xl:h-9 2xl:w-auto 2xl:px-3"
                       >
-                        <Download className="h-4 w-4" />
-                        <span className="sr-only 2xl:not-sr-only 2xl:ml-2">Download</span>
+                        {downloadBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        <span className="sr-only 2xl:not-sr-only 2xl:ml-2">{downloadBusy ? 'Downloading...' : 'Download'}</span>
                       </Button>
                     </div>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}
