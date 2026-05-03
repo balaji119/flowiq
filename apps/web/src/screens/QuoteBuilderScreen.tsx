@@ -2514,6 +2514,41 @@ export function QuoteBuilderScreen({
         if (mime.includes('jpg') || mime.includes('jpeg') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return 'jpg';
         return 'png';
       };
+      const normalizePreviewBlobForWord = async (
+        previewBlob: Blob,
+        mimeType: string,
+        fileName: string,
+      ): Promise<{ bytes: Uint8Array; extension: 'png' | 'jpg' }> => {
+        const resolvedMime = (previewBlob.type || mimeType || '').toLowerCase();
+        const isWordSafeRaster = resolvedMime.includes('png') || resolvedMime.includes('jpg') || resolvedMime.includes('jpeg');
+        if (isWordSafeRaster) {
+          const bytes = new Uint8Array(await previewBlob.arrayBuffer());
+          return {
+            bytes,
+            extension: detectImageExtension(resolvedMime, fileName),
+          };
+        }
+
+        const bitmap = await createImageBitmap(previewBlob);
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.ceil(bitmap.width));
+          canvas.height = Math.max(1, Math.ceil(bitmap.height));
+          const context = canvas.getContext('2d');
+          if (!context) {
+            throw new Error('Unable to prepare artwork thumbnail preview');
+          }
+          context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          const pngBlob = await canvasToBlob(canvas, 'image/png');
+          const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
+          return {
+            bytes: pngBytes,
+            extension: 'png',
+          };
+        } finally {
+          bitmap.close();
+        }
+      };
 
       if (shouldGenerateExcel || exportMode === 'word') {
         setExportProgressMessage('Preparing artwork previews...');
@@ -2545,11 +2580,12 @@ export function QuoteBuilderScreen({
                   const previewUrl = image.thumbnailUrl ? toAbsoluteUrl(buildApiUrl(image.thumbnailUrl)) : '';
                   const previewResponse = previewUrl ? await fetch(previewUrl) : response;
                   const previewBlob = previewResponse.ok ? await previewResponse.blob() : blob;
-                  const previewBytes = new Uint8Array(await previewBlob.arrayBuffer());
-                  creativePreviewById.set(imageId, {
-                    bytes: previewBytes,
-                    extension: detectImageExtension(previewBlob.type || mimeType, image.thumbnailFileName || image.fileName || image.name || ''),
-                  });
+                  const normalizedPreview = await normalizePreviewBlobForWord(
+                    previewBlob,
+                    mimeType,
+                    image.thumbnailFileName || image.fileName || image.name || '',
+                  );
+                  creativePreviewById.set(imageId, normalizedPreview);
                 }
               }
             } catch {
@@ -2586,16 +2622,30 @@ export function QuoteBuilderScreen({
 
         const inferCreativeTypeLabel = (creativeRows: typeof printRowsSorted) => {
           const totals = rowTotals(creativeRows);
+          const hasEightSheet = (totals.get(9) ?? 0) > 0 || (totals.get(14) ?? 0) > 0;
+          const hasSixSheet = (totals.get(10) ?? 0) > 0 || (totals.get(15) ?? 0) > 0;
           const hasQuad = (totals.get(11) ?? 0) > 0 || (totals.get(16) ?? 0) > 0;
+          const hasTwoSheet = (totals.get(12) ?? 0) > 0 || (totals.get(17) ?? 0) > 0;
           const hasQa0 = (totals.get(13) ?? 0) > 0;
-          const hasOtherPosters = (totals.get(9) ?? 0) > 0 || (totals.get(10) ?? 0) > 0 || (totals.get(12) ?? 0) > 0 || (totals.get(14) ?? 0) > 0 || (totals.get(15) ?? 0) > 0 || (totals.get(17) ?? 0) > 0;
+          const hasPosterSizes = hasEightSheet || hasSixSheet || hasQuad || hasTwoSheet || hasQa0;
           const hasMegaPortrait = (totals.get(20) ?? 0) > 0;
           const hasDotMega = (totals.get(19) ?? 0) > 0;
           const hasMega = (totals.get(18) ?? 0) > 0;
           const lowerNames = creativeRows.map((row) => row.fileName.toLowerCase()).join(' ');
+          const hasNonPosterSizes = hasMegaPortrait || hasDotMega || hasMega;
 
-          if (hasQa0 && !hasQuad && !hasOtherPosters && !hasMega && !hasDotMega && !hasMegaPortrait) return 'QA0';
-          if (hasQuad || hasOtherPosters || hasQa0) return 'Quad';
+          if (hasQa0 && !hasEightSheet && !hasSixSheet && !hasQuad && !hasTwoSheet && !hasNonPosterSizes) return 'QA0';
+          if (hasQuad) return '4-sheet';
+          if (hasEightSheet && !hasSixSheet && !hasTwoSheet && !hasQa0 && !hasNonPosterSizes) return '8-sheet';
+          if (hasSixSheet && !hasEightSheet && !hasTwoSheet && !hasQa0 && !hasNonPosterSizes) return '6-sheet';
+          if (hasTwoSheet && !hasEightSheet && !hasSixSheet && !hasQa0 && !hasNonPosterSizes) return '2-sheet';
+          if (hasMegaPortrait && !hasPosterSizes && !hasDotMega && !hasMega) return 'Mega Portrait';
+          if (hasDotMega && !hasPosterSizes && !hasMegaPortrait && !hasMega) return 'DOT Mega';
+          if (hasMega && !hasPosterSizes && !hasMegaPortrait && !hasDotMega) return lowerNames.includes('mini') ? 'Mini Mega' : 'Mega';
+          if (hasEightSheet && !hasQuad && !hasQa0) return '8-sheet';
+          if (hasSixSheet && !hasQuad && !hasQa0) return '6-sheet';
+          if (hasTwoSheet && !hasQuad && !hasQa0) return '2-sheet';
+          if (hasQa0 && !hasQuad) return 'QA0';
           if (hasMegaPortrait) return 'Mega Portrait';
           if (hasDotMega) return 'DOT Mega';
           if (hasMega) return lowerNames.includes('mini') ? 'Mini Mega' : 'Mega';
@@ -2614,7 +2664,7 @@ export function QuoteBuilderScreen({
 
         const pluralizeTypeLabel = (label: string, count: number) => {
           if (count === 1) return label;
-          if (label === 'Quad') return 'Quads';
+          if (label === '4-sheet') return '4-sheet';
           if (label === 'QA0') return 'QA0';
           if (label === 'Mini Mega') return 'Mini Megas';
           if (label === 'Mega Portrait') return 'Mega Portraits';
@@ -2631,12 +2681,12 @@ export function QuoteBuilderScreen({
         const quantityLabelForColumn = (column: number, creativeTypeLabel: string) => {
           if (column === 9) return '8-sheet posters';
           if (column === 10) return '6-sheet posters';
-          if (column === 11) return 'Quads';
+          if (column === 11) return '4-sheet posters';
           if (column === 12) return '2-sheet posters';
-          if (column === 13) return creativeTypeLabel === 'QA0' ? 'QA0' : 'A0 sized Quads';
+          if (column === 13) return creativeTypeLabel === 'QA0' ? 'QA0' : 'A0 sized 4-sheet posters';
           if (column === 14) return 'Brisbane sized 8-sheet posters';
           if (column === 15) return 'Brisbane sized 6-sheet posters';
-          if (column === 16) return 'Brisbane sized Quads';
+          if (column === 16) return 'Brisbane sized 4-sheet posters';
           if (column === 17) return 'Brisbane sized 2-sheet posters';
           if (column === 18) return creativeTypeLabel === 'Mini Mega' ? 'Mini Mega' : 'Mega';
           if (column === 19) return 'DOT Mega';
@@ -2879,12 +2929,12 @@ export function QuoteBuilderScreen({
           const normalized = typeLabel.trim().toUpperCase();
           if (normalized === '8 SHEET') return '8-sheet posters';
           if (normalized === '6 SHEET') return '6-sheet posters';
-          if (normalized === '4 SHEET') return 'Quads';
+          if (normalized === '4 SHEET') return '4-sheet posters';
           if (normalized === '2 SHEET') return '2-sheet posters';
           if (normalized === 'QA0') return 'QA0';
           if (normalized === 'BRIS 8 SHEET') return 'Brisbane sized 8-sheet posters';
           if (normalized === 'BRIS 6 SHEET') return 'Brisbane sized 6-sheet posters';
-          if (normalized === 'BRIS 4 SHEET') return 'Brisbane sized Quads';
+          if (normalized === 'BRIS 4 SHEET') return 'Brisbane sized 4-sheet posters';
           if (normalized === 'BRIS 2 SHEET') return 'Brisbane sized 2-sheet posters';
           if (normalized === 'FERRO') return 'Mega';
           if (normalized === 'REFLECTIVE') return 'DOT Mega';
