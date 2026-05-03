@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Download, ExternalLink, FileText, LoaderCircle } from 'lucide-react';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@flowiq/ui';
+import { Button } from '@flowiq/ui';
 import { CampaignRecord } from '@flowiq/shared';
 import { buildApiUrl } from '../services/apiBase';
 import { fetchCampaign } from '../services/campaignApi';
@@ -29,6 +29,12 @@ function extensionFromName(fileName: string) {
   const dotIndex = fileName.lastIndexOf('.');
   if (dotIndex <= 0 || dotIndex === fileName.length - 1) return '';
   return fileName.slice(dotIndex + 1).toUpperCase();
+}
+
+function isPdfAsset(fileName: string, mimeType: string) {
+  const lowerName = fileName.toLowerCase();
+  const lowerMime = (mimeType || '').toLowerCase();
+  return lowerMime === 'application/pdf' || lowerName.endsWith('.pdf');
 }
 
 function triggerDownload(href: string, fileName: string) {
@@ -103,9 +109,10 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
         name: image.name || fileName,
         fileName,
         url: resolvedUrl,
+        thumbnailUrl: image.thumbnailUrl ? toAbsoluteUrl(buildApiUrl(image.thumbnailUrl)) : '',
         mimeType,
       };
-    });
+    }).filter((file) => isPdfAsset(file.fileName, file.mimeType));
   }, [campaign]);
 
   function openFile(url: string) {
@@ -144,26 +151,19 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
     <main className="dense-main mx-auto flex min-h-screen w-full max-w-[1400px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
       <section className="relative overflow-hidden rounded-[32px] border border-slate-700/70 bg-slate-950/70 px-6 py-8 shadow-2xl shadow-slate-950/40">
         <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.2),transparent_52%)]" />
-        <div className="relative flex flex-col gap-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-3">
-              <Badge className="w-fit gap-2 px-3 py-1 text-[11px] uppercase tracking-[0.22em]">Master Artwork Folder</Badge>
-              <div className="space-y-1">
-                <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">{campaignName}</h1>
-                <p className="text-sm text-slate-300">Browse and download uploaded artwork files for this campaign.</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={onBack} type="button" variant="outline">
-                <ArrowLeft className="h-4 w-4" />
-                Campaigns
+        <div className="relative grid min-h-[72px] grid-cols-[1fr_auto_1fr] items-center gap-4">
+          <div />
+          <h1 className="text-center text-3xl font-black tracking-tight text-white sm:text-4xl">{campaignName}</h1>
+          <div className="flex justify-end gap-2">
+            <Button onClick={onBack} type="button" variant="outline">
+              <ArrowLeft className="h-4 w-4" />
+              Campaigns
+            </Button>
+            {campaign?.id ? (
+              <Button onClick={() => onOpenCampaign(campaign.id)} type="button">
+                Open Campaign
               </Button>
-              {campaign?.id ? (
-                <Button onClick={() => onOpenCampaign(campaign.id)} type="button">
-                  Open Campaign
-                </Button>
-              ) : null}
-            </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -174,74 +174,71 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
         <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-900/90 px-6 py-20">
           <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
         </div>
+      ) : artworkFiles.length === 0 ? (
+        <div className="rounded-md border border-slate-700 bg-slate-900/70 px-4 py-8 text-center text-sm text-slate-300">
+          No artwork PDF files uploaded for this campaign.
+        </div>
       ) : (
-        <Card>
-          <CardHeader className="p-6 pb-0">
-            <CardTitle>Files</CardTitle>
-            <CardDescription>{artworkFiles.length} uploaded artwork file{artworkFiles.length === 1 ? '' : 's'}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 p-6">
-            {artworkFiles.length === 0 ? (
-              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-4 py-8 text-center text-sm text-slate-300">
-                No artwork files uploaded for this campaign.
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
-                <table className="dense-table w-full table-fixed border-collapse text-sm">
-                  <thead>
-                    <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
-                      <th className="w-[36%] border border-slate-700 px-4 py-3 text-left">Name</th>
-                      <th className="w-[36%] border border-slate-700 px-4 py-3 text-left">File</th>
-                      <th className="w-[10%] border border-slate-700 px-4 py-3 text-left">Type</th>
-                      <th className="w-[18%] border border-slate-700 px-4 py-3 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {artworkFiles.map((file) => (
-                      <tr key={file.id} className="border-t border-slate-700/70 bg-slate-800/70">
-                        <td className="border border-slate-700 px-4 py-3 font-semibold text-white break-words whitespace-normal">{file.name}</td>
-                        <td className="border border-slate-700 px-4 py-3 text-slate-200 break-words whitespace-normal">{file.fileName}</td>
-                        <td className="border border-slate-700 px-4 py-3 text-slate-300">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-slate-400" />
-                            <span>{extensionFromName(file.fileName) || file.mimeType}</span>
-                          </div>
-                        </td>
-                        <td className="border border-slate-700 px-4 py-3">
-                          <div className="flex items-center justify-center gap-2 whitespace-nowrap">
-                            <Button
-                              onClick={() => openFile(file.url)}
-                              size="sm"
-                              type="button"
-                              variant="outline"
-                              title="Open file"
-                              aria-label="Open file"
-                              className="h-9 w-9 px-0 2xl:h-9 2xl:w-auto 2xl:px-3"
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                              <span className="sr-only 2xl:not-sr-only 2xl:ml-2">Open</span>
-                            </Button>
-                            <Button
-                              onClick={() => downloadFile(file.url, file.fileName)}
-                              size="sm"
-                              type="button"
-                              title="Download file"
-                              aria-label="Download file"
-                              className="h-9 w-9 px-0 2xl:h-9 2xl:w-auto 2xl:px-3"
-                            >
-                              <Download className="h-4 w-4" />
-                              <span className="sr-only 2xl:not-sr-only 2xl:ml-2">Download</span>
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
+          <table className="dense-table w-full table-fixed border-collapse text-sm">
+            <thead>
+              <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
+                <th className="w-[14%] border border-slate-700 px-4 py-3 text-left">Thumbnail</th>
+                <th className="w-[64%] border border-slate-700 px-4 py-3 text-left">File</th>
+                <th className="w-[22%] border border-slate-700 px-4 py-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {artworkFiles.map((file) => (
+                <tr key={file.id} className="border-t border-slate-700/70 bg-slate-800/70">
+                  <td className="border border-slate-700 px-4 py-3">
+                    {file.thumbnailUrl ? (
+                      <img
+                        src={file.thumbnailUrl}
+                        alt={file.fileName}
+                        className="h-12 w-20 rounded border border-slate-600 object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-20 items-center justify-center rounded border border-slate-600 bg-slate-900 text-[10px] text-slate-400">
+                        <FileText className="mr-1 h-3 w-3" />
+                        PDF
+                      </div>
+                    )}
+                  </td>
+                  <td className="border border-slate-700 px-4 py-3 text-slate-200 break-words whitespace-normal">{file.fileName}</td>
+                  <td className="border border-slate-700 px-4 py-3">
+                    <div className="flex items-center justify-center gap-2 whitespace-nowrap">
+                      <Button
+                        onClick={() => openFile(file.url)}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                        title="Open PDF"
+                        aria-label="Open PDF"
+                        className="h-9 w-9 px-0 2xl:h-9 2xl:w-auto 2xl:px-3"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        <span className="sr-only 2xl:not-sr-only 2xl:ml-2">Open</span>
+                      </Button>
+                      <Button
+                        onClick={() => downloadFile(file.url, file.fileName)}
+                        size="sm"
+                        type="button"
+                        title="Download PDF"
+                        aria-label="Download PDF"
+                        className="h-9 w-9 px-0 2xl:h-9 2xl:w-auto 2xl:px-3"
+                      >
+                        <Download className="h-4 w-4" />
+                        <span className="sr-only 2xl:not-sr-only 2xl:ml-2">Download</span>
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </main>
   );
