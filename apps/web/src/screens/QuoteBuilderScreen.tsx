@@ -33,8 +33,23 @@ import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShipping
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 import ExcelJS from 'exceljs';
+import { Document as WordDocument, ExternalHyperlink, ImageRun, LineRuleType, Packer, Paragraph, TextRun, UnderlineType } from 'docx';
 
 const ACTIVE_CAMPAIGN_ID_KEY = 'adsconnect-active-campaign-id';
+const VISUALS_EXPORT_MODE = parseVisualsExportMode(process.env.EXPORT_EXCEL);
+
+type VisualsExportMode = 'excel' | 'word';
+
+type GeneratedVisualExportFile = {
+  fileName: string;
+  blob: Blob;
+  mimeType: string;
+};
+
+function parseVisualsExportMode(value: string | undefined): VisualsExportMode {
+  const normalized = (value || '').trim().toLowerCase();
+  return ['1', 'true', 'yes', 'on'].includes(normalized) ? 'excel' : 'word';
+}
 
 async function setStoredCampaignId(value: string | null) {
   if (typeof window === 'undefined') return;
@@ -385,6 +400,12 @@ function buildCreativeCode(state: ExportState, creativeNumber: number) {
   return `${prefix}${creativeNumber}`;
 }
 
+function getCreativeNumberFromCode(creativeCode: string) {
+  const numeric = creativeCode.replace(/^[A-Z]+/, '');
+  const parsed = Number.parseInt(numeric, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function downloadBlobWithFileName(blob: Blob, fileName: string) {
   const objectUrl = window.URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -409,6 +430,21 @@ function blobToDataUrl(blob: Blob) {
     reader.onerror = () => reject(new Error('Unable to read image blob'));
     reader.readAsDataURL(blob);
   });
+}
+
+function dataUrlToBytes(dataUrl: string) {
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex < 0) return null;
+  const meta = dataUrl.slice(0, commaIndex).toLowerCase();
+  const encoded = dataUrl.slice(commaIndex + 1);
+  if (!meta.includes(';base64')) return null;
+  const binary = atob(encoded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const extension = meta.includes('image/jpeg') || meta.includes('image/jpg') ? 'jpg' : 'png';
+  return { bytes, extension } as const;
 }
 
 function toAbsoluteUrl(url: string) {
@@ -2231,13 +2267,14 @@ export function QuoteBuilderScreen({
     return marketLines.reduce((total, line) => total + calculateLinePrintingCost(line), 0);
   }
 
-  async function generateArtworkExcelTemplates(downloadFiles: boolean) {
+  async function generateArtworkTemplates(downloadFiles: boolean, exportMode: VisualsExportMode): Promise<GeneratedVisualExportFile[]> {
     try {
       const ExcelJSRuntime = ExcelJS as any;
       const baseName = sanitizeFileName((values.campaignName || 'Campaign').trim() || 'Campaign');
       const campaignNumber = values.customerReference.trim() || campaignId || '';
       const weekCommencing = parseDateOnly(values.campaignStartDate);
       const weekCount = Math.max(1, Number.parseInt(values.numberOfWeeks || '1', 10) || 1);
+      const shouldGenerateExcel = exportMode === 'excel';
 
       const lineByAssetId = new Map((summary?.lines ?? []).map((line) => [line.id, line]));
       const defaultDeliveryAddressByMarket = new Map<string, string>();
@@ -2441,34 +2478,464 @@ export function QuoteBuilderScreen({
       });
 
       const requiredCreativeImageIds = new Set(Array.from(printRows.values()).map((row) => row.creativeImageId));
-      const detectImageExtension = (mimeType: string, fileName: string) => {
+      const creativePreviewById = new Map<string, { bytes: Uint8Array; extension: 'png' | 'jpg' }>();
+      const detectImageExtension = (mimeType: string, fileName: string): 'png' | 'jpg' => {
         const mime = mimeType.toLowerCase();
         const lowerName = fileName.toLowerCase();
         if (mime.includes('png') || lowerName.endsWith('.png')) return 'png';
-        if (mime.includes('jpg') || mime.includes('jpeg') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return 'jpeg';
+        if (mime.includes('jpg') || mime.includes('jpeg') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return 'jpg';
         return 'png';
       };
 
-      setExportProgressMessage('Preparing artwork previews...');
-      await Promise.all(
-        Array.from(requiredCreativeImageIds).map(async (imageId) => {
-          const image = imageRecordById.get(imageId);
-          if (!image?.imageUrl) return;
-          const mimeType = image.mimeType.toLowerCase();
-          const isPdf = mimeType === 'application/pdf' || image.fileName.toLowerCase().endsWith('.pdf');
-          const isImage = mimeType.startsWith('image/');
-          if (!isPdf && !isImage) return;
+      if (shouldGenerateExcel || exportMode === 'word') {
+        setExportProgressMessage('Preparing artwork previews...');
+        await Promise.all(
+          Array.from(requiredCreativeImageIds).map(async (imageId) => {
+            const image = imageRecordById.get(imageId);
+            if (!image?.imageUrl) return;
+            const mimeType = (image.mimeType || '').toLowerCase();
+            const isPdf = mimeType === 'application/pdf' || image.fileName.toLowerCase().endsWith('.pdf');
+            const isImage = mimeType.startsWith('image/');
+            try {
+              const sourceUrl = toAbsoluteUrl(buildApiUrl(image.imageUrl));
+              if (!sourceUrl) return;
+              const response = await fetch(sourceUrl);
+              if (!response.ok) return;
+              const blob = await response.blob();
+
+              if (shouldGenerateExcel && (isPdf || isImage)) {
+                const dataUrl = isPdf ? await pdfFirstPageToDataUrl(blob, 420) : await blobToDataUrl(blob);
+                if (dataUrl) creativeImageDataUrlById.set(imageId, dataUrl);
+              }
+
+              if (exportMode === 'word') {
+                if (isPdf) {
+                  const previewDataUrl = await pdfFirstPageToDataUrl(blob, 560);
+                  const parsed = previewDataUrl ? dataUrlToBytes(previewDataUrl) : null;
+                  if (parsed) creativePreviewById.set(imageId, parsed);
+                } else if (isImage) {
+                  const previewUrl = image.thumbnailUrl ? toAbsoluteUrl(buildApiUrl(image.thumbnailUrl)) : '';
+                  const previewResponse = previewUrl ? await fetch(previewUrl) : response;
+                  const previewBlob = previewResponse.ok ? await previewResponse.blob() : blob;
+                  const previewBytes = new Uint8Array(await previewBlob.arrayBuffer());
+                  creativePreviewById.set(imageId, {
+                    bytes: previewBytes,
+                    extension: detectImageExtension(previewBlob.type || mimeType, image.thumbnailFileName || image.fileName || image.name || ''),
+                  });
+                }
+              }
+            } catch {
+              // Skip image embedding when image fetch fails.
+            }
+          }),
+        );
+      }
+      const fillWordDocument = async (): Promise<GeneratedVisualExportFile> => {
+        setExportProgressMessage('Generating Word document...');
+
+        const printRowsSorted = Array.from(printRows.values()).sort(
+          (a, b) => a.creativeNumber - b.creativeNumber || a.fileName.localeCompare(b.fileName) || a.state.localeCompare(b.state),
+        );
+
+        const rowsByCreative = new Map<number, typeof printRowsSorted>();
+        printRowsSorted.forEach((row) => {
+          const bucket = rowsByCreative.get(row.creativeNumber) ?? [];
+          bucket.push(row);
+          rowsByCreative.set(row.creativeNumber, bucket);
+        });
+
+        const quantityColumns = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+        const rowTotals = (creativeRows: typeof printRowsSorted) => {
+          const totals = new Map<number, number>();
+          creativeRows.forEach((row) => {
+            Object.entries(row.quantities).forEach(([column, quantity]) => {
+              const numericColumn = Number(column);
+              totals.set(numericColumn, (totals.get(numericColumn) ?? 0) + quantity);
+            });
+          });
+          return totals;
+        };
+
+        const inferCreativeTypeLabel = (creativeRows: typeof printRowsSorted) => {
+          const totals = rowTotals(creativeRows);
+          const hasQuad = (totals.get(11) ?? 0) > 0 || (totals.get(16) ?? 0) > 0;
+          const hasQa0 = (totals.get(13) ?? 0) > 0;
+          const hasOtherPosters = (totals.get(9) ?? 0) > 0 || (totals.get(10) ?? 0) > 0 || (totals.get(12) ?? 0) > 0 || (totals.get(14) ?? 0) > 0 || (totals.get(15) ?? 0) > 0 || (totals.get(17) ?? 0) > 0;
+          const hasMegaPortrait = (totals.get(20) ?? 0) > 0;
+          const hasDotMega = (totals.get(19) ?? 0) > 0;
+          const hasMega = (totals.get(18) ?? 0) > 0;
+          const lowerNames = creativeRows.map((row) => row.fileName.toLowerCase()).join(' ');
+
+          if (hasQa0 && !hasQuad && !hasOtherPosters && !hasMega && !hasDotMega && !hasMegaPortrait) return 'QA0';
+          if (hasQuad || hasOtherPosters || hasQa0) return 'Quad';
+          if (hasMegaPortrait) return 'Mega Portrait';
+          if (hasDotMega) return 'DOT Mega';
+          if (hasMega) return lowerNames.includes('mini') ? 'Mini Mega' : 'Mega';
+          return 'Artwork';
+        };
+
+        const typeCounts = new Map<string, number>();
+        const creativeTypeByNumber = new Map<number, string>();
+        Array.from(rowsByCreative.entries())
+          .sort((a, b) => a[0] - b[0])
+          .forEach(([creativeNumber, creativeRows]) => {
+            const typeLabel = inferCreativeTypeLabel(creativeRows);
+            creativeTypeByNumber.set(creativeNumber, typeLabel);
+            typeCounts.set(typeLabel, (typeCounts.get(typeLabel) ?? 0) + 1);
+          });
+
+        const pluralizeTypeLabel = (label: string, count: number) => {
+          if (count === 1) return label;
+          if (label === 'Quad') return 'Quads';
+          if (label === 'QA0') return 'QA0';
+          if (label === 'Mini Mega') return 'Mini Megas';
+          if (label === 'Mega Portrait') return 'Mega Portraits';
+          if (label === 'DOT Mega') return 'DOT Megas';
+          if (label === 'Mega') return 'Megas';
+          return `${label}s`;
+        };
+
+        const creativeHeadline = Array.from(typeCounts.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([label, count]) => `${count} x ${pluralizeTypeLabel(label, count)}`)
+          .join(', ') || 'No mapped creatives';
+
+        const quantityLabelForColumn = (column: number, creativeTypeLabel: string) => {
+          if (column === 9) return '8-sheet posters';
+          if (column === 10) return '6-sheet posters';
+          if (column === 11) return 'Quads';
+          if (column === 12) return '2-sheet posters';
+          if (column === 13) return creativeTypeLabel === 'QA0' ? 'QA0' : 'A0 sized Quads';
+          if (column === 14) return 'Brisbane sized 8-sheet posters';
+          if (column === 15) return 'Brisbane sized 6-sheet posters';
+          if (column === 16) return 'Brisbane sized Quads';
+          if (column === 17) return 'Brisbane sized 2-sheet posters';
+          if (column === 18) return creativeTypeLabel === 'Mini Mega' ? 'Mini Mega' : 'Mega';
+          if (column === 19) return 'DOT Mega';
+          return 'Mega Portrait';
+        };
+
+        const resolveCreativeFileName = (creativeImageId: string, fallbackBaseName: string) => {
+          const imageRecord = imageRecordById.get(creativeImageId);
+          const rawFileName = (imageRecord?.fileName || imageRecord?.name || '').trim();
+          if (rawFileName) return rawFileName;
+          return `${fallbackBaseName}.pdf`;
+        };
+
+        const quantityPartsByCreative = new Map<number, string[]>();
+        Array.from(rowsByCreative.entries())
+          .sort((a, b) => a[0] - b[0])
+          .forEach(([creativeNumber, creativeRows]) => {
+            const totals = rowTotals(creativeRows);
+            const creativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
+            const parts = quantityColumns
+              .map((column) => {
+                const quantity = totals.get(column) ?? 0;
+                if (quantity <= 0) return '';
+                return `${quantity} x ${quantityLabelForColumn(column, creativeTypeLabel)}`;
+              })
+              .filter(Boolean);
+            quantityPartsByCreative.set(creativeNumber, parts);
+          });
+
+        const miniMegaPageByCreativeNumber = new Map<number, number>();
+        const miniMegaGroups = new Map<string, number[]>();
+        Array.from(rowsByCreative.entries())
+          .sort((a, b) => a[0] - b[0])
+          .forEach(([creativeNumber, creativeRows]) => {
+            const creativeTypeLabel = creativeTypeByNumber.get(creativeNumber);
+            if (creativeTypeLabel !== 'Mini Mega') return;
+            const firstFileName = creativeRows[0]?.fileName || '';
+            if (!firstFileName) return;
+            const bucket = miniMegaGroups.get(firstFileName) ?? [];
+            bucket.push(creativeNumber);
+            miniMegaGroups.set(firstFileName, bucket);
+          });
+        miniMegaGroups.forEach((creativeNumbers) => {
+          creativeNumbers.forEach((creativeNumber, index) => {
+            miniMegaPageByCreativeNumber.set(creativeNumber, index + 1);
+          });
+        });
+
+        const getStoredNameFromUrl = (url: string) => {
+          const resolved = toAbsoluteUrl(buildApiUrl(url || ''));
+          if (!resolved) return '';
           try {
-            const response = await fetch(toAbsoluteUrl(buildApiUrl(image.imageUrl)));
-            if (!response.ok) return;
-            const blob = await response.blob();
-            const dataUrl = isPdf ? await pdfFirstPageToDataUrl(blob, 420) : await blobToDataUrl(blob);
-            if (dataUrl) creativeImageDataUrlById.set(imageId, dataUrl);
+            const parsed = new URL(resolved, window.location.origin);
+            const segments = parsed.pathname.split('/').filter(Boolean);
+            const storedName = segments[segments.length - 1] || '';
+            return decodeURIComponent(storedName);
           } catch {
-            // Skip image embedding when image fetch fails.
+            const segments = resolved.split('/').filter(Boolean);
+            return decodeURIComponent(segments[segments.length - 1] || '');
           }
-        }),
-      );
+        };
+
+        const buildCampaignImageDownloadUrl = (creativeImageId: string) => {
+          const imageRecord = imageRecordById.get(creativeImageId);
+          if (!imageRecord) return '';
+          const storedName = getStoredNameFromUrl(imageRecord.imageUrl || '');
+          const rawFileName = resolveCreativeFileName(creativeImageId, imageRecord.name || 'Artwork');
+          if (!storedName) return toAbsoluteUrl(buildApiUrl(imageRecord.imageUrl || ''));
+          const downloadUrl = new URL(toAbsoluteUrl(buildApiUrl(`/api/campaign-images/${encodeURIComponent(storedName)}/download`)));
+          downloadUrl.searchParams.set('filename', rawFileName);
+          return downloadUrl.toString();
+        };
+
+        const artworkFolderUrl = campaignId
+          ? toAbsoluteUrl(`/?view=artwork&campaignId=${encodeURIComponent(campaignId)}`)
+          : '';
+
+        const bodySpacing = {
+          after: 120,
+          line: 276,
+          lineRule: LineRuleType.AUTO,
+        } as const;
+
+        const makeParagraph = (
+          children: Array<TextRun | ExternalHyperlink | ImageRun>,
+          options?: any,
+        ) =>
+          new Paragraph({
+            children,
+            spacing: bodySpacing,
+            ...(options || {}),
+          });
+
+        const paragraphs: Paragraph[] = [];
+        const pushBlank = () => paragraphs.push(new Paragraph({ text: '', spacing: bodySpacing }));
+
+        paragraphs.push(
+          makeParagraph([
+            new TextRun({ text: 'Artwork - ', underline: { type: UnderlineType.SINGLE } }),
+            new TextRun(values.campaignName.trim() || 'Artwork'),
+            new TextRun('  '),
+            ...(artworkFolderUrl
+              ? [
+                  new ExternalHyperlink({
+                    children: [new TextRun({ text: 'Artwork', style: 'Hyperlink' })],
+                    link: artworkFolderUrl,
+                  }),
+                ]
+              : [new TextRun('Artwork')]),
+          ]),
+        );
+        paragraphs.push(
+          makeParagraph([
+            new TextRun({ text: 'Creative - ', underline: { type: UnderlineType.SINGLE } }),
+            new TextRun(creativeHeadline),
+          ]),
+        );
+        paragraphs.push(
+          makeParagraph([new TextRun({ text: 'No. of posters to print -', underline: { type: UnderlineType.SINGLE } })]),
+        );
+        pushBlank();
+
+        Array.from(rowsByCreative.entries())
+          .sort((a, b) => a[0] - b[0])
+          .forEach(([creativeNumber]) => {
+            const creativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
+            const labelText = `Creative ${creativeNumber} (${creativeTypeLabel}): `;
+            const summary = (quantityPartsByCreative.get(creativeNumber) ?? []).join(' & ');
+            paragraphs.push(
+              makeParagraph(
+                [
+                  new TextRun({ text: labelText, bold: true }),
+                  new TextRun(summary || 'No mapped quantities'),
+                ],
+                { bullet: { level: 0 } },
+              ),
+            );
+          });
+
+        pushBlank();
+        Array.from(rowsByCreative.entries())
+          .sort((a, b) => a[0] - b[0])
+          .forEach(([creativeNumber, creativeRows]) => {
+            const creativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
+            const headerText = `Creative ${creativeNumber} (${creativeTypeLabel}):`;
+            const pageNumber = miniMegaPageByCreativeNumber.get(creativeNumber);
+            const firstCreativeImageId = creativeRows[0]?.creativeImageId || '';
+            const preview = creativePreviewById.get(firstCreativeImageId);
+
+            if (creativeTypeLabel === 'Mini Mega' && creativeRows.length > 0) {
+              const fileName = resolveCreativeFileName(firstCreativeImageId, creativeRows[0].fileName);
+              const pageSuffix = pageNumber ? ` PAGE ${pageNumber}` : '';
+              paragraphs.push(
+                makeParagraph([
+                  new TextRun({ text: `${headerText} `, bold: true }),
+                  new TextRun({ text: '[PDF] ', bold: true, color: 'C00000' }),
+                  new ExternalHyperlink({
+                    children: [new TextRun({ text: `${fileName}${pageSuffix}`, style: 'Hyperlink' })],
+                    link: buildCampaignImageDownloadUrl(firstCreativeImageId),
+                  }),
+                ]),
+              );
+              if (preview) {
+                paragraphs.push(
+                  makeParagraph([
+                    new ImageRun({
+                      type: preview.extension,
+                      data: preview.bytes,
+                      transformation: { width: 430, height: 130 },
+                    }),
+                  ]),
+                );
+              }
+              pushBlank();
+              return;
+            }
+
+            paragraphs.push(makeParagraph([new TextRun({ text: headerText, bold: true })]));
+            creativeRows.forEach((row) => {
+              const fileName = resolveCreativeFileName(row.creativeImageId, row.fileName);
+              paragraphs.push(
+                makeParagraph([
+                  new TextRun({ text: `${row.state}: `, bold: true }),
+                  new TextRun({ text: '[PDF] ', bold: true, color: 'C00000' }),
+                  new ExternalHyperlink({
+                    children: [new TextRun({ text: fileName, style: 'Hyperlink' })],
+                    link: buildCampaignImageDownloadUrl(row.creativeImageId),
+                  }),
+                ]),
+              );
+            });
+            if (preview) {
+              paragraphs.push(
+                makeParagraph([
+                  new ImageRun({
+                    type: preview.extension,
+                    data: preview.bytes,
+                    transformation: { width: 430, height: 130 },
+                  }),
+                ]),
+              );
+            }
+            pushBlank();
+          });
+
+        paragraphs.push(
+          makeParagraph([new TextRun({ text: 'Delivery -', underline: { type: UnderlineType.SINGLE } })]),
+        );
+        pushBlank();
+
+        const deliveryByDestination = new Map<string, {
+          creativeNumber: number;
+          creativeTypeLabel: string;
+          quantityByTypeLabel: Map<string, number>;
+        }[]>();
+        const deliveryLabelFromType = (typeLabel: string) => {
+          const normalized = typeLabel.trim().toUpperCase();
+          if (normalized === '8 SHEET') return '8-sheet posters';
+          if (normalized === '6 SHEET') return '6-sheet posters';
+          if (normalized === '4 SHEET') return 'Quads';
+          if (normalized === '2 SHEET') return '2-sheet posters';
+          if (normalized === 'QA0') return 'QA0';
+          if (normalized === 'BRIS 8 SHEET') return 'Brisbane sized 8-sheet posters';
+          if (normalized === 'BRIS 6 SHEET') return 'Brisbane sized 6-sheet posters';
+          if (normalized === 'BRIS 4 SHEET') return 'Brisbane sized Quads';
+          if (normalized === 'BRIS 2 SHEET') return 'Brisbane sized 2-sheet posters';
+          if (normalized === 'FERRO') return 'Mega';
+          if (normalized === 'REFLECTIVE') return 'DOT Mega';
+          return 'Mega Portrait';
+        };
+
+        Array.from(deliveryRows.values()).forEach((row) => {
+          const creativeNumber = getCreativeNumberFromCode(row.creativeCode);
+          const creativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
+          const destinationKey = row.deliveredTo || 'DELIVERY';
+          const creativeBucket = deliveryByDestination.get(destinationKey) ?? [];
+          let creativeEntry = creativeBucket.find((entry) => entry.creativeNumber === creativeNumber);
+          if (!creativeEntry) {
+            creativeEntry = {
+              creativeNumber,
+              creativeTypeLabel,
+              quantityByTypeLabel: new Map<string, number>(),
+            };
+            creativeBucket.push(creativeEntry);
+          }
+          const quantityLabel = deliveryLabelFromType(row.typeLabel);
+          creativeEntry.quantityByTypeLabel.set(
+            quantityLabel,
+            (creativeEntry.quantityByTypeLabel.get(quantityLabel) ?? 0) + row.quantity,
+          );
+          deliveryByDestination.set(destinationKey, creativeBucket);
+        });
+
+        const deadlineText = formatDeliveryDeadline(values.dueDate);
+        Array.from(deliveryByDestination.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .forEach(([destination, entries]) => {
+            const destinationBlock = deliveryInfoBlocks.find((block) => block.toUpperCase().startsWith(destination.toUpperCase()));
+            const destinationLines = destinationBlock
+              ? destinationBlock.split('\n').map((line) => line.trim()).filter(Boolean)
+              : [];
+            const destinationName = destinationLines.length > 1 ? destinationLines[1] : destination;
+            paragraphs.push(
+              makeParagraph([new TextRun(`Please deliver to ${destinationName} by ${deadlineText} by COB:`)]),
+            );
+            pushBlank();
+            entries
+              .sort((a, b) => a.creativeNumber - b.creativeNumber)
+              .forEach((entry) => {
+                const parts = Array.from(entry.quantityByTypeLabel.entries()).map(
+                  ([quantityLabel, quantity]) => `${quantity} x ${quantityLabel}`,
+                );
+                paragraphs.push(
+                  makeParagraph([
+                    new TextRun({ text: `Creative ${entry.creativeNumber} (${entry.creativeTypeLabel}): `, bold: true }),
+                    new TextRun(parts.join(' & ') || 'No mapped quantities'),
+                  ], { bullet: { level: 0 } }),
+                );
+              });
+            pushBlank();
+          });
+
+        const wordDocument = new WordDocument({
+          styles: {
+            default: {
+              document: {
+                run: {
+                  font: 'Calibri',
+                  size: 22,
+                },
+                paragraph: {
+                  spacing: bodySpacing,
+                },
+              },
+            },
+          },
+          sections: [
+            {
+              properties: {
+                page: {
+                  margin: {
+                    top: 284,
+                    right: 284,
+                    bottom: 284,
+                    left: 284,
+                    header: 708,
+                    footer: 708,
+                    gutter: 0,
+                  },
+                },
+              },
+              children: paragraphs,
+            },
+          ],
+        });
+
+        const blob = await Packer.toBlob(wordDocument);
+        const fileName = `${baseName} - Visuals.docx`;
+        if (downloadFiles) {
+          downloadBlobWithFileName(blob, fileName);
+        }
+        return {
+          fileName,
+          blob,
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        };
+      };
 
       const fillPrintWorkbook = async () => {
         setExportProgressMessage('Generating Print Quantities file...');
@@ -2652,7 +3119,11 @@ export function QuoteBuilderScreen({
         if (downloadFiles) {
           downloadBlobWithFileName(blob, fileName);
         }
-        return { fileName, blob };
+        return {
+          fileName,
+          blob,
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        };
       };
 
       const fillDeliveryWorkbook = async () => {
@@ -2812,18 +3283,27 @@ export function QuoteBuilderScreen({
         if (downloadFiles) {
           downloadBlobWithFileName(blob, fileName);
         }
-        return { fileName, blob };
+        return {
+          fileName,
+          blob,
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        };
       };
+
+      if (!shouldGenerateExcel) {
+        const wordFile = await fillWordDocument();
+        return [wordFile];
+      }
 
       const printWorkbookFile = await fillPrintWorkbook();
       const deliveryWorkbookFile = await fillDeliveryWorkbook();
       return [printWorkbookFile, deliveryWorkbookFile];
     } catch (exportError) {
-      throw exportError instanceof Error ? exportError : new Error('Unable to generate Excel templates. Please try again.');
+      throw exportError instanceof Error ? exportError : new Error('Unable to generate export files. Please try again.');
     }
   }
 
-  async function downloadArtworkExcelTemplates() {
+  async function downloadArtworkVisuals() {
     if (exportingTemplates || sendingAdsEmail) return;
     if (!hasDeliveryDueDate) {
       setError('Add a due date before downloading visuals.');
@@ -2843,11 +3323,11 @@ export function QuoteBuilderScreen({
     setExportProgressMessage('Preparing export...');
 
     try {
-      await generateArtworkExcelTemplates(true);
+      await generateArtworkTemplates(true, VISUALS_EXPORT_MODE);
       setExportProgressMessage('Download started. Check your browser download bar.');
       setError('');
     } catch (exportError) {
-      const message = exportError instanceof Error ? exportError.message : 'Unable to download Excel templates. Please try again.';
+      const message = exportError instanceof Error ? exportError.message : 'Unable to download visual export. Please try again.';
       setError(message);
       setExportProgressMessage('');
     } finally {
@@ -2875,11 +3355,11 @@ export function QuoteBuilderScreen({
     setExportProgressMessage('Preparing export for email...');
 
     try {
-      const generatedFiles = await generateArtworkExcelTemplates(false);
+      const generatedFiles = await generateArtworkTemplates(false, 'excel');
       const files = generatedFiles.map(
         (generatedFile) =>
           new File([generatedFile.blob], generatedFile.fileName, {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            type: generatedFile.mimeType,
           }),
       );
       const usedCreativeImageIds = new Set(
@@ -3554,7 +4034,7 @@ export function QuoteBuilderScreen({
                   <Button
                     className="h-10 min-w-[180px] px-5 text-base"
                     disabled={exportingTemplates || sendingAdsEmail}
-                    onClick={() => void downloadArtworkExcelTemplates()}
+                    onClick={() => void downloadArtworkVisuals()}
                     title={!hasUploadedPurchaseOrder ? 'Upload purchase order before downloading visuals' : undefined}
                     type="button"
                     variant="outline"
@@ -3588,7 +4068,7 @@ export function QuoteBuilderScreen({
                   <Button
                     className="h-10 min-w-[180px] px-5 text-base"
                     disabled={exportingTemplates || sendingAdsEmail}
-                    onClick={() => void downloadArtworkExcelTemplates()}
+                    onClick={() => void downloadArtworkVisuals()}
                     title={!hasUploadedPurchaseOrder ? 'Upload purchase order before downloading visuals' : undefined}
                     type="button"
                     variant="outline"
@@ -4258,3 +4738,4 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
+
