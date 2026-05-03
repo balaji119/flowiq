@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Download, ExternalLink, FileText, LoaderCircle } from 'lucide-react';
 import { Button } from '@flowiq/ui';
 import { CampaignRecord } from '@flowiq/shared';
+import { createPortal } from 'react-dom';
 import { buildApiUrl } from '../services/apiBase';
 import { fetchCampaign } from '../services/campaignApi';
 import { PDFDocument } from 'pdf-lib';
@@ -110,6 +111,8 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [campaign, setCampaign] = useState<CampaignRecord | null>(null);
+  const [topBarCenterHost, setTopBarCenterHost] = useState<HTMLElement | null>(null);
+  const [topBarActionsHost, setTopBarActionsHost] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -139,6 +142,11 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
       active = false;
     };
   }, [campaignId]);
+
+  useEffect(() => {
+    setTopBarCenterHost(document.getElementById('workspace-topbar-center-slot'));
+    setTopBarActionsHost(document.getElementById('workspace-topbar-actions-slot'));
+  }, []);
 
   const artworkFiles = useMemo(() => {
     const grouped = new Map<string, {
@@ -244,24 +252,30 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
 
   return (
     <main className="dense-main mx-auto flex min-h-screen w-full max-w-[1400px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-      <section className="relative overflow-hidden rounded-[32px] border border-slate-700/70 bg-slate-950/70 px-6 py-8 shadow-2xl shadow-slate-950/40">
-        <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.2),transparent_52%)]" />
-        <div className="relative grid min-h-[72px] grid-cols-[1fr_auto_1fr] items-center gap-4">
-          <div />
-          <h1 className="text-center text-3xl font-black tracking-tight text-white sm:text-4xl">{campaignName}</h1>
-          <div className="flex justify-end gap-2">
-            <Button onClick={onBack} type="button" variant="outline">
-              <ArrowLeft className="h-4 w-4" />
-              Campaigns
-            </Button>
-            {campaign?.id ? (
-              <Button onClick={() => onOpenCampaign(campaign.id)} type="button">
-                Open Campaign
+      {topBarCenterHost
+        ? createPortal(
+            <h1 className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300" title={campaignName}>
+              {campaignName}
+            </h1>,
+            topBarCenterHost,
+          )
+        : null}
+      {topBarActionsHost
+        ? createPortal(
+            <div className="flex justify-end gap-2">
+              <Button onClick={onBack} type="button" variant="outline">
+                <ArrowLeft className="h-4 w-4" />
+                Campaigns
               </Button>
-            ) : null}
-          </div>
-        </div>
-      </section>
+              {campaign?.id ? (
+                <Button onClick={() => onOpenCampaign(campaign.id)} type="button">
+                  Open Campaign
+                </Button>
+              ) : null}
+            </div>,
+            topBarActionsHost,
+          )
+        : null}
 
       {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 
