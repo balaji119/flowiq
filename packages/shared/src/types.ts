@@ -90,6 +90,9 @@ export type CampaignPrintImage = {
   thumbnailFileName?: string;
   thumbnailStoredName?: string;
   thumbnailUrl?: string;
+  sourcePdfFileName?: string;
+  sourcePdfStoredName?: string;
+  sourcePdfUrl?: string;
 };
 
 export type CampaignLine = CampaignAsset & { market: string };

@@ -46,6 +46,9 @@ type campaignPrintImage struct {
 	ThumbnailFileName   string `json:"thumbnailFileName,omitempty"`
 	ThumbnailStoredName string `json:"thumbnailStoredName,omitempty"`
 	ThumbnailURL        string `json:"thumbnailUrl,omitempty"`
+	SourcePDFFileName   string `json:"sourcePdfFileName,omitempty"`
+	SourcePDFStoredName string `json:"sourcePdfStoredName,omitempty"`
+	SourcePDFURL        string `json:"sourcePdfUrl,omitempty"`
 }
 
 type orderFormValues struct {

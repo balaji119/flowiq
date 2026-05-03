@@ -268,6 +268,9 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
       thumbnailFileName: image.thumbnailFileName,
       thumbnailStoredName: image.thumbnailStoredName,
       thumbnailUrl: normalizeCampaignImageUrl(image.thumbnailUrl),
+      sourcePdfFileName: image.sourcePdfFileName,
+      sourcePdfStoredName: image.sourcePdfStoredName,
+      sourcePdfUrl: normalizeCampaignImageUrl(image.sourcePdfUrl),
     })),
   };
 }
@@ -445,6 +448,27 @@ function dataUrlToBytes(dataUrl: string) {
   }
   const extension = meta.includes('image/jpeg') || meta.includes('image/jpg') ? 'jpg' : 'png';
   return { bytes, extension } as const;
+}
+
+const WORD_FOLDER_ICON_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAqklEQVR4AeyWSwqAIBRFrf3UOCKifUWjaAW1oCiIdlUq+AYS+E0nN7r+8HM8I0uW+csP0LbN45kzhrwQAx0HD4YggH0/mG3meVGXFxC+BuU6AlA7pq4JYBh6ZptpGiVnVdXW1nS7cgNeEABvO/3i8HXdnNZ8TSYAndDUj3G4ACIA0ckRAMAADMAADMAADMAADJAB2xdxrHnq+UcAaiB1XV7XXeTM7wZMRl8AAAD//5quy1QAAAAGSURBVAMANKD4Qc3tQ0sAAAAASUVORK5CYII=';
+const WORD_PDF_ICON_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAB0klEQVR4AcyXT04CMRTGyyxm58pjTHBt0DEY74BXwEROYFgRT4CJ4AVE7mAkTiQewB7DlQfAfk0eKa9l2mmGGQgf/fO+tr++Ngwkgr16vfNNpAo2VVDTAgga5TZdKvDKEHsBVqtPESLGUhliLwCb2Nvsds/IUwmiNoDp9EnEQNQGgO3HQNQKEANRO0BVCAtgvf7uQGmadkIEL8S98/mLngcxpRxgLlkALtMh+5Lf/GLTptrPAKX35P1DNCla93gyQET9/pUwNZs9U0iXZozq3AMjxcwS/VzODEwmj/pBhFJKKfgC6KcHFerwjEb3fG6BGPlQWgbV4QRQ/fqd57kYDG7FYvGq264PePAVjBgHRZ9PpQC+wWbcB2p6zboXYLl8M59y5lhvXcoffXzITFG4f6s4AcbjB4EzxQXCKpRi1KtIqvtDfqlgqG6WTgA815FSXJzQxbEAxpmTY47h8E6QzBjVnQAYiMtFppASFzXLshDrjscJsOPwNHC+OC7sHjv12K1wFADuCO4HJNU5Y+ehR8UJLACce1n6ETeFhV07h6dsHgKxACjQVLkF+Lu5Fk2KNrgFoI6my+S0+Oq0qfYzwFOu/mDG/jsOGsfXO3gG+IK8/Q8AAP//tC16dwAAAAZJREFUAwClos9YP/kZEAAAAABJRU5ErkJggg==';
+const WORD_FOLDER_ICON = dataUrlToBytes(WORD_FOLDER_ICON_DATA_URL);
+const WORD_PDF_ICON = dataUrlToBytes(WORD_PDF_ICON_DATA_URL);
+
+function createWordIconRun(kind: 'folder' | 'pdf') {
+  const icon = kind === 'folder' ? WORD_FOLDER_ICON : WORD_PDF_ICON;
+  if (!icon) return null;
+  return new ImageRun({
+    type: icon.extension,
+    data: icon.bytes,
+    transformation: { width: 16, height: 16 },
+  });
+}
+
+function createWordIconChildren(kind: 'folder' | 'pdf'): Array<ImageRun | TextRun> {
+  const iconRun = createWordIconRun(kind);
+  if (!iconRun) return [];
+  return [iconRun, new TextRun(' ')];
 }
 
 function toAbsoluteUrl(url: string) {
@@ -1901,6 +1925,7 @@ export function QuoteBuilderScreen({
 
       const uploadedImages: CampaignPrintImage[] = [];
       for (const pdfFile of files) {
+        const sourcePdfUpload = await uploadCampaignImage(pdfFile);
         const pageImages = await convertPdfToArtworkPages(pdfFile);
         for (const pageImage of pageImages) {
           const [uploadResponse, thumbnailUploadResponse] = await Promise.all([
@@ -1921,6 +1946,9 @@ export function QuoteBuilderScreen({
             thumbnailFileName: thumbnailUploadResponse.originalName || pageImage.thumbnailFile.name,
             thumbnailStoredName: thumbnailUploadResponse.storedName,
             thumbnailUrl: thumbnailUploadResponse.url || `/api/campaign-images/${thumbnailUploadResponse.storedName}`,
+            sourcePdfFileName: sourcePdfUpload.originalName || pdfFile.name,
+            sourcePdfStoredName: sourcePdfUpload.storedName,
+            sourcePdfUrl: sourcePdfUpload.url || `/api/campaign-images/${sourcePdfUpload.storedName}`,
           });
         }
       }
@@ -2617,9 +2645,21 @@ export function QuoteBuilderScreen({
 
         const resolveCreativeFileName = (creativeImageId: string, fallbackBaseName: string) => {
           const imageRecord = imageRecordById.get(creativeImageId);
-          const rawFileName = (imageRecord?.fileName || imageRecord?.name || '').trim();
-          if (rawFileName) return rawFileName;
-          return `${fallbackBaseName}.pdf`;
+          const rawPdfFileName = (imageRecord?.sourcePdfFileName || '').trim();
+          if (rawPdfFileName) {
+            return /\.pdf$/i.test(rawPdfFileName) ? rawPdfFileName : `${rawPdfFileName}.pdf`;
+          }
+          const rawName = (imageRecord?.name || '').trim().replace(/\s*\(Page\s+\d+\)\s*$/i, '').trim();
+          if (rawName) {
+            return /\.pdf$/i.test(rawName) ? rawName : `${rawName}.pdf`;
+          }
+          const rawFileName = (imageRecord?.fileName || '').trim();
+          if (rawFileName) {
+            const base = rawFileName.replace(/\.[^.]+$/, '').replace(/-page-\d+$/i, '').trim();
+            if (base) return `${base}.pdf`;
+          }
+          const fallbackBase = fallbackBaseName.replace(/\.[^.]+$/, '').replace(/-page-\d+$/i, '').trim();
+          return `${fallbackBase || 'Artwork'}.pdf`;
         };
 
         const quantityPartsByCreative = new Map<number, string[]>();
@@ -2674,9 +2714,10 @@ export function QuoteBuilderScreen({
         const buildCampaignImageDownloadUrl = (creativeImageId: string) => {
           const imageRecord = imageRecordById.get(creativeImageId);
           if (!imageRecord) return '';
-          const storedName = getStoredNameFromUrl(imageRecord.imageUrl || '');
+          const sourcePdfUrl = imageRecord.sourcePdfUrl || imageRecord.imageUrl || '';
+          const storedName = imageRecord.sourcePdfStoredName || getStoredNameFromUrl(sourcePdfUrl);
           const rawFileName = resolveCreativeFileName(creativeImageId, imageRecord.name || 'Artwork');
-          if (!storedName) return toAbsoluteUrl(buildApiUrl(imageRecord.imageUrl || ''));
+          if (!storedName) return toAbsoluteUrl(buildApiUrl(sourcePdfUrl));
           const downloadUrl = new URL(toAbsoluteUrl(buildApiUrl(`/api/campaign-images/${encodeURIComponent(storedName)}/download`)));
           downloadUrl.searchParams.set('filename', rawFileName);
           return downloadUrl.toString();
@@ -2713,11 +2754,17 @@ export function QuoteBuilderScreen({
             ...(artworkFolderUrl
               ? [
                   new ExternalHyperlink({
-                    children: [new TextRun({ text: 'Artwork', style: 'Hyperlink' })],
+                    children: [
+                      ...createWordIconChildren('folder'),
+                      new TextRun({ text: 'Artwork', style: 'Hyperlink' }),
+                    ],
                     link: artworkFolderUrl,
                   }),
                 ]
-              : [new TextRun('Artwork')]),
+              : [
+                  ...createWordIconChildren('folder'),
+                  new TextRun('Artwork'),
+                ]),
           ]),
         );
         paragraphs.push(
@@ -2764,9 +2811,11 @@ export function QuoteBuilderScreen({
               paragraphs.push(
                 makeParagraph([
                   new TextRun({ text: `${headerText} `, bold: true }),
-                  new TextRun({ text: '[PDF] ', bold: true, color: 'C00000' }),
                   new ExternalHyperlink({
-                    children: [new TextRun({ text: `${fileName}${pageSuffix}`, style: 'Hyperlink' })],
+                    children: [
+                      ...createWordIconChildren('pdf'),
+                      new TextRun({ text: `${fileName}${pageSuffix}`, style: 'Hyperlink' }),
+                    ],
                     link: buildCampaignImageDownloadUrl(firstCreativeImageId),
                   }),
                 ]),
@@ -2792,9 +2841,11 @@ export function QuoteBuilderScreen({
               paragraphs.push(
                 makeParagraph([
                   new TextRun({ text: `${row.state}: `, bold: true }),
-                  new TextRun({ text: '[PDF] ', bold: true, color: 'C00000' }),
                   new ExternalHyperlink({
-                    children: [new TextRun({ text: fileName, style: 'Hyperlink' })],
+                    children: [
+                      ...createWordIconChildren('pdf'),
+                      new TextRun({ text: fileName, style: 'Hyperlink' }),
+                    ],
                     link: buildCampaignImageDownloadUrl(row.creativeImageId),
                   }),
                 ]),
