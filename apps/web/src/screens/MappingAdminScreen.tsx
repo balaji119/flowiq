@@ -40,7 +40,7 @@ function formatSheetHeader(key: (typeof formatKeys)[number]) {
   return key.includes('-sheet') ? key.replace('-', ' ') : key;
 }
 
-export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShippingCosts, onOpenShippingSettings, onOpenUsers, tenantId }: MappingAdminScreenProps) {
+export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings, onOpenShippingCosts, onOpenShippingSettings, onOpenUsers, tenantId }: MappingAdminScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -299,6 +299,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
       onOpenLanding={onBack}
       onOpenMappings={() => {}}
       onOpenPrintingCosts={onOpenPrintingCosts}
+      onOpenSettings={onOpenSettings}
       onOpenShippingCosts={onOpenShippingCosts}
       onOpenShippingSettings={onOpenShippingSettings}
       onOpenUsers={onOpenUsers}
@@ -543,4 +544,3 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenShipping
     </AdminWorkspaceShell>
   );
 }
-

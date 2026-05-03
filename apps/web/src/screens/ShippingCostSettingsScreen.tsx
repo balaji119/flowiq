@@ -32,7 +32,7 @@ function emptyAssetShippingDraft(): AssetShippingDraft {
   };
 }
 
-export function ShippingCostSettingsScreen({ onBack, onOpenMappings, onOpenPrintingCosts, onOpenShippingSettings, onOpenUsers, tenantId }: ShippingCostSettingsScreenProps) {
+export function ShippingCostSettingsScreen({ onBack, onOpenMappings, onOpenPrintingCosts, onOpenSettings, onOpenShippingSettings, onOpenUsers, tenantId }: ShippingCostSettingsScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -382,6 +382,7 @@ export function ShippingCostSettingsScreen({ onBack, onOpenMappings, onOpenPrint
       onOpenLanding={onBack}
       onOpenMappings={onOpenMappings}
       onOpenPrintingCosts={onOpenPrintingCosts}
+      onOpenSettings={onOpenSettings}
       onOpenShippingCosts={() => {}}
       onOpenShippingSettings={onOpenShippingSettings}
       onOpenUsers={onOpenUsers}

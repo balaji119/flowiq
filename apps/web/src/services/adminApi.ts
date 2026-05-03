@@ -13,6 +13,8 @@ import {
   MarketShippingRateInput,
   MarketShippingRateRecord,
   PrintIqOptionsCacheStatus,
+  SheetNameOverrideRecord,
+  SheetNameOverrides,
   TenantRecord,
 } from '@flowiq/shared';
 import { apiFetchJson } from './apiClient';
@@ -175,6 +177,19 @@ export async function fetchMarketAssetShippingCosts(tenantId?: string) {
 export async function upsertMarketAssetShippingCosts(payload: { costs: MarketAssetShippingCostInput[] }, tenantId?: string) {
   const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
   return apiFetchJson<{ costs: MarketAssetShippingCostRecord[] }>(`/api/admin/market-asset-shipping-costs${query}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchAdminSheetNameOverrides(tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ settings: SheetNameOverrideRecord }>(`/api/admin/sheet-name-overrides${query}`);
+}
+
+export async function upsertAdminSheetNameOverrides(payload: { overrides: SheetNameOverrides }, tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ settings: SheetNameOverrideRecord }>(`/api/admin/sheet-name-overrides${query}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });

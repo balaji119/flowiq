@@ -12,9 +12,10 @@ import { PrintingCostSettingsScreen } from './src/screens/PrintingCostSettingsSc
 import { QuoteBuilderScreen } from './src/screens/QuoteBuilderScreen';
 import { ShippingCostSettingsScreen } from './src/screens/ShippingCostSettingsScreen';
 import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
 import { UserManagementScreen } from './src/screens/UserManagementScreen';
 
-type AppView = 'landing' | 'quote' | 'artwork' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs';
+type AppView = 'landing' | 'quote' | 'artwork' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings';
 
 type AppNavState = {
   view: AppView;
@@ -39,6 +40,7 @@ function parseView(raw: string | null): AppView {
   if (raw === 'shipping') return 'shipping';
   if (raw === 'shipping-costs') return 'shipping-costs';
   if (raw === 'printing-costs') return 'printing-costs';
+  if (raw === 'settings') return 'settings';
   if (raw === 'quote') return 'quote';
   if (raw === 'artwork') return 'artwork';
   if (raw === 'admin') return 'users';
@@ -141,6 +143,7 @@ function AppShell() {
         onOpenLanding={() => navigateTo('landing')}
         onOpenMappings={canAccessManagement ? () => navigateTo('mappings') : undefined}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenSettings={canAccessManagement ? () => navigateTo('settings') : undefined}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={canAccessManagement ? () => navigateTo('shipping') : undefined}
         onOpenUsers={canAccessManagement ? () => navigateTo('users') : undefined}
@@ -156,6 +159,7 @@ function AppShell() {
         onBack={() => navigateTo('landing')}
         onOpenMappings={() => navigateTo('mappings')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenSettings={() => navigateTo('settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={() => navigateTo('shipping')}
         tenantId={selectedAdminTenantId ?? session.user.tenantId ?? ''}
@@ -168,6 +172,7 @@ function AppShell() {
       <MappingAdminScreen
         onBack={() => navigateTo('landing')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenSettings={() => navigateTo('settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={() => navigateTo('shipping')}
         onOpenUsers={() => navigateTo('users')}
@@ -182,6 +187,7 @@ function AppShell() {
         onBack={() => navigateTo('landing')}
         onOpenMappings={() => navigateTo('mappings')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenSettings={() => navigateTo('settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenUsers={() => navigateTo('users')}
         tenantId={selectedAdminTenantId}
@@ -195,6 +201,21 @@ function AppShell() {
         onBack={() => navigateTo('landing')}
         onOpenMappings={() => navigateTo('mappings')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenSettings={() => navigateTo('settings')}
+        onOpenShippingSettings={() => navigateTo('shipping')}
+        onOpenUsers={() => navigateTo('users')}
+        tenantId={selectedAdminTenantId}
+      />
+    );
+  }
+
+  if (view === 'settings') {
+    return (
+      <SettingsScreen
+        onBack={() => navigateTo('landing')}
+        onOpenMappings={() => navigateTo('mappings')}
+        onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={() => navigateTo('shipping')}
         onOpenUsers={() => navigateTo('users')}
         tenantId={selectedAdminTenantId}

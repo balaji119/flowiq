@@ -15,6 +15,7 @@ import {
   MarketShippingRateRecord,
   OrderFormValues,
   QuantityBreakdown,
+  SheetNameOverrides,
   buildPrintIqPayload,
   createCampaignAsset,
   createCampaignMarket,
@@ -32,6 +33,8 @@ import { sendEmailToAds } from '../services/finalizeApi';
 import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
+import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
+import { resolveFormatName, resolveSheetName, sanitizeSheetNameOverrides } from '../services/sheetNameOverrides';
 import ExcelJS from 'exceljs';
 import { Document as WordDocument, ExternalHyperlink, ImageRun, LineRuleType, Packer, Paragraph, TextRun, UnderlineType } from 'docx';
 
@@ -128,19 +131,22 @@ function formatCurrency(value: number) {
   return `$${value.toFixed(2)}`;
 }
 
-function formatKeyLabel(key: (typeof formatKeys)[number]) {
-  if (key === 'Mega') return 'Megasite';
-  if (key === 'DOT M') return 'DOT Megasite';
-  if (key === 'MP') return 'Mega Portrait';
-  return key;
+function formatKeyLabel(key: (typeof formatKeys)[number], overrides: SheetNameOverrides = {}) {
+  const resolved = resolveFormatName(key, overrides);
+  if (key === 'Mega') return resolved;
+  if (key === 'DOT M') return resolved;
+  if (key === 'MP') return resolved;
+  return resolved;
 }
 
 const creativeFormatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'Mega', 'DOT M', 'MP'] as const;
 type CreativeFormatKey = (typeof creativeFormatKeys)[number];
 
-function creativeFormatLabel(key: CreativeFormatKey) {
-  if (key === '8-sheet') return '8-sheet / QA0';
-  return formatKeyLabel(key);
+function creativeFormatLabel(key: CreativeFormatKey, overrides: SheetNameOverrides = {}) {
+  if (key === '8-sheet') {
+    return `${resolveFormatName('8-sheet', overrides)} / ${resolveFormatName('QA0', overrides)}`;
+  }
+  return formatKeyLabel(key, overrides);
 }
 
 function toCreativeFormatKey(key: keyof QuantityBreakdown): CreativeFormatKey {
@@ -951,6 +957,7 @@ export function QuoteBuilderScreen({
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<MarketDeliveryAddressRecord[]>([]);
   const [marketShippingRates, setMarketShippingRates] = useState<MarketShippingRateRecord[]>([]);
   const [marketAssetPrintingCosts, setMarketAssetPrintingCosts] = useState<MarketAssetPrintingCostRecord[]>([]);
+  const [sheetNameOverrides, setSheetNameOverrides] = useState<SheetNameOverrides>({});
   const [marketAssetShippingCosts, setMarketAssetShippingCosts] = useState<MarketAssetShippingCostRecord[]>([]);
   const [metadataError, setMetadataError] = useState('');
   const [loadingMetadata, setLoadingMetadata] = useState(true);
@@ -1197,6 +1204,24 @@ export function QuoteBuilderScreen({
   }, []);
 
   useEffect(() => {
+    let active = true;
+    async function loadSheetNameOverrides() {
+      try {
+        const response = await fetchCampaignSheetNameOverrides();
+        if (!active) return;
+        setSheetNameOverrides(sanitizeSheetNameOverrides(response.settings.overrides));
+      } catch {
+        if (!active) return;
+        setSheetNameOverrides({});
+      }
+    }
+    void loadSheetNameOverrides();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (loadingCampaign) return;
 
     let active = true;
@@ -1229,6 +1254,10 @@ export function QuoteBuilderScreen({
   }, [loadingCampaign]);
 
   const payload = useMemo(() => buildPrintIqPayload(values, summary), [summary, values]);
+  const normalizedSheetNameOverrides = useMemo(
+    () => sanitizeSheetNameOverrides(sheetNameOverrides),
+    [sheetNameOverrides],
+  );
   const canAddAddressInFinalize = session?.user.role === 'admin' || session?.user.role === 'super_admin';
   const numberOfWeeks = Math.max(1, Math.min(20, Math.floor(Number(values.numberOfWeeks) || 1)));
   const marketNames = useMemo(() => markets.map((market) => market.name), [markets]);
@@ -2385,21 +2414,24 @@ export function QuoteBuilderScreen({
         return 20;
       };
 
+      const getSizeDisplayName = (key: keyof QuantityBreakdown) => {
+        if (key === '8-sheet') return resolveFormatName('8-sheet', normalizedSheetNameOverrides);
+        if (key === '6-sheet') return resolveFormatName('6-sheet', normalizedSheetNameOverrides);
+        if (key === '4-sheet') return resolveFormatName('4-sheet', normalizedSheetNameOverrides);
+        if (key === '2-sheet') return resolveFormatName('2-sheet', normalizedSheetNameOverrides);
+        if (key === 'QA0') return resolveFormatName('QA0', normalizedSheetNameOverrides);
+        if (key === 'Mega') return resolveFormatName('Mega', normalizedSheetNameOverrides);
+        if (key === 'DOT M') return resolveFormatName('DOT M', normalizedSheetNameOverrides);
+        return resolveFormatName('MP', normalizedSheetNameOverrides);
+      };
+
       const getDeliveryTypeLabel = (state: ExportState, key: keyof QuantityBreakdown) => {
         if (state === 'QLD') {
-          if (key === '8-sheet') return 'BRIS 8 SHEET';
-          if (key === '6-sheet') return 'BRIS 6 SHEET';
-          if (key === '4-sheet') return 'BRIS 4 SHEET';
-          if (key === '2-sheet') return 'BRIS 2 SHEET';
+          if (key === '8-sheet' || key === '6-sheet' || key === '4-sheet' || key === '2-sheet') {
+            return `BRIS ${getSizeDisplayName(key).toUpperCase()}`;
+          }
         }
-        if (key === '8-sheet') return '8 SHEET';
-        if (key === '6-sheet') return '6 SHEET';
-        if (key === '4-sheet') return '4 SHEET';
-        if (key === '2-sheet') return '2 SHEET';
-        if (key === 'QA0') return 'QA0';
-        if (key === 'Mega') return 'FERRO';
-        if (key === 'DOT M') return 'REFLECTIVE';
-        return 'MEGA PORT';
+        return getSizeDisplayName(key).toUpperCase();
       };
 
       const posterDivisors: Record<keyof QuantityBreakdown, number> = {
@@ -2417,10 +2449,10 @@ export function QuoteBuilderScreen({
         '6-sheet': 'posters',
         '4-sheet': 'posters',
         '2-sheet': 'posters',
-        QA0: 'A0 sized posters',
-        Mega: 'Mega',
-        'DOT M': 'DOT Mega',
-        MP: 'Mega Portrait',
+        QA0: 'posters',
+        Mega: resolveFormatName('Mega', normalizedSheetNameOverrides),
+        'DOT M': resolveFormatName('DOT M', normalizedSheetNameOverrides),
+        MP: resolveFormatName('MP', normalizedSheetNameOverrides),
       };
 
       // Collect delivery addresses from campaign data regardless of mapped creatives.
@@ -2501,11 +2533,12 @@ export function QuoteBuilderScreen({
           formatKeys.forEach((key) => {
             const quantity = breakdown[key] ?? 0;
             if (quantity <= 0) return;
+            const sizeDisplayName = getSizeDisplayName(key);
             if (key === 'Mega' || key === 'DOT M' || key === 'MP') {
               parts.push(`${quantity} x ${summaryLabels[key]}`);
               return;
             }
-            parts.push(`${quantity} ${summaryLabels[key]} (${quantity / posterDivisors[key]} x ${key})`);
+            parts.push(`${quantity} ${summaryLabels[key]} (${quantity / posterDivisors[key]} x ${sizeDisplayName})`);
           });
           return parts.length ? `Creative ${creativeNumber}: ${parts.join(' & ')}` : '';
         })
@@ -2670,6 +2703,18 @@ export function QuoteBuilderScreen({
 
         const typeCounts = new Map<string, number>();
         const creativeTypeByNumber = new Map<number, string>();
+        const resolveCreativeTypeLabel = (label: string) => {
+          if (label === 'Mini Mega') return resolveSheetName('Mini Mega', normalizedSheetNameOverrides, 'mini-mega');
+          if (label === '8-sheet') return resolveFormatName('8-sheet', normalizedSheetNameOverrides);
+          if (label === '6-sheet') return resolveFormatName('6-sheet', normalizedSheetNameOverrides);
+          if (label === '4-sheet') return resolveFormatName('4-sheet', normalizedSheetNameOverrides);
+          if (label === '2-sheet') return resolveFormatName('2-sheet', normalizedSheetNameOverrides);
+          if (label === 'QA0') return resolveFormatName('QA0', normalizedSheetNameOverrides);
+          if (label === 'Mega') return resolveFormatName('Mega', normalizedSheetNameOverrides);
+          if (label === 'DOT Mega') return resolveFormatName('DOT M', normalizedSheetNameOverrides);
+          if (label === 'Mega Portrait') return resolveFormatName('MP', normalizedSheetNameOverrides);
+          return label;
+        };
         Array.from(rowsByCreative.entries())
           .sort((a, b) => a[0] - b[0])
           .forEach(([creativeNumber, creativeRows]) => {
@@ -2678,35 +2723,28 @@ export function QuoteBuilderScreen({
             typeCounts.set(typeLabel, (typeCounts.get(typeLabel) ?? 0) + 1);
           });
 
-        const pluralizeTypeLabel = (label: string, count: number) => {
-          if (count === 1) return label;
-          if (label === '4-sheet') return '4-sheet';
-          if (label === 'QA0') return 'QA0';
-          if (label === 'Mini Mega') return 'Mini Megas';
-          if (label === 'Mega Portrait') return 'Mega Portraits';
-          if (label === 'DOT Mega') return 'DOT Megas';
-          if (label === 'Mega') return 'Megas';
-          return `${label}s`;
-        };
-
         const creativeHeadline = Array.from(typeCounts.entries())
           .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([label, count]) => `${count} x ${pluralizeTypeLabel(label, count)}`)
+          .map(([label, count]) => `${count} x ${resolveCreativeTypeLabel(label)}`)
           .join(', ') || 'No mapped creatives';
 
-        const quantityLabelForColumn = (column: number, creativeTypeLabel: string) => {
-          if (column === 9) return '8-sheet posters';
-          if (column === 10) return '6-sheet posters';
-          if (column === 11) return '4-sheet posters';
-          if (column === 12) return '2-sheet posters';
-          if (column === 13) return creativeTypeLabel === 'QA0' ? 'QA0' : 'A0 sized 4-sheet posters';
-          if (column === 14) return 'Brisbane sized 8-sheet posters';
-          if (column === 15) return 'Brisbane sized 6-sheet posters';
-          if (column === 16) return 'Brisbane sized 4-sheet posters';
-          if (column === 17) return 'Brisbane sized 2-sheet posters';
-          if (column === 18) return creativeTypeLabel === 'Mini Mega' ? 'Mini Mega' : 'Mega';
-          if (column === 19) return 'DOT Mega';
-          return 'Mega Portrait';
+        const quantityLabelForColumn = (column: number, rawCreativeTypeLabel: string) => {
+          if (column === 9) return `${resolveFormatName('8-sheet', normalizedSheetNameOverrides)} posters`;
+          if (column === 10) return `${resolveFormatName('6-sheet', normalizedSheetNameOverrides)} posters`;
+          if (column === 11) return `${resolveFormatName('4-sheet', normalizedSheetNameOverrides)} posters`;
+          if (column === 12) return `${resolveFormatName('2-sheet', normalizedSheetNameOverrides)} posters`;
+          if (column === 13) return rawCreativeTypeLabel === 'QA0'
+            ? resolveFormatName('QA0', normalizedSheetNameOverrides)
+            : `${resolveFormatName('QA0', normalizedSheetNameOverrides)} posters`;
+          if (column === 14) return `Brisbane sized ${resolveFormatName('8-sheet', normalizedSheetNameOverrides)} posters`;
+          if (column === 15) return `Brisbane sized ${resolveFormatName('6-sheet', normalizedSheetNameOverrides)} posters`;
+          if (column === 16) return `Brisbane sized ${resolveFormatName('4-sheet', normalizedSheetNameOverrides)} posters`;
+          if (column === 17) return `Brisbane sized ${resolveFormatName('2-sheet', normalizedSheetNameOverrides)} posters`;
+          if (column === 18) return rawCreativeTypeLabel === 'Mini Mega'
+            ? resolveCreativeTypeLabel('Mini Mega')
+            : resolveFormatName('Mega', normalizedSheetNameOverrides);
+          if (column === 19) return resolveFormatName('DOT M', normalizedSheetNameOverrides);
+          return resolveFormatName('MP', normalizedSheetNameOverrides);
         };
 
         const resolveCreativeFileName = (creativeImageId: string, fallbackBaseName: string) => {
@@ -2733,12 +2771,12 @@ export function QuoteBuilderScreen({
           .sort((a, b) => a[0] - b[0])
           .forEach(([creativeNumber, creativeRows]) => {
             const totals = rowTotals(creativeRows);
-            const creativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
+            const rawCreativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
             const parts = quantityColumns
               .map((column) => {
                 const quantity = totals.get(column) ?? 0;
                 if (quantity <= 0) return '';
-                return `${quantity} x ${quantityLabelForColumn(column, creativeTypeLabel)}`;
+                return `${quantity} x ${quantityLabelForColumn(column, rawCreativeTypeLabel)}`;
               })
               .filter(Boolean);
             quantityPartsByCreative.set(creativeNumber, parts);
@@ -2847,7 +2885,7 @@ export function QuoteBuilderScreen({
         Array.from(rowsByCreative.entries())
           .sort((a, b) => a[0] - b[0])
           .forEach(([creativeNumber]) => {
-            const creativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
+            const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
             const labelText = `Creative ${creativeNumber} (${creativeTypeLabel}): `;
             const summary = (quantityPartsByCreative.get(creativeNumber) ?? []).join(' & ');
             paragraphs.push(
@@ -2865,13 +2903,14 @@ export function QuoteBuilderScreen({
         Array.from(rowsByCreative.entries())
           .sort((a, b) => a[0] - b[0])
           .forEach(([creativeNumber, creativeRows]) => {
-            const creativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
+            const rawCreativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
+            const creativeTypeLabel = resolveCreativeTypeLabel(rawCreativeTypeLabel);
             const headerText = `Creative ${creativeNumber} (${creativeTypeLabel}):`;
             const pageNumber = miniMegaPageByCreativeNumber.get(creativeNumber);
             const firstCreativeImageId = creativeRows[0]?.creativeImageId || '';
             const preview = creativePreviewById.get(firstCreativeImageId);
 
-            if (creativeTypeLabel === 'Mini Mega' && creativeRows.length > 0) {
+            if (rawCreativeTypeLabel === 'Mini Mega' && creativeRows.length > 0) {
               const fileName = resolveCreativeFileName(firstCreativeImageId, creativeRows[0].fileName);
               const pageSuffix = pageNumber ? ` PAGE ${pageNumber}` : '';
               paragraphs.push(
@@ -2943,23 +2982,26 @@ export function QuoteBuilderScreen({
         }[]>();
         const deliveryLabelFromType = (typeLabel: string) => {
           const normalized = typeLabel.trim().toUpperCase();
-          if (normalized === '8 SHEET') return '8-sheet posters';
-          if (normalized === '6 SHEET') return '6-sheet posters';
-          if (normalized === '4 SHEET') return '4-sheet posters';
-          if (normalized === '2 SHEET') return '2-sheet posters';
-          if (normalized === 'QA0') return 'QA0';
-          if (normalized === 'BRIS 8 SHEET') return 'Brisbane sized 8-sheet posters';
-          if (normalized === 'BRIS 6 SHEET') return 'Brisbane sized 6-sheet posters';
-          if (normalized === 'BRIS 4 SHEET') return 'Brisbane sized 4-sheet posters';
-          if (normalized === 'BRIS 2 SHEET') return 'Brisbane sized 2-sheet posters';
-          if (normalized === 'FERRO') return 'Mega';
-          if (normalized === 'REFLECTIVE') return 'DOT Mega';
-          return 'Mega Portrait';
+          const namesByUpper = new Map<string, string>([
+            [resolveFormatName('8-sheet', normalizedSheetNameOverrides).toUpperCase(), `${resolveFormatName('8-sheet', normalizedSheetNameOverrides)} posters`],
+            [resolveFormatName('6-sheet', normalizedSheetNameOverrides).toUpperCase(), `${resolveFormatName('6-sheet', normalizedSheetNameOverrides)} posters`],
+            [resolveFormatName('4-sheet', normalizedSheetNameOverrides).toUpperCase(), `${resolveFormatName('4-sheet', normalizedSheetNameOverrides)} posters`],
+            [resolveFormatName('2-sheet', normalizedSheetNameOverrides).toUpperCase(), `${resolveFormatName('2-sheet', normalizedSheetNameOverrides)} posters`],
+            [resolveFormatName('QA0', normalizedSheetNameOverrides).toUpperCase(), resolveFormatName('QA0', normalizedSheetNameOverrides)],
+            [resolveFormatName('Mega', normalizedSheetNameOverrides).toUpperCase(), resolveFormatName('Mega', normalizedSheetNameOverrides)],
+            [resolveFormatName('DOT M', normalizedSheetNameOverrides).toUpperCase(), resolveFormatName('DOT M', normalizedSheetNameOverrides)],
+            [resolveFormatName('MP', normalizedSheetNameOverrides).toUpperCase(), resolveFormatName('MP', normalizedSheetNameOverrides)],
+          ]);
+          if (normalized.startsWith('BRIS ')) {
+            const brisLabel = namesByUpper.get(normalized.slice(5));
+            return brisLabel ? `Brisbane sized ${brisLabel}` : `Brisbane sized ${normalized.slice(5)}`;
+          }
+          return namesByUpper.get(normalized) || normalized;
         };
 
         Array.from(deliveryRows.values()).forEach((row) => {
           const creativeNumber = getCreativeNumberFromCode(row.creativeCode);
-          const creativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
+          const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
           const destinationKey = row.deliveredTo || 'DELIVERY';
           const creativeBucket = deliveryByDestination.get(destinationKey) ?? [];
           let creativeEntry = creativeBucket.find((entry) => entry.creativeNumber === creativeNumber);
@@ -3472,7 +3514,7 @@ export function QuoteBuilderScreen({
     setExportProgressMessage('Preparing export for email...');
 
     try {
-      const generatedFiles = await generateArtworkTemplates(false, 'excel');
+      const generatedFiles = await generateArtworkTemplates(false, VISUALS_EXPORT_MODE);
       const files = generatedFiles.map(
         (generatedFile) =>
           new File([generatedFile.blob], generatedFile.fileName, {
@@ -3489,13 +3531,82 @@ export function QuoteBuilderScreen({
           }),
         ),
       );
-      const creativeLinks = values.printImages
+      const toCreativeFileGroupKey = (fileName: string) => {
+        const normalizedFileName = (fileName || '').trim();
+        const fromFile = normalizedFileName.replace(/\.[^.]+$/, '').replace(/-page-\d+$/i, '').trim();
+        return (fromFile || 'artwork').toLowerCase();
+      };
+      const normalizePdfFileName = (image: CampaignPrintImage, fallbackBaseName = 'Artwork') => {
+        const rawPdfFileName = (image.sourcePdfFileName || '').trim();
+        if (rawPdfFileName) {
+          return /\.pdf$/i.test(rawPdfFileName) ? rawPdfFileName : `${rawPdfFileName}.pdf`;
+        }
+        const rawName = (image.name || '').trim().replace(/\s*\(Page\s+\d+\)\s*$/i, '').trim();
+        if (rawName) {
+          return /\.pdf$/i.test(rawName) ? rawName : `${rawName}.pdf`;
+        }
+        const rawFileName = (image.fileName || '').trim();
+        if (rawFileName) {
+          const base = rawFileName.replace(/\.[^.]+$/, '').replace(/-page-\d+$/i, '').trim();
+          if (base) return `${base}.pdf`;
+        }
+        const fallbackBase = fallbackBaseName.replace(/\.[^.]+$/, '').replace(/-page-\d+$/i, '').trim();
+        return `${fallbackBase || 'Artwork'}.pdf`;
+      };
+      const getStoredNameFromUrl = (url: string) => {
+        const resolved = toAbsoluteUrl(buildApiUrl(url || ''));
+        if (!resolved) return '';
+        try {
+          const parsed = new URL(resolved, window.location.origin);
+          const segments = parsed.pathname.split('/').filter(Boolean);
+          const storedName = segments[segments.length - 1] || '';
+          return decodeURIComponent(storedName);
+        } catch {
+          const segments = resolved.split('/').filter(Boolean);
+          return decodeURIComponent(segments[segments.length - 1] || '');
+        }
+      };
+      const buildPdfDownloadUrl = (storedName: string, fileName: string) => {
+        const cleanedStoredName = storedName.trim();
+        if (!cleanedStoredName) return '';
+        const downloadUrl = new URL(toAbsoluteUrl(buildApiUrl(`/api/campaign-images/${encodeURIComponent(cleanedStoredName)}/download`)));
+        downloadUrl.searchParams.set('filename', fileName);
+        return downloadUrl.toString();
+      };
+      const sourcePdfByGroupKey = new Map<string, { fileName: string; url: string; storedName: string }>();
+      values.printImages.forEach((image) => {
+        const sourceStoredName = (image.sourcePdfStoredName || '').trim()
+          || getStoredNameFromUrl(image.sourcePdfUrl || '');
+        if (!sourceStoredName) return;
+        const sourceName = normalizePdfFileName(image, image.fileName || image.name || 'Artwork');
+        const sourceUrl = buildPdfDownloadUrl(sourceStoredName, sourceName);
+        if (!sourceUrl) return;
+        const key = toCreativeFileGroupKey(image.fileName || image.name || '');
+        if (!sourcePdfByGroupKey.has(key)) {
+          sourcePdfByGroupKey.set(key, { fileName: sourceName, url: sourceUrl, storedName: sourceStoredName });
+        }
+      });
+      const creativeLinksByUrl = new Map<string, { name: string; url: string }>();
+      values.printImages
         .filter((image) => usedCreativeImageIds.has(image.id))
-        .map((image) => ({
-          name: image.name || image.fileName || 'Creative',
-          url: toAbsoluteUrl(buildApiUrl(image.imageUrl || '')),
-        }))
-        .filter((link) => Boolean(link.url.trim()));
+        .forEach((image) => {
+          const sourceStoredName = (image.sourcePdfStoredName || '').trim()
+            || getStoredNameFromUrl(image.sourcePdfUrl || '');
+          const sourceFileName = normalizePdfFileName(image, image.fileName || image.name || 'Artwork');
+          const directSourceUrl = sourceStoredName ? buildPdfDownloadUrl(sourceStoredName, sourceFileName) : '';
+          const key = toCreativeFileGroupKey(image.fileName || image.name || '');
+          const groupedSource = sourcePdfByGroupKey.get(key);
+
+          const linkUrl = directSourceUrl || groupedSource?.url || '';
+          if (!linkUrl.trim()) {
+            return;
+          }
+          const linkName = sourceStoredName ? sourceFileName : (groupedSource?.fileName || sourceFileName);
+          if (!creativeLinksByUrl.has(linkUrl)) {
+            creativeLinksByUrl.set(linkUrl, { name: linkName, url: linkUrl });
+          }
+        });
+      const creativeLinks = Array.from(creativeLinksByUrl.values());
       setExportProgressMessage('Sending email to ADS...');
       await sendEmailToAds(files, values.campaignName, creativeLinks);
       setExportProgressMessage('Email sent to ADS.');
@@ -3826,7 +3937,7 @@ export function QuoteBuilderScreen({
                                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                                       <th className="border border-slate-700 px-4 py-3 text-left">Type</th>
                                       {visibleMarketFormatKeys.map((key) => (
-                                        <th key={`schedule-market-head-${market.id}-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatKeyLabel(key)}</th>
+                                        <th key={`schedule-market-head-${market.id}-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatKeyLabel(key, normalizedSheetNameOverrides)}</th>
                                       ))}
                                       <th className="border border-slate-700 px-4 py-3 text-center">Total</th>
                                     </tr>
@@ -3922,7 +4033,7 @@ export function QuoteBuilderScreen({
                                           ) : null}
                                           <td className="px-4 py-3">
                                             {formatKey ? (
-                                              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">{creativeFormatLabel(formatKey)}</p>
+                                              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">{creativeFormatLabel(formatKey, normalizedSheetNameOverrides)}</p>
                                             ) : (
                                               <p className="text-sm text-slate-400">No active quantity formats</p>
                                             )}
@@ -4025,7 +4136,7 @@ export function QuoteBuilderScreen({
                             <th className="sticky left-0 z-40 border border-slate-700 bg-slate-950 px-3 py-2 text-left whitespace-nowrap">Market</th>
                             <th className="sticky left-[112px] z-40 border border-slate-700 bg-slate-950 px-3 py-2 text-left whitespace-nowrap">Type</th>
                             {visibleReviewFormatKeys.map((key) => (
-                              <th key={`review-head-${key}`} className="border border-slate-700 px-3 py-2 text-center">{formatKeyLabel(key)}</th>
+                              <th key={`review-head-${key}`} className="border border-slate-700 px-3 py-2 text-center">{formatKeyLabel(key, normalizedSheetNameOverrides)}</th>
                             ))}
                             <th className="sticky right-0 z-40 border border-slate-700 bg-slate-950 px-3 py-2 text-center whitespace-nowrap">Total</th>
                           </tr>
@@ -4222,7 +4333,7 @@ export function QuoteBuilderScreen({
                     <th className="border border-slate-700 px-3 py-2 text-left">Market</th>
                     <th className="border border-slate-700 px-3 py-2 text-left">Type</th>
                     {visibleReviewFormatKeys.map((key) => (
-                      <th key={`expanded-review-head-${key}`} className="border border-slate-700 px-3 py-2 text-center">{formatKeyLabel(key)}</th>
+                      <th key={`expanded-review-head-${key}`} className="border border-slate-700 px-3 py-2 text-center">{formatKeyLabel(key, normalizedSheetNameOverrides)}</th>
                     ))}
                     <th className="border border-slate-700 px-3 py-2 text-center">Total</th>
                   </tr>
@@ -4420,7 +4531,7 @@ export function QuoteBuilderScreen({
                               {formatKeys
                                 .filter((key) => (draftMarketSummary.breakdown[key] ?? 0) > 0)
                                 .map((key) => (
-                                  <th key={`draft-market-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatKeyLabel(key)}</th>
+                                  <th key={`draft-market-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatKeyLabel(key, normalizedSheetNameOverrides)}</th>
                                 ))}
                               <th className="border border-slate-700 px-4 py-3 text-center">Total</th>
                             </tr>
@@ -4641,7 +4752,6 @@ export function QuoteBuilderScreen({
                   </div>
                   <div className="border-t border-slate-700 px-3 py-2">
                     <p className="truncate text-sm font-semibold text-slate-100">{previewArtworkImage.name || previewArtworkImage.fileName}</p>
-                    <p className="truncate text-xs text-slate-400">{previewArtworkImage.fileName}</p>
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">

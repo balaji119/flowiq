@@ -46,6 +46,15 @@ export type TenantRecord = {
   createdAt?: string;
 };
 
+export type SheetNameOverrides = Record<string, string>;
+
+export type SheetNameOverrideRecord = {
+  tenantId: string;
+  overrides: SheetNameOverrides;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type PrintIqOptionsCacheBucket = {
   cached: boolean;
   count: number;

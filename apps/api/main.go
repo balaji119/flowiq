@@ -248,6 +248,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/market-shipping-rates", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketShippingRates)))
 	mux.Handle("GET /api/market-asset-shipping-costs", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketAssetShippingCosts)))
 	mux.Handle("GET /api/market-asset-printing-costs", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketAssetPrintingCosts)))
+	mux.Handle("GET /api/sheet-name-overrides", a.withAuth(http.HandlerFunc(a.handleGetCampaignSheetNameOverrides)))
 	mux.Handle("GET /api/calculator/metadata", a.withAuth(http.HandlerFunc(a.handleCalculatorMetadata)))
 	mux.Handle("POST /api/calculator/calculate", a.withAuth(http.HandlerFunc(a.handleCalculateCampaign)))
 	mux.Handle("GET /api/printiq/options/quote-form", a.withAuth(http.HandlerFunc(a.handleQuoteFormOptions)))
@@ -284,6 +285,8 @@ func (a *app) routes() http.Handler {
 	mux.Handle("PUT /api/admin/market-asset-shipping-costs", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMarketAssetShippingCosts), "super_admin")))
 	mux.Handle("GET /api/admin/market-asset-printing-costs", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListMarketAssetPrintingCosts), "super_admin")))
 	mux.Handle("PUT /api/admin/market-asset-printing-costs", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMarketAssetPrintingCosts), "super_admin")))
+	mux.Handle("GET /api/admin/sheet-name-overrides", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleGetSheetNameOverrides), "super_admin", "admin")))
+	mux.Handle("PUT /api/admin/sheet-name-overrides", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertSheetNameOverrides), "super_admin", "admin")))
 	mux.Handle("GET /api/admin/printiq-options/status", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleOptionsStatus), "super_admin")))
 	mux.Handle("POST /api/admin/printiq-options/refresh", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleRefreshOptions), "super_admin")))
 
@@ -1089,6 +1092,21 @@ func (a *app) handleListCampaignMarketAssetShippingCosts(w http.ResponseWriter, 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"costs": records})
+}
+
+func (a *app) handleGetCampaignSheetNameOverrides(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	if user == nil || user.TenantID == nil || strings.TrimSpace(*user.TenantID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenantId is required"})
+		return
+	}
+
+	record, err := a.mappingStore.listSheetNameOverrides(r.Context(), *user.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"settings": record})
 }
 
 var unsafeFilenamePattern = regexp.MustCompile(`[^a-zA-Z0-9-_]`)
@@ -2026,4 +2044,45 @@ func (a *app) handleUpsertMarketAssetShippingCosts(w http.ResponseWriter, r *htt
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"costs": records})
+}
+
+func (a *app) handleGetSheetNameOverrides(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	record, err := a.mappingStore.listSheetNameOverrides(r.Context(), *tenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"settings": record})
+}
+
+func (a *app) handleUpsertSheetNameOverrides(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var payload struct {
+		Overrides sheetNameOverrides `json:"overrides"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	if payload.Overrides == nil {
+		payload.Overrides = sheetNameOverrides{}
+	}
+
+	record, err := a.mappingStore.upsertSheetNameOverrides(r.Context(), *tenantID, payload.Overrides)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"settings": record})
 }

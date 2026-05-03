@@ -88,6 +88,13 @@ type marketAssetShippingCostRow struct {
 	UpdatedAt        time.Time
 }
 
+type sheetNameOverrideRow struct {
+	TenantID  string
+	Overrides []byte
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 func newMappingStore(pool *pgxpool.Pool) *mappingStore {
 	return &mappingStore{pool: pool}
 }
@@ -392,6 +399,102 @@ func decodeMarketAssetShippingCostRow(row marketAssetShippingCostRow) marketAsse
 		CreatedAt:        row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+func scanSheetNameOverrideRow(scanner interface {
+	Scan(dest ...any) error
+}) (sheetNameOverrideRow, error) {
+	var row sheetNameOverrideRow
+	err := scanner.Scan(
+		&row.TenantID,
+		&row.Overrides,
+		&row.CreatedAt,
+		&row.UpdatedAt,
+	)
+	return row, err
+}
+
+func normalizeSheetNameOverrides(input sheetNameOverrides) sheetNameOverrides {
+	normalized := sheetNameOverrides{}
+	for key, value := range input {
+		trimmedKey := strings.TrimSpace(key)
+		trimmedValue := strings.TrimSpace(value)
+		if trimmedKey == "" || trimmedValue == "" {
+			continue
+		}
+		normalized[trimmedKey] = trimmedValue
+	}
+	return normalized
+}
+
+func decodeSheetNameOverrideRow(row sheetNameOverrideRow) (sheetNameOverrideRecord, error) {
+	overrides := sheetNameOverrides{}
+	if len(row.Overrides) > 0 {
+		if err := json.Unmarshal(row.Overrides, &overrides); err != nil {
+			return sheetNameOverrideRecord{}, err
+		}
+	}
+	return sheetNameOverrideRecord{
+		TenantID:  row.TenantID,
+		Overrides: normalizeSheetNameOverrides(overrides),
+		CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339),
+	}, nil
+}
+
+func (s *mappingStore) listSheetNameOverrides(ctx context.Context, tenantID string) (*sheetNameOverrideRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
+	row, err := scanSheetNameOverrideRow(s.pool.QueryRow(ctx, `
+		SELECT tenant_id, overrides, created_at, updated_at
+		FROM sheet_name_overrides
+		WHERE tenant_id = $1
+	`, tenantID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return s.upsertSheetNameOverrides(ctx, tenantID, defaultSheetNameOverrides())
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	record, err := decodeSheetNameOverrideRow(row)
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
+func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID string, overrides sheetNameOverrides) (*sheetNameOverrideRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
+	normalized := normalizeSheetNameOverrides(overrides)
+	overridesJSON, err := json.Marshal(normalized)
+	if err != nil {
+		return nil, err
+	}
+
+	row, err := scanSheetNameOverrideRow(s.pool.QueryRow(ctx, `
+		INSERT INTO sheet_name_overrides (tenant_id, overrides, created_at, updated_at)
+		VALUES ($1, $2::jsonb, NOW(), NOW())
+		ON CONFLICT (tenant_id)
+		DO UPDATE SET
+			overrides = EXCLUDED.overrides,
+			updated_at = NOW()
+		RETURNING tenant_id, overrides, created_at, updated_at
+	`, tenantID, string(overridesJSON)))
+	if err != nil {
+		return nil, err
+	}
+
+	record, err := decodeSheetNameOverrideRow(row)
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
 }
 
 func (s *mappingStore) ensureMarket(ctx context.Context, tenantID, marketName string) (string, error) {

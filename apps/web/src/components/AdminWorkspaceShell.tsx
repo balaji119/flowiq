@@ -1,9 +1,9 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronRight, CircleDollarSign, Database, Home, LogOut, MapPin, Truck, Users } from 'lucide-react';
+import { ArrowLeft, ChevronRight, CircleDollarSign, Database, Home, LogOut, MapPin, Settings, Truck, Users } from 'lucide-react';
 import { cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 
-export type AdminWorkspaceSection = 'landing' | 'quote' | 'artwork' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs';
+export type AdminWorkspaceSection = 'landing' | 'quote' | 'artwork' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings';
 
 export type AdminWorkspaceHandlers = {
   onBack?: () => void;
@@ -13,6 +13,7 @@ export type AdminWorkspaceHandlers = {
   onOpenShippingSettings?: () => void;
   onOpenShippingCosts?: () => void;
   onOpenPrintingCosts?: () => void;
+  onOpenSettings?: () => void;
 };
 
 type AdminWorkspaceShellProps = AdminWorkspaceHandlers & {
@@ -48,6 +49,7 @@ export function AdminWorkspaceShell({
   onOpenShippingSettings,
   onOpenShippingCosts,
   onOpenPrintingCosts,
+  onOpenSettings,
   children,
 }: AdminWorkspaceShellProps) {
   const { session, logout } = useAuth();
@@ -124,6 +126,9 @@ export function AdminWorkspaceShell({
   }
   if (canAccessManagement && onOpenShippingSettings) {
     items.push({ id: 'shipping', label: 'Shipping Address', icon: <MapPin className="h-[22px] w-[22px]" />, onClick: onOpenShippingSettings });
+  }
+  if (canAccessManagement && onOpenSettings) {
+    items.push({ id: 'settings', label: 'Settings', icon: <Settings className="h-[22px] w-[22px]" />, onClick: onOpenSettings });
   }
   if (canAccessShippingCosts && onOpenShippingCosts) {
     items.push({ id: 'shipping-costs', label: 'Shipping Cost', icon: <Truck className="h-[22px] w-[22px]" />, onClick: onOpenShippingCosts });

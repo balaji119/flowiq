@@ -84,6 +84,7 @@ export function UserManagementScreen({
   onBack,
   onOpenMappings,
   onOpenPrintingCosts,
+  onOpenSettings,
   onOpenShippingSettings,
   onOpenShippingCosts,
   tenantId,
@@ -346,6 +347,7 @@ export function UserManagementScreen({
       onOpenLanding={onBack}
       onOpenMappings={onOpenMappings}
       onOpenPrintingCosts={onOpenPrintingCosts}
+      onOpenSettings={onOpenSettings}
       onOpenShippingCosts={onOpenShippingCosts}
       onOpenShippingSettings={onOpenShippingSettings}
       onOpenUsers={() => {}}

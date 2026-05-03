@@ -268,6 +268,17 @@ func (s *authStore) createTenant(name string) (*TenantRecord, error) {
 	`, tenant.ID, tenant.Name); err != nil {
 		return nil, err
 	}
+	defaultOverridesJSON, err := defaultSheetNameOverridesJSON()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.pool.Exec(context.Background(), `
+		INSERT INTO sheet_name_overrides (tenant_id, overrides, created_at, updated_at)
+		VALUES ($1, $2::jsonb, NOW(), NOW())
+		ON CONFLICT (tenant_id) DO NOTHING
+	`, tenant.ID, defaultOverridesJSON); err != nil {
+		return nil, err
+	}
 	return &tenant, nil
 }
 

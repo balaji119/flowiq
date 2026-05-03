@@ -19,6 +19,15 @@ type TenantRecord struct {
 	CreatedAt string `json:"createdAt,omitempty"`
 }
 
+type sheetNameOverrides map[string]string
+
+type sheetNameOverrideRecord struct {
+	TenantID  string             `json:"tenantId"`
+	Overrides sheetNameOverrides `json:"overrides"`
+	CreatedAt string             `json:"createdAt"`
+	UpdatedAt string             `json:"updatedAt"`
+}
+
 type AuthUser struct {
 	ID         string  `json:"id"`
 	Email      string  `json:"email"`
