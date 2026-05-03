@@ -4,6 +4,7 @@ import { Button } from '@flowiq/ui';
 import { CampaignRecord } from '@flowiq/shared';
 import { buildApiUrl } from '../services/apiBase';
 import { fetchCampaign } from '../services/campaignApi';
+import { PDFDocument } from 'pdf-lib';
 
 type CampaignArtworkFolderScreenProps = {
   campaignId: string | null;
@@ -23,18 +24,6 @@ function toAbsoluteUrl(url: string) {
     }
   }
   return trimmed;
-}
-
-function extensionFromName(fileName: string) {
-  const dotIndex = fileName.lastIndexOf('.');
-  if (dotIndex <= 0 || dotIndex === fileName.length - 1) return '';
-  return fileName.slice(dotIndex + 1).toUpperCase();
-}
-
-function isPdfAsset(fileName: string, mimeType: string) {
-  const lowerName = fileName.toLowerCase();
-  const lowerMime = (mimeType || '').toLowerCase();
-  return lowerMime === 'application/pdf' || lowerName.endsWith('.pdf');
 }
 
 function triggerDownload(href: string, fileName: string) {
@@ -63,6 +52,52 @@ function apiFileDownloadUrl(url: string, fileName: string) {
   const apiUrl = new URL(`/api/campaign-images/${encodeURIComponent(storedName)}/download`, window.location.origin);
   apiUrl.searchParams.set('filename', fileName);
   return apiUrl.toString();
+}
+
+function toPdfGroupKey(name: string, fileName: string) {
+  const normalizedName = (name || '').trim();
+  const normalizedFileName = (fileName || '').trim();
+  const fromName = normalizedName.replace(/\s*\(Page\s+\d+\)\s*$/i, '').trim();
+  if (fromName) return fromName;
+  const fromFile = normalizedFileName.replace(/\.[^.]+$/, '').replace(/-page-\d+$/i, '').trim();
+  return fromFile || 'Artwork';
+}
+
+function toPdfFileName(groupKey: string) {
+  const trimmed = groupKey.trim();
+  if (!trimmed) return 'Artwork.pdf';
+  return /\.pdf$/i.test(trimmed) ? trimmed : `${trimmed}.pdf`;
+}
+
+function getPageNumber(name: string, fileName: string) {
+  const fromName = name.match(/\(Page\s+(\d+)\)/i);
+  if (fromName) return Number.parseInt(fromName[1], 10) || 1;
+  const fromFile = fileName.match(/-page-(\d+)/i);
+  if (fromFile) return Number.parseInt(fromFile[1], 10) || 1;
+  return 1;
+}
+
+async function createPdfFromImagePages(
+  pages: Array<{ url: string; fileName: string; mimeType: string }>,
+) {
+  const pdfDoc = await PDFDocument.create();
+  for (const page of pages) {
+    const response = await fetch(page.url, { cache: 'no-store' });
+    if (!response.ok) continue;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const mimeType = (page.mimeType || '').toLowerCase();
+    const lowerName = page.fileName.toLowerCase();
+    const isJpeg = mimeType.includes('jpeg') || mimeType.includes('jpg') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg');
+    const embedded = isJpeg ? await pdfDoc.embedJpg(bytes) : await pdfDoc.embedPng(bytes);
+    const pageRef = pdfDoc.addPage([embedded.width, embedded.height]);
+    pageRef.drawImage(embedded, {
+      x: 0,
+      y: 0,
+      width: embedded.width,
+      height: embedded.height,
+    });
+  }
+  return pdfDoc.save();
 }
 
 export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign }: CampaignArtworkFolderScreenProps) {
@@ -100,48 +135,98 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
   }, [campaignId]);
 
   const artworkFiles = useMemo(() => {
-    return (campaign?.values.printImages ?? []).map((image) => {
+    const grouped = new Map<string, {
+      key: string;
+      fileName: string;
+      thumbnailUrl: string;
+      pages: Array<{ id: string; url: string; fileName: string; mimeType: string; pageNumber: number }>;
+    }>();
+
+    (campaign?.values.printImages ?? []).forEach((image) => {
       const fileName = image.fileName || image.name || 'Artwork';
-      const resolvedUrl = toAbsoluteUrl(buildApiUrl(image.imageUrl || ''));
-      const mimeType = image.mimeType || 'application/octet-stream';
-      return {
-        id: image.id,
-        name: image.name || fileName,
-        fileName,
-        url: resolvedUrl,
+      const url = toAbsoluteUrl(buildApiUrl(image.imageUrl || ''));
+      if (!url) return;
+      const key = toPdfGroupKey(image.name || '', fileName);
+      const pageNumber = getPageNumber(image.name || '', fileName);
+      const current = grouped.get(key) ?? {
+        key,
+        fileName: toPdfFileName(key),
         thumbnailUrl: image.thumbnailUrl ? toAbsoluteUrl(buildApiUrl(image.thumbnailUrl)) : '',
-        mimeType,
+        pages: [],
       };
-    }).filter((file) => isPdfAsset(file.fileName, file.mimeType));
+      if (!current.thumbnailUrl && image.thumbnailUrl) {
+        current.thumbnailUrl = toAbsoluteUrl(buildApiUrl(image.thumbnailUrl));
+      }
+      current.pages.push({
+        id: image.id,
+        url,
+        fileName,
+        mimeType: image.mimeType || 'application/octet-stream',
+        pageNumber,
+      });
+      grouped.set(key, current);
+    });
+
+    return Array.from(grouped.values())
+      .map((group) => ({
+        ...group,
+        pages: [...group.pages].sort((a, b) => a.pageNumber - b.pageNumber),
+      }))
+      .sort((a, b) => a.fileName.localeCompare(b.fileName));
   }, [campaign]);
 
-  function openFile(url: string) {
-    if (!url) return;
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
-
-  function downloadFile(url: string, fileName: string) {
-    if (!url) return;
+  function openFile(group: { fileName: string; pages: Array<{ url: string; fileName: string; mimeType: string }> }) {
     void (async () => {
       setError('');
-      const directDownloadUrl = campaignFileDownloadUrl(url);
-      const fallbackApiUrl = apiFileDownloadUrl(url, fileName);
-      if (!directDownloadUrl || !fallbackApiUrl) {
-        setError('Invalid file URL');
-        return;
-      }
-
       try {
-        const probe = await fetch(directDownloadUrl, { method: 'HEAD', cache: 'no-store' });
-        if (probe.ok) {
-          triggerDownload(directDownloadUrl, fileName);
+        if (group.pages.length === 1 && group.pages[0].mimeType.toLowerCase() === 'application/pdf') {
+          window.open(group.pages[0].url, '_blank', 'noopener,noreferrer');
           return;
         }
-      } catch {
-        // Fall back to API download endpoint below.
+        const pdfBytes = await createPdfFromImagePages(group.pages);
+        const pdfBuffer = new Uint8Array(pdfBytes).buffer;
+        const pdfBlob = new Blob([pdfBuffer], { type: 'application/pdf' });
+        const objectUrl = URL.createObjectURL(pdfBlob);
+        window.open(objectUrl, '_blank', 'noopener,noreferrer');
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
+      } catch (openError) {
+        setError(openError instanceof Error ? openError.message : 'Unable to open artwork PDF');
       }
+    })();
+  }
 
-      triggerDownload(fallbackApiUrl, fileName);
+  function downloadFile(group: { fileName: string; pages: Array<{ url: string; fileName: string; mimeType: string }> }) {
+    void (async () => {
+      setError('');
+      try {
+        if (group.pages.length === 1 && group.pages[0].mimeType.toLowerCase() === 'application/pdf') {
+          const directDownloadUrl = campaignFileDownloadUrl(group.pages[0].url);
+          const fallbackApiUrl = apiFileDownloadUrl(group.pages[0].url, group.fileName);
+          if (!directDownloadUrl || !fallbackApiUrl) {
+            setError('Invalid file URL');
+            return;
+          }
+          try {
+            const probe = await fetch(directDownloadUrl, { method: 'HEAD', cache: 'no-store' });
+            if (probe.ok) {
+              triggerDownload(directDownloadUrl, group.fileName);
+              return;
+            }
+          } catch {
+            // fall through to fallback
+          }
+          triggerDownload(fallbackApiUrl, group.fileName);
+          return;
+        }
+        const pdfBytes = await createPdfFromImagePages(group.pages);
+        const pdfBuffer = new Uint8Array(pdfBytes).buffer;
+        const pdfBlob = new Blob([pdfBuffer], { type: 'application/pdf' });
+        const objectUrl = URL.createObjectURL(pdfBlob);
+        triggerDownload(objectUrl, group.fileName);
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
+      } catch (downloadError) {
+        setError(downloadError instanceof Error ? downloadError.message : 'Unable to download artwork PDF');
+      }
     })();
   }
 
@@ -176,7 +261,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
         </div>
       ) : artworkFiles.length === 0 ? (
         <div className="rounded-md border border-slate-700 bg-slate-900/70 px-4 py-8 text-center text-sm text-slate-300">
-          No artwork PDF files uploaded for this campaign.
+          No artwork files uploaded for this campaign.
         </div>
       ) : (
         <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
@@ -190,7 +275,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
             </thead>
             <tbody>
               {artworkFiles.map((file) => (
-                <tr key={file.id} className="border-t border-slate-700/70 bg-slate-800/70">
+                <tr key={file.key} className="border-t border-slate-700/70 bg-slate-800/70">
                   <td className="border border-slate-700 px-4 py-3">
                     {file.thumbnailUrl ? (
                       <img
@@ -210,7 +295,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
                   <td className="border border-slate-700 px-4 py-3">
                     <div className="flex items-center justify-center gap-2 whitespace-nowrap">
                       <Button
-                        onClick={() => openFile(file.url)}
+                        onClick={() => openFile(file)}
                         size="sm"
                         type="button"
                         variant="outline"
@@ -222,7 +307,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
                         <span className="sr-only 2xl:not-sr-only 2xl:ml-2">Open</span>
                       </Button>
                       <Button
-                        onClick={() => downloadFile(file.url, file.fileName)}
+                        onClick={() => downloadFile(file)}
                         size="sm"
                         type="button"
                         title="Download PDF"
