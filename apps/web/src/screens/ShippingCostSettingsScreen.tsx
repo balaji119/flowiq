@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, Shield } from 'lucide-react';
 import { CalculatorMappingRecord, MarketAssetShippingCostInput, MarketAssetShippingCostRecord, MarketShippingRateRecord, TenantRecord } from '@flowiq/shared';
 import { Card, CardDescription, CardHeader, CardTitle, Input } from '@flowiq/ui';
-import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
 import { useAuth } from '../context/AuthContext';
 import {
   fetchCalculatorMappings,
@@ -14,9 +13,8 @@ import {
 } from '../services/adminApi';
 
 type ShippingCostSettingsScreenProps = {
-  onBack: () => void;
   tenantId?: string | null;
-} & Omit<AdminWorkspaceHandlers, 'onBack' | 'onOpenShippingCosts'>;
+};
 
 type AssetShippingDraft = {
   megaShippingRate: string;
@@ -32,7 +30,7 @@ function emptyAssetShippingDraft(): AssetShippingDraft {
   };
 }
 
-export function ShippingCostSettingsScreen({ onBack, onOpenMappings, onOpenPrintingCosts, onOpenSettings, onOpenShippingSettings, onOpenUsers, tenantId }: ShippingCostSettingsScreenProps) {
+export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -372,21 +370,6 @@ export function ShippingCostSettingsScreen({ onBack, onOpenMappings, onOpenPrint
   }
 
   return (
-    <AdminWorkspaceShell
-      activeSection="shipping-costs"
-      canAccessManagement
-      canAccessShippingCosts={session?.user.role === 'super_admin'}
-      canAccessPrintingCosts={session?.user.role === 'super_admin'}
-      pageTitle="Freight Rate Card"
-      onBack={onBack}
-      onOpenLanding={onBack}
-      onOpenMappings={onOpenMappings}
-      onOpenPrintingCosts={onOpenPrintingCosts}
-      onOpenSettings={onOpenSettings}
-      onOpenShippingCosts={() => {}}
-      onOpenShippingSettings={onOpenShippingSettings}
-      onOpenUsers={onOpenUsers}
-    >
     <main className="dense-main flex min-h-0 w-full flex-col gap-6">
       {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 
@@ -695,7 +678,6 @@ export function ShippingCostSettingsScreen({ onBack, onOpenMappings, onOpenPrint
         )}
       </section>
     </main>
-    </AdminWorkspaceShell>
   );
 }
 

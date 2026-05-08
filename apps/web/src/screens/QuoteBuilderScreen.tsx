@@ -1,5 +1,5 @@
 import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, Eye, LoaderCircle, Maximize2, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, Eye, LoaderCircle, Maximize2, Pencil, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignPrintImage,
@@ -983,6 +983,7 @@ export function QuoteBuilderScreen({
   const [previewArtworkTarget, setPreviewArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey } | null>(null);
   const [previewArtworkFullLoaded, setPreviewArtworkFullLoaded] = useState(false);
   const [uploadingArtworkPages, setUploadingArtworkPages] = useState(false);
+  const [artworkSearchQuery, setArtworkSearchQuery] = useState('');
   const [artworkUploadSuccessOpen, setArtworkUploadSuccessOpen] = useState(false);
   const [artworkUploadSuccessMessage, setArtworkUploadSuccessMessage] = useState('');
   const [deletingArtworkIds, setDeletingArtworkIds] = useState<string[]>([]);
@@ -1428,6 +1429,14 @@ export function QuoteBuilderScreen({
     if (!targetAsset) return '';
     return getCreativeImageIdForFormat(targetAsset, assignArtworkTarget.formatKey);
   }, [assignArtworkTarget, values.campaignMarkets]);
+  const filteredArtworkImages = useMemo(() => {
+    const query = artworkSearchQuery.trim().toLowerCase();
+    if (!query) return values.printImages;
+    return values.printImages.filter((image) => {
+      const name = (image.name || image.fileName || '').toLowerCase();
+      return name.includes(query);
+    });
+  }, [artworkSearchQuery, values.printImages]);
   const previewArtworkImage = useMemo(() => {
     if (!previewArtworkTarget) return null;
     const targetMarket = values.campaignMarkets.find((market) => market.id === previewArtworkTarget.marketId);
@@ -1841,6 +1850,7 @@ export function QuoteBuilderScreen({
     setAssignArtworkDialogOpen(false);
     setAssignArtworkTarget(null);
     setArtworkDialogError('');
+    setArtworkSearchQuery('');
     if (artworkPdfInputRef.current) {
       artworkPdfInputRef.current.value = '';
     }
@@ -2027,7 +2037,19 @@ export function QuoteBuilderScreen({
     void uploadArtworkPdfFiles(nextFiles);
   }
 
-  function handleArtworkActionButtonClick() {
+  async function ensureCampaignReadyForArtworkUpload() {
+    const savedCampaignId = await saveCampaignDraft();
+    if (savedCampaignId) return true;
+    const message = 'Save the campaign before uploading artwork.';
+    setArtworkDialogError(message);
+    setError(message);
+    return false;
+  }
+
+  async function handleArtworkActionButtonClick() {
+    const canUploadArtwork = await ensureCampaignReadyForArtworkUpload();
+    if (!canUploadArtwork) return;
+
     if (uploadingArtworkPages) {
       openArtworkManagerDialog();
       return;
@@ -3778,7 +3800,7 @@ export function QuoteBuilderScreen({
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <Button
                       className="h-10 min-w-[180px] px-5 text-base"
-                      onClick={handleArtworkActionButtonClick}
+                      onClick={() => void handleArtworkActionButtonClick()}
                       type="button"
                       variant="outline"
                     >
@@ -4397,7 +4419,7 @@ export function QuoteBuilderScreen({
       >
         <DialogContent
           className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0"
-          style={{ width: 'min(calc(100vw - 2rem), 72rem)', maxHeight: '90vh' }}
+          style={{ width: 'min(calc(100vw - 2rem), 90rem)', maxHeight: '90vh' }}
         >
           <DialogHeader className="shrink-0 border-b border-slate-700 px-5 py-4">
             <DialogTitle>Add Market</DialogTitle>
@@ -4787,7 +4809,16 @@ export function QuoteBuilderScreen({
             <DialogTitle>Artwork</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="relative min-w-[220px] flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  className="h-9 border-slate-600 bg-slate-900 pl-9 text-slate-100 placeholder:text-slate-500"
+                  onChange={(event) => setArtworkSearchQuery(event.target.value)}
+                  placeholder="Search by file name"
+                  value={artworkSearchQuery}
+                />
+              </div>
               <Button disabled={uploadingArtworkPages} onClick={openArtworkPdfPicker} type="button" variant="secondary">
                 {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Upload className="h-4 w-4" />}
                 {uploadingArtworkPages ? 'Uploading Artwork...' : 'Upload Artwork'}
@@ -4800,8 +4831,8 @@ export function QuoteBuilderScreen({
             ) : null}
             {values.printImages.length > 0 ? (
               <div className="max-h-[56vh] overflow-auto rounded-md border border-slate-700 bg-slate-900/65 p-3">
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
-                  {values.printImages.map((image) => {
+                <div className="space-y-2">
+                  {filteredArtworkImages.map((image) => {
                     const thumbnailSrc = image.thumbnailUrl ? buildApiUrl(image.thumbnailUrl) : '';
                     const imageSrc = image.imageUrl ? buildApiUrl(image.imageUrl) : '';
                     const displaySrc = thumbnailSrc || imageSrc;
@@ -4817,12 +4848,12 @@ export function QuoteBuilderScreen({
                         )}
                       >
                         <button
-                          className="flex w-full flex-col overflow-hidden text-left"
+                          className="flex w-full items-center gap-3 overflow-hidden p-2.5 pr-12 text-left"
                           disabled={deleting}
                           onClick={() => assignArtworkImageToTarget(image.id)}
                           type="button"
                         >
-                          <div className="aspect-[4/3] w-full overflow-hidden bg-slate-900">
+                          <div className="h-12 w-12 shrink-0 overflow-hidden rounded border border-slate-700 bg-slate-900">
                             {displaySrc ? (
                               <img
                                 alt={image.name}
@@ -4831,12 +4862,13 @@ export function QuoteBuilderScreen({
                                 src={displaySrc}
                               />
                             ) : (
-                              <div className="flex h-full items-center justify-center px-2 text-center text-xs text-slate-400">Preview unavailable</div>
+                              <div className="flex h-full items-center justify-center px-1 text-center text-[10px] text-slate-400">N/A</div>
                             )}
                           </div>
-                          <div className="space-y-1 px-2 py-2">
-                            <p className="truncate text-xs font-semibold text-slate-100">{image.name || image.fileName}</p>
-                            <p className="truncate text-[11px] text-slate-400">{image.fileName}</p>
+                          <div className="min-w-0 space-y-1">
+                            <p className="whitespace-normal break-all text-sm font-semibold leading-snug text-slate-100">
+                              {image.name || image.fileName}
+                            </p>
                           </div>
                         </button>
                         <Button
@@ -4858,6 +4890,11 @@ export function QuoteBuilderScreen({
                       </div>
                     );
                   })}
+                  {filteredArtworkImages.length === 0 ? (
+                    <div className="rounded-md border border-slate-700 bg-slate-900 px-4 py-6 text-center text-sm text-slate-400">
+                      No files match your search.
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : (
@@ -4865,11 +4902,18 @@ export function QuoteBuilderScreen({
                 No artwork uploaded yet. Upload PDFs to generate selectable thumbnails.
               </div>
             )}
-            <div className="flex justify-end">
-              <Button onClick={closeAssignArtworkDialog} type="button" variant="ghost">
-                Continue
-              </Button>
-            </div>
+            {uploadingArtworkPages ? (
+              <div className="flex justify-end">
+                <Button
+                  className="border-orange-500 bg-orange-500 text-white hover:bg-orange-400"
+                  onClick={closeAssignArtworkDialog}
+                  type="button"
+                  variant="secondary"
+                >
+                  Continue
+                </Button>
+              </div>
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>

@@ -196,16 +196,11 @@ function AppShell() {
   }
 
   if (view === 'shipping-costs') {
-    return (
+    return renderGlobalSidebar(
       <ShippingCostSettingsScreen
-        onBack={() => navigateTo('landing')}
-        onOpenMappings={() => navigateTo('mappings')}
-        onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
-        onOpenSettings={() => navigateTo('settings')}
-        onOpenShippingSettings={() => navigateTo('shipping')}
-        onOpenUsers={() => navigateTo('users')}
         tenantId={selectedAdminTenantId}
-      />
+      />,
+      { pageTitle: 'Freight Rate Card' },
     );
   }
 
