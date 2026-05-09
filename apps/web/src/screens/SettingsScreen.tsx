@@ -43,6 +43,7 @@ export function SettingsScreen({
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(session?.user.tenantId ?? null);
   const [presetOverrides, setPresetOverrides] = useState<Record<string, string>>({});
+  const [multipleArtworkFormats, setMultipleArtworkFormats] = useState<Record<string, boolean>>({});
   const [customOverrides, setCustomOverrides] = useState<CustomOverrideRow[]>([]);
 
   const canSwitchTenant = session?.user.role === 'super_admin' && !tenantId;
@@ -101,6 +102,7 @@ export function SettingsScreen({
           nextPreset[entry.key] = normalized[entry.key] || defaultSheetNamePresetOverrides[entry.key] || '';
         });
         setPresetOverrides(nextPreset);
+        setMultipleArtworkFormats(response.settings.multipleArtworkFormats ?? {});
 
         const presetKeys = new Set(sheetNamePresetEntries.map((entry) => entry.key));
         const nextCustom = Object.entries(normalized)
@@ -144,12 +146,15 @@ export function SettingsScreen({
       if (!sourceKey || !nextValue) return;
       merged[sourceKey] = nextValue;
     });
+    const normalizedMultipleArtworkFormats = Object.fromEntries(
+      Object.entries(multipleArtworkFormats).filter(([, enabled]) => Boolean(enabled)),
+    );
 
     setSaving(true);
     setError('');
     setNotice('');
     try {
-      const response = await upsertAdminSheetNameOverrides({ overrides: merged }, effectiveTenantId);
+      const response = await upsertAdminSheetNameOverrides({ overrides: merged, multipleArtworkFormats: normalizedMultipleArtworkFormats }, effectiveTenantId);
       const normalized = sanitizeSheetNameOverrides(response.settings.overrides);
 
       const nextPreset: Record<string, string> = {};
@@ -157,6 +162,7 @@ export function SettingsScreen({
         nextPreset[entry.key] = normalized[entry.key] || defaultSheetNamePresetOverrides[entry.key] || '';
       });
       setPresetOverrides(nextPreset);
+      setMultipleArtworkFormats(response.settings.multipleArtworkFormats ?? {});
 
       const presetKeys = new Set(sheetNamePresetEntries.map((entry) => entry.key));
       const nextCustom = Object.entries(normalized)
@@ -256,7 +262,6 @@ export function SettingsScreen({
         ) : null}
 
         <section className="max-w-5xl space-y-5">
-          <h2 className="text-lg font-semibold tracking-tight text-slate-100">Sheet Name Overrides</h2>
           {loading ? (
             <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
               <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
@@ -266,13 +271,15 @@ export function SettingsScreen({
               <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/70">
                 <table className="w-full table-fixed border-collapse text-sm">
                   <colgroup>
-                    <col className="w-[260px]" />
+                    <col className="w-[220px]" />
                     <col className="w-[420px]" />
+                    <col className="w-[160px]" />
                   </colgroup>
                   <thead>
                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                       <th className="border border-slate-700 px-4 py-3 text-left">Current Name</th>
                       <th className="border border-slate-700 px-4 py-3 text-left">Override Name</th>
+                      <th className="border border-slate-700 px-4 py-3 text-center">Multiple Artwork</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -290,6 +297,19 @@ export function SettingsScreen({
                             }
                             placeholder={`Override for ${entry.label}`}
                             value={presetOverrides[entry.key] || ''}
+                          />
+                        </td>
+                        <td className="border border-slate-700 px-4 py-3 text-center">
+                          <input
+                            checked={Boolean(multipleArtworkFormats[entry.key])}
+                            className="h-4 w-4 accent-orange-400"
+                            onChange={(event) =>
+                              setMultipleArtworkFormats((current) => ({
+                                ...current,
+                                [entry.key]: event.target.checked,
+                              }))
+                            }
+                            type="checkbox"
                           />
                         </td>
                       </tr>

@@ -2069,7 +2069,8 @@ func (a *app) handleUpsertSheetNameOverrides(w http.ResponseWriter, r *http.Requ
 	}
 
 	var payload struct {
-		Overrides sheetNameOverrides `json:"overrides"`
+		Overrides              sheetNameOverrides `json:"overrides"`
+		MultipleArtworkFormats map[string]bool    `json:"multipleArtworkFormats"`
 	}
 	if err := decodeJSONBody(r, &payload); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
@@ -2078,8 +2079,11 @@ func (a *app) handleUpsertSheetNameOverrides(w http.ResponseWriter, r *http.Requ
 	if payload.Overrides == nil {
 		payload.Overrides = sheetNameOverrides{}
 	}
+	if payload.MultipleArtworkFormats == nil {
+		payload.MultipleArtworkFormats = map[string]bool{}
+	}
 
-	record, err := a.mappingStore.upsertSheetNameOverrides(r.Context(), *tenantID, payload.Overrides)
+	record, err := a.mappingStore.upsertSheetNameOverrides(r.Context(), *tenantID, payload.Overrides, payload.MultipleArtworkFormats)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return

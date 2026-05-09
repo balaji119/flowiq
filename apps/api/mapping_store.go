@@ -89,10 +89,11 @@ type marketAssetShippingCostRow struct {
 }
 
 type sheetNameOverrideRow struct {
-	TenantID  string
-	Overrides []byte
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	TenantID               string
+	Overrides              []byte
+	MultipleArtworkFormats []byte
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 func newMappingStore(pool *pgxpool.Pool) *mappingStore {
@@ -408,6 +409,7 @@ func scanSheetNameOverrideRow(scanner interface {
 	err := scanner.Scan(
 		&row.TenantID,
 		&row.Overrides,
+		&row.MultipleArtworkFormats,
 		&row.CreatedAt,
 		&row.UpdatedAt,
 	)
@@ -427,18 +429,39 @@ func normalizeSheetNameOverrides(input sheetNameOverrides) sheetNameOverrides {
 	return normalized
 }
 
+func normalizeMultipleArtworkFormats(input map[string]bool) map[string]bool {
+	normalized := map[string]bool{}
+	for key, enabled := range input {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			continue
+		}
+		if enabled {
+			normalized[trimmedKey] = true
+		}
+	}
+	return normalized
+}
+
 func decodeSheetNameOverrideRow(row sheetNameOverrideRow) (sheetNameOverrideRecord, error) {
 	overrides := sheetNameOverrides{}
+	multipleArtworkFormats := map[string]bool{}
 	if len(row.Overrides) > 0 {
 		if err := json.Unmarshal(row.Overrides, &overrides); err != nil {
 			return sheetNameOverrideRecord{}, err
 		}
 	}
+	if len(row.MultipleArtworkFormats) > 0 {
+		if err := json.Unmarshal(row.MultipleArtworkFormats, &multipleArtworkFormats); err != nil {
+			return sheetNameOverrideRecord{}, err
+		}
+	}
 	return sheetNameOverrideRecord{
-		TenantID:  row.TenantID,
-		Overrides: normalizeSheetNameOverrides(overrides),
-		CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339),
+		TenantID:               row.TenantID,
+		Overrides:              normalizeSheetNameOverrides(overrides),
+		MultipleArtworkFormats: normalizeMultipleArtworkFormats(multipleArtworkFormats),
+		CreatedAt:              row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:              row.UpdatedAt.UTC().Format(time.RFC3339),
 	}, nil
 }
 
@@ -448,12 +471,12 @@ func (s *mappingStore) listSheetNameOverrides(ctx context.Context, tenantID stri
 	}
 
 	row, err := scanSheetNameOverrideRow(s.pool.QueryRow(ctx, `
-		SELECT tenant_id, overrides, created_at, updated_at
+		SELECT tenant_id, overrides, multiple_artwork_formats, created_at, updated_at
 		FROM sheet_name_overrides
 		WHERE tenant_id = $1
 	`, tenantID))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return s.upsertSheetNameOverrides(ctx, tenantID, defaultSheetNameOverrides())
+		return s.upsertSheetNameOverrides(ctx, tenantID, defaultSheetNameOverrides(), map[string]bool{})
 	}
 	if err != nil {
 		return nil, err
@@ -466,26 +489,32 @@ func (s *mappingStore) listSheetNameOverrides(ctx context.Context, tenantID stri
 	return &record, nil
 }
 
-func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID string, overrides sheetNameOverrides) (*sheetNameOverrideRecord, error) {
+func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID string, overrides sheetNameOverrides, multipleArtworkFormats map[string]bool) (*sheetNameOverrideRecord, error) {
 	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
 		return nil, err
 	}
 
 	normalized := normalizeSheetNameOverrides(overrides)
+	normalizedMultipleArtworkFormats := normalizeMultipleArtworkFormats(multipleArtworkFormats)
 	overridesJSON, err := json.Marshal(normalized)
+	if err != nil {
+		return nil, err
+	}
+	multipleArtworkFormatsJSON, err := json.Marshal(normalizedMultipleArtworkFormats)
 	if err != nil {
 		return nil, err
 	}
 
 	row, err := scanSheetNameOverrideRow(s.pool.QueryRow(ctx, `
-		INSERT INTO sheet_name_overrides (tenant_id, overrides, created_at, updated_at)
-		VALUES ($1, $2::jsonb, NOW(), NOW())
+		INSERT INTO sheet_name_overrides (tenant_id, overrides, multiple_artwork_formats, created_at, updated_at)
+		VALUES ($1, $2::jsonb, $3::jsonb, NOW(), NOW())
 		ON CONFLICT (tenant_id)
 		DO UPDATE SET
 			overrides = EXCLUDED.overrides,
+			multiple_artwork_formats = EXCLUDED.multiple_artwork_formats,
 			updated_at = NOW()
-		RETURNING tenant_id, overrides, created_at, updated_at
-	`, tenantID, string(overridesJSON)))
+		RETURNING tenant_id, overrides, multiple_artwork_formats, created_at, updated_at
+	`, tenantID, string(overridesJSON), string(multipleArtworkFormatsJSON)))
 	if err != nil {
 		return nil, err
 	}

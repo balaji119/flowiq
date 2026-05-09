@@ -34,14 +34,15 @@ import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShipping
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
-import { resolveFormatName, resolveSheetName, sanitizeSheetNameOverrides } from '../services/sheetNameOverrides';
+import { canonicalKeyForFormat, resolveFormatName, resolveSheetName, sanitizeSheetNameOverrides } from '../services/sheetNameOverrides';
 import ExcelJS from 'exceljs';
 import { Document as WordDocument, ExternalHyperlink, ImageRun, LineRuleType, Packer, Paragraph, TextRun, UnderlineType } from 'docx';
+import { PDFArray, PDFDocument, PDFName, PDFString, StandardFonts, rgb } from 'pdf-lib';
 
 const ACTIVE_CAMPAIGN_ID_KEY = 'adsconnect-active-campaign-id';
 const VISUALS_EXPORT_MODE = parseVisualsExportMode(process.env.EXPORT_EXCEL);
 
-type VisualsExportMode = 'excel' | 'word';
+type VisualsExportMode = 'excel' | 'pdf';
 
 type GeneratedVisualExportFile = {
   fileName: string;
@@ -51,7 +52,7 @@ type GeneratedVisualExportFile = {
 
 function parseVisualsExportMode(value: string | undefined): VisualsExportMode {
   const normalized = (value || '').trim().toLowerCase();
-  return ['1', 'true', 'yes', 'on'].includes(normalized) ? 'excel' : 'word';
+  return ['1', 'true', 'yes', 'on'].includes(normalized) ? 'excel' : 'pdf';
 }
 
 async function setStoredCampaignId(value: string | null) {
@@ -142,6 +143,9 @@ function formatKeyLabel(key: (typeof formatKeys)[number], overrides: SheetNameOv
 const creativeFormatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'Mega', 'DOT M', 'MP'] as const;
 type CreativeFormatKey = (typeof creativeFormatKeys)[number];
 
+type MultiCreativeImageMap = Partial<Record<CreativeFormatKey, string[]>>;
+const MULTI_ARTWORK_SLOT_UI_CAP = 24;
+
 function creativeFormatLabel(key: CreativeFormatKey, overrides: SheetNameOverrides = {}) {
   if (key === '8-sheet') {
     return `${resolveFormatName('8-sheet', overrides)} / ${resolveFormatName('QA0', overrides)}`;
@@ -169,6 +173,19 @@ function normalizeCreativeImageIds(asset: CampaignAsset): Partial<Record<Creativ
       normalized[key] = legacyCreativeId;
     });
   }
+  return normalized;
+}
+
+function normalizeMultiCreativeImageIds(asset: CampaignAsset): MultiCreativeImageMap {
+  const normalized: MultiCreativeImageMap = {};
+  creativeFormatKeys.forEach((key) => {
+    const values = (asset.multiCreativeImageIds?.[key] ?? [])
+      .map((value) => (value || '').trim())
+      .filter(Boolean);
+    if (values.length > 0) {
+      normalized[key] = values;
+    }
+  });
   return normalized;
 }
 
@@ -257,9 +274,11 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
       ...market,
       assets: (market.assets ?? []).map((asset) => {
         const creativeImageIds = normalizeCreativeImageIds(asset);
+        const multiCreativeImageIds = normalizeMultiCreativeImageIds(asset);
         return {
           ...asset,
           creativeImageIds,
+          multiCreativeImageIds,
           creativeImageId: getCreativeImageIdForFormat({ ...asset, creativeImageIds }, '8-sheet') || asset.creativeImageId || '',
         };
       }),
@@ -958,6 +977,7 @@ export function QuoteBuilderScreen({
   const [marketShippingRates, setMarketShippingRates] = useState<MarketShippingRateRecord[]>([]);
   const [marketAssetPrintingCosts, setMarketAssetPrintingCosts] = useState<MarketAssetPrintingCostRecord[]>([]);
   const [sheetNameOverrides, setSheetNameOverrides] = useState<SheetNameOverrides>({});
+  const [multipleArtworkFormats, setMultipleArtworkFormats] = useState<Record<string, boolean>>({});
   const [marketAssetShippingCosts, setMarketAssetShippingCosts] = useState<MarketAssetShippingCostRecord[]>([]);
   const [metadataError, setMetadataError] = useState('');
   const [loadingMetadata, setLoadingMetadata] = useState(true);
@@ -978,7 +998,9 @@ export function QuoteBuilderScreen({
   const [purchaseOrderUploadSuccessOpen, setPurchaseOrderUploadSuccessOpen] = useState(false);
   const [purchaseOrderUploadSuccessMessage, setPurchaseOrderUploadSuccessMessage] = useState('');
   const [assignArtworkDialogOpen, setAssignArtworkDialogOpen] = useState(false);
-  const [assignArtworkTarget, setAssignArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey } | null>(null);
+  const [assignArtworkTarget, setAssignArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey; slotIndex?: number } | null>(null);
+  const [multiArtworkDialogOpen, setMultiArtworkDialogOpen] = useState(false);
+  const [multiArtworkTarget, setMultiArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey; slotCount: number } | null>(null);
   const [previewArtworkDialogOpen, setPreviewArtworkDialogOpen] = useState(false);
   const [previewArtworkTarget, setPreviewArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey } | null>(null);
   const [previewArtworkFullLoaded, setPreviewArtworkFullLoaded] = useState(false);
@@ -1211,9 +1233,11 @@ export function QuoteBuilderScreen({
         const response = await fetchCampaignSheetNameOverrides();
         if (!active) return;
         setSheetNameOverrides(sanitizeSheetNameOverrides(response.settings.overrides));
+        setMultipleArtworkFormats(response.settings.multipleArtworkFormats ?? {});
       } catch {
         if (!active) return;
         setSheetNameOverrides({});
+        setMultipleArtworkFormats({});
       }
     }
     void loadSheetNameOverrides();
@@ -1259,6 +1283,13 @@ export function QuoteBuilderScreen({
     () => sanitizeSheetNameOverrides(sheetNameOverrides),
     [sheetNameOverrides],
   );
+  const normalizedMultipleArtworkFormats = useMemo(() => {
+    const normalized: Record<string, boolean> = {};
+    Object.entries(multipleArtworkFormats).forEach(([key, enabled]) => {
+      if (enabled) normalized[key] = true;
+    });
+    return normalized;
+  }, [multipleArtworkFormats]);
   const canAddAddressInFinalize = session?.user.role === 'admin' || session?.user.role === 'super_admin';
   const numberOfWeeks = Math.max(1, Math.min(20, Math.floor(Number(values.numberOfWeeks) || 1)));
   const marketNames = useMemo(() => markets.map((market) => market.name), [markets]);
@@ -1408,6 +1439,10 @@ export function QuoteBuilderScreen({
       market.assets.some((asset) => {
         const hasFormatMapping = Object.values(normalizeCreativeImageIds(asset)).some((imageId) => Boolean((imageId || '').trim()));
         if (hasFormatMapping) return true;
+        const hasMultiFormatMapping = Object.values(normalizeMultiCreativeImageIds(asset)).some((imageIds) =>
+          imageIds.some((imageId) => Boolean((imageId || '').trim())),
+        );
+        if (hasMultiFormatMapping) return true;
         return Boolean((asset.creativeImageId || '').trim());
       }),
     );
@@ -1427,6 +1462,10 @@ export function QuoteBuilderScreen({
     const targetMarket = values.campaignMarkets.find((market) => market.id === assignArtworkTarget.marketId);
     const targetAsset = targetMarket?.assets.find((asset) => asset.id === assignArtworkTarget.assetId);
     if (!targetAsset) return '';
+    if (assignArtworkTarget.slotIndex != null) {
+      const slotIds = targetAsset.multiCreativeImageIds?.[assignArtworkTarget.formatKey] ?? [];
+      return slotIds[assignArtworkTarget.slotIndex] || '';
+    }
     return getCreativeImageIdForFormat(targetAsset, assignArtworkTarget.formatKey);
   }, [assignArtworkTarget, values.campaignMarkets]);
   const filteredArtworkImages = useMemo(() => {
@@ -1459,9 +1498,14 @@ export function QuoteBuilderScreen({
     values.campaignMarkets.forEach((market) => {
       market.assets.forEach((asset) => {
         const mappedCreativeImageIds = normalizeCreativeImageIds(asset);
+        const mappedMultiCreativeImageIds = normalizeMultiCreativeImageIds(asset);
         creativeFormatKeys.forEach((formatKey) => {
           const mappedId = (mappedCreativeImageIds[formatKey] || '').trim();
           if (mappedId) assignedIds.add(mappedId);
+          (mappedMultiCreativeImageIds[formatKey] ?? []).forEach((slotId) => {
+            const trimmed = (slotId || '').trim();
+            if (trimmed) assignedIds.add(trimmed);
+          });
         });
         const legacyMappedId = (asset.creativeImageId || '').trim();
         if (legacyMappedId) assignedIds.add(legacyMappedId);
@@ -1652,6 +1696,7 @@ export function QuoteBuilderScreen({
         ...asset,
         selectedWeeks: [...asset.selectedWeeks],
         creativeImageIds: { ...(asset.creativeImageIds ?? {}) },
+        multiCreativeImageIds: { ...(asset.multiCreativeImageIds ?? {}) },
       })),
     });
     setEditingMarketId(marketId);
@@ -1809,10 +1854,15 @@ export function QuoteBuilderScreen({
     });
   }
 
-  function openAssignArtworkDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey) {
-    setAssignArtworkTarget({ marketId, assetId, formatKey });
+  function openAssignArtworkDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey, slotIndex?: number) {
+    setAssignArtworkTarget({ marketId, assetId, formatKey, slotIndex });
     setArtworkDialogError('');
     setAssignArtworkDialogOpen(true);
+  }
+
+  function openMultiArtworkDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey, slotCount: number) {
+    setMultiArtworkTarget({ marketId, assetId, formatKey, slotCount: Math.min(MULTI_ARTWORK_SLOT_UI_CAP, Math.max(1, slotCount)) });
+    setMultiArtworkDialogOpen(true);
   }
 
   function openArtworkPreviewDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey) {
@@ -1858,10 +1908,32 @@ export function QuoteBuilderScreen({
 
   function assignArtworkImageToTarget(imageId: string) {
     if (!assignArtworkTarget) return;
-    const { marketId, assetId, formatKey } = assignArtworkTarget;
-    assignArtworkToFormat(marketId, assetId, formatKey, imageId);
+    const { marketId, assetId, formatKey, slotIndex } = assignArtworkTarget;
+    if (slotIndex !== undefined) {
+      assignArtworkToFormatSlot(marketId, assetId, formatKey, slotIndex, imageId);
+    } else {
+      assignArtworkToFormat(marketId, assetId, formatKey, imageId);
+    }
     closeAssignArtworkDialog();
     closeArtworkPreviewDialog();
+  }
+
+  function assignArtworkToFormatSlot(marketId: string, assetId: string, formatKey: CreativeFormatKey, slotIndex: number, imageId: string) {
+    updateCampaignAsset(marketId, assetId, (current) => {
+      const nextMultiCreativeImageIds = {
+        ...normalizeMultiCreativeImageIds(current),
+      };
+      const nextSlotIds = [...(nextMultiCreativeImageIds[formatKey] ?? [])];
+      while (nextSlotIds.length <= slotIndex) {
+        nextSlotIds.push('');
+      }
+      nextSlotIds[slotIndex] = imageId;
+      nextMultiCreativeImageIds[formatKey] = nextSlotIds;
+      return {
+        ...current,
+        multiCreativeImageIds: nextMultiCreativeImageIds,
+      };
+    });
   }
 
   function assignArtworkToFormat(marketId: string, assetId: string, formatKey: CreativeFormatKey, imageId: string) {
@@ -2378,6 +2450,12 @@ export function QuoteBuilderScreen({
       });
 
       const imageById = new Map(values.printImages.map((image, index) => [image.id, { image, creativeNumber: index + 1 }]));
+      const mappingOptionByMarketAssetId = new Map<string, MarketMetadata['assets'][number]>();
+      markets.forEach((marketMetadata) => {
+        marketMetadata.assets.forEach((assetOption) => {
+          mappingOptionByMarketAssetId.set(`${marketMetadata.name}\x00${assetOption.id}`, assetOption);
+        });
+      });
       const printRows = new Map<
         string,
         {
@@ -2417,6 +2495,12 @@ export function QuoteBuilderScreen({
         const bucket = creativeSummary.get(creativeNumber) ?? { '8-sheet': 0, '6-sheet': 0, '4-sheet': 0, '2-sheet': 0, QA0: 0, Mega: 0, 'DOT M': 0, MP: 0 };
         bucket[key] += quantity;
         creativeSummary.set(creativeNumber, bucket);
+      };
+      const splitQuantityAcrossSlots = (total: number, slots: number) => {
+        const safeSlots = Math.max(1, slots);
+        const base = Math.floor(total / safeSlots);
+        const remainder = total % safeSlots;
+        return Array.from({ length: safeSlots }, (_, index) => base + (index < remainder ? 1 : 0));
       };
 
       const getPrintColumn = (state: ExportState, key: keyof QuantityBreakdown) => {
@@ -2501,47 +2585,67 @@ export function QuoteBuilderScreen({
             if (quantity <= 0) return;
 
             const creativeFormat = toCreativeFormatKey(key);
-            const creativeImageId = getCreativeImageIdForFormat(asset, creativeFormat);
-            if (!creativeImageId) return;
-            const creative = imageById.get(creativeImageId);
-            if (!creative) return;
+            const mappingOption = mappingOptionByMarketAssetId.get(`${market.market}\x00${asset.assetId}`);
+            const configuredSlotCount = Math.max(1, mappingOption?.quantities?.[creativeFormat] ?? 1);
+            const multiSlotImageIds = (asset.multiCreativeImageIds?.[creativeFormat] ?? [])
+              .map((imageId) => (imageId || '').trim())
+              .filter((imageId) => Boolean(imageById.get(imageId)));
+            const useMultiArtworkForFormat = Boolean(normalizedMultipleArtworkFormats[canonicalKeyForFormat(creativeFormat)]);
+            const useMultiArtwork = useMultiArtworkForFormat && multiSlotImageIds.length > 0;
 
-            const creativeCode = buildCreativeCode(state, creative.creativeNumber);
-            const fileName = toFileBaseName(creative.image.fileName || creative.image.name || asset.assetSearch || asset.assetId || 'Artwork');
-            const printRowKey = `${creativeCode}\x00${fileName}`;
-            const printRow = printRows.get(printRowKey) ?? {
-              creativeCode,
-              creativeNumber: creative.creativeNumber,
-              creativeImageId: creative.image.id,
-              fileName,
-              state,
-              quantities: {},
-            };
+            const creativeAssignments = useMultiArtwork
+              ? (() => {
+                  const slotQuantities = splitQuantityAcrossSlots(quantity, configuredSlotCount);
+                  return multiSlotImageIds.slice(0, configuredSlotCount).map((imageId, index) => ({
+                    imageId,
+                    quantity: slotQuantities[index] ?? 0,
+                  })).filter((assignment) => assignment.quantity > 0);
+                })()
+              : (() => {
+                  const creativeImageId = getCreativeImageIdForFormat(asset, creativeFormat);
+                  return creativeImageId ? [{ imageId: creativeImageId, quantity }] : [];
+                })();
 
-            const column = getPrintColumn(state, key);
-            printRow.quantities[column] = (printRow.quantities[column] ?? 0) + quantity;
-            printRows.set(printRowKey, printRow);
-
-            const typeLabel = getDeliveryTypeLabel(state, key);
-            const deliveredTo = `VIM ${state}`;
-            const rolled = state !== 'NSW';
-            const deliveryKey = `${creativeCode}\x00${fileName}\x00${typeLabel}\x00${deliveredTo}`;
-            const existingDeliveryRow = deliveryRows.get(deliveryKey);
-            if (existingDeliveryRow) {
-              existingDeliveryRow.quantity += quantity;
-            } else {
-              deliveryRows.set(deliveryKey, {
+            creativeAssignments.forEach((assignment) => {
+              const creative = imageById.get(assignment.imageId);
+              if (!creative) return;
+              const creativeCode = buildCreativeCode(state, creative.creativeNumber);
+              const fileName = toFileBaseName(creative.image.fileName || creative.image.name || asset.assetSearch || asset.assetId || 'Artwork');
+              const printRowKey = `${creativeCode}\x00${fileName}`;
+              const printRow = printRows.get(printRowKey) ?? {
                 creativeCode,
+                creativeNumber: creative.creativeNumber,
+                creativeImageId: creative.image.id,
                 fileName,
                 state,
-                typeLabel,
-                quantity,
-                deliveredTo,
-                rolled,
-              });
-            }
+                quantities: {},
+              };
 
-            updateSummary(creative.creativeNumber, key, quantity);
+              const column = getPrintColumn(state, key);
+              printRow.quantities[column] = (printRow.quantities[column] ?? 0) + assignment.quantity;
+              printRows.set(printRowKey, printRow);
+
+              const typeLabel = getDeliveryTypeLabel(state, key);
+              const deliveredTo = `VIM ${state}`;
+              const rolled = state !== 'NSW';
+              const deliveryKey = `${creativeCode}\x00${fileName}\x00${typeLabel}\x00${deliveredTo}`;
+              const existingDeliveryRow = deliveryRows.get(deliveryKey);
+              if (existingDeliveryRow) {
+                existingDeliveryRow.quantity += assignment.quantity;
+              } else {
+                deliveryRows.set(deliveryKey, {
+                  creativeCode,
+                  fileName,
+                  state,
+                  typeLabel,
+                  quantity: assignment.quantity,
+                  deliveredTo,
+                  rolled,
+                });
+              }
+
+              updateSummary(creative.creativeNumber, key, assignment.quantity);
+            });
           });
 
           pushDeliveryInfo(asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || '', market.market, state);
@@ -2619,7 +2723,7 @@ export function QuoteBuilderScreen({
         }
       };
 
-      if (shouldGenerateExcel || exportMode === 'word') {
+      if (shouldGenerateExcel || exportMode === 'pdf') {
         setExportProgressMessage('Preparing artwork previews...');
         await Promise.all(
           Array.from(requiredCreativeImageIds).map(async (imageId) => {
@@ -2640,7 +2744,7 @@ export function QuoteBuilderScreen({
                 if (dataUrl) creativeImageDataUrlById.set(imageId, dataUrl);
               }
 
-              if (exportMode === 'word') {
+              if (exportMode === 'pdf') {
                 if (isPdf) {
                   const previewDataUrl = await pdfFirstPageToDataUrl(blob, 560);
                   const parsed = previewDataUrl ? dataUrlToBytes(previewDataUrl) : null;
@@ -2666,7 +2770,7 @@ export function QuoteBuilderScreen({
         );
       }
       const fillWordDocument = async (): Promise<GeneratedVisualExportFile> => {
-        setExportProgressMessage('Generating Word document...');
+        setExportProgressMessage('Generating PDF document...');
 
         const printRowsSorted = Array.from(printRows.values()).sort(
           (a, b) => a.creativeNumber - b.creativeNumber || a.fileName.localeCompare(b.fileName) || a.state.localeCompare(b.state),
@@ -2693,38 +2797,20 @@ export function QuoteBuilderScreen({
 
         const inferCreativeTypeLabel = (creativeRows: typeof printRowsSorted) => {
           const totals = rowTotals(creativeRows);
-          const hasEightSheet = (totals.get(9) ?? 0) > 0 || (totals.get(14) ?? 0) > 0;
-          const hasSixSheet = (totals.get(10) ?? 0) > 0 || (totals.get(15) ?? 0) > 0;
           const hasQuad = (totals.get(11) ?? 0) > 0 || (totals.get(16) ?? 0) > 0;
-          const hasTwoSheet = (totals.get(12) ?? 0) > 0 || (totals.get(17) ?? 0) > 0;
           const hasQa0 = (totals.get(13) ?? 0) > 0;
-          const hasPosterSizes = hasEightSheet || hasSixSheet || hasQuad || hasTwoSheet || hasQa0;
           const hasMegaPortrait = (totals.get(20) ?? 0) > 0;
           const hasDotMega = (totals.get(19) ?? 0) > 0;
           const hasMega = (totals.get(18) ?? 0) > 0;
           const lowerNames = creativeRows.map((row) => row.fileName.toLowerCase()).join(' ');
-          const hasNonPosterSizes = hasMegaPortrait || hasDotMega || hasMega;
-
-          if (hasQa0 && !hasEightSheet && !hasSixSheet && !hasQuad && !hasTwoSheet && !hasNonPosterSizes) return 'QA0';
           if (hasQuad) return '4-sheet';
-          if (hasEightSheet && !hasSixSheet && !hasTwoSheet && !hasQa0 && !hasNonPosterSizes) return '8-sheet';
-          if (hasSixSheet && !hasEightSheet && !hasTwoSheet && !hasQa0 && !hasNonPosterSizes) return '6-sheet';
-          if (hasTwoSheet && !hasEightSheet && !hasSixSheet && !hasQa0 && !hasNonPosterSizes) return '2-sheet';
-          if (hasMegaPortrait && !hasPosterSizes && !hasDotMega && !hasMega) return 'Mega Portrait';
-          if (hasDotMega && !hasPosterSizes && !hasMegaPortrait && !hasMega) return 'DOT Mega';
-          if (hasMega && !hasPosterSizes && !hasMegaPortrait && !hasDotMega) return lowerNames.includes('mini') ? 'Mini Mega' : 'Mega';
-          if (hasEightSheet && !hasQuad && !hasQa0) return '8-sheet';
-          if (hasSixSheet && !hasQuad && !hasQa0) return '6-sheet';
-          if (hasTwoSheet && !hasQuad && !hasQa0) return '2-sheet';
-          if (hasQa0 && !hasQuad) return 'QA0';
+          if (hasQa0) return 'QA0';
           if (hasMegaPortrait) return 'Mega Portrait';
           if (hasDotMega) return 'DOT Mega';
           if (hasMega) return lowerNames.includes('mini') ? 'Mini Mega' : 'Mega';
           return 'Artwork';
         };
 
-        const typeCounts = new Map<string, number>();
-        const creativeTypeByNumber = new Map<number, string>();
         const resolveCreativeTypeLabel = (label: string) => {
           if (label === 'Mini Mega') return resolveSheetName('Mini Mega', normalizedSheetNameOverrides, 'mini-mega');
           if (label === '8-sheet') return resolveFormatName('8-sheet', normalizedSheetNameOverrides);
@@ -2737,49 +2823,54 @@ export function QuoteBuilderScreen({
           if (label === 'Mega Portrait') return resolveFormatName('MP', normalizedSheetNameOverrides);
           return label;
         };
-        Array.from(rowsByCreative.entries())
-          .sort((a, b) => a[0] - b[0])
-          .forEach(([creativeNumber, creativeRows]) => {
-            const typeLabel = inferCreativeTypeLabel(creativeRows);
-            creativeTypeByNumber.set(creativeNumber, typeLabel);
-            typeCounts.set(typeLabel, (typeCounts.get(typeLabel) ?? 0) + 1);
-          });
-
-        const creativeHeadline = Array.from(typeCounts.entries())
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([label, count]) => `${count} x ${resolveCreativeTypeLabel(label)}`)
-          .join(', ') || 'No mapped creatives';
 
         const quantityLabelForColumn = (column: number, rawCreativeTypeLabel: string) => {
           if (column === 9) return `${resolveFormatName('8-sheet', normalizedSheetNameOverrides)} posters`;
           if (column === 10) return `${resolveFormatName('6-sheet', normalizedSheetNameOverrides)} posters`;
           if (column === 11) return `${resolveFormatName('4-sheet', normalizedSheetNameOverrides)} posters`;
           if (column === 12) return `${resolveFormatName('2-sheet', normalizedSheetNameOverrides)} posters`;
-          if (column === 13) return rawCreativeTypeLabel === 'QA0'
-            ? resolveFormatName('QA0', normalizedSheetNameOverrides)
-            : `${resolveFormatName('QA0', normalizedSheetNameOverrides)} posters`;
+          if (column === 13) return rawCreativeTypeLabel === 'QA0' ? resolveFormatName('QA0', normalizedSheetNameOverrides) : `${resolveFormatName('QA0', normalizedSheetNameOverrides)} posters`;
           if (column === 14) return `Brisbane sized ${resolveFormatName('8-sheet', normalizedSheetNameOverrides)} posters`;
           if (column === 15) return `Brisbane sized ${resolveFormatName('6-sheet', normalizedSheetNameOverrides)} posters`;
           if (column === 16) return `Brisbane sized ${resolveFormatName('4-sheet', normalizedSheetNameOverrides)} posters`;
           if (column === 17) return `Brisbane sized ${resolveFormatName('2-sheet', normalizedSheetNameOverrides)} posters`;
-          if (column === 18) return rawCreativeTypeLabel === 'Mini Mega'
-            ? resolveCreativeTypeLabel('Mini Mega')
-            : resolveFormatName('Mega', normalizedSheetNameOverrides);
+          if (column === 18) return rawCreativeTypeLabel === 'Mini Mega' ? resolveCreativeTypeLabel('Mini Mega') : resolveFormatName('Mega', normalizedSheetNameOverrides);
           if (column === 19) return resolveFormatName('DOT M', normalizedSheetNameOverrides);
           return resolveFormatName('MP', normalizedSheetNameOverrides);
         };
 
-        const resolveCreativeFileName = (creativeImageId: string, fallbackBaseName: string) => {
-          const imageRecord = imageRecordById.get(creativeImageId);
-          const rawPdfFileName = (imageRecord?.sourcePdfFileName || '').trim();
-          if (rawPdfFileName) {
-            return /\.pdf$/i.test(rawPdfFileName) ? rawPdfFileName : `${rawPdfFileName}.pdf`;
-          }
-          const rawName = (imageRecord?.name || '').trim().replace(/\s*\(Page\s+\d+\)\s*$/i, '').trim();
-          if (rawName) {
-            return /\.pdf$/i.test(rawName) ? rawName : `${rawName}.pdf`;
-          }
-          const rawFileName = (imageRecord?.fileName || '').trim();
+        const creativeTypeByNumber = new Map<number, string>();
+        const typeCounts = new Map<string, number>();
+        Array.from(rowsByCreative.entries()).sort((a, b) => a[0] - b[0]).forEach(([creativeNumber, creativeRows]) => {
+          const typeLabel = inferCreativeTypeLabel(creativeRows);
+          creativeTypeByNumber.set(creativeNumber, typeLabel);
+          typeCounts.set(typeLabel, (typeCounts.get(typeLabel) ?? 0) + 1);
+        });
+
+        const creativeHeadline = Array.from(typeCounts.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([label, count]) => `${count} x ${resolveCreativeTypeLabel(label)}`)
+          .join(', ') || 'No mapped creatives';
+
+        const quantityPartsByCreative = new Map<number, string[]>();
+        Array.from(rowsByCreative.entries()).forEach(([creativeNumber, creativeRows]) => {
+          const rawCreativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
+          const totals = rowTotals(creativeRows);
+          const parts: string[] = [];
+          quantityColumns.forEach((column) => {
+            const quantity = totals.get(column) ?? 0;
+            if (quantity <= 0) return;
+            parts.push(`${quantity} x ${quantityLabelForColumn(column, rawCreativeTypeLabel)}`);
+          });
+          quantityPartsByCreative.set(creativeNumber, parts);
+        });
+
+        const normalizePdfFileName = (image: CampaignPrintImage, fallbackBaseName = 'Artwork') => {
+          const rawPdfFileName = (image.sourcePdfFileName || '').trim();
+          if (rawPdfFileName) return /\.pdf$/i.test(rawPdfFileName) ? rawPdfFileName : `${rawPdfFileName}.pdf`;
+          const rawName = (image.name || '').trim().replace(/\s*\(Page\s+\d+\)\s*$/i, '').trim();
+          if (rawName) return /\.pdf$/i.test(rawName) ? rawName : `${rawName}.pdf`;
+          const rawFileName = (image.fileName || '').trim();
           if (rawFileName) {
             const base = rawFileName.replace(/\.[^.]+$/, '').replace(/-page-\d+$/i, '').trim();
             if (base) return `${base}.pdf`;
@@ -2787,334 +2878,343 @@ export function QuoteBuilderScreen({
           const fallbackBase = fallbackBaseName.replace(/\.[^.]+$/, '').replace(/-page-\d+$/i, '').trim();
           return `${fallbackBase || 'Artwork'}.pdf`;
         };
-
-        const quantityPartsByCreative = new Map<number, string[]>();
-        Array.from(rowsByCreative.entries())
-          .sort((a, b) => a[0] - b[0])
-          .forEach(([creativeNumber, creativeRows]) => {
-            const totals = rowTotals(creativeRows);
-            const rawCreativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
-            const parts = quantityColumns
-              .map((column) => {
-                const quantity = totals.get(column) ?? 0;
-                if (quantity <= 0) return '';
-                return `${quantity} x ${quantityLabelForColumn(column, rawCreativeTypeLabel)}`;
-              })
-              .filter(Boolean);
-            quantityPartsByCreative.set(creativeNumber, parts);
-          });
-
-        const miniMegaPageByCreativeNumber = new Map<number, number>();
-        const miniMegaGroups = new Map<string, number[]>();
-        Array.from(rowsByCreative.entries())
-          .sort((a, b) => a[0] - b[0])
-          .forEach(([creativeNumber, creativeRows]) => {
-            const creativeTypeLabel = creativeTypeByNumber.get(creativeNumber);
-            if (creativeTypeLabel !== 'Mini Mega') return;
-            const firstFileName = creativeRows[0]?.fileName || '';
-            if (!firstFileName) return;
-            const bucket = miniMegaGroups.get(firstFileName) ?? [];
-            bucket.push(creativeNumber);
-            miniMegaGroups.set(firstFileName, bucket);
-          });
-        miniMegaGroups.forEach((creativeNumbers) => {
-          creativeNumbers.forEach((creativeNumber, index) => {
-            miniMegaPageByCreativeNumber.set(creativeNumber, index + 1);
-          });
-        });
-
         const getStoredNameFromUrl = (url: string) => {
-          const resolved = toAbsoluteUrl(buildApiUrl(url || ''));
-          if (!resolved) return '';
           try {
-            const parsed = new URL(resolved, window.location.origin);
-            const segments = parsed.pathname.split('/').filter(Boolean);
-            const storedName = segments[segments.length - 1] || '';
-            return decodeURIComponent(storedName);
+            const resolved = toAbsoluteUrl(buildApiUrl(url || ''));
+            const parsed = new URL(resolved);
+            const parts = parsed.pathname.split('/').filter(Boolean);
+            return parts[parts.length - 1] || '';
           } catch {
-            const segments = resolved.split('/').filter(Boolean);
-            return decodeURIComponent(segments[segments.length - 1] || '');
+            return '';
           }
         };
-
-        const buildCampaignImageDownloadUrl = (creativeImageId: string) => {
-          const imageRecord = imageRecordById.get(creativeImageId);
-          if (!imageRecord) return '';
-          const sourcePdfUrl = imageRecord.sourcePdfUrl || imageRecord.imageUrl || '';
-          const storedName = imageRecord.sourcePdfStoredName || getStoredNameFromUrl(sourcePdfUrl);
-          const rawFileName = resolveCreativeFileName(creativeImageId, imageRecord.name || 'Artwork');
-          if (!storedName) return toAbsoluteUrl(buildApiUrl(sourcePdfUrl));
-          const downloadUrl = new URL(toAbsoluteUrl(buildApiUrl(`/api/campaign-images/${encodeURIComponent(storedName)}/download`)));
-          downloadUrl.searchParams.set('filename', rawFileName);
+        const buildPdfDownloadUrl = (storedName: string, fileName: string) => {
+          const cleanedStoredName = storedName.trim();
+          if (!cleanedStoredName) return '';
+          const downloadUrl = new URL(toAbsoluteUrl(buildApiUrl(`/api/campaign-images/${encodeURIComponent(cleanedStoredName)}/download`)));
+          downloadUrl.searchParams.set('filename', fileName);
           return downloadUrl.toString();
         };
+        const buildCreativePdfLink = (creativeImageId: string, fallbackBaseName: string) => {
+          const image = imageRecordById.get(creativeImageId);
+          if (!image) return '';
+          const storedName = (image.sourcePdfStoredName || '').trim() || getStoredNameFromUrl(image.sourcePdfUrl || image.imageUrl || '');
+          const fileName = normalizePdfFileName(image, fallbackBaseName);
+          return storedName ? buildPdfDownloadUrl(storedName, fileName) : '';
+        };
 
+        const deliveryByDestination = new Map<string, Map<number, Map<string, number>>>();
+        Array.from(deliveryRows.values()).forEach((row) => {
+          const creativeNumber = getCreativeNumberFromCode(row.creativeCode);
+          const destinationKey = row.deliveredTo || 'DELIVERY';
+          const destinationBucket = deliveryByDestination.get(destinationKey) ?? new Map<number, Map<string, number>>();
+          const creativeBucket = destinationBucket.get(creativeNumber) ?? new Map<string, number>();
+          const label = row.typeLabel;
+          creativeBucket.set(label, (creativeBucket.get(label) ?? 0) + row.quantity);
+          destinationBucket.set(creativeNumber, creativeBucket);
+          deliveryByDestination.set(destinationKey, destinationBucket);
+        });
+
+        const deadlineText = formatDeliveryDeadline(values.dueDate);
+        const pdfDoc = await PDFDocument.create();
+        let page = pdfDoc.addPage([595.28, 841.89]);
+        const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+        const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+        let adsLogoPngBytes: Uint8Array | null = null;
+        try {
+          const logoResponse = await fetch('/ads-logo.webp');
+          if (logoResponse.ok) {
+            const logoBlob = await logoResponse.blob();
+            const logoBitmap = await createImageBitmap(logoBlob);
+            try {
+              const logoCanvas = document.createElement('canvas');
+              logoCanvas.width = Math.max(1, Math.ceil(logoBitmap.width));
+              logoCanvas.height = Math.max(1, Math.ceil(logoBitmap.height));
+              const logoContext = logoCanvas.getContext('2d');
+              if (logoContext) {
+                logoContext.drawImage(logoBitmap, 0, 0, logoCanvas.width, logoCanvas.height);
+                const logoPngBlob = await canvasToBlob(logoCanvas, 'image/png');
+                adsLogoPngBytes = new Uint8Array(await logoPngBlob.arrayBuffer());
+              }
+            } finally {
+              logoBitmap.close();
+            }
+          }
+        } catch {
+          adsLogoPngBytes = null;
+        }
+        const adsLogoImage = adsLogoPngBytes ? await pdfDoc.embedPng(adsLogoPngBytes) : null;
+        const linkColor = rgb(0.05, 0.35, 0.78);
+        const brandBlue = rgb(0.05, 0.13, 0.25);
+        const brandOrange = rgb(0.95, 0.45, 0.12);
+        const titleBg = brandBlue;
+        const sectionBg = rgb(0.95, 0.97, 1);
+        const sectionBorder = rgb(0.8, 0.86, 0.94);
+        const marginX = 42;
+        const marginTop = 44;
+        const marginBottom = 44;
+        const fontSize = 10.5;
+        const lineHeight = 14;
+        const maxWidth = page.getWidth() - marginX * 2;
+        let cursorY = page.getHeight() - marginTop;
         const artworkFolderUrl = campaignId
           ? toAbsoluteUrl(`/?view=artwork&campaignId=${encodeURIComponent(campaignId)}`)
           : '';
 
-        const bodySpacing = {
-          after: 120,
-          line: 276,
-          lineRule: LineRuleType.AUTO,
-        } as const;
-
-        const makeParagraph = (
-          children: Array<TextRun | ExternalHyperlink | ImageRun>,
-          options?: any,
-        ) =>
-          new Paragraph({
-            children,
-            spacing: bodySpacing,
-            ...(options || {}),
+        const addLinkAnnotation = (x: number, y: number, width: number, height: number, url: string) => {
+          if (!url) return;
+          const annotation = pdfDoc.context.obj({
+            Type: 'Annot',
+            Subtype: 'Link',
+            Rect: [x, y, x + width, y + height],
+            Border: [0, 0, 0],
+            A: { Type: 'Action', S: 'URI', URI: PDFString.of(url) },
           });
-
-        const paragraphs: Paragraph[] = [];
-        const pushBlank = () => paragraphs.push(new Paragraph({ text: '', spacing: bodySpacing }));
-
-        paragraphs.push(
-          makeParagraph([
-            new TextRun({ text: 'Artwork - ', underline: { type: UnderlineType.SINGLE } }),
-            new TextRun(values.campaignName.trim() || 'Artwork'),
-            new TextRun('  '),
-            ...(artworkFolderUrl
-              ? [
-                  new ExternalHyperlink({
-                    children: [
-                      ...createWordIconChildren('folder'),
-                      new TextRun({ text: 'Artwork', style: 'Hyperlink' }),
-                    ],
-                    link: artworkFolderUrl,
-                  }),
-                ]
-              : [
-                  ...createWordIconChildren('folder'),
-                  new TextRun('Artwork'),
-                ]),
-          ]),
-        );
-        paragraphs.push(
-          makeParagraph([
-            new TextRun({ text: 'Creative - ', underline: { type: UnderlineType.SINGLE } }),
-            new TextRun(creativeHeadline),
-          ]),
-        );
-        paragraphs.push(
-          makeParagraph([new TextRun({ text: 'No. of posters to print -', underline: { type: UnderlineType.SINGLE } })]),
-        );
-        pushBlank();
-
-        Array.from(rowsByCreative.entries())
-          .sort((a, b) => a[0] - b[0])
-          .forEach(([creativeNumber]) => {
-            const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
-            const labelText = `Creative ${creativeNumber} (${creativeTypeLabel}): `;
-            const summary = (quantityPartsByCreative.get(creativeNumber) ?? []).join(' & ');
-            paragraphs.push(
-              makeParagraph(
-                [
-                  new TextRun({ text: labelText, bold: true }),
-                  new TextRun(summary || 'No mapped quantities'),
-                ],
-                { bullet: { level: 0 } },
-              ),
-            );
-          });
-
-        pushBlank();
-        Array.from(rowsByCreative.entries())
-          .sort((a, b) => a[0] - b[0])
-          .forEach(([creativeNumber, creativeRows]) => {
-            const rawCreativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
-            const creativeTypeLabel = resolveCreativeTypeLabel(rawCreativeTypeLabel);
-            const headerText = `Creative ${creativeNumber} (${creativeTypeLabel}):`;
-            const pageNumber = miniMegaPageByCreativeNumber.get(creativeNumber);
-            const firstCreativeImageId = creativeRows[0]?.creativeImageId || '';
-            const preview = creativePreviewById.get(firstCreativeImageId);
-
-            if (rawCreativeTypeLabel === 'Mini Mega' && creativeRows.length > 0) {
-              const fileName = resolveCreativeFileName(firstCreativeImageId, creativeRows[0].fileName);
-              const pageSuffix = pageNumber ? ` PAGE ${pageNumber}` : '';
-              paragraphs.push(
-                makeParagraph([
-                  new TextRun({ text: `${headerText} `, bold: true }),
-                  new ExternalHyperlink({
-                    children: [
-                      ...createWordIconChildren('pdf'),
-                      new TextRun({ text: `${fileName}${pageSuffix}`, style: 'Hyperlink' }),
-                    ],
-                    link: buildCampaignImageDownloadUrl(firstCreativeImageId),
-                  }),
-                ]),
-              );
-              if (preview) {
-                paragraphs.push(
-                  makeParagraph([
-                    new ImageRun({
-                      type: preview.extension,
-                      data: preview.bytes,
-                      transformation: { width: 430, height: 130 },
-                    }),
-                  ]),
-                );
-              }
-              pushBlank();
-              return;
-            }
-
-            paragraphs.push(makeParagraph([new TextRun({ text: headerText, bold: true })]));
-            creativeRows.forEach((row) => {
-              const fileName = resolveCreativeFileName(row.creativeImageId, row.fileName);
-              paragraphs.push(
-                makeParagraph([
-                  new TextRun({ text: `${row.state}: `, bold: true }),
-                  new ExternalHyperlink({
-                    children: [
-                      ...createWordIconChildren('pdf'),
-                      new TextRun({ text: fileName, style: 'Hyperlink' }),
-                    ],
-                    link: buildCampaignImageDownloadUrl(row.creativeImageId),
-                  }),
-                ]),
-              );
-            });
-            if (preview) {
-              paragraphs.push(
-                makeParagraph([
-                  new ImageRun({
-                    type: preview.extension,
-                    data: preview.bytes,
-                    transformation: { width: 430, height: 130 },
-                  }),
-                ]),
-              );
-            }
-            pushBlank();
-          });
-
-        paragraphs.push(
-          makeParagraph([new TextRun({ text: 'Delivery -', underline: { type: UnderlineType.SINGLE } })]),
-        );
-        pushBlank();
-
-        const deliveryByDestination = new Map<string, {
-          creativeNumber: number;
-          creativeTypeLabel: string;
-          quantityByTypeLabel: Map<string, number>;
-        }[]>();
-        const deliveryLabelFromType = (typeLabel: string) => {
-          const normalized = typeLabel.trim().toUpperCase();
-          const namesByUpper = new Map<string, string>([
-            [resolveFormatName('8-sheet', normalizedSheetNameOverrides).toUpperCase(), `${resolveFormatName('8-sheet', normalizedSheetNameOverrides)} posters`],
-            [resolveFormatName('6-sheet', normalizedSheetNameOverrides).toUpperCase(), `${resolveFormatName('6-sheet', normalizedSheetNameOverrides)} posters`],
-            [resolveFormatName('4-sheet', normalizedSheetNameOverrides).toUpperCase(), `${resolveFormatName('4-sheet', normalizedSheetNameOverrides)} posters`],
-            [resolveFormatName('2-sheet', normalizedSheetNameOverrides).toUpperCase(), `${resolveFormatName('2-sheet', normalizedSheetNameOverrides)} posters`],
-            [resolveFormatName('QA0', normalizedSheetNameOverrides).toUpperCase(), resolveFormatName('QA0', normalizedSheetNameOverrides)],
-            [resolveFormatName('Mega', normalizedSheetNameOverrides).toUpperCase(), resolveFormatName('Mega', normalizedSheetNameOverrides)],
-            [resolveFormatName('DOT M', normalizedSheetNameOverrides).toUpperCase(), resolveFormatName('DOT M', normalizedSheetNameOverrides)],
-            [resolveFormatName('MP', normalizedSheetNameOverrides).toUpperCase(), resolveFormatName('MP', normalizedSheetNameOverrides)],
-          ]);
-          if (normalized.startsWith('BRIS ')) {
-            const brisLabel = namesByUpper.get(normalized.slice(5));
-            return brisLabel ? `Brisbane sized ${brisLabel}` : `Brisbane sized ${normalized.slice(5)}`;
-          }
-          return namesByUpper.get(normalized) || normalized;
+          const annotationRef = pdfDoc.context.register(annotation);
+          const annots = page.node.lookup(PDFName.of('Annots'), PDFArray) ?? pdfDoc.context.obj([]);
+          annots.push(annotationRef);
+          page.node.set(PDFName.of('Annots'), annots);
         };
 
-        Array.from(deliveryRows.values()).forEach((row) => {
-          const creativeNumber = getCreativeNumberFromCode(row.creativeCode);
-          const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
-          const destinationKey = row.deliveredTo || 'DELIVERY';
-          const creativeBucket = deliveryByDestination.get(destinationKey) ?? [];
-          let creativeEntry = creativeBucket.find((entry) => entry.creativeNumber === creativeNumber);
-          if (!creativeEntry) {
-            creativeEntry = {
-              creativeNumber,
-              creativeTypeLabel,
-              quantityByTypeLabel: new Map<string, number>(),
-            };
-            creativeBucket.push(creativeEntry);
+        const ensureSpace = (requiredHeight: number) => {
+          if (cursorY - requiredHeight < marginBottom) {
+            page = pdfDoc.addPage([595.28, 841.89]);
+            cursorY = page.getHeight() - marginTop;
           }
-          const quantityLabel = deliveryLabelFromType(row.typeLabel);
-          creativeEntry.quantityByTypeLabel.set(
-            quantityLabel,
-            (creativeEntry.quantityByTypeLabel.get(quantityLabel) ?? 0) + row.quantity,
-          );
-          deliveryByDestination.set(destinationKey, creativeBucket);
-        });
+        };
 
-        const deadlineText = formatDeliveryDeadline(values.dueDate);
-        Array.from(deliveryByDestination.entries())
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .forEach(([destination, entries]) => {
-            const destinationBlock = deliveryInfoBlocks.find((block) => block.toUpperCase().startsWith(destination.toUpperCase()));
-            const destinationLines = destinationBlock
-              ? destinationBlock.split('\n').map((line) => line.trim()).filter(Boolean)
-              : [];
-            const destinationName = destinationLines.length > 1 ? destinationLines[1] : destination;
-            paragraphs.push(
-              makeParagraph([new TextRun(`Please deliver to ${destinationName} by ${deadlineText} by COB:`)]),
-            );
-            pushBlank();
-            entries
-              .sort((a, b) => a.creativeNumber - b.creativeNumber)
-              .forEach((entry) => {
-                const parts = Array.from(entry.quantityByTypeLabel.entries()).map(
-                  ([quantityLabel, quantity]) => `${quantity} x ${quantityLabel}`,
-                );
-                paragraphs.push(
-                  makeParagraph([
-                    new TextRun({ text: `Creative ${entry.creativeNumber} (${entry.creativeTypeLabel}): `, bold: true }),
-                    new TextRun(parts.join(' & ') || 'No mapped quantities'),
-                  ], { bullet: { level: 0 } }),
-                );
-              });
-            pushBlank();
+        const drawTitleBlock = (title: string, subtitle: string) => {
+          const h = 76;
+          ensureSpace(h + 10);
+          page.drawRectangle({
+            x: marginX,
+            y: cursorY - h + 8,
+            width: maxWidth,
+            height: h,
+            color: titleBg,
           });
+          const titleTextX = marginX + 12;
+          if (adsLogoImage) {
+            const logoTargetHeight = 38;
+            const logoScale = logoTargetHeight / Math.max(1, adsLogoImage.height);
+            const logoWidth = Math.max(1, Math.round(adsLogoImage.width * logoScale));
+            page.drawImage(adsLogoImage, {
+              x: marginX + 12,
+              y: cursorY - 52,
+              width: logoWidth,
+              height: logoTargetHeight,
+            });
+          }
+          page.drawText(title, {
+            x: titleTextX + (adsLogoImage ? 56 : 0),
+            y: cursorY - 16,
+            size: 16,
+            font: bold,
+            color: rgb(1, 1, 1),
+          });
+          page.drawText(subtitle, {
+            x: titleTextX + (adsLogoImage ? 56 : 0),
+            y: cursorY - 34,
+            size: 10,
+            font,
+            color: rgb(0.85, 0.9, 0.97),
+          });
+          const startLabel = values.campaignStartDate?.trim() ? values.campaignStartDate : '-';
+          const dueLabel = values.dueDate?.trim() ? values.dueDate : '-';
+          page.drawText(`Start Date: ${startLabel}    Due Date: ${dueLabel}`, {
+            x: titleTextX + (adsLogoImage ? 56 : 0),
+            y: cursorY - 50,
+            size: 9.5,
+            font,
+            color: rgb(0.85, 0.9, 0.97),
+          });
+          cursorY -= (h + 10);
+        };
 
-        const wordDocument = new WordDocument({
-          styles: {
-            default: {
-              document: {
-                run: {
-                  font: 'Calibri',
-                  size: 22,
-                },
-                paragraph: {
-                  spacing: bodySpacing,
-                },
-              },
-            },
-          },
-          sections: [
-            {
-              properties: {
-                page: {
-                  margin: {
-                    top: 284,
-                    right: 284,
-                    bottom: 284,
-                    left: 284,
-                    header: 708,
-                    footer: 708,
-                    gutter: 0,
-                  },
-                },
-              },
-              children: paragraphs,
-            },
-          ],
+        const drawSectionHeader = (label: string) => {
+          const h = 22;
+          ensureSpace(h + 6);
+          page.drawRectangle({
+            x: marginX,
+            y: cursorY - h + 4,
+            width: maxWidth,
+            height: h,
+            color: sectionBg,
+            borderColor: sectionBorder,
+            borderWidth: 1,
+          });
+          page.drawRectangle({
+            x: marginX,
+            y: cursorY - h + 4,
+            width: 4,
+            height: h,
+            color: brandOrange,
+          });
+          page.drawText(label, {
+            x: marginX + 10,
+            y: cursorY - 11,
+            size: 10.5,
+            font: bold,
+            color: rgb(0.1, 0.16, 0.26),
+          });
+          cursorY -= (h + 6);
+          cursorY -= 6;
+        };
+
+        const drawWrappedLine = (
+          text: string,
+          isBold = false,
+          link?: string,
+          indent = 0,
+          color: ReturnType<typeof rgb> = rgb(0.08, 0.12, 0.18),
+        ) => {
+          const useFont = isBold ? bold : font;
+          const words = text.split(' ');
+          let current = '';
+          const xBase = marginX + indent;
+          const maxWidthForLine = maxWidth - indent;
+          const flush = () => {
+            ensureSpace(lineHeight);
+            const printable = current || ' ';
+            const width = useFont.widthOfTextAtSize(printable, fontSize);
+            page.drawText(printable, {
+              x: xBase,
+              y: cursorY,
+              size: fontSize,
+              font: useFont,
+              color: link ? linkColor : color,
+            });
+            if (link) {
+              page.drawLine({ start: { x: xBase, y: cursorY - 1 }, end: { x: xBase + width, y: cursorY - 1 }, thickness: 0.5, color: linkColor });
+              addLinkAnnotation(xBase, cursorY - 2, width, lineHeight, link);
+            }
+            cursorY -= lineHeight;
+          };
+          words.forEach((word) => {
+            const candidate = current ? `${current} ${word}` : word;
+            const width = useFont.widthOfTextAtSize(candidate, fontSize);
+            if (width <= maxWidthForLine) {
+              current = candidate;
+            } else {
+              flush();
+              current = word;
+            }
+          });
+          flush();
+        };
+
+        drawTitleBlock(values.campaignName.trim() || 'Artwork', `Creative Mix: ${creativeHeadline}`);
+        if (artworkFolderUrl) {
+          drawSectionHeader('Resources');
+          drawWrappedLine('Artwork Folder', false, artworkFolderUrl, 16);
+          cursorY -= 4;
+        }
+        drawSectionHeader('Print Quantities');
+        Array.from(rowsByCreative.keys()).sort((a, b) => a - b).forEach((creativeNumber) => {
+          const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
+          const summary = (quantityPartsByCreative.get(creativeNumber) ?? []).join(' & ') || 'No mapped quantities';
+          drawWrappedLine(`• Creative ${creativeNumber} (${creativeTypeLabel}): ${summary}`, false, undefined, 16);
+        });
+        cursorY -= 8;
+        drawSectionHeader('Creative Files & Thumbnails');
+        for (const [creativeNumber, creativeRows] of Array.from(rowsByCreative.entries()).sort((a, b) => a[0] - b[0])) {
+          const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
+          drawWrappedLine(`Creative ${creativeNumber} (${creativeTypeLabel}):`, true, undefined, 16);
+          for (const row of creativeRows) {
+            const link = buildCreativePdfLink(row.creativeImageId, row.fileName || 'Artwork');
+            drawWrappedLine(`${row.state}: ${row.fileName}.pdf`, false, link || undefined, 32);
+          }
+          const firstImageId = creativeRows[0]?.creativeImageId || '';
+          const preview = creativePreviewById.get(firstImageId);
+          if (preview) {
+            try {
+              const embedded = preview.extension === 'png'
+                ? await pdfDoc.embedPng(preview.bytes)
+                : await pdfDoc.embedJpg(preview.bytes);
+              const maxThumbWidth = 230;
+              const scale = Math.min(1, maxThumbWidth / embedded.width);
+              const width = Math.max(1, Math.round(embedded.width * scale));
+              const height = Math.max(1, Math.round(embedded.height * scale));
+              ensureSpace(height + 16);
+              page.drawImage(embedded, {
+                x: marginX + 28,
+                y: cursorY - height + 6,
+                width,
+                height,
+              });
+              cursorY -= (height + 14);
+            } catch {
+              // Ignore thumbnail render failures.
+            }
+          }
+          drawWrappedLine('');
+        }
+        drawSectionHeader('Delivery Instructions');
+        Array.from(deliveryByDestination.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([destination, creativeMap]) => {
+          drawWrappedLine(
+            `Deliver to ${destination} by ${deadlineText} by COB:`,
+            true,
+            undefined,
+            16,
+            rgb(0.09, 0.2, 0.35),
+          );
+          cursorY -= 2;
+          Array.from(creativeMap.entries()).sort((a, b) => a[0] - b[0]).forEach(([creativeNumber, quantityMap]) => {
+            const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
+            const parts = Array.from(quantityMap.entries()).map(([quantityLabel, quantity]) => `${quantity} x ${quantityLabel}`);
+            drawWrappedLine(`• Creative ${creativeNumber} (${creativeTypeLabel}): ${parts.join(' & ')}`, false, undefined, 32);
+          });
+          cursorY -= 6;
         });
 
-        const blob = await Packer.toBlob(wordDocument);
-        const fileName = `${baseName} - Visuals.docx`;
+        const generatedAt = new Date().toLocaleString('en-AU', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        const allPages = pdfDoc.getPages();
+        const totalPages = allPages.length;
+        allPages.forEach((pdfPage, index) => {
+          const footerY = 20;
+          const pageWidth = pdfPage.getWidth();
+          pdfPage.drawLine({
+            start: { x: marginX, y: footerY + 10 },
+            end: { x: pageWidth - marginX, y: footerY + 10 },
+            thickness: 0.8,
+            color: sectionBorder,
+          });
+          pdfPage.drawText(`Generated: ${generatedAt}`, {
+            x: marginX,
+            y: footerY,
+            size: 8.5,
+            font,
+            color: rgb(0.38, 0.45, 0.58),
+          });
+          const pageLabel = `Page ${index + 1} of ${totalPages}`;
+          const labelWidth = font.widthOfTextAtSize(pageLabel, 8.5);
+          pdfPage.drawText(pageLabel, {
+            x: pageWidth - marginX - labelWidth,
+            y: footerY,
+            size: 8.5,
+            font,
+            color: brandBlue,
+          });
+        });
+
+        const pdfBytes = await pdfDoc.save();
+        const pdfArrayBuffer = new ArrayBuffer(pdfBytes.byteLength);
+        new Uint8Array(pdfArrayBuffer).set(pdfBytes);
+        const blob = new Blob([pdfArrayBuffer], { type: 'application/pdf' });
+        const fileName = `${baseName} - Visuals.pdf`;
         if (downloadFiles) {
           downloadBlobWithFileName(blob, fileName);
         }
         return {
           fileName,
           blob,
-          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          mimeType: 'application/pdf',
         };
       };
 
@@ -3490,10 +3590,6 @@ export function QuoteBuilderScreen({
       setError('Add a due date before downloading visuals.');
       return;
     }
-    if (!hasUploadedPurchaseOrder) {
-      setError('Upload a purchase order file before downloading visuals');
-      return;
-    }
     if (!hasMappedCreatives) {
       setError('Map at least one creative to a market asset before downloading visuals');
       return;
@@ -3549,7 +3645,10 @@ export function QuoteBuilderScreen({
             const mapped = creativeFormatKeys
               .map((format) => getCreativeImageIdForFormat(asset, format))
               .filter((imageId) => Boolean(imageId.trim()));
-            return Array.from(new Set(mapped));
+            const multiMapped = creativeFormatKeys.flatMap((format) =>
+              (asset.multiCreativeImageIds?.[format] ?? []).map((imageId) => (imageId || '').trim()).filter(Boolean),
+            );
+            return Array.from(new Set([...mapped, ...multiMapped]));
           }),
         ),
       );
@@ -4042,10 +4141,14 @@ export function QuoteBuilderScreen({
                                 const requiredFormats = getCreativeFormatsForBreakdown(line?.breakdown);
                                 const displayFormats = requiredFormats.length > 0 ? requiredFormats : [null];
                                 const rowSpan = displayFormats.length;
+                                const metadataAsset = markets.find((entry) => entry.name === market.market)?.assets.find((entry) => entry.id === asset.assetId);
                                 return (
                                   <Fragment key={`finalize-map-group-${asset.id}`}>
                                     {displayFormats.map((formatKey, index) => {
                                       const selectedCreativeId = formatKey ? getCreativeImageIdForFormat(asset, formatKey) : '';
+                                      const multiArtworkSlotCount = formatKey && normalizedMultipleArtworkFormats[canonicalKeyForFormat(formatKey)] ? Math.max(1, metadataAsset?.quantities?.[formatKey] ?? 1) : 0;
+                                      const slotArtworkIds = formatKey ? (asset.multiCreativeImageIds?.[formatKey] ?? []) : [];
+                                      const hasAnySlotArtwork = slotArtworkIds.some((id) => Boolean((id || '').trim()));
                                       return (
                                         <tr key={`finalize-map-row-${asset.id}-${formatKey ?? 'none'}-${index}`} className="border-b border-slate-700/70 align-top last:border-b-0">
                                           {index === 0 ? (
@@ -4066,14 +4169,25 @@ export function QuoteBuilderScreen({
                                                 <Button
                                                   className="h-9 w-24 px-3 text-xs font-semibold"
                                                   onClick={() =>
-                                                    selectedCreativeId
-                                                      ? openArtworkPreviewDialog(market.id, asset.id, formatKey)
-                                                      : openAssignArtworkDialog(market.id, asset.id, formatKey)
+                                                    multiArtworkSlotCount > 0
+                                                      ? openMultiArtworkDialog(market.id, asset.id, formatKey, multiArtworkSlotCount)
+                                                      : selectedCreativeId
+                                                        ? openArtworkPreviewDialog(market.id, asset.id, formatKey)
+                                                        : openAssignArtworkDialog(market.id, asset.id, formatKey)
                                                   }
                                                   type="button"
-                                                  variant={selectedCreativeId ? 'outline' : 'secondary'}
+                                                  variant={multiArtworkSlotCount > 0 ? (hasAnySlotArtwork ? 'outline' : 'secondary') : selectedCreativeId ? 'outline' : 'secondary'}
                                                 >
-                                                  {selectedCreativeId ? (
+                                                  {multiArtworkSlotCount > 0 ? (
+                                                    hasAnySlotArtwork ? (
+                                                      <>
+                                                        <Eye className="h-3.5 w-3.5" />
+                                                        Show
+                                                      </>
+                                                    ) : (
+                                                      '+ Assign'
+                                                    )
+                                                  ) : selectedCreativeId ? (
                                                     <>
                                                       <Eye className="h-3.5 w-3.5" />
                                                       Show
@@ -4285,7 +4399,6 @@ export function QuoteBuilderScreen({
                     className="h-10 min-w-[180px] px-5 text-base"
                     disabled={exportingTemplates || sendingAdsEmail}
                     onClick={() => void downloadArtworkVisuals()}
-                    title={!hasUploadedPurchaseOrder ? 'Upload purchase order before downloading visuals' : undefined}
                     type="button"
                     variant="outline"
                   >
@@ -4319,7 +4432,6 @@ export function QuoteBuilderScreen({
                     className="h-10 min-w-[180px] px-5 text-base"
                     disabled={exportingTemplates || sendingAdsEmail}
                     onClick={() => void downloadArtworkVisuals()}
-                    title={!hasUploadedPurchaseOrder ? 'Upload purchase order before downloading visuals' : undefined}
                     type="button"
                     variant="outline"
                   >
@@ -4732,7 +4844,7 @@ export function QuoteBuilderScreen({
           closeArtworkPreviewDialog();
         }}
       >
-        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 42rem)' }}>
+        <DialogContent style={{ width: '70vw', maxWidth: '70vw' }}>
           <DialogHeader>
             <DialogTitle>Artwork</DialogTitle>
           </DialogHeader>
@@ -4791,6 +4903,88 @@ export function QuoteBuilderScreen({
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={multiArtworkDialogOpen}
+        onOpenChange={(open) => {
+          setMultiArtworkDialogOpen(open);
+          if (!open) {
+            setMultiArtworkTarget(null);
+          }
+        }}
+      >
+        <DialogContent style={{ width: '70vw', maxWidth: '70vw' }}>
+          <DialogHeader>
+            <DialogTitle>Artwork</DialogTitle>
+          </DialogHeader>
+          {multiArtworkTarget ? (
+            <div className="space-y-3">
+              <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/70">
+                <table className="w-full table-fixed border-collapse text-sm">
+                  <colgroup>
+                    <col className="w-[52px]" />
+                    <col className="w-[120px]" />
+                    <col className="w-auto" />
+                    <col className="w-[110px]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
+                      <th className="border border-slate-700 px-3 py-2 text-left">No</th>
+                      <th className="border border-slate-700 px-3 py-2 text-center">
+                        <span className="whitespace-nowrap tracking-normal">Thumbnail</span>
+                      </th>
+                      <th className="border border-slate-700 px-3 py-2 text-left">Filename</th>
+                      <th className="border border-slate-700 px-3 py-2 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: multiArtworkTarget.slotCount }, (_, index) => {
+                      const targetMarket = values.campaignMarkets.find((market) => market.id === multiArtworkTarget.marketId);
+                      const targetAsset = targetMarket?.assets.find((asset) => asset.id === multiArtworkTarget.assetId);
+                      const slotImageId = targetAsset?.multiCreativeImageIds?.[multiArtworkTarget.formatKey]?.[index] || '';
+                      const slotImage = slotImageId ? values.printImages.find((image) => image.id === slotImageId) : null;
+                      const thumbnailSrc = slotImage?.thumbnailUrl ? buildApiUrl(slotImage.thumbnailUrl) : (slotImage?.imageUrl ? buildApiUrl(slotImage.imageUrl) : '');
+                      const fileName = slotImage?.fileName || slotImage?.name || '-';
+                      return (
+                        <tr key={`multi-artwork-slot-${index + 1}`} className="border-t border-slate-700/70 bg-slate-800/65">
+                          <td className="border border-slate-700 px-3 py-2 text-slate-200">{index + 1}</td>
+                          <td className="border border-slate-700 px-3 py-2">
+                            <div className="mx-auto h-14 w-14 overflow-hidden rounded border border-slate-700 bg-slate-900">
+                              {thumbnailSrc ? (
+                                <img alt={`Slot ${index + 1} thumbnail`} className="h-full w-full object-cover" loading="lazy" src={thumbnailSrc} />
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="border border-slate-700 px-3 py-2 text-slate-100">
+                            <p className="whitespace-normal break-all leading-snug">{fileName}</p>
+                          </td>
+                          <td className="border border-slate-700 px-3 py-2 text-center">
+                            <Button
+                              className="h-8 px-3 text-xs"
+                              onClick={() =>
+                                openAssignArtworkDialog(
+                                  multiArtworkTarget.marketId,
+                                  multiArtworkTarget.assetId,
+                                  multiArtworkTarget.formatKey,
+                                  index,
+                                )
+                              }
+                              type="button"
+                              variant={slotImageId ? 'outline' : 'secondary'}
+                            >
+                              {slotImageId ? 'Change' : 'Assign'}
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 
@@ -5009,4 +5203,5 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
+
 

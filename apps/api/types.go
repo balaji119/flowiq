@@ -22,10 +22,11 @@ type TenantRecord struct {
 type sheetNameOverrides map[string]string
 
 type sheetNameOverrideRecord struct {
-	TenantID  string             `json:"tenantId"`
-	Overrides sheetNameOverrides `json:"overrides"`
-	CreatedAt string             `json:"createdAt"`
-	UpdatedAt string             `json:"updatedAt"`
+	TenantID               string             `json:"tenantId"`
+	Overrides              sheetNameOverrides `json:"overrides"`
+	MultipleArtworkFormats map[string]bool    `json:"multipleArtworkFormats,omitempty"`
+	CreatedAt              string             `json:"createdAt"`
+	UpdatedAt              string             `json:"updatedAt"`
 }
 
 type AuthUser struct {
@@ -91,13 +92,14 @@ type orderFormValues struct {
 }
 
 type campaignAsset struct {
-	ID               string            `json:"id"`
-	AssetID          string            `json:"assetId"`
-	AssetSearch      string            `json:"assetSearch"`
-	SelectedWeeks    []int             `json:"selectedWeeks"`
-	CreativeImageID  string            `json:"creativeImageId"`
-	CreativeImageIDs map[string]string `json:"creativeImageIds,omitempty"`
-	DeliveryAddress  string            `json:"deliveryAddress"`
+	ID                    string              `json:"id"`
+	AssetID               string              `json:"assetId"`
+	AssetSearch           string              `json:"assetSearch"`
+	SelectedWeeks         []int               `json:"selectedWeeks"`
+	CreativeImageID       string              `json:"creativeImageId"`
+	CreativeImageIDs      map[string]string   `json:"creativeImageIds,omitempty"`
+	MultiCreativeImageIDs map[string][]string `json:"multiCreativeImageIds,omitempty"`
+	DeliveryAddress       string              `json:"deliveryAddress"`
 }
 
 type campaignMarket struct {
