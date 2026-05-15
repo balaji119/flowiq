@@ -1327,6 +1327,10 @@ export function QuoteBuilderScreen({
     return marketNames.filter((marketName) => !selectedMarketNames.has(marketName));
   }, [marketNames, selectedMarketsForPopup]);
   const canAddMarket = remainingMarketNames.length > 0;
+  const canAddMarketInPlanning = useMemo(() => {
+    const selected = new Set(values.campaignMarkets.map((market) => market.market.trim()).filter(Boolean));
+    return marketNames.some((marketName) => !selected.has(marketName));
+  }, [marketNames, values.campaignMarkets]);
   const addMarketDisabledReason = loadingMetadata
     ? 'Market options are still loading.'
     : markets.length === 0
@@ -1690,7 +1694,7 @@ export function QuoteBuilderScreen({
       assets: nextMarket.assets.map((asset) => ({
         ...asset,
         deliveryAddress: preferredAddress,
-        selectedWeeks: createAllWeeks(numberOfWeeks),
+        selectedWeeks: [],
       })),
     });
     setEditingMarketId(null);
@@ -3982,12 +3986,18 @@ export function QuoteBuilderScreen({
                   >
                     Manage Artwork
                   </Button>
-                  <div title={canAddMarket ? 'Add another market' : addMarketDisabledReason}>
-                    <Button className="h-10 min-w-[160px] px-5 text-base" disabled={!canAddMarket} onClick={openAddMarketDialog} type="button" variant="secondary">
+                  <div title={canAddMarketInPlanning ? 'Add another market' : addMarketDisabledReason}>
+                    <Button
+                      className="h-10 min-w-[160px] px-5 text-base disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-slate-800"
+                      disabled={!canAddMarketInPlanning}
+                      onClick={openAddMarketDialog}
+                      type="button"
+                      variant="secondary"
+                    >
                       <Plus className="h-4 w-4" />
                       Add Market
-                      </Button>
-                    </div>
+                    </Button>
+                  </div>
                   </div>
                 </div>
                 {loadingMetadata ? (
@@ -4031,7 +4041,7 @@ export function QuoteBuilderScreen({
                                                   assetId: '',
                                                   assetSearch: '',
                                                   deliveryAddress: preferredAddress,
-                                                  selectedWeeks: createAllWeeks(numberOfWeeks),
+                                                  selectedWeeks: [],
                                                 })),
                                               };
                                             })
@@ -4050,7 +4060,7 @@ export function QuoteBuilderScreen({
                         <div className="mt-5 space-y-4">
                           <div>
                             <p className="text-sm font-semibold text-white">Assets</p>
-                            <p className="text-xs text-slate-400">Attach the assets you want to run in this market. All campaign weeks are selected automatically.</p>
+                            <p className="text-xs text-slate-400">Attach the assets you want to run in this market. Select weeks as needed.</p>
                           </div>
                           <div className="rounded-md border border-slate-700/80 bg-slate-900/45 lg:overflow-visible">
                             <div className="overflow-x-auto lg:overflow-visible">
@@ -4632,7 +4642,7 @@ export function QuoteBuilderScreen({
                               assetId: '',
                               assetSearch: '',
                               deliveryAddress: preferredAddress,
-                              selectedWeeks: createAllWeeks(numberOfWeeks),
+                              selectedWeeks: [],
                             })),
                           };
                         })
