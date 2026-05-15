@@ -2062,8 +2062,8 @@ export function QuoteBuilderScreen({
     }
   }
 
-  async function uploadArtworkPdfFiles(files: File[]) {
-    if (!files.length) return;
+  async function uploadArtworkPdfFiles(files: File[]): Promise<number> {
+    if (!files.length) return 0;
     const nonPdfFile = files.find((file) => !isPdfFile(file));
     if (nonPdfFile) {
       setArtworkDialogError('Only PDF files are allowed.');
@@ -5431,5 +5431,4 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
-
 
