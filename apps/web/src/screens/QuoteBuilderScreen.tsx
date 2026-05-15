@@ -4961,21 +4961,43 @@ export function QuoteBuilderScreen({
                             <p className="whitespace-normal break-all leading-snug">{fileName}</p>
                           </td>
                           <td className="border border-slate-700 px-3 py-2 text-center">
-                            <Button
-                              className="h-8 px-3 text-xs"
-                              onClick={() =>
-                                openAssignArtworkDialog(
-                                  multiArtworkTarget.marketId,
-                                  multiArtworkTarget.assetId,
-                                  multiArtworkTarget.formatKey,
-                                  index,
-                                )
-                              }
-                              type="button"
-                              variant={slotImageId ? 'outline' : 'secondary'}
-                            >
-                              {slotImageId ? 'Change' : 'Assign'}
-                            </Button>
+                            <div className="flex items-center justify-center gap-2">
+                              <Button
+                                aria-label={`Edit artwork for slot ${index + 1}`}
+                                className="h-8 w-8 p-0"
+                                onClick={() =>
+                                  openAssignArtworkDialog(
+                                    multiArtworkTarget.marketId,
+                                    multiArtworkTarget.assetId,
+                                    multiArtworkTarget.formatKey,
+                                    index,
+                                  )
+                                }
+                                type="button"
+                                variant={slotImageId ? 'outline' : 'secondary'}
+                              >
+                                {slotImageId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                              </Button>
+                              {slotImageId ? (
+                                <Button
+                                  aria-label={`Remove artwork from slot ${index + 1}`}
+                                  className="h-8 w-8 p-0"
+                                  onClick={() =>
+                                    assignArtworkToFormatSlot(
+                                      multiArtworkTarget.marketId,
+                                      multiArtworkTarget.assetId,
+                                      multiArtworkTarget.formatKey,
+                                      index,
+                                      '',
+                                    )
+                                  }
+                                  type="button"
+                                  variant="destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       );
