@@ -1,5 +1,5 @@
 import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, Eye, LoaderCircle, Maximize2, Pencil, Plus, Search, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, Eye, GripVertical, LoaderCircle, Maximize2, Pencil, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignPrintImage,
@@ -1014,6 +1014,8 @@ export function QuoteBuilderScreen({
   const [queuedArtworkFileNames, setQueuedArtworkFileNames] = useState<string[]>([]);
   const [uploadManagerOpen, setUploadManagerOpen] = useState(false);
   const [hasChosenArtworkInSession, setHasChosenArtworkInSession] = useState(false);
+  const [draggingDraftAssetId, setDraggingDraftAssetId] = useState<string | null>(null);
+  const [dragOverDraftAssetId, setDragOverDraftAssetId] = useState<string | null>(null);
   const [artworkSearchQuery, setArtworkSearchQuery] = useState('');
   const [artworkUploadSuccessOpen, setArtworkUploadSuccessOpen] = useState(false);
   const [artworkUploadSuccessMessage, setArtworkUploadSuccessMessage] = useState('');
@@ -1820,6 +1822,22 @@ export function QuoteBuilderScreen({
       ...market,
       assets: market.assets.length === 1 ? market.assets : market.assets.filter((asset) => asset.id !== assetId),
     }));
+  }
+
+  function reorderDraftAssets(sourceAssetId: string, targetAssetId: string) {
+    if (sourceAssetId === targetAssetId) return;
+    updateDraftMarket((market) => {
+      const sourceIndex = market.assets.findIndex((asset) => asset.id === sourceAssetId);
+      const targetIndex = market.assets.findIndex((asset) => asset.id === targetAssetId);
+      if (sourceIndex === -1 || targetIndex === -1) return market;
+      const nextAssets = [...market.assets];
+      const [movedAsset] = nextAssets.splice(sourceIndex, 1);
+      nextAssets.splice(targetIndex, 0, movedAsset);
+      return {
+        ...market,
+        assets: nextAssets,
+      };
+    });
   }
 
   function removeCampaignMarket(marketId: string) {
@@ -4663,17 +4681,22 @@ export function QuoteBuilderScreen({
                   </div>
                 </div>
 
-                <div className="space-y-4">
+              <div className="space-y-4">
+                  <p className="text-xs text-slate-400">Drag the handle to reorder assets.</p>
                   <div className="rounded-md border border-slate-700/80 bg-slate-900/45">
                     <div className="overflow-visible">
                       <table className="dense-table w-full table-fixed border-collapse">
                         <colgroup>
-                          <col className="w-[38%]" />
-                          <col className="w-[48%]" />
+                          <col className="w-[2.4%]" />
+                          <col className="w-[39.6%]" />
+                          <col className="w-[44%]" />
                           <col className="w-[4%]" />
                         </colgroup>
                         <thead>
                           <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                            <th className="px-2 py-3 text-center">
+                              <span className="sr-only">Reorder</span>
+                            </th>
                             <th className="px-4 py-3 text-left">Asset</th>
                             <th className="px-4 py-3 text-left">Active Weeks</th>
                             <th className="px-3 py-3 text-center">
@@ -4686,9 +4709,60 @@ export function QuoteBuilderScreen({
                             const canRemoveAsset = draftMarket.assets.length > 1;
                             const availableAssets = assetsForMarket(draftMarket.market);
                             const availableAssetOptions = assetOptionsFor(draftMarket, asset.id, asset.assetId);
+                            const isDragging = draggingDraftAssetId === asset.id;
+                            const isDragOver = dragOverDraftAssetId === asset.id && draggingDraftAssetId !== asset.id;
                             return (
-                              <tr key={asset.id} className="border-b border-slate-700/70 align-top last:border-b-0">
-                                <td className="px-4 py-3">
+                              <tr
+                                key={asset.id}
+                                className={cn(
+                                  'border-b border-slate-700/70 align-top last:border-b-0',
+                                  isDragging ? 'bg-slate-700/30 opacity-70' : '',
+                                  isDragOver ? 'bg-orange-500/10 ring-1 ring-inset ring-orange-400/50' : '',
+                                )}
+                                onDragLeave={() => {
+                                  if (dragOverDraftAssetId === asset.id) setDragOverDraftAssetId(null);
+                                }}
+                                onDragOver={(event) => {
+                                  if (!draggingDraftAssetId || draggingDraftAssetId === asset.id) return;
+                                  event.preventDefault();
+                                  if (dragOverDraftAssetId !== asset.id) setDragOverDraftAssetId(asset.id);
+                                }}
+                                onDrop={(event) => {
+                                  event.preventDefault();
+                                  const sourceAssetId = draggingDraftAssetId || event.dataTransfer.getData('text/plain');
+                                  if (!sourceAssetId || sourceAssetId === asset.id) {
+                                    setDraggingDraftAssetId(null);
+                                    setDragOverDraftAssetId(null);
+                                    return;
+                                  }
+                                  reorderDraftAssets(sourceAssetId, asset.id);
+                                  setDraggingDraftAssetId(null);
+                                  setDragOverDraftAssetId(null);
+                                }}
+                              >
+                                <td className="px-0 py-3 text-center align-middle">
+                                  <button
+                                    aria-label={`Reorder ${asset.assetSearch || 'asset'}`}
+                                    className={cn(
+                                      'mx-auto inline-flex h-7 w-7 cursor-grab items-center justify-center rounded border border-slate-700 bg-slate-900 text-slate-400 transition hover:border-slate-500 hover:text-slate-200',
+                                      isDragging ? 'cursor-grabbing border-orange-400 text-orange-200' : '',
+                                    )}
+                                    draggable
+                                    onDragEnd={() => {
+                                      setDraggingDraftAssetId(null);
+                                      setDragOverDraftAssetId(null);
+                                    }}
+                                    onDragStart={(event) => {
+                                      event.dataTransfer.effectAllowed = 'move';
+                                      event.dataTransfer.setData('text/plain', asset.id);
+                                      setDraggingDraftAssetId(asset.id);
+                                    }}
+                                    type="button"
+                                  >
+                                    <GripVertical className="h-4 w-4" />
+                                  </button>
+                                </td>
+                                <td className="px-1 py-3">
                                   <SearchableSelect
                                     emptyMessage={availableAssets.length ? 'No assets available for this row.' : 'No assets available for this market.'}
                                     items={availableAssetOptions}
