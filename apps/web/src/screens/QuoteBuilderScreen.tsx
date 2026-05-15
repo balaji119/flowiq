@@ -884,20 +884,20 @@ function ConfirmationDialog({
         if (!nextOpen && !confirming) onCancel();
       }}
     >
-      <DialogContent className="[&>button]:hidden" style={{ width: 'min(calc(100vw - 2rem), 30rem)' }}>
+      <DialogContent className="[&>button]:hidden overflow-x-hidden" style={{ width: 'min(calc(100vw - 2rem), 30rem)' }}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          <DialogDescription className="break-all whitespace-normal text-left">{description}</DialogDescription>
         </DialogHeader>
         <div className="flex items-start gap-3 rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>This action is permanent and cannot be undone.</p>
+          <p className="break-words whitespace-normal">This action is permanent and cannot be undone.</p>
         </div>
-        <div className="flex justify-end gap-3">
-          <Button disabled={confirming} onClick={onCancel} type="button" variant="ghost">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+          <Button className="w-full sm:w-auto" disabled={confirming} onClick={onCancel} type="button" variant="ghost">
             {cancelLabel}
           </Button>
-          <Button disabled={confirming} onClick={onConfirm} type="button" variant="destructive">
+          <Button className="w-full sm:w-auto" disabled={confirming} onClick={onConfirm} type="button" variant="destructive">
             {confirming ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
             {confirming ? 'Deleting...' : confirmLabel}
           </Button>
@@ -905,6 +905,11 @@ function ConfirmationDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function truncateForDialog(value: string, maxLength = 44) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
 function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: number): CampaignMarket[] {
@@ -1005,6 +1010,10 @@ export function QuoteBuilderScreen({
   const [previewArtworkTarget, setPreviewArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey } | null>(null);
   const [previewArtworkFullLoaded, setPreviewArtworkFullLoaded] = useState(false);
   const [uploadingArtworkPages, setUploadingArtworkPages] = useState(false);
+  const [pendingArtworkUploadCount, setPendingArtworkUploadCount] = useState(0);
+  const [queuedArtworkFileNames, setQueuedArtworkFileNames] = useState<string[]>([]);
+  const [uploadManagerOpen, setUploadManagerOpen] = useState(false);
+  const [hasChosenArtworkInSession, setHasChosenArtworkInSession] = useState(false);
   const [artworkSearchQuery, setArtworkSearchQuery] = useState('');
   const [artworkUploadSuccessOpen, setArtworkUploadSuccessOpen] = useState(false);
   const [artworkUploadSuccessMessage, setArtworkUploadSuccessMessage] = useState('');
@@ -1032,6 +1041,8 @@ export function QuoteBuilderScreen({
   const [bottomBarHost, setBottomBarHost] = useState<HTMLElement | null>(null);
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
   const artworkPdfInputRef = useRef<HTMLInputElement | null>(null);
+  const artworkUploadQueueRef = useRef<File[]>([]);
+  const artworkUploadWorkerActiveRef = useRef(false);
   const campaignHydratedRef = useRef(false);
   const lastPersistedValuesRef = useRef('');
   const lastAutoSaveFailedValuesRef = useRef<string | null>(null);
@@ -2034,18 +2045,14 @@ export function QuoteBuilderScreen({
     const nonPdfFile = files.find((file) => !isPdfFile(file));
     if (nonPdfFile) {
       setArtworkDialogError('Only PDF files are allowed.');
-      return;
+      return 0;
     }
 
-    setUploadingArtworkPages(true);
-    setArtworkDialogError('');
-    setArtworkUploadSuccessOpen(false);
-    setArtworkUploadSuccessMessage('');
     try {
       const savedCampaignId = await saveCampaignDraft();
       if (!savedCampaignId) {
         setArtworkDialogError('Save the campaign before uploading artwork.');
-        return;
+        return 0;
       }
 
       const uploadedImages: CampaignPrintImage[] = [];
@@ -2088,15 +2095,50 @@ export function QuoteBuilderScreen({
             printImages: Array.from(byId.values()),
           };
         });
-        setArtworkUploadSuccessMessage(`${uploadedImages.length} artwork file${uploadedImages.length === 1 ? '' : 's'} uploaded successfully.`);
-        setArtworkUploadSuccessOpen(true);
       }
+      return uploadedImages.length;
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : 'Unable to upload artwork PDFs';
       setArtworkDialogError(message);
       setError(message);
+      return 0;
+    }
+  }
+
+  async function processArtworkUploadQueue() {
+    if (artworkUploadWorkerActiveRef.current) return;
+    artworkUploadWorkerActiveRef.current = true;
+    setUploadingArtworkPages(true);
+    setArtworkDialogError('');
+    setArtworkUploadSuccessOpen(false);
+    setArtworkUploadSuccessMessage('');
+    let totalUploadedPages = 0;
+    let uploadedPdfCount = 0;
+
+    try {
+      while (artworkUploadQueueRef.current.length > 0) {
+        const nextFile = artworkUploadQueueRef.current.shift();
+        setPendingArtworkUploadCount(artworkUploadQueueRef.current.length);
+        setQueuedArtworkFileNames(artworkUploadQueueRef.current.map((file) => file.name));
+        if (!nextFile) continue;
+        const uploadedFromPdf = await uploadArtworkPdfFiles([nextFile]);
+        totalUploadedPages += uploadedFromPdf;
+        if (uploadedFromPdf > 0) {
+          uploadedPdfCount += 1;
+        }
+      }
+
+      if (uploadedPdfCount > 0) {
+        setArtworkUploadSuccessMessage(
+          `${uploadedPdfCount} PDF file${uploadedPdfCount === 1 ? '' : 's'} uploaded successfully (${totalUploadedPages} artwork page${totalUploadedPages === 1 ? '' : 's'} generated).`,
+        );
+        setArtworkUploadSuccessOpen(true);
+      }
     } finally {
+      artworkUploadWorkerActiveRef.current = false;
       setUploadingArtworkPages(false);
+      setPendingArtworkUploadCount(0);
+      setQueuedArtworkFileNames([]);
       if (artworkPdfInputRef.current) {
         artworkPdfInputRef.current.value = '';
       }
@@ -2106,7 +2148,28 @@ export function QuoteBuilderScreen({
   function handleArtworkPickerFiles(fileList: FileList | null) {
     const nextFiles = Array.from(fileList ?? []);
     if (!nextFiles.length) return;
-    void uploadArtworkPdfFiles(nextFiles);
+    const validFiles = nextFiles.filter((file) => isPdfFile(file));
+    if (validFiles.length !== nextFiles.length) {
+      setArtworkDialogError('Only PDF files are allowed.');
+    }
+    if (!validFiles.length) return;
+    setHasChosenArtworkInSession(true);
+    artworkUploadQueueRef.current.push(...validFiles);
+    setPendingArtworkUploadCount(artworkUploadQueueRef.current.length);
+    setQueuedArtworkFileNames(artworkUploadQueueRef.current.map((file) => file.name));
+    setUploadManagerOpen(true);
+    void processArtworkUploadQueue();
+  }
+
+  function removeQueuedArtworkFileAt(indexToRemove: number) {
+    if (indexToRemove < 0 || indexToRemove >= artworkUploadQueueRef.current.length) return;
+    artworkUploadQueueRef.current = artworkUploadQueueRef.current.filter((_, index) => index !== indexToRemove);
+    setPendingArtworkUploadCount(artworkUploadQueueRef.current.length);
+    setQueuedArtworkFileNames(artworkUploadQueueRef.current.map((file) => file.name));
+  }
+
+  function openUploadManagerDialog() {
+    setUploadManagerOpen(true);
   }
 
   async function ensureCampaignReadyForArtworkUpload() {
@@ -3887,6 +3950,7 @@ export function QuoteBuilderScreen({
                     multiple
                     onChange={(event) => {
                       handleArtworkPickerFiles(event.target.files);
+                      event.target.value = '';
                     }}
                     type="file"
                   />
@@ -3896,20 +3960,32 @@ export function QuoteBuilderScreen({
               <div className="space-y-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-lg font-black tracking-tight text-white">Market Planning</h3>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <Button
-                      className="h-10 min-w-[180px] px-5 text-base"
-                      onClick={() => void handleArtworkActionButtonClick()}
-                      type="button"
-                      variant="outline"
-                    >
-                      {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Upload className="h-4 w-4" />}
-                      {uploadingArtworkPages ? 'Uploading Artwork...' : values.printImages.length > 0 ? 'Manage Artwork' : 'Upload Artwork'}
-                    </Button>
-                    <div title={canAddMarket ? 'Add another market' : addMarketDisabledReason}>
-                      <Button className="h-10 min-w-[160px] px-5 text-base" disabled={!canAddMarket} onClick={openAddMarketDialog} type="button" variant="secondary">
-                        <Plus className="h-4 w-4" />
-                        Add Market
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Button
+                    className="h-10 min-w-[180px] px-5 text-base"
+                    onClick={openUploadManagerDialog}
+                    type="button"
+                    variant="outline"
+                  >
+                    {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Upload className="h-4 w-4" />}
+                    {uploadingArtworkPages
+                      ? pendingArtworkUploadCount > 0
+                        ? `Upload Artwork (${pendingArtworkUploadCount} queued)`
+                        : 'Upload Artwork'
+                      : 'Upload Artwork'}
+                  </Button>
+                  <Button
+                    className="h-10 min-w-[180px] px-5 text-base"
+                    onClick={openArtworkManagerDialog}
+                    type="button"
+                    variant="outline"
+                  >
+                    Manage Artwork
+                  </Button>
+                  <div title={canAddMarket ? 'Add another market' : addMarketDisabledReason}>
+                    <Button className="h-10 min-w-[160px] px-5 text-base" disabled={!canAddMarket} onClick={openAddMarketDialog} type="button" variant="secondary">
+                      <Plus className="h-4 w-4" />
+                      Add Market
                       </Button>
                     </div>
                   </div>
@@ -5025,20 +5101,14 @@ export function QuoteBuilderScreen({
             <DialogTitle>Artwork</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="relative min-w-[220px] flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  className="h-9 border-slate-600 bg-slate-900 pl-9 text-slate-100 placeholder:text-slate-500"
-                  onChange={(event) => setArtworkSearchQuery(event.target.value)}
-                  placeholder="Search by file name"
-                  value={artworkSearchQuery}
-                />
-              </div>
-              <Button disabled={uploadingArtworkPages} onClick={openArtworkPdfPicker} type="button" variant="secondary">
-                {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Upload className="h-4 w-4" />}
-                {uploadingArtworkPages ? 'Uploading Artwork...' : 'Upload Artwork'}
-              </Button>
+            <div className="relative min-w-[220px] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                className="h-9 border-slate-600 bg-slate-900 pl-9 text-slate-100 placeholder:text-slate-500"
+                onChange={(event) => setArtworkSearchQuery(event.target.value)}
+                placeholder="Search by file name"
+                value={artworkSearchQuery}
+              />
             </div>
             {artworkDialogError ? (
               <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200">
@@ -5118,18 +5188,70 @@ export function QuoteBuilderScreen({
                 No artwork uploaded yet. Upload PDFs to generate selectable thumbnails.
               </div>
             )}
-            {uploadingArtworkPages ? (
-              <div className="flex justify-end">
-                <Button
-                  className="border-orange-500 bg-orange-500 text-white hover:bg-orange-400"
-                  onClick={closeAssignArtworkDialog}
-                  type="button"
-                  variant="secondary"
-                >
-                  Continue
-                </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={uploadManagerOpen} onOpenChange={setUploadManagerOpen}>
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 44rem)', maxHeight: '90vh' }}>
+          <DialogHeader>
+            <DialogTitle>Upload Manager</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-700 bg-slate-950/70 px-3 py-2">
+              <div className="text-sm text-slate-300">
+                {uploadingArtworkPages
+                  ? pendingArtworkUploadCount > 0
+                    ? `Uploading in progress (${pendingArtworkUploadCount} queued)`
+                    : 'Uploading in progress'
+                  : 'No active uploads'}
               </div>
-            ) : null}
+              <Button onClick={openArtworkPdfPicker} type="button" variant="secondary">
+                {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Upload className="h-4 w-4" />}
+                {uploadingArtworkPages || hasChosenArtworkInSession ? 'Choose More PDFs' : 'Choose PDFs'}
+              </Button>
+            </div>
+
+            {queuedArtworkFileNames.length > 0 ? (
+              <div className="rounded-md border border-slate-700 bg-slate-950/70 px-3 py-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">
+                  Queued Files ({queuedArtworkFileNames.length})
+                </p>
+                <div className="mt-1 max-h-44 space-y-1 overflow-auto">
+                  {queuedArtworkFileNames.map((fileName, index) => (
+                    <div key={`upload-manager-queued-file-${index}-${fileName}`} className="flex items-center gap-2">
+                      <p className="min-w-0 flex-1 truncate text-xs text-slate-400" title={fileName}>
+                        {index + 1}. {fileName}
+                      </p>
+                      <Button
+                        aria-label={`Remove queued file ${fileName}`}
+                        className="h-6 w-6 rounded-full border border-slate-700 p-0 text-slate-300 hover:text-white"
+                        onClick={() => removeQueuedArtworkFileAt(index)}
+                        size="icon"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-md border border-slate-700 bg-slate-900 px-4 py-4 text-sm text-slate-400">
+                No queued files. Choose PDFs to add them here.
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button
+                className="border-orange-500 bg-orange-500 text-white hover:bg-orange-400"
+                onClick={() => setUploadManagerOpen(false)}
+                type="button"
+                variant="secondary"
+              >
+                Continue
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -5214,7 +5336,7 @@ export function QuoteBuilderScreen({
         confirming={confirmingArtworkDelete}
         description={
           deleteArtworkCandidate
-            ? `Delete "${deleteArtworkCandidate.name || deleteArtworkCandidate.fileName || 'this artwork'}"? This permanently removes the file from storage.`
+            ? `Delete "${truncateForDialog(deleteArtworkCandidate.name || deleteArtworkCandidate.fileName || 'this artwork')}"? This permanently removes the file from storage.`
             : ''
         }
         onCancel={cancelDeleteArtwork}
