@@ -1810,6 +1810,7 @@ export function QuoteBuilderScreen({
             ...createCampaignAsset(`asset-${Date.now()}`, numberOfWeeks),
             assetId: nextAsset.id,
             assetSearch: nextAsset.label,
+            selectedWeeks: [],
             deliveryAddress: preferredAddress,
           },
         ],
@@ -1862,6 +1863,7 @@ export function QuoteBuilderScreen({
             ...createCampaignAsset(`asset-${Date.now()}`, numberOfWeeks),
             assetId: nextAsset.id,
             assetSearch: nextAsset.label,
+            selectedWeeks: [],
             deliveryAddress: preferredAddress,
           },
         ],
@@ -2670,8 +2672,6 @@ export function QuoteBuilderScreen({
             if (quantity <= 0) return;
 
             const creativeFormat = toCreativeFormatKey(key);
-            const mappingOption = mappingOptionByMarketAssetId.get(`${market.market}\x00${asset.assetId}`);
-            const configuredSlotCount = Math.max(1, mappingOption?.quantities?.[creativeFormat] ?? 1);
             const multiSlotImageIds = (asset.multiCreativeImageIds?.[creativeFormat] ?? [])
               .map((imageId) => (imageId || '').trim())
               .filter((imageId) => Boolean(imageById.get(imageId)));
@@ -2680,8 +2680,9 @@ export function QuoteBuilderScreen({
 
             const creativeAssignments = useMultiArtwork
               ? (() => {
-                  const slotQuantities = splitQuantityAcrossSlots(quantity, configuredSlotCount);
-                  return multiSlotImageIds.slice(0, configuredSlotCount).map((imageId, index) => ({
+                  const slotCount = Math.max(1, multiSlotImageIds.length);
+                  const slotQuantities = splitQuantityAcrossSlots(quantity, slotCount);
+                  return multiSlotImageIds.slice(0, slotCount).map((imageId, index) => ({
                     imageId,
                     quantity: slotQuantities[index] ?? 0,
                   })).filter((assignment) => assignment.quantity > 0);
@@ -5431,4 +5432,3 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
-
