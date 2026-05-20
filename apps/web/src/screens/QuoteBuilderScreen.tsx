@@ -1,5 +1,5 @@
 import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, Eye, GripVertical, LoaderCircle, Maximize2, Pencil, Plus, Search, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, Eye, GripVertical, LayoutGrid, LoaderCircle, Maximize2, Pencil, Plus, Search, Table2, Trash2, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignPrintImage,
@@ -40,9 +40,12 @@ import { Document as WordDocument, ExternalHyperlink, ImageRun, LineRuleType, Pa
 import { PDFArray, PDFDocument, PDFName, PDFString, StandardFonts, rgb } from 'pdf-lib';
 
 const ACTIVE_CAMPAIGN_ID_KEY = 'adsconnect-active-campaign-id';
+const REVIEW_DRAWER_OPEN_KEY = 'adsconnect-review-drawer-open';
+const REVIEW_DRAWER_MODE_KEY = 'adsconnect-review-drawer-mode';
 const VISUALS_EXPORT_MODE = parseVisualsExportMode(process.env.EXPORT_EXCEL);
 
 type VisualsExportMode = 'excel' | 'pdf';
+type ReviewDrawerMode = 'high-level' | 'detailed';
 
 type GeneratedVisualExportFile = {
   fileName: string;
@@ -1063,8 +1066,9 @@ export function QuoteBuilderScreen({
   const [treatDefaultMarketAsPlaceholder, setTreatDefaultMarketAsPlaceholder] = useState(false);
   const [marketPopupManagedFlow, setMarketPopupManagedFlow] = useState(false);
   const [hasSavedMarketViaPopup, setHasSavedMarketViaPopup] = useState(false);
-  const [postersExpandedOpen, setPostersExpandedOpen] = useState(false);
   const [expandedMarketId, setExpandedMarketId] = useState<string | null>(null);
+  const [reviewDrawerOpen, setReviewDrawerOpen] = useState(false);
+  const [reviewDrawerMode, setReviewDrawerMode] = useState<ReviewDrawerMode>('high-level');
   const [newAddressTarget, setNewAddressTarget] = useState<{ marketId: string; assetId: string; marketName: string } | null>(null);
   const [newAddressForm, setNewAddressForm] = useState<AddressFormState>(() => emptyAddressForm());
   const [newAddressError, setNewAddressError] = useState('');
@@ -1392,11 +1396,15 @@ export function QuoteBuilderScreen({
     () => (summary ? summary.perMarket.filter((entry) => selectedCampaignMarketNames.has(entry.market)) : []),
     [selectedCampaignMarketNames, summary],
   );
-  const visibleReviewFormatKeys = useMemo(
-    () =>
-      formatKeys.filter((key) => visibleReviewMarkets.some((marketSummary) => (marketSummary.breakdown[key] ?? 0) > 0)),
+  const detailedReviewFormatKeys = useMemo(
+    () => formatKeys.filter((key) => visibleReviewMarkets.some((marketSummary) => buildReviewRows(marketSummary).some((row) => (row.breakdown[key] ?? 0) > 0))),
     [visibleReviewMarkets],
   );
+  const detailedDrawerWidth = useMemo(() => {
+    const extraColumns = Math.max(0, detailedReviewFormatKeys.length - 3);
+    const calculated = 472 + (extraColumns * 74);
+    return Math.min(920, Math.max(472, calculated));
+  }, [detailedReviewFormatKeys.length]);
   const twoSheeterPriceByMarket = useMemo(
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.twoSheeterPrice ?? 0])),
     [marketShippingRates],
@@ -1566,6 +1574,31 @@ export function QuoteBuilderScreen({
     setTopBarActionsHost(document.getElementById('workspace-topbar-actions-slot'));
     setBottomBarHost(document.getElementById('workspace-bottom-bar-slot'));
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const savedValue = window.localStorage.getItem(REVIEW_DRAWER_OPEN_KEY);
+      setReviewDrawerOpen(savedValue === '1');
+      const savedMode = window.localStorage.getItem(REVIEW_DRAWER_MODE_KEY);
+      if (savedMode === 'detailed' || savedMode === 'high-level') {
+        setReviewDrawerMode(savedMode);
+      }
+    } catch {
+      setReviewDrawerOpen(false);
+      setReviewDrawerMode('high-level');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(REVIEW_DRAWER_OPEN_KEY, reviewDrawerOpen ? '1' : '0');
+      window.localStorage.setItem(REVIEW_DRAWER_MODE_KEY, reviewDrawerMode);
+    } catch {
+      // Ignore storage access issues.
+    }
+  }, [reviewDrawerMode, reviewDrawerOpen]);
 
   useEffect(() => {
     const normalizedError = error.trim().toLowerCase();
@@ -2548,6 +2581,16 @@ export function QuoteBuilderScreen({
     const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
     return marketLines.reduce((total, line) => total + calculateLinePrintingCost(line), 0);
   }
+
+  const totalPrintingCost = useMemo(
+    () => visibleReviewMarkets.reduce((total, marketSummary) => total + calculateMarketPrintingCost(marketSummary.market), 0),
+    [visibleReviewMarkets],
+  );
+  const totalShippingCost = useMemo(
+    () => visibleReviewMarkets.reduce((total, marketSummary) => total + calculateMarketShippingCost(marketSummary.market), 0),
+    [visibleReviewMarkets],
+  );
+  const totalEstimateCost = totalPrintingCost + totalShippingCost;
 
   async function generateArtworkTemplates(downloadFiles: boolean, exportMode: VisualsExportMode): Promise<GeneratedVisualExportFile[]> {
     try {
@@ -3869,8 +3912,10 @@ export function QuoteBuilderScreen({
     <main className="dense-main flex min-h-0 w-full flex-col gap-6">
       {topBarCenterHost
         ? createPortal(
-            <p className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300" title={activeCampaignName}>
-              {activeCampaignName}
+            <p className="truncate text-sm font-medium text-slate-300" title={`Campaign Builder / ${activeCampaignName}`}>
+              <span className="text-slate-400">Campaign Builder</span>
+              <span className="mx-2 text-slate-500">/</span>
+              <span className="font-semibold text-slate-200">{activeCampaignName}</span>
             </p>,
             topBarCenterHost,
           )
@@ -3889,9 +3934,9 @@ export function QuoteBuilderScreen({
       ) : null}
       {quoteResponseMessage ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{quoteResponseMessage}</div> : null}
 
-      <div className="grid gap-7 pb-0">
+      <div className={cn('grid gap-7 pb-0 transition-[padding-right] duration-200 ease-out', reviewDrawerOpen ? 'lg:pr-[488px]' : 'lg:pr-0')}>
         <section>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.95fr)_minmax(400px,1fr)] lg:items-start">
+          <div className="grid gap-4 lg:grid-cols-1 lg:items-start">
             <div className="space-y-7">
               <div className={cn('space-y-4', TOP_FORM_THEME)}>
                 <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_226px_226px_136px]">
@@ -4389,185 +4434,266 @@ export function QuoteBuilderScreen({
               </div>
             </div>
 
-          <aside className="space-y-4 lg:sticky lg:top-2 lg:w-full">
-              {summary ? (
+          <aside
+            className={cn(
+              'fixed bottom-4 right-4 top-[92px] z-30 rounded-2xl border border-white/5 bg-gradient-to-b from-slate-900/92 to-slate-950/92 shadow-[0_24px_60px_rgba(2,6,23,0.45)] backdrop-blur-md transition-transform duration-200 ease-out',
+              reviewDrawerOpen ? 'translate-x-0' : 'translate-x-[calc(100%+1.5rem)]',
+            )}
+            style={{ width: reviewDrawerMode === 'detailed' ? `min(calc(100vw - 2rem), ${detailedDrawerWidth}px)` : '472px' }}
+          >
+            {summary ? (
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="flex items-center justify-between border-b border-white/5 px-5 py-3.5">
+                  <div>
+                    <h3 className="text-[16px] font-semibold text-white">Campaign Summary</h3>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="inline-flex rounded-lg border border-white/10 bg-slate-900/70 p-0.5">
+                      <button
+                        aria-label="High-level view"
+                        className={cn('rounded-md p-1.5 transition', reviewDrawerMode === 'high-level' ? 'bg-slate-700/80 text-white' : 'text-slate-300 hover:text-white')}
+                        onClick={() => setReviewDrawerMode('high-level')}
+                        title="High-level view"
+                        type="button"
+                      >
+                        <LayoutGrid className="h-4 w-4" />
+                      </button>
+                      <button
+                        aria-label="Detailed view"
+                        className={cn('rounded-md p-1.5 transition', reviewDrawerMode === 'detailed' ? 'bg-slate-700/80 text-white' : 'text-slate-300 hover:text-white')}
+                        onClick={() => setReviewDrawerMode('detailed')}
+                        title="Detailed view"
+                        type="button"
+                      >
+                        <Table2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <Button
+                      aria-label="Close review"
+                      className="h-8 w-8 rounded-full border border-white/10 bg-slate-900/70 p-0 text-slate-300 hover:bg-slate-800 hover:text-white"
+                      onClick={() => setReviewDrawerOpen(false)}
+                      type="button"
+                      variant="ghost"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className={cn('min-h-0 flex-1 px-5 py-4', reviewDrawerMode === 'detailed' ? 'space-y-3 overflow-y-auto' : 'space-y-4 overflow-hidden')}>
+                  {reviewDrawerMode === 'high-level' ? (
                     <>
-                    <div className="rounded-xl border border-white/10 bg-slate-900/75">
-                      <div className="flex items-center justify-between border-b border-white/10 px-3 py-2.5">
-                        <h3 className="px-1 text-base font-semibold tracking-tight text-white">Posters</h3>
-                        <Button
-                          aria-label="Expand posters table"
-                          className="h-7 w-7 rounded-sm border border-transparent px-0 transition hover:border-slate-600 hover:bg-slate-800/80 hover:text-white focus-visible:border-slate-500 focus-visible:bg-slate-800/80"
-                          onClick={() => setPostersExpandedOpen(true)}
-                          title="Expand"
-                          type="button"
-                          variant="ghost"
-                        >
-                          <Maximize2 className="h-4 w-4" />
-                        </Button>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="rounded-xl bg-gradient-to-br from-slate-800/65 to-slate-900/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_24px_rgba(2,6,23,0.28)]">
+                          <p className="text-[11px] font-semibold text-slate-400">Total Posters</p>
+                          <p className="mt-1.5 text-[25px] font-bold leading-none text-white">{summary.grandTotal.posterTotal}</p>
+                        </div>
+                        <div className="rounded-xl bg-gradient-to-br from-slate-800/65 to-slate-900/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_24px_rgba(2,6,23,0.28)]">
+                          <p className="text-[11px] font-semibold text-slate-400">Total Frames</p>
+                          <p className="mt-1.5 text-[25px] font-bold leading-none text-white">{summary.grandTotal.frameTotal}</p>
+                        </div>
+                        <div className="rounded-xl bg-gradient-to-br from-slate-800/65 to-slate-900/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_24px_rgba(2,6,23,0.28)]">
+                          <p className="text-[11px] font-semibold text-slate-400">Printing Cost</p>
+                          <p className="mt-1.5 text-[22px] font-bold leading-none text-white">{formatCurrency(totalPrintingCost)}</p>
+                        </div>
+                        <div className="rounded-xl bg-gradient-to-br from-slate-800/65 to-slate-900/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_24px_rgba(2,6,23,0.28)]">
+                          <p className="text-[11px] font-semibold text-slate-400">Shipping Cost</p>
+                          <p className="mt-1.5 text-[22px] font-bold leading-none text-white">{formatCurrency(totalShippingCost)}</p>
+                        </div>
                       </div>
-                      <div className="overflow-x-auto">
-                      <table className="dense-table w-max min-w-full border-collapse text-sm">
-                        <colgroup>
-                          <col className="w-[112px]" />
-                          <col className="w-[88px]" />
-                          {visibleReviewFormatKeys.map((key) => (
-                            <col key={`review-col-${key}`} className="w-[88px]" />
-                          ))}
-                          <col className="w-[92px]" />
-                        </colgroup>
-                        <thead>
-                          <tr className="bg-slate-950/70 text-[11px] font-semibold uppercase tracking-[0.13em] text-slate-300">
-                            <th className="sticky left-0 z-40 border border-white/10 bg-slate-950 px-3 py-3 text-left whitespace-nowrap">Market</th>
-                            <th className="sticky left-[112px] z-40 border border-white/10 bg-slate-950 px-3 py-3 text-left whitespace-nowrap">Type</th>
-                            {visibleReviewFormatKeys.map((key) => (
-                              <th key={`review-head-${key}`} className="border border-white/10 px-3 py-3 text-center">{formatKeyLabel(key, normalizedSheetNameOverrides)}</th>
-                            ))}
-                            <th className="sticky right-0 z-40 border border-white/10 bg-slate-950 px-3 py-3 text-center whitespace-nowrap">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {visibleReviewMarkets.map((marketSummary) => {
-                            const rows = buildReviewRows(marketSummary);
-                            return rows.map((row, rowIndex) => (
-                              <tr key={`review-row-${marketSummary.market}-${row.label}`} className={cn('bg-slate-900/45', rowIndex > 0 ? 'border-t border-white/10' : 'border-t border-white/10')}>
-                                {rowIndex === 0 ? (
-                                  <th rowSpan={rows.length} className="sticky left-0 z-30 border border-white/10 bg-slate-900 px-3 py-3 text-left font-semibold text-slate-100">
-                                    {marketSummary.market}
-                                  </th>
-                                ) : null}
-                                <th className="sticky left-[112px] z-30 border border-white/10 bg-slate-900 px-3 py-3 text-left font-semibold text-slate-100">{row.label}</th>
-                                {visibleReviewFormatKeys.map((key) => (
-                                  <td key={`review-cell-${marketSummary.market}-${row.label}-${key}`} className="border border-white/10 px-3 py-3 text-center font-semibold text-white">
-                                    {row.breakdown[key]}
-                                  </td>
-                                ))}
-                                <td className="sticky right-0 z-30 border border-white/10 bg-slate-900 px-3 py-3 text-center font-bold text-white">{row.total}</td>
-                              </tr>
-                            ));
-                          })}
-
-                          {(() => {
-                            const grandRows = buildReviewRows(summary.grandTotal);
-
-                            return grandRows.map((row, rowIndex, allRows) => (
-                              <tr key={`review-grand-${row.label}`} className={cn('bg-orange-500/8', rowIndex === 0 ? 'border-t border-orange-300/30' : 'border-t border-orange-300/20')}>
-                                {rowIndex === 0 ? (
-                                  <th rowSpan={allRows.length} className="sticky left-0 z-30 border border-orange-300/25 bg-[#2e2219] px-3 py-3 text-left font-semibold text-orange-100">
-                                    All Markets
-                                  </th>
-                                ) : null}
-                                <th className="sticky left-[112px] z-30 border border-orange-300/25 bg-[#2e2219] px-3 py-3 text-left font-semibold text-orange-100">{row.label}</th>
-                                {visibleReviewFormatKeys.map((key) => (
-                                  <td key={`review-grand-cell-${row.label}-${key}`} className="border border-orange-300/25 px-3 py-3 text-center font-semibold text-orange-100">
-                                    {row.breakdown[key]}
-                                  </td>
-                                ))}
-                                <td className="sticky right-0 z-30 border border-orange-300/25 bg-[#2e2219] px-3 py-3 text-center font-bold text-orange-100">{row.total}</td>
-                              </tr>
-                            ));
-                          })()}
-                        </tbody>
-                      </table>
+                      <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+                      <div className="space-y-3">
+                        <h4 className="text-[15px] font-semibold text-white">Market Breakdown</h4>
+                        {visibleReviewMarkets.map((marketSummary) => (
+                          <div key={`review-market-card-${marketSummary.market}`} className="rounded-xl bg-gradient-to-b from-slate-800/52 to-slate-900/62 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                            <div className="-m-1.5 flex w-full items-center gap-3 rounded-xl p-1.5">
+                              <span className="h-2.5 w-2.5 rounded-full bg-orange-300/80" />
+                              <p className="flex-1 text-left text-[17px] font-semibold text-slate-100">{marketSummary.market}</p>
+                            </div>
+                            <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[14px]">
+                              <div className="text-slate-400">Posters</div>
+                              <div className="text-right font-semibold tabular-nums text-white">{marketSummary.posterTotal}</div>
+                              <div className="text-slate-400">Frames</div>
+                              <div className="text-right font-semibold tabular-nums text-white">{marketSummary.frameTotal}</div>
+                              <div className="text-slate-400">Printing</div>
+                              <div className="text-right font-semibold tabular-nums text-white">{formatCurrency(calculateMarketPrintingCost(marketSummary.market))}</div>
+                              <div className="text-slate-400">Shipping</div>
+                              <div className="text-right font-semibold tabular-nums text-white">{formatCurrency(calculateMarketShippingCost(marketSummary.market))}</div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                    <div>
-                      <h3 className="mb-2 text-base font-semibold tracking-tight text-white">Cost</h3>
-                    </div>
-                    <div className="overflow-x-auto rounded-xl border border-white/10 bg-slate-900/75">
-                      <table className="dense-table w-full border-collapse text-sm">
-                        <thead>
-                          <tr className="bg-slate-950/70 text-[11px] font-semibold uppercase tracking-[0.13em] text-slate-300">
-                            <th className="border border-white/10 px-4 py-3.5 text-left">Market</th>
-                            <th className="border border-white/10 px-4 py-3.5 text-center">Printing Cost ($)</th>
-                            <th className="border border-white/10 px-4 py-3.5 text-center">Shipping Cost ($)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {visibleReviewMarkets.map((marketSummary) => (
-                            <tr key={`review-cost-${marketSummary.market}`} className="border-t border-white/10 bg-slate-900/45">
-                              <th className="border border-white/10 px-4 py-3.5 text-left font-semibold text-slate-100">{marketSummary.market}</th>
-                              <td className="border border-white/10 px-4 py-3.5 text-center font-bold text-white">
-                                {formatCurrency(calculateMarketPrintingCost(marketSummary.market))}
-                              </td>
-                              <td className="border border-white/10 px-4 py-3.5 text-center font-bold text-white">
-                                {formatCurrency(calculateMarketShippingCost(marketSummary.market))}
-                              </td>
-                            </tr>
-                          ))}
-                          <tr className="border-t border-orange-300/30 bg-orange-500/8">
-                            <th className="border border-orange-300/25 px-4 py-3.5 text-left font-bold text-orange-100">All Markets</th>
-                            <td className="border border-orange-300/25 px-4 py-3.5 text-center font-bold text-orange-100">
-                              {formatCurrency(
-                                visibleReviewMarkets.reduce(
-                                  (total, marketSummary) => total + calculateMarketPrintingCost(marketSummary.market),
-                                  0,
-                                ),
-                              )}
-                            </td>
-                            <td className="border border-orange-300/25 px-4 py-3.5 text-center font-bold text-orange-100">
-                              {formatCurrency(
-                                visibleReviewMarkets.reduce(
-                                  (total, marketSummary) => total + calculateMarketShippingCost(marketSummary.market),
-                                  0,
-                                ),
-                              )}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
                     </>
-
-              ) : (
-                  <div className="rounded-xl border border-white/10 bg-slate-900/70 p-6">
-                    <div className="flex items-start gap-3">
-                      <CircleAlert className="mt-0.5 h-5 w-5 text-amber-300" />
-                      <div>
-                        <p className="font-semibold text-white">No totals yet</p>
-                        <p className="mt-1 text-sm text-slate-400">Configure campaign assets above to generate totals.</p>
+                  ) : (
+                    <>
+                      <div className="rounded-xl border border-white/10 bg-slate-900/65 p-3">
+                        <p className="mb-2 text-[18px] font-semibold text-white">Posters</p>
+                        <div className="overflow-hidden rounded-lg border border-white/10">
+                          <table className="w-full border-collapse text-[12px]">
+                            <thead className="bg-slate-950 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+                              <tr>
+                                <th className="border border-white/10 px-2.5 py-2 text-left">Market</th>
+                                <th className="border border-white/10 px-2.5 py-2 text-left">Type</th>
+                                {detailedReviewFormatKeys.map((key) => (
+                                  <th key={`detail-head-${key}`} className="border border-white/10 px-2.5 py-2 text-right">{formatKeyLabel(key, normalizedSheetNameOverrides)}</th>
+                                ))}
+                                <th className="border border-white/10 px-2.5 py-2 text-right">Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {visibleReviewMarkets.map((marketSummary) => {
+                                const rows = buildReviewRows(marketSummary);
+                                return (
+                                  <Fragment key={`review-detail-${marketSummary.market}`}>
+                                    <tr className="bg-slate-900/60">
+                                      <td className="border border-white/10 px-2.5 py-2 font-semibold text-white" rowSpan={2}>{marketSummary.market}</td>
+                                      <td className="border border-white/10 px-2.5 py-2 font-semibold text-white">Posters</td>
+                                      {detailedReviewFormatKeys.map((key) => (
+                                        <td key={`detail-row-posters-${marketSummary.market}-${key}`} className="border border-white/10 px-2.5 py-2 text-right tabular-nums text-white">{rows[0].breakdown[key]}</td>
+                                      ))}
+                                      <td className="border border-white/10 px-2.5 py-2 text-right font-semibold tabular-nums text-white">{rows[0].total}</td>
+                                    </tr>
+                                    <tr className="bg-slate-900/60">
+                                      <td className="border border-white/10 px-2.5 py-2 font-semibold text-white">Frames</td>
+                                      {detailedReviewFormatKeys.map((key) => (
+                                        <td key={`detail-row-frames-${marketSummary.market}-${key}`} className="border border-white/10 px-2.5 py-2 text-right tabular-nums text-white">{rows[1].breakdown[key]}</td>
+                                      ))}
+                                      <td className="border border-white/10 px-2.5 py-2 text-right font-semibold tabular-nums text-white">{rows[1].total}</td>
+                                    </tr>
+                                  </Fragment>
+                                );
+                              })}
+                              {(() => {
+                                const allRows = buildReviewRows(summary.grandTotal);
+                                return (
+                                  <>
+                                    <tr className="bg-orange-500/10">
+                                      <td className="border border-orange-300/25 px-2.5 py-2 font-semibold text-orange-100" rowSpan={2}>All Markets</td>
+                                      <td className="border border-orange-300/25 px-2.5 py-2 font-semibold text-orange-100">Posters</td>
+                                      {detailedReviewFormatKeys.map((key) => (
+                                        <td key={`detail-all-posters-${key}`} className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{allRows[0].breakdown[key]}</td>
+                                      ))}
+                                      <td className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{allRows[0].total}</td>
+                                    </tr>
+                                    <tr className="bg-orange-500/10">
+                                      <td className="border border-orange-300/25 px-2.5 py-2 font-semibold text-orange-100">Frames</td>
+                                      {detailedReviewFormatKeys.map((key) => (
+                                        <td key={`detail-all-frames-${key}`} className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{allRows[1].breakdown[key]}</td>
+                                      ))}
+                                      <td className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{allRows[1].total}</td>
+                                    </tr>
+                                  </>
+                                );
+                              })()}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
+                      <div className="rounded-xl border border-white/10 bg-slate-900/65 p-3">
+                        <p className="mb-2 text-[18px] font-semibold text-white">Cost</p>
+                        <div className="overflow-hidden rounded-lg border border-white/10">
+                          <table className="w-full border-collapse text-[12px]">
+                            <thead className="bg-slate-950 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+                              <tr>
+                                <th className="border border-white/10 px-2.5 py-2 text-left">Market</th>
+                                <th className="border border-white/10 px-2.5 py-2 text-right">Printing Cost ($)</th>
+                                <th className="border border-white/10 px-2.5 py-2 text-right">Shipping Cost ($)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {visibleReviewMarkets.map((marketSummary) => (
+                                <tr key={`review-cost-${marketSummary.market}`} className="bg-slate-900/60">
+                                  <td className="border border-white/10 px-2.5 py-2 font-semibold text-white">{marketSummary.market}</td>
+                                  <td className="border border-white/10 px-2.5 py-2 text-right font-semibold tabular-nums text-white">{formatCurrency(calculateMarketPrintingCost(marketSummary.market))}</td>
+                                  <td className="border border-white/10 px-2.5 py-2 text-right font-semibold tabular-nums text-white">{formatCurrency(calculateMarketShippingCost(marketSummary.market))}</td>
+                                </tr>
+                              ))}
+                              <tr className="bg-orange-500/10">
+                                <td className="border border-orange-300/25 px-2.5 py-2 font-semibold text-orange-100">All Markets</td>
+                                <td className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{formatCurrency(totalPrintingCost)}</td>
+                                <td className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{formatCurrency(totalShippingCost)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="border-t border-white/5 bg-gradient-to-b from-slate-900/96 via-slate-900/98 to-slate-950 px-5 py-4">
+                  <p className="text-[11px] font-semibold text-slate-400">Total Estimate</p>
+                  <p className="mt-1 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-[30px] font-extrabold leading-none text-transparent drop-shadow-[0_0_18px_rgba(255,255,255,0.12)]">
+                    {formatCurrency(totalEstimateCost)}
+                  </p>
+                  <div className="mt-5 flex gap-2.5">
+                    <Button
+                      className="h-9 flex-1 rounded-xl border-white/10 bg-slate-800/65 px-4 text-sm font-semibold text-slate-100 transition hover:bg-slate-700/75"
+                      disabled={exportingTemplates || sendingAdsEmail}
+                      onClick={() => void downloadArtworkVisuals()}
+                      type="button"
+                      variant="outline"
+                    >
+                      {exportingTemplates ? 'Generating...' : 'Download Visuals'}
+                    </Button>
+                    <Button
+                      className="h-9 flex-1 rounded-xl border border-orange-300/35 bg-gradient-to-r from-orange-600 to-orange-500 px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(249,115,22,0.26)] transition hover:brightness-105"
+                      disabled={exportingTemplates || sendingAdsEmail}
+                      onClick={() => void sendArtworkEmailToAds()}
+                      type="button"
+                      variant="secondary"
+                    >
+                      {sendingAdsEmail ? 'Sending...' : 'Send Email'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-slate-900/70 p-6">
+                <div className="flex items-start gap-3">
+                  <CircleAlert className="mt-0.5 h-5 w-5 text-amber-300" />
+                  <div>
+                    <p className="font-semibold text-white">No totals yet</p>
+                    <p className="mt-1 text-sm text-slate-400">Configure campaign assets above to generate totals.</p>
+                  </div>
                     </div>
                   </div>
-              )}
-            </aside>
+            )}
+          </aside>
           </div>
         </section>
 
       </div>
 
+      <div
+        aria-hidden={!reviewDrawerOpen}
+        className={cn(
+          'fixed inset-0 z-20 bg-[rgba(3,8,20,0.35)] backdrop-blur-[2px] transition-opacity duration-200 ease-out',
+          reviewDrawerOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
+        )}
+        onClick={() => setReviewDrawerOpen(false)}
+      />
+
+      {!reviewDrawerOpen ? (
+        <button
+          className="fixed right-4 top-[128px] z-40 rounded-full border border-white/10 bg-gradient-to-r from-slate-800/92 to-slate-900/92 px-4 py-2 text-sm font-medium text-white shadow-[0_10px_20px_rgba(2,6,23,0.32)] transition duration-200 ease-out hover:-translate-y-[1px] hover:brightness-105"
+          onClick={() => setReviewDrawerOpen(true)}
+          type="button"
+        >
+          {summary
+            ? `${summary.grandTotal.posterTotal} Posters • ${summary.grandTotal.frameTotal} Frames • ${formatCurrency(totalEstimateCost)}`
+            : 'Open Review'}
+        </button>
+      ) : null}
+
       {(bottomBarHost
         ? createPortal(
             <div className="z-20 border-t border-slate-800/90 bg-slate-950/92 backdrop-blur">
               <div className="w-full px-3 py-2 sm:px-4 lg:px-5">
-                <div className="relative flex items-center gap-3 px-1 py-1.5">
-                <div className="min-h-[20px] text-sm text-slate-300" role="status">
+                <div className="min-h-[20px] px-1 py-1 text-sm text-slate-300" role="status">
                   {exportProgressMessage || ''}
                 </div>
-                <div className="ml-auto flex flex-col gap-2 sm:flex-row sm:justify-end">
-                  <Button
-                    className="h-9 min-w-[180px] rounded-lg border-slate-700 px-5 text-sm font-semibold"
-                    disabled={exportingTemplates || sendingAdsEmail}
-                    onClick={() => void downloadArtworkVisuals()}
-                    type="button"
-                    variant="outline"
-                  >
-                    {exportingTemplates ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
-                    {exportingTemplates ? 'Generating Files...' : 'Download Visuals'}
-                  </Button>
-                  <Button
-                    className="h-9 min-w-[210px] rounded-lg border border-orange-300/35 bg-orange-600 px-6 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(249,115,22,0.2)] hover:bg-orange-500"
-                    disabled={exportingTemplates || sendingAdsEmail}
-                    onClick={() => void sendArtworkEmailToAds()}
-                    title={hasUploadedPurchaseOrder ? undefined : 'Upload purchase order before sending to ADS'}
-                    type="button"
-                    variant="secondary"
-                  >
-                    {sendingAdsEmail ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
-                    {sendingAdsEmail ? 'Sending Email...' : 'Send Email To ADS'}
-                  </Button>
-                </div>
-              </div>
               </div>
             </div>,
             bottomBarHost,
@@ -4575,101 +4701,12 @@ export function QuoteBuilderScreen({
         : (
             <div className="z-20 border-t border-slate-800/90 bg-slate-950/92 backdrop-blur">
               <div className="w-full px-3 py-2 sm:px-4 lg:px-5">
-                <div className="relative flex items-center gap-3 px-1 py-1.5">
-                <div className="min-h-[20px] text-sm text-slate-300" role="status">
+                <div className="min-h-[20px] px-1 py-1 text-sm text-slate-300" role="status">
                   {exportProgressMessage || ''}
                 </div>
-                <div className="ml-auto flex flex-col gap-2 sm:flex-row sm:justify-end">
-                  <Button
-                    className="h-9 min-w-[180px] rounded-lg border-slate-700 px-5 text-sm font-semibold"
-                    disabled={exportingTemplates || sendingAdsEmail}
-                    onClick={() => void downloadArtworkVisuals()}
-                    type="button"
-                    variant="outline"
-                  >
-                    {exportingTemplates ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
-                    {exportingTemplates ? 'Generating Files...' : 'Download Visuals'}
-                  </Button>
-                  <Button
-                    className="h-9 min-w-[210px] rounded-lg border border-orange-300/35 bg-orange-600 px-6 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(249,115,22,0.2)] hover:bg-orange-500"
-                    disabled={exportingTemplates || sendingAdsEmail}
-                    onClick={() => void sendArtworkEmailToAds()}
-                    title={hasUploadedPurchaseOrder ? undefined : 'Upload purchase order before sending to ADS'}
-                    type="button"
-                    variant="secondary"
-                  >
-                    {sendingAdsEmail ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
-                    {sendingAdsEmail ? 'Sending Email...' : 'Send Email To ADS'}
-                  </Button>
-                </div>
-              </div>
               </div>
             </div>
           ))}
-
-      <Dialog open={postersExpandedOpen} onOpenChange={setPostersExpandedOpen}>
-        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 82rem)', maxHeight: '90vh' }}>
-          <DialogHeader>
-            <DialogTitle>Posters</DialogTitle>
-          </DialogHeader>
-          {summary ? (
-            <div className="overflow-auto rounded-md border border-slate-700 bg-slate-900/70">
-              <table className="dense-table w-full table-fixed border-collapse text-sm">
-                <thead>
-                  <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
-                    <th className="border border-slate-700 px-3 py-2 text-left">Market</th>
-                    <th className="border border-slate-700 px-3 py-2 text-left">Type</th>
-                    {visibleReviewFormatKeys.map((key) => (
-                      <th key={`expanded-review-head-${key}`} className="border border-slate-700 px-3 py-2 text-center">{formatKeyLabel(key, normalizedSheetNameOverrides)}</th>
-                    ))}
-                    <th className="border border-slate-700 px-3 py-2 text-center">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleReviewMarkets.map((marketSummary) => {
-                    const rows = buildReviewRows(marketSummary);
-                    return rows.map((row, rowIndex) => (
-                      <tr key={`expanded-review-row-${marketSummary.market}-${row.label}`} className={cn('bg-slate-800/70', rowIndex > 0 ? 'border-t border-slate-700/70' : 'border-t-2 border-slate-600')}>
-                        {rowIndex === 0 ? (
-                          <th rowSpan={rows.length} className="border border-slate-700 px-3 py-2 text-left font-semibold text-slate-100">
-                            {marketSummary.market}
-                          </th>
-                        ) : null}
-                        <th className="border border-slate-700 px-3 py-2 text-left font-semibold text-slate-100">{row.label}</th>
-                        {visibleReviewFormatKeys.map((key) => (
-                          <td key={`expanded-review-cell-${marketSummary.market}-${row.label}-${key}`} className="border border-slate-700 px-3 py-2 text-center font-semibold text-white">
-                            {row.breakdown[key]}
-                          </td>
-                        ))}
-                        <td className="border border-slate-700 px-3 py-2 text-center font-black text-white">{row.total}</td>
-                      </tr>
-                    ));
-                  })}
-                  {(() => {
-                    const grandRows = buildReviewRows(summary.grandTotal);
-                    return grandRows.map((row, rowIndex, allRows) => (
-                      <tr key={`expanded-review-grand-${row.label}`} className={cn('bg-orange-500/10', rowIndex === 0 ? 'border-t-4 border-orange-400/40' : 'border-t border-orange-400/20')}>
-                        {rowIndex === 0 ? (
-                          <th rowSpan={allRows.length} className="border border-orange-300/30 px-3 py-2 text-left font-semibold text-orange-100">
-                            All Markets
-                          </th>
-                        ) : null}
-                        <th className="border border-orange-300/30 px-3 py-2 text-left font-semibold text-orange-100">{row.label}</th>
-                        {visibleReviewFormatKeys.map((key) => (
-                          <td key={`expanded-review-grand-cell-${row.label}-${key}`} className="border border-orange-300/30 px-3 py-2 text-center font-semibold text-orange-100">
-                            {row.breakdown[key]}
-                          </td>
-                        ))}
-                        <td className="border border-orange-300/30 px-3 py-2 text-center font-black text-orange-100">{row.total}</td>
-                      </tr>
-                    ));
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={Boolean(expandedMarketId)}
