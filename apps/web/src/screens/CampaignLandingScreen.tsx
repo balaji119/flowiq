@@ -140,14 +140,11 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
     });
   }, [campaigns, searchQuery]);
 
-  const topBarCenterContent = (
-    <p className="truncate text-xs text-slate-300">
-      Logged in users: <span className="font-semibold text-slate-100">{activeUsersCount ?? '--'}</span>
-    </p>
-  );
-
   const topBarActions = (
-    <div className="flex flex-wrap items-center justify-end gap-3">
+    <div className="flex flex-wrap items-center justify-end gap-4">
+      <p className="hidden whitespace-nowrap text-[11px] text-slate-400 lg:block">
+        Active users <span className="font-semibold text-slate-200">{activeUsersCount ?? '--'}</span>
+      </p>
       <div className="flex h-10 min-w-[248px] overflow-hidden rounded-lg border border-white/10 bg-slate-900/60 transition-[background-color,border-color,box-shadow] duration-200 hover:border-white/15 hover:bg-slate-900/70 focus-within:border-orange-300/45 focus-within:shadow-[0_0_0_1px_rgba(251,146,60,0.22)]">
         <span className="inline-flex items-center gap-2 border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">
           Campaign
@@ -161,7 +158,7 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
           value={searchQuery}
         />
       </div>
-      <div className="flex rounded-lg border border-white/10 bg-slate-900/70 p-1 transition-[background-color,border-color,box-shadow] duration-200 hover:border-white/15">
+      <div className="flex h-10 items-center rounded-lg border border-white/10 bg-slate-900/70 p-1 transition-[background-color,border-color,box-shadow] duration-200 hover:border-white/15">
         <Button
           aria-label="Thumbnail view"
           className={`h-8 w-8 rounded-md border border-transparent px-0 transition-[background-color,border-color,color,transform] duration-200 ease-out focus-visible:ring-0 ${
@@ -201,7 +198,7 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
 
   return (
     <main className="dense-main flex min-h-0 w-full flex-col gap-6">
-      {topBarCenterHost ? createPortal(topBarCenterContent, topBarCenterHost) : null}
+      {topBarCenterHost ? createPortal(<span aria-hidden="true" />, topBarCenterHost) : null}
       {topBarActionsHost ? createPortal(topBarActions, topBarActionsHost) : null}
 
       {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
@@ -305,10 +302,7 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
               ))}
             </section>
           ) : (
-            <section className="overflow-x-auto rounded-xl border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
-              <div className="border-b border-white/10 bg-slate-900/35 px-5 py-3.5">
-                <h2 className="text-xl font-bold tracking-tight text-white">Campaign Schedules</h2>
-              </div>
+            <section className="overflow-x-auto rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
               <table className="dense-table min-w-[1080px] w-full border-collapse text-[14px]">
                 <thead>
                   <tr className="bg-slate-950/65 text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-200">

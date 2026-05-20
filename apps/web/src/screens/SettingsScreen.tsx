@@ -268,7 +268,7 @@ export function SettingsScreen({
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/70">
+              <div className="overflow-x-auto rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
                 <table className="w-full table-fixed border-collapse text-sm">
                   <colgroup>
                     <col className="w-[220px]" />
@@ -283,8 +283,11 @@ export function SettingsScreen({
                     </tr>
                   </thead>
                   <tbody>
-                    {sheetNamePresetEntries.map((entry) => (
-                      <tr key={entry.key} className="border-t border-slate-700/70 bg-slate-800/70">
+                    {sheetNamePresetEntries.map((entry, rowIndex) => (
+                      <tr
+                        key={entry.key}
+                        className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#1a2740]/70' : 'bg-[#162033]'}`}
+                      >
                         <td className="border border-slate-700 px-4 py-3 font-semibold text-white">{entry.label}</td>
                         <td className="border border-slate-700 px-4 py-3">
                           <Input

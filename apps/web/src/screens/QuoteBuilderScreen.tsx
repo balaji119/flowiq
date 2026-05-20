@@ -147,33 +147,33 @@ type MultiCreativeImageMap = Partial<Record<CreativeFormatKey, string[]>>;
 const MULTI_ARTWORK_SLOT_UI_CAP = 24;
 const MARKET_PLANNING_THEMES = [
   {
-    card: 'border-orange-500/28 bg-gradient-to-br from-orange-500/8 via-slate-900/78 to-slate-950/65',
-    cardActive: 'border-orange-300/70 shadow-[0_0_0_1px_rgba(251,146,60,0.34)]',
-    accent: 'bg-orange-300/85',
-    header: 'bg-gradient-to-r from-orange-500/22 to-orange-500/8 text-orange-100',
+    card: 'border-white/10 bg-slate-900/70',
+    cardActive: 'border-orange-300/45 shadow-[0_0_0_1px_rgba(251,146,60,0.14)]',
+    accent: 'bg-orange-300/70',
+    header: 'bg-slate-900/92 text-slate-300',
   },
   {
-    card: 'border-amber-500/28 bg-gradient-to-br from-amber-500/8 via-slate-900/78 to-slate-950/65',
-    cardActive: 'border-amber-300/70 shadow-[0_0_0_1px_rgba(252,211,77,0.32)]',
-    accent: 'bg-amber-300/85',
-    header: 'bg-gradient-to-r from-amber-500/22 to-amber-500/8 text-amber-100',
+    card: 'border-white/10 bg-slate-900/70',
+    cardActive: 'border-orange-300/45 shadow-[0_0_0_1px_rgba(251,146,60,0.14)]',
+    accent: 'bg-orange-300/70',
+    header: 'bg-slate-900/92 text-slate-300',
   },
   {
-    card: 'border-orange-300/16 bg-gradient-to-br from-orange-300/3 via-slate-900/72 to-slate-950/60',
-    cardActive: 'border-orange-200/55 shadow-[0_0_0_1px_rgba(251,191,36,0.20)]',
-    accent: 'bg-orange-200/65',
-    header: 'bg-gradient-to-r from-orange-300/10 to-orange-200/4 text-orange-100',
+    card: 'border-white/10 bg-slate-900/70',
+    cardActive: 'border-orange-300/45 shadow-[0_0_0_1px_rgba(251,146,60,0.14)]',
+    accent: 'bg-orange-300/70',
+    header: 'bg-slate-900/92 text-slate-300',
   },
   {
-    card: 'border-yellow-500/30 bg-gradient-to-br from-yellow-500/8 via-slate-900/78 to-slate-950/65',
-    cardActive: 'border-yellow-300/70 shadow-[0_0_0_1px_rgba(253,224,71,0.32)]',
-    accent: 'bg-yellow-300/85',
-    header: 'bg-gradient-to-r from-yellow-500/20 to-amber-500/8 text-yellow-100',
+    card: 'border-white/10 bg-slate-900/70',
+    cardActive: 'border-orange-300/45 shadow-[0_0_0_1px_rgba(251,146,60,0.14)]',
+    accent: 'bg-orange-300/70',
+    header: 'bg-slate-900/92 text-slate-300',
   },
 ] as const;
 
 const TOP_FORM_THEME =
-  'rounded-md border border-orange-500/28 bg-gradient-to-b from-slate-900/80 via-slate-900/72 to-slate-950/65 p-4 shadow-[0_0_0_1px_rgba(251,146,60,0.08)]';
+  'rounded-xl border border-white/10 bg-slate-900/75 p-5 shadow-[0_10px_22px_rgba(2,6,23,0.22)]';
 
 function creativeFormatLabel(key: CreativeFormatKey, overrides: SheetNameOverrides = {}) {
   if (key === '8-sheet') {
@@ -1064,6 +1064,7 @@ export function QuoteBuilderScreen({
   const [marketPopupManagedFlow, setMarketPopupManagedFlow] = useState(false);
   const [hasSavedMarketViaPopup, setHasSavedMarketViaPopup] = useState(false);
   const [postersExpandedOpen, setPostersExpandedOpen] = useState(false);
+  const [expandedMarketId, setExpandedMarketId] = useState<string | null>(null);
   const [newAddressTarget, setNewAddressTarget] = useState<{ marketId: string; assetId: string; marketName: string } | null>(null);
   const [newAddressForm, setNewAddressForm] = useState<AddressFormState>(() => emptyAddressForm());
   const [newAddressError, setNewAddressError] = useState('');
@@ -3888,26 +3889,26 @@ export function QuoteBuilderScreen({
       ) : null}
       {quoteResponseMessage ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{quoteResponseMessage}</div> : null}
 
-      <div className="grid gap-6 pb-0">
+      <div className="grid gap-7 pb-0">
         <section>
-          <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
-            <div className="space-y-6 lg:col-span-2">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.95fr)_minmax(400px,1fr)] lg:items-start">
+            <div className="space-y-7">
               <div className={cn('space-y-4', TOP_FORM_THEME)}>
-                <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_226px_226px_136px]">
-              <div className="flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
-                <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">Campaign Name</span>
+                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_226px_226px_136px]">
+              <div className="flex h-11 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
+                <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Campaign Name</span>
                 <Input
-                  className="h-10 rounded-none border-0 bg-transparent"
+                  className="h-11 rounded-none border-0 bg-transparent px-3"
                   id="campaign-name"
                   type="text"
                   value={values.campaignName}
                   onChange={(event) => updateField('campaignName', event.target.value)}
                 />
               </div>
-              <div className="flex h-10 w-[226px] overflow-hidden rounded-md border border-slate-600 bg-slate-800">
-                <span className="inline-flex items-center whitespace-nowrap border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">Start Date</span>
+              <div className="flex h-11 w-[226px] overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
+                <span className="inline-flex items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Start Date</span>
                 <Input
-                  className="h-10 w-[148px] flex-none rounded-none border-0 bg-transparent px-2 pr-2 [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:block [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100"
+                  className="h-11 w-[142px] flex-none rounded-none border-0 bg-transparent px-2 pr-3 [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:block [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100"
                   id="campaign-start"
                   min={minSelectableDate}
                   type="date"
@@ -3915,10 +3916,10 @@ export function QuoteBuilderScreen({
                   onChange={(event) => updateField('campaignStartDate', event.target.value)}
                 />
               </div>
-              <div className="flex h-10 w-[226px] overflow-hidden rounded-md border border-slate-600 bg-slate-800">
-                <span className="inline-flex items-center whitespace-nowrap border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">Due Date</span>
+              <div className="flex h-11 w-[226px] overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
+                <span className="inline-flex items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Due Date</span>
                 <Input
-                  className="h-10 w-[148px] flex-none rounded-none border-0 bg-transparent px-2 pr-2 [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:block [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100"
+                  className="h-11 w-[140px] flex-none rounded-none border-0 bg-transparent px-2 pr-2 [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:block [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100"
                   id="due-date"
                   min={minSelectableDate}
                   type="date"
@@ -3926,10 +3927,10 @@ export function QuoteBuilderScreen({
                   onChange={(event) => updateField('dueDate', event.target.value)}
                 />
               </div>
-              <div className="flex h-10 w-[136px] overflow-hidden rounded-md border border-slate-600 bg-slate-800">
-                <span className="inline-flex items-center whitespace-nowrap border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">Weeks</span>
+              <div className="flex h-11 w-[136px] overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
+                <span className="inline-flex items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Weeks</span>
                 <Input
-                  className="h-10 w-10 flex-none rounded-none border-0 bg-transparent px-0 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  className="h-11 w-10 flex-none rounded-none border-0 bg-transparent px-0 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   id="week-count"
                   inputMode="numeric"
                   min={1}
@@ -3941,9 +3942,9 @@ export function QuoteBuilderScreen({
                   type="number"
                   value={numberOfWeeks}
                 />
-                <div className="flex h-10 w-8 flex-col border-l border-slate-600">
+                <div className="flex h-11 w-8 flex-col border-l border-white/10">
                   <Button
-                    className="h-[22px] w-8 rounded-none border-b border-slate-600 px-0"
+                    className="h-[22px] w-8 rounded-none border-b border-white/10 px-0"
                     onClick={() => updateWeekCount(numberOfWeeks + 1)}
                     type="button"
                     variant="ghost"
@@ -3962,11 +3963,11 @@ export function QuoteBuilderScreen({
                 </div>
               </div>
                 </div>
-                <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_226px_226px_136px]">
-                  <div className="flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
-                    <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">Purchase Order</span>
+                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_226px_226px_136px]">
+                  <div className="flex h-11 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
+                    <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Purchase Order</span>
                     <button
-                      className="h-10 min-w-0 flex-1 truncate border-0 bg-transparent px-3 text-left text-sm font-semibold text-slate-100 transition hover:bg-slate-700/40"
+                      className="h-11 min-w-0 flex-1 truncate border-0 bg-transparent px-3 text-left text-sm font-medium text-slate-100 transition hover:bg-slate-700/30"
                       disabled={uploadingPurchaseOrder}
                       onClick={openPurchaseOrderPicker}
                       type="button"
@@ -4010,11 +4011,11 @@ export function QuoteBuilderScreen({
               </div>
 
               <div className="space-y-6">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <h3 className="text-lg font-black tracking-tight text-white">Market Planning</h3>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-lg font-bold tracking-tight text-white">Market Planning</h3>
+                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
                   <Button
-                    className="h-10 min-w-[180px] px-5 text-base"
+                    className="h-10 min-w-[180px] rounded-lg border-white/15 px-5 text-sm font-semibold"
                     onClick={openUploadManagerDialog}
                     type="button"
                     variant="outline"
@@ -4027,7 +4028,7 @@ export function QuoteBuilderScreen({
                       : 'Upload Artwork'}
                   </Button>
                   <Button
-                    className="h-10 min-w-[180px] px-5 text-base"
+                    className="h-10 min-w-[180px] rounded-lg border-white/15 px-5 text-sm font-semibold"
                     onClick={openArtworkManagerDialog}
                     type="button"
                     variant="outline"
@@ -4036,7 +4037,7 @@ export function QuoteBuilderScreen({
                   </Button>
                   <div title={canAddMarketInPlanning ? 'Add another market' : addMarketDisabledReason}>
                     <Button
-                      className="h-10 min-w-[160px] px-5 text-base disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-slate-800"
+                      className="h-10 min-w-[160px] rounded-lg border border-orange-300/40 bg-orange-600 px-5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(249,115,22,0.2)] transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-orange-600"
                       disabled={!canAddMarketInPlanning}
                       onClick={openAddMarketDialog}
                       type="button"
@@ -4049,13 +4050,13 @@ export function QuoteBuilderScreen({
                   </div>
                 </div>
                 {loadingMetadata ? (
-                  <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
+                  <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-slate-300">
                     <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" />
                     Loading campaign mappings…
                   </div>
                 ) : null}
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {visiblePlanningMarkets.map((market, marketIndex) => {
                     const marketTheme = MARKET_PLANNING_THEMES[marketIndex % MARKET_PLANNING_THEMES.length];
                     const availableAssets = assetsForMarket(market.market);
@@ -4069,11 +4070,11 @@ export function QuoteBuilderScreen({
                     return (
                       <div
                         key={market.id}
-                        className={cn('rounded-md border p-4 sm:p-5', marketTheme.card, isActiveMarket ? marketTheme.cardActive : '')}
+                        className={cn('rounded-xl border p-4 sm:p-4', marketTheme.card, isActiveMarket ? marketTheme.cardActive : '')}
                         onClick={() => setActiveMarketId(market.id)}
                         onFocusCapture={() => setActiveMarketId(market.id)}
                       >
-                        <div className={cn('mb-3 h-1.5 w-24 rounded-full', marketTheme.accent)} />
+                        <div className={cn('mb-4 h-1 w-16 rounded-full', marketTheme.accent)} />
                         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                           <div className="flex-1">
                             <SearchableSelect
@@ -4107,24 +4108,24 @@ export function QuoteBuilderScreen({
                           ) : null}
                         </div>
 
-                        <div className="mt-5 space-y-4">
+                        <div className="mt-4 space-y-4">
                           <div>
-                            <p className="text-sm font-semibold text-white">Assets</p>
+                            <p className="text-sm font-semibold text-slate-100">Assets</p>
                             <p className="text-xs text-slate-400">Attach the assets you want to run in this market. Select weeks as needed.</p>
                           </div>
-                          <div className="rounded-md border border-slate-700/80 bg-slate-900/45 lg:overflow-visible">
+                          <div className="rounded-lg border border-white/10 bg-slate-950/40 lg:overflow-visible">
                             <div className="overflow-x-auto lg:overflow-visible">
-                              <table className="dense-table min-w-[780px] w-full border-collapse">
+                              <table className="dense-table min-w-[780px] w-full border-collapse text-sm">
                               <colgroup>
                                 <col />
                                 <col className="w-[1%]" />
                                 <col className="w-[24px]" />
                               </colgroup>
                               <thead>
-                                <tr className={cn('border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em]', marketTheme.header)}>
-                                  <th className="px-4 py-3 text-left">Asset</th>
-                                  <th className="px-4 py-3 text-left">Active Weeks</th>
-                                  <th className="px-3 py-3 text-center">
+                                <tr className={cn('border-b border-white/10 text-[11px] font-semibold uppercase tracking-[0.15em]', marketTheme.header)}>
+                                  <th className="px-4 py-3.5 text-left">Asset</th>
+                                  <th className="px-4 py-3.5 text-left">Active Weeks</th>
+                                  <th className="px-3 py-3.5 text-center">
                                     <span className="sr-only">Actions</span>
                                   </th>
                                 </tr>
@@ -4234,27 +4235,30 @@ export function QuoteBuilderScreen({
                   })}
                 </div>
 
-                <div className="space-y-5">
+                <div className="space-y-3">
                   {values.campaignMarkets.map((market, marketIndex) => {
                     const marketTheme = MARKET_PLANNING_THEMES[marketIndex % MARKET_PLANNING_THEMES.length];
                     const deliveryAddressOptions = deliveryAddressOptionsFor(market.market);
                     return (
-                      <div
-                        key={`finalize-map-${market.id}`}
-                        className={cn(
-                          'relative rounded-md border',
-                          marketTheme.card,
-                          'shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]',
-                        )}
-                      >
-                        <div className={cn('absolute left-12 right-0 top-0 h-1 rounded-tr-md', marketTheme.accent)} />
-                        <div className={cn('absolute inset-y-0 left-0 flex w-12 items-center justify-center border-r', marketTheme.header)}>
-                          <span className="text-[11px] font-black uppercase tracking-[0.18em] text-white [writing-mode:vertical-rl] rotate-180">
-                            {market.market || 'Market'}
-                          </span>
+                      <div key={`finalize-map-${market.id}`} className={cn('relative rounded-xl border', marketTheme.card)}>
+                        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className={cn('h-2 w-2 rounded-full', marketTheme.accent)} />
+                            <span className="text-xs font-semibold uppercase tracking-[0.13em] text-slate-200">{market.market || 'Market'}</span>
+                          </div>
                         </div>
                         <Button
-                          className="absolute right-2 top-2 h-7 w-7"
+                          className="absolute right-11 top-2.5 h-7 w-7"
+                          onClick={() => setExpandedMarketId(market.id)}
+                          size="icon"
+                          title="Expand market"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Maximize2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          className="absolute right-3 top-2.5 h-7 w-7"
                           onClick={() => openEditMarketDialog(market.id)}
                           size="icon"
                           title="Edit market"
@@ -4263,21 +4267,21 @@ export function QuoteBuilderScreen({
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        <div className="space-y-3 p-4 pl-14">
-                          <div className="overflow-visible">
-                            <table className="dense-table w-full border-collapse table-fixed">
-                            <colgroup>
-                              <col className="w-[32%]" />
-                              <col className="w-[16%]" />
-                              <col className="w-[14%]" />
-                              <col className="w-[38%]" />
-                            </colgroup>
-                            <thead>
-                              <tr className={cn('border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em]', marketTheme.header)}>
-                                <th className="px-4 py-3 text-left">Asset</th>
-                                <th className="px-4 py-3 text-left">Category</th>
-                                <th className="px-4 py-3 text-left">Creative</th>
-                                <th className="px-4 py-3 text-left">Delivery Address</th>
+                        <div className="space-y-3 p-4">
+                          <div className={cn(market.assets.length > 4 ? 'max-h-[220px] overflow-y-auto' : 'overflow-visible')}>
+                              <table className="dense-table w-full border-collapse table-fixed text-sm">
+                              <colgroup>
+                                <col className="w-[28%]" />
+                                <col className="w-[16%]" />
+                                <col className="w-[14%]" />
+                                <col className="w-[42%]" />
+                              </colgroup>
+                              <thead>
+                                <tr className={cn('border-b border-white/10 text-[11px] font-semibold uppercase tracking-[0.15em]', marketTheme.header)}>
+                                  <th className="px-4 py-3.5 text-left">Asset</th>
+                                  <th className="px-4 py-3.5 text-left">Category</th>
+                                  <th className="px-4 py-3.5 text-left">Creative</th>
+                                  <th className="px-4 py-3.5 text-left">Delivery Address</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -4385,12 +4389,12 @@ export function QuoteBuilderScreen({
               </div>
             </div>
 
-          <aside className="space-y-3 lg:sticky lg:top-2">
+          <aside className="space-y-4 lg:sticky lg:top-2 lg:w-full">
               {summary ? (
                     <>
-                    <div className="rounded-md border border-orange-500/35 bg-gradient-to-b from-slate-900/88 to-slate-950/80 shadow-[0_0_0_1px_rgba(251,146,60,0.08)]">
-                      <div className="flex items-center justify-between border-b border-orange-400/30 bg-gradient-to-r from-orange-500/16 to-transparent px-2 py-1.5">
-                        <h3 className="px-1 text-lg font-black tracking-tight text-white">Posters</h3>
+                    <div className="rounded-xl border border-white/10 bg-slate-900/75">
+                      <div className="flex items-center justify-between border-b border-white/10 px-3 py-2.5">
+                        <h3 className="px-1 text-base font-semibold tracking-tight text-white">Posters</h3>
                         <Button
                           aria-label="Expand posters table"
                           className="h-7 w-7 rounded-sm border border-transparent px-0 transition hover:border-slate-600 hover:bg-slate-800/80 hover:text-white focus-visible:border-slate-500 focus-visible:bg-slate-800/80"
@@ -4413,32 +4417,32 @@ export function QuoteBuilderScreen({
                           <col className="w-[92px]" />
                         </colgroup>
                         <thead>
-                          <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
-                            <th className="sticky left-0 z-40 border border-slate-700 bg-slate-950 px-3 py-2 text-left whitespace-nowrap">Market</th>
-                            <th className="sticky left-[112px] z-40 border border-slate-700 bg-slate-950 px-3 py-2 text-left whitespace-nowrap">Type</th>
+                          <tr className="bg-slate-950/70 text-[11px] font-semibold uppercase tracking-[0.13em] text-slate-300">
+                            <th className="sticky left-0 z-40 border border-white/10 bg-slate-950 px-3 py-3 text-left whitespace-nowrap">Market</th>
+                            <th className="sticky left-[112px] z-40 border border-white/10 bg-slate-950 px-3 py-3 text-left whitespace-nowrap">Type</th>
                             {visibleReviewFormatKeys.map((key) => (
-                              <th key={`review-head-${key}`} className="border border-slate-700 px-3 py-2 text-center">{formatKeyLabel(key, normalizedSheetNameOverrides)}</th>
+                              <th key={`review-head-${key}`} className="border border-white/10 px-3 py-3 text-center">{formatKeyLabel(key, normalizedSheetNameOverrides)}</th>
                             ))}
-                            <th className="sticky right-0 z-40 border border-slate-700 bg-slate-950 px-3 py-2 text-center whitespace-nowrap">Total</th>
+                            <th className="sticky right-0 z-40 border border-white/10 bg-slate-950 px-3 py-3 text-center whitespace-nowrap">Total</th>
                           </tr>
                         </thead>
                         <tbody>
                           {visibleReviewMarkets.map((marketSummary) => {
                             const rows = buildReviewRows(marketSummary);
                             return rows.map((row, rowIndex) => (
-                              <tr key={`review-row-${marketSummary.market}-${row.label}`} className={cn('bg-slate-800/70', rowIndex > 0 ? 'border-t border-slate-700/70' : 'border-t-2 border-slate-600')}>
+                              <tr key={`review-row-${marketSummary.market}-${row.label}`} className={cn('bg-slate-900/45', rowIndex > 0 ? 'border-t border-white/10' : 'border-t border-white/10')}>
                                 {rowIndex === 0 ? (
-                                  <th rowSpan={rows.length} className="sticky left-0 z-30 border border-slate-700 bg-slate-800 px-3 py-2 text-left font-semibold text-slate-100">
+                                  <th rowSpan={rows.length} className="sticky left-0 z-30 border border-white/10 bg-slate-900 px-3 py-3 text-left font-semibold text-slate-100">
                                     {marketSummary.market}
                                   </th>
                                 ) : null}
-                                <th className="sticky left-[112px] z-30 border border-slate-700 bg-slate-800 px-3 py-2 text-left font-semibold text-slate-100">{row.label}</th>
+                                <th className="sticky left-[112px] z-30 border border-white/10 bg-slate-900 px-3 py-3 text-left font-semibold text-slate-100">{row.label}</th>
                                 {visibleReviewFormatKeys.map((key) => (
-                                  <td key={`review-cell-${marketSummary.market}-${row.label}-${key}`} className="border border-slate-700 px-3 py-2 text-center font-semibold text-white">
+                                  <td key={`review-cell-${marketSummary.market}-${row.label}-${key}`} className="border border-white/10 px-3 py-3 text-center font-semibold text-white">
                                     {row.breakdown[key]}
                                   </td>
                                 ))}
-                                <td className="sticky right-0 z-30 border border-slate-700 bg-slate-800 px-3 py-2 text-center font-black text-white">{row.total}</td>
+                                <td className="sticky right-0 z-30 border border-white/10 bg-slate-900 px-3 py-3 text-center font-bold text-white">{row.total}</td>
                               </tr>
                             ));
                           })}
@@ -4447,19 +4451,19 @@ export function QuoteBuilderScreen({
                             const grandRows = buildReviewRows(summary.grandTotal);
 
                             return grandRows.map((row, rowIndex, allRows) => (
-                              <tr key={`review-grand-${row.label}`} className={cn('bg-orange-500/10', rowIndex === 0 ? 'border-t-4 border-orange-400/40' : 'border-t border-orange-400/20')}>
+                              <tr key={`review-grand-${row.label}`} className={cn('bg-orange-500/8', rowIndex === 0 ? 'border-t border-orange-300/30' : 'border-t border-orange-300/20')}>
                                 {rowIndex === 0 ? (
-                                  <th rowSpan={allRows.length} className="sticky left-0 z-30 border border-orange-300/30 bg-[#3a2317] px-3 py-2 text-left font-semibold text-orange-100">
+                                  <th rowSpan={allRows.length} className="sticky left-0 z-30 border border-orange-300/25 bg-[#2e2219] px-3 py-3 text-left font-semibold text-orange-100">
                                     All Markets
                                   </th>
                                 ) : null}
-                                <th className="sticky left-[112px] z-30 border border-orange-300/30 bg-[#3a2317] px-3 py-2 text-left font-semibold text-orange-100">{row.label}</th>
+                                <th className="sticky left-[112px] z-30 border border-orange-300/25 bg-[#2e2219] px-3 py-3 text-left font-semibold text-orange-100">{row.label}</th>
                                 {visibleReviewFormatKeys.map((key) => (
-                                  <td key={`review-grand-cell-${row.label}-${key}`} className="border border-orange-300/30 px-3 py-2 text-center font-semibold text-orange-100">
+                                  <td key={`review-grand-cell-${row.label}-${key}`} className="border border-orange-300/25 px-3 py-3 text-center font-semibold text-orange-100">
                                     {row.breakdown[key]}
                                   </td>
                                 ))}
-                                <td className="sticky right-0 z-30 border border-orange-300/30 bg-[#3a2317] px-3 py-2 text-center font-black text-orange-100">{row.total}</td>
+                                <td className="sticky right-0 z-30 border border-orange-300/25 bg-[#2e2219] px-3 py-3 text-center font-bold text-orange-100">{row.total}</td>
                               </tr>
                             ));
                           })()}
@@ -4468,32 +4472,32 @@ export function QuoteBuilderScreen({
                       </div>
                     </div>
                     <div>
-                      <h3 className="mb-2 text-lg font-black tracking-tight text-white">Cost</h3>
+                      <h3 className="mb-2 text-base font-semibold tracking-tight text-white">Cost</h3>
                     </div>
-                    <div className="overflow-x-auto rounded-md border border-orange-500/35 bg-gradient-to-b from-slate-900/88 to-slate-950/80 shadow-[0_0_0_1px_rgba(251,146,60,0.08)]">
+                    <div className="overflow-x-auto rounded-xl border border-white/10 bg-slate-900/75">
                       <table className="dense-table w-full border-collapse text-sm">
                         <thead>
-                          <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
-                            <th className="border border-slate-700 px-4 py-3 text-left">Market</th>
-                            <th className="border border-slate-700 px-4 py-3 text-center">Printing Cost ($)</th>
-                            <th className="border border-slate-700 px-4 py-3 text-center">Shipping Cost ($)</th>
+                          <tr className="bg-slate-950/70 text-[11px] font-semibold uppercase tracking-[0.13em] text-slate-300">
+                            <th className="border border-white/10 px-4 py-3.5 text-left">Market</th>
+                            <th className="border border-white/10 px-4 py-3.5 text-center">Printing Cost ($)</th>
+                            <th className="border border-white/10 px-4 py-3.5 text-center">Shipping Cost ($)</th>
                           </tr>
                         </thead>
                         <tbody>
                           {visibleReviewMarkets.map((marketSummary) => (
-                            <tr key={`review-cost-${marketSummary.market}`} className="border-t border-slate-700/70 bg-slate-800/70">
-                              <th className="border border-slate-700 px-4 py-3 text-left font-semibold text-slate-100">{marketSummary.market}</th>
-                              <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">
+                            <tr key={`review-cost-${marketSummary.market}`} className="border-t border-white/10 bg-slate-900/45">
+                              <th className="border border-white/10 px-4 py-3.5 text-left font-semibold text-slate-100">{marketSummary.market}</th>
+                              <td className="border border-white/10 px-4 py-3.5 text-center font-bold text-white">
                                 {formatCurrency(calculateMarketPrintingCost(marketSummary.market))}
                               </td>
-                              <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">
+                              <td className="border border-white/10 px-4 py-3.5 text-center font-bold text-white">
                                 {formatCurrency(calculateMarketShippingCost(marketSummary.market))}
                               </td>
                             </tr>
                           ))}
-                          <tr className="border-t-4 border-orange-400/40 bg-orange-500/10">
-                            <th className="border border-orange-300/30 px-4 py-3 text-left font-black text-orange-100">All Markets</th>
-                            <td className="border border-orange-300/30 px-4 py-3 text-center font-black text-orange-100">
+                          <tr className="border-t border-orange-300/30 bg-orange-500/8">
+                            <th className="border border-orange-300/25 px-4 py-3.5 text-left font-bold text-orange-100">All Markets</th>
+                            <td className="border border-orange-300/25 px-4 py-3.5 text-center font-bold text-orange-100">
                               {formatCurrency(
                                 visibleReviewMarkets.reduce(
                                   (total, marketSummary) => total + calculateMarketPrintingCost(marketSummary.market),
@@ -4501,7 +4505,7 @@ export function QuoteBuilderScreen({
                                 ),
                               )}
                             </td>
-                            <td className="border border-orange-300/30 px-4 py-3 text-center font-black text-orange-100">
+                            <td className="border border-orange-300/25 px-4 py-3.5 text-center font-bold text-orange-100">
                               {formatCurrency(
                                 visibleReviewMarkets.reduce(
                                   (total, marketSummary) => total + calculateMarketShippingCost(marketSummary.market),
@@ -4516,7 +4520,7 @@ export function QuoteBuilderScreen({
                     </>
 
               ) : (
-                  <div className="rounded-md border border-slate-700 bg-slate-800/70 p-6">
+                  <div className="rounded-xl border border-white/10 bg-slate-900/70 p-6">
                     <div className="flex items-start gap-3">
                       <CircleAlert className="mt-0.5 h-5 w-5 text-amber-300" />
                       <div>
@@ -4534,14 +4538,15 @@ export function QuoteBuilderScreen({
 
       {(bottomBarHost
         ? createPortal(
-            <div className="z-20 border-t border-slate-700/80 bg-slate-950/95 backdrop-blur">
-              <div className="flex w-full items-center justify-between gap-4 px-6 py-3">
+            <div className="z-20 border-t border-slate-800/90 bg-slate-950/92 backdrop-blur">
+              <div className="w-full px-3 py-2 sm:px-4 lg:px-5">
+                <div className="relative flex items-center gap-3 px-1 py-1.5">
                 <div className="min-h-[20px] text-sm text-slate-300" role="status">
                   {exportProgressMessage || ''}
                 </div>
-                <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="ml-auto flex flex-col gap-2 sm:flex-row sm:justify-end">
                   <Button
-                    className="h-10 min-w-[180px] px-5 text-base"
+                    className="h-9 min-w-[180px] rounded-lg border-slate-700 px-5 text-sm font-semibold"
                     disabled={exportingTemplates || sendingAdsEmail}
                     onClick={() => void downloadArtworkVisuals()}
                     type="button"
@@ -4551,7 +4556,7 @@ export function QuoteBuilderScreen({
                     {exportingTemplates ? 'Generating Files...' : 'Download Visuals'}
                   </Button>
                   <Button
-                    className="h-10 min-w-[210px] px-6 text-base"
+                    className="h-9 min-w-[210px] rounded-lg border border-orange-300/35 bg-orange-600 px-6 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(249,115,22,0.2)] hover:bg-orange-500"
                     disabled={exportingTemplates || sendingAdsEmail}
                     onClick={() => void sendArtworkEmailToAds()}
                     title={hasUploadedPurchaseOrder ? undefined : 'Upload purchase order before sending to ADS'}
@@ -4563,18 +4568,20 @@ export function QuoteBuilderScreen({
                   </Button>
                 </div>
               </div>
+              </div>
             </div>,
             bottomBarHost,
           )
         : (
-            <div className="z-20 border-t border-slate-700/80 bg-slate-950/95 backdrop-blur">
-              <div className="flex w-full items-center justify-between gap-4 px-6 py-3">
+            <div className="z-20 border-t border-slate-800/90 bg-slate-950/92 backdrop-blur">
+              <div className="w-full px-3 py-2 sm:px-4 lg:px-5">
+                <div className="relative flex items-center gap-3 px-1 py-1.5">
                 <div className="min-h-[20px] text-sm text-slate-300" role="status">
                   {exportProgressMessage || ''}
                 </div>
-                <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="ml-auto flex flex-col gap-2 sm:flex-row sm:justify-end">
                   <Button
-                    className="h-10 min-w-[180px] px-5 text-base"
+                    className="h-9 min-w-[180px] rounded-lg border-slate-700 px-5 text-sm font-semibold"
                     disabled={exportingTemplates || sendingAdsEmail}
                     onClick={() => void downloadArtworkVisuals()}
                     type="button"
@@ -4584,7 +4591,7 @@ export function QuoteBuilderScreen({
                     {exportingTemplates ? 'Generating Files...' : 'Download Visuals'}
                   </Button>
                   <Button
-                    className="h-10 min-w-[210px] px-6 text-base"
+                    className="h-9 min-w-[210px] rounded-lg border border-orange-300/35 bg-orange-600 px-6 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(249,115,22,0.2)] hover:bg-orange-500"
                     disabled={exportingTemplates || sendingAdsEmail}
                     onClick={() => void sendArtworkEmailToAds()}
                     title={hasUploadedPurchaseOrder ? undefined : 'Upload purchase order before sending to ADS'}
@@ -4595,6 +4602,7 @@ export function QuoteBuilderScreen({
                     {sendingAdsEmail ? 'Sending Email...' : 'Send Email To ADS'}
                   </Button>
                 </div>
+              </div>
               </div>
             </div>
           ))}
@@ -4660,6 +4668,142 @@ export function QuoteBuilderScreen({
               </table>
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(expandedMarketId)}
+        onOpenChange={(open) => {
+          if (!open) setExpandedMarketId(null);
+        }}
+      >
+        <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0" style={{ width: 'min(calc(100vw - 2rem), 86rem)', maxHeight: '90vh' }}>
+          {(() => {
+            const expandedMarket = values.campaignMarkets.find((entry) => entry.id === expandedMarketId) ?? null;
+            if (!expandedMarket) return null;
+            const deliveryAddressOptions = deliveryAddressOptionsFor(expandedMarket.market);
+            return (
+              <>
+                <DialogHeader className="shrink-0 border-b border-slate-700 px-5 py-4">
+                  <DialogTitle>{expandedMarket.market || 'Market'} - Assets</DialogTitle>
+                </DialogHeader>
+                <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+                <div className="overflow-auto rounded-md border border-slate-700 bg-slate-900/70">
+                  <table className="dense-table w-full border-collapse table-fixed text-sm">
+                    <colgroup>
+                      <col className="w-[28%]" />
+                      <col className="w-[16%]" />
+                      <col className="w-[14%]" />
+                      <col className="w-[42%]" />
+                    </colgroup>
+                    <thead>
+                      <tr className="border-b border-white/10 bg-slate-950 text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-300">
+                        <th className="px-4 py-3.5 text-left">Asset</th>
+                        <th className="px-4 py-3.5 text-left">Category</th>
+                        <th className="px-4 py-3.5 text-left">Creative</th>
+                        <th className="px-4 py-3.5 text-left">Delivery Address</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {expandedMarket.assets.map((asset) => {
+                        const line = summaryLineByAssetId.get(asset.id);
+                        const requiredFormats = getCreativeFormatsForBreakdown(line?.breakdown);
+                        const displayFormats = requiredFormats.length > 0 ? requiredFormats : [null];
+                        const rowSpan = displayFormats.length;
+                        const metadataAsset = markets.find((entry) => entry.name === expandedMarket.market)?.assets.find((entry) => entry.id === asset.assetId);
+                        return (
+                          <Fragment key={`expanded-market-group-${asset.id}`}>
+                            {displayFormats.map((formatKey, index) => {
+                              const selectedCreativeId = formatKey ? getCreativeImageIdForFormat(asset, formatKey) : '';
+                              const multiArtworkSlotCount = formatKey && normalizedMultipleArtworkFormats[canonicalKeyForFormat(formatKey)] ? Math.max(1, metadataAsset?.quantities?.[formatKey] ?? 1) : 0;
+                              const slotArtworkIds = formatKey ? (asset.multiCreativeImageIds?.[formatKey] ?? []) : [];
+                              const hasAnySlotArtwork = slotArtworkIds.some((id) => Boolean((id || '').trim()));
+                              return (
+                                <tr key={`expanded-market-row-${asset.id}-${formatKey ?? 'none'}-${index}`} className="border-b border-slate-700/70 align-top last:border-b-0">
+                                  {index === 0 ? (
+                                    <td className="px-4 py-3" rowSpan={rowSpan}>
+                                      <p className="text-sm font-semibold text-white">{asset.assetSearch || asset.assetId || 'Asset not selected'}</p>
+                                    </td>
+                                  ) : null}
+                                  <td className="px-4 py-3">
+                                    {formatKey ? (
+                                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">{creativeFormatLabel(formatKey, normalizedSheetNameOverrides)}</p>
+                                    ) : (
+                                      <p className="text-sm text-slate-400">No active quantity formats</p>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {formatKey ? (
+                                      <div className="flex items-center">
+                                        <Button
+                                          className="h-9 w-24 px-3 text-xs font-semibold"
+                                          onClick={() =>
+                                            multiArtworkSlotCount > 0
+                                              ? openMultiArtworkDialog(expandedMarket.id, asset.id, formatKey, multiArtworkSlotCount)
+                                              : selectedCreativeId
+                                                ? openArtworkPreviewDialog(expandedMarket.id, asset.id, formatKey)
+                                                : openAssignArtworkDialog(expandedMarket.id, asset.id, formatKey)
+                                          }
+                                          type="button"
+                                          variant={multiArtworkSlotCount > 0 ? (hasAnySlotArtwork ? 'outline' : 'secondary') : selectedCreativeId ? 'outline' : 'secondary'}
+                                        >
+                                          {multiArtworkSlotCount > 0 ? (
+                                            hasAnySlotArtwork ? (
+                                              <>
+                                                <Eye className="h-3.5 w-3.5" />
+                                                Show
+                                              </>
+                                            ) : (
+                                              '+ Assign'
+                                            )
+                                          ) : selectedCreativeId ? (
+                                            <>
+                                              <Eye className="h-3.5 w-3.5" />
+                                              Show
+                                            </>
+                                          ) : (
+                                            '+ Assign'
+                                          )}
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-slate-500">-</p>
+                                    )}
+                                  </td>
+                                  {index === 0 ? (
+                                    <td className="px-4 py-3" rowSpan={rowSpan}>
+                                      <SearchableSelect
+                                        actionDisabled={!expandedMarket.market}
+                                        actionLabel={canAddAddressInFinalize ? 'Add new address' : undefined}
+                                        emptyMessage={deliveryAddressOptions.length ? 'No matching addresses found.' : 'No addresses saved for this market yet.'}
+                                        items={deliveryAddressOptions}
+                                        label=""
+                                        onAction={() => openAddAddressDialog(expandedMarket.id, asset.id, expandedMarket.market)}
+                                        onValueChange={(value) =>
+                                          updateCampaignAsset(expandedMarket.id, asset.id, (current) => ({
+                                            ...current,
+                                            deliveryAddress: value,
+                                          }))
+                                        }
+                                        placeholder={deliveryAddressOptions.length ? 'Choose delivery address' : 'No addresses available'}
+                                        selectedLabel={asset.deliveryAddress || ''}
+                                        selectedValue={asset.deliveryAddress || ''}
+                                      />
+                                    </td>
+                                  ) : null}
+                                </tr>
+                              );
+                            })}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                </div>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

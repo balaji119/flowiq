@@ -141,13 +141,13 @@ export function AdminWorkspaceShell({
     <main className="flex h-screen w-full overflow-hidden">
       <aside
         className={cn(
-          'relative flex h-screen shrink-0 flex-col border-r border-slate-700/80 bg-slate-950/65 transition-[width] duration-200',
-          expanded ? 'w-64' : 'w-[74px]',
+          'relative flex h-screen shrink-0 flex-col border-r border-slate-700/75 bg-slate-950/65 transition-[width] duration-200',
+          expanded ? 'w-[248px]' : 'w-[66px]',
         )}
         onMouseEnter={() => setCollapsedSidebarHover(true)}
         onMouseLeave={() => setCollapsedSidebarHover(false)}
       >
-        <div className={cn('border-b border-slate-700/80', expanded ? 'px-3 py-2.5' : 'flex h-[74px] items-center justify-center px-2')}>
+        <div className={cn('border-b border-slate-700/80', expanded ? 'px-2.5 py-2.5' : 'flex h-[66px] items-center justify-center px-1.5')}>
           {expanded ? (
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex items-center gap-1.5">
@@ -157,7 +157,7 @@ export function AdminWorkspaceShell({
                 <p className="truncate text-xs font-bold uppercase leading-none tracking-[0.16em] text-orange-300">Connect</p>
               </div>
               <button
-                className="rounded-md p-2 text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                className="rounded-md p-2 text-slate-300 transition-[background-color,color,transform,box-shadow] duration-200 hover:-translate-y-[1px] hover:bg-slate-800 hover:text-white hover:shadow-[0_5px_12px_rgba(15,23,42,0.28)]"
                 onClick={toggleExpanded}
                 title="Collapse sidebar"
                 type="button"
@@ -177,7 +177,7 @@ export function AdminWorkspaceShell({
         {!expanded ? (
           <button
             className={cn(
-              'absolute left-full top-[72px] z-20 -translate-x-1/2 rounded-full border border-slate-300/80 bg-slate-200 p-1.5 text-slate-700 shadow-md transition-all duration-150 hover:bg-white',
+              'absolute left-full top-[64px] z-20 -translate-x-1/2 rounded-full border border-slate-300/80 bg-slate-200 p-1.5 text-slate-700 shadow-md transition-all duration-150 hover:bg-white',
               collapsedSidebarHover ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
             )}
             onClick={toggleExpanded}
@@ -188,7 +188,7 @@ export function AdminWorkspaceShell({
           </button>
         ) : null}
 
-        <nav className="flex-1 space-y-3 py-2">
+        <nav className="flex-1 space-y-2.5 py-2">
           {items
             .filter((item) => (item.id === 'shipping-costs' ? canAccessShippingCosts : true))
             .map((item) => {
@@ -198,10 +198,10 @@ export function AdminWorkspaceShell({
                   key={item.id}
                   className={cn(
                     'flex items-center rounded-md text-[8px] font-semibold uppercase leading-none tracking-[0.02em] transition-[background-color,border-color,color,transform,box-shadow] duration-200 [&_svg]:transition-opacity [&_svg]:duration-200',
-                    expanded ? 'h-12 w-full justify-start gap-2.5 px-2.5' : 'mx-auto h-12 w-12 justify-center',
+                    expanded ? 'h-11 w-full justify-start gap-2.5 px-2.5' : 'mx-auto h-11 w-11 justify-center',
                     active
                       ? 'border border-orange-300/35 bg-gradient-to-r from-orange-500/20 to-transparent text-white shadow-[0_0_0_1px_rgba(251,146,60,0.22),0_6px_14px_rgba(15,23,42,0.28)] [&_svg]:opacity-100'
-                      : 'border border-transparent text-slate-400 [&_svg]:opacity-80 hover:border-white/10 hover:bg-slate-800/65 hover:text-white hover:[&_svg]:opacity-100',
+                      : 'border border-transparent text-slate-400 [&_svg]:opacity-80 hover:-translate-y-[1px] hover:border-white/10 hover:bg-slate-800/65 hover:text-white hover:shadow-[0_6px_14px_rgba(15,23,42,0.24)] hover:[&_svg]:opacity-100',
                   )}
                   onClick={item.onClick}
                   title={!expanded ? item.label : undefined}
@@ -287,16 +287,29 @@ export function AdminWorkspaceShell({
       <section className="min-w-0 flex h-screen flex-1 flex-col overflow-hidden">
         <header className="shrink-0">
           <div className="border-b border-white/10 bg-slate-900/62 backdrop-blur">
-            <div className="flex min-h-[64px] items-center justify-center px-6">
-              <p className="whitespace-nowrap text-[28px] font-bold leading-none tracking-tight text-white">ADS Connect</p>
+            <div
+              aria-label="ADS Connect positioning statement"
+              className="grid min-h-[62px] grid-cols-1 gap-0.5 px-6 py-1.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-3"
+              role="region"
+            >
+              <h1 className="whitespace-nowrap text-[28px] font-bold leading-none tracking-tight text-white [text-rendering:geometricPrecision]">ADS Connect</h1>
+              <div className="min-w-0 border-l-0 border-white/10 pl-0 sm:border-l sm:pl-4">
+                <p className="text-[8px] font-semibold uppercase tracking-[0.2em] text-slate-400/45">Powered by ADS</p>
+                <h2 className="mt-0.5 text-[14px] font-semibold leading-tight tracking-tight text-slate-100/90 [text-rendering:geometricPrecision]">Turn Hours into Minutes</h2>
+                <p className="mt-1 max-w-[500px] text-[11px] leading-[1.35] text-slate-300/70">
+                  Integrated with REV360 for faster campaign delivery and workflow automation.
+                </p>
+              </div>
             </div>
           </div>
           <div className="border-b border-orange-500/22 bg-gradient-to-r from-slate-800/92 via-slate-800/88 to-orange-500/14">
-            <div className="grid min-h-[52px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-6">
-              <h1 className="truncate text-lg font-semibold tracking-tight text-slate-100">{pageTitle || 'Workspace'}</h1>
-              <div className="min-w-0 px-1 text-center" id="workspace-topbar-center-slot" />
-              <div className="flex flex-wrap items-center justify-end gap-2" id="workspace-topbar-actions-slot">
-                {topBarActions}
+            <div className="flex min-h-[48px] items-center justify-between gap-3 px-6">
+              <h2 className="truncate text-lg font-semibold tracking-tight text-slate-100">{pageTitle || 'Workspace'}</h2>
+              <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+                <div className="min-w-0 flex-1 text-center text-slate-300/80" id="workspace-topbar-center-slot" />
+                <div aria-label="Workspace actions" className="flex flex-wrap items-center justify-end gap-3" id="workspace-topbar-actions-slot">
+                  {topBarActions}
+                </div>
               </div>
             </div>
           </div>

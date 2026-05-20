@@ -389,7 +389,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
               <p className="mt-2 text-sm text-slate-400">Choose Add Mapping to create the first asset mapping for {selectedMarketFilter}.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/70">
+            <div className="overflow-x-auto rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
               <table className="dense-table min-w-[1180px] w-full border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -404,8 +404,11 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredMappings.map((mapping) => (
-                    <tr key={`mapping-row-${mapping.id}`} className="bg-slate-800/70 border-t border-slate-700/70">
+                  {filteredMappings.map((mapping, rowIndex) => (
+                    <tr
+                      key={`mapping-row-${mapping.id}`}
+                      className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#1a2740]/70' : 'bg-[#162033]'}`}
+                    >
                       <td className="border border-slate-700 px-4 py-3 font-semibold text-white">{mapping.asset}</td>
                       <td className="border border-slate-700 px-4 py-3 text-slate-200">{mapping.label}</td>
                       <td className="border border-slate-700 px-4 py-3 text-slate-300">{mapping.state || '-'}</td>

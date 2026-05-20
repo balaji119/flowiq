@@ -399,7 +399,7 @@ export function UserManagementScreen({
               <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/60">
+            <div className="overflow-x-auto rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
               <table className="dense-table min-w-[980px] w-full border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -422,12 +422,14 @@ export function UserManagementScreen({
                 </thead>
                 <tbody>
                   {users.length > 0 ? (
-                    users.map((user) => {
+                    users.map((user, rowIndex) => {
                       const canManage = canActOnUser(user);
                       return (
                         <tr
                           key={user.id}
-                          className="border-t border-slate-700/70 bg-slate-900/50"
+                          className={`border-t border-white/5 ${
+                            rowIndex % 2 === 0 ? 'bg-[#1a2740]/70' : 'bg-[#162033]'
+                          }`}
                         >
                           <td className="border border-slate-700 px-4 py-3 font-semibold text-white">
                             {user.name}
@@ -490,7 +492,7 @@ export function UserManagementScreen({
                       );
                     })
                   ) : (
-                    <tr className="bg-slate-900/50">
+                    <tr className="bg-[#162033]">
                       <td
                         className="border border-slate-700 px-4 py-8 text-center text-sm text-slate-400"
                         colSpan={5}

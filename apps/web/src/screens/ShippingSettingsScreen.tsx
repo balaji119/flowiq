@@ -591,7 +591,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 	        ) : selectedMarketFilter ? (
 	          <div className="space-y-2">
 	            {selectedMarketAddresses.length > 0 ? (
-	              <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/60">
+	              <div className="overflow-x-auto rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
 	                <table className="dense-table min-w-[1180px] w-full border-collapse text-sm">
 	                  <thead>
 	                    <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -607,12 +607,12 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
 	                    </tr>
 	                  </thead>
 	                  <tbody>
-	                    {selectedMarketAddresses.map((address) => {
+	                    {selectedMarketAddresses.map((address, rowIndex) => {
 	                      const parsed = parseDeliveryAddress(address.deliveryAddress);
 	                      return (
 	                        <tr
 	                          key={`${selectedMarketFilter}-${address.deliveryAddress}`}
-	                          className={address.isDefault ? 'bg-orange-500/10' : 'bg-slate-900/50'}
+	                          className={address.isDefault ? 'bg-orange-500/10' : rowIndex % 2 === 0 ? 'bg-[#1a2740]/70' : 'bg-[#162033]'}
 	                        >
 	                          <td className="border border-slate-700 px-4 py-3 font-semibold text-white">{parsed.name || 'Delivery address'}</td>
 	                          <td className="border border-slate-700 px-4 py-3 text-slate-200">{formatAddressLine(parsed) || '-'}</td>
