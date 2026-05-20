@@ -3909,13 +3909,11 @@ export function QuoteBuilderScreen({
   }
 
   return (
-    <main className="dense-main flex min-h-0 w-full flex-col gap-6">
+    <main className="dense-main flex min-h-0 w-full flex-col gap-4 pb-0">
       {topBarCenterHost
         ? createPortal(
-            <p className="truncate text-sm font-medium text-slate-300" title={`Campaign Builder / ${activeCampaignName}`}>
-              <span className="text-slate-400">Campaign Builder</span>
-              <span className="mx-2 text-slate-500">/</span>
-              <span className="font-semibold text-slate-200">{activeCampaignName}</span>
+            <p className="truncate text-[13px] font-semibold uppercase tracking-[0.14em] text-slate-200/90" title={activeCampaignName}>
+              {activeCampaignName}
             </p>,
             topBarCenterHost,
           )
@@ -4677,7 +4675,7 @@ export function QuoteBuilderScreen({
 
       {!reviewDrawerOpen ? (
         <button
-          className="fixed right-4 top-[128px] z-40 rounded-full border border-white/10 bg-gradient-to-r from-slate-800/92 to-slate-900/92 px-4 py-2 text-sm font-medium text-white shadow-[0_10px_20px_rgba(2,6,23,0.32)] transition duration-200 ease-out hover:-translate-y-[1px] hover:brightness-105"
+          className="fixed bottom-6 right-6 z-40 rounded-full border border-orange-300/45 bg-gradient-to-r from-orange-600 to-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(249,115,22,0.36)] transition duration-200 ease-out hover:-translate-y-[1px] hover:brightness-105"
           onClick={() => setReviewDrawerOpen(true)}
           type="button"
         >
@@ -4687,26 +4685,28 @@ export function QuoteBuilderScreen({
         </button>
       ) : null}
 
-      {(bottomBarHost
-        ? createPortal(
-            <div className="z-20 border-t border-slate-800/90 bg-slate-950/92 backdrop-blur">
-              <div className="w-full px-3 py-2 sm:px-4 lg:px-5">
-                <div className="min-h-[20px] px-1 py-1 text-sm text-slate-300" role="status">
-                  {exportProgressMessage || ''}
+      {exportProgressMessage
+        ? (bottomBarHost
+            ? createPortal(
+                <div className="z-20 border-t border-slate-800/90 bg-slate-950/92 backdrop-blur">
+                  <div className="w-full px-3 py-2 sm:px-4 lg:px-5">
+                    <div className="px-1 py-1 text-sm text-slate-300" role="status">
+                      {exportProgressMessage}
+                    </div>
+                  </div>
+                </div>,
+                bottomBarHost,
+              )
+            : (
+                <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-800/90 bg-slate-950/92 backdrop-blur">
+                  <div className="w-full px-3 py-2 sm:px-4 lg:px-5">
+                    <div className="px-1 py-1 text-sm text-slate-300" role="status">
+                      {exportProgressMessage}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>,
-            bottomBarHost,
-          )
-        : (
-            <div className="z-20 border-t border-slate-800/90 bg-slate-950/92 backdrop-blur">
-              <div className="w-full px-3 py-2 sm:px-4 lg:px-5">
-                <div className="min-h-[20px] px-1 py-1 text-sm text-slate-300" role="status">
-                  {exportProgressMessage || ''}
-                </div>
-              </div>
-            </div>
-          ))}
+              ))
+        : null}
 
       <Dialog
         open={Boolean(expandedMarketId)}
