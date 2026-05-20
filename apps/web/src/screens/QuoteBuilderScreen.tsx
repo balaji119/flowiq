@@ -1437,8 +1437,12 @@ export function QuoteBuilderScreen({
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.eightSheeterSetsPerBox ?? entry.sheeterSetsPerBox ?? 15])),
     [marketShippingRates],
   );
-  const useFlatRateByMarket = useMemo(
-    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.useFlatRate ?? false])),
+  const useFlatRateSheetersByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.useFlatRateSheeters ?? entry.useFlatRate ?? false])),
+    [marketShippingRates],
+  );
+  const useFlatRateMegasByMarket = useMemo(
+    () => new Map(marketShippingRates.map((entry) => [entry.market, entry.useFlatRateMegas ?? entry.useFlatRate ?? false])),
     [marketShippingRates],
   );
   const printingCostByMarketAsset = useMemo(
@@ -2506,20 +2510,34 @@ export function QuoteBuilderScreen({
     const eightSheeterSetsPerBox = eightSheeterSetsPerBoxByMarket.get(marketName) ?? 15;
     const megasPerBox = megasPerBoxByMarket.get(marketName) ?? 1;
     const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
-    const useFlatRate = useFlatRateByMarket.get(marketName) ?? false;
+    const useFlatRateSheeters = useFlatRateSheetersByMarket.get(marketName) ?? false;
+    const useFlatRateMegas = useFlatRateMegasByMarket.get(marketName) ?? false;
 
-    if (useFlatRate) {
+    const posterShipping = useFlatRateSheeters
+      ? (() => {
       const hasTwoSheet = marketLines.some((line) => (line.breakdown['2-sheet'] ?? 0) > 0);
       const hasFourSheet = marketLines.some((line) => (line.breakdown['4-sheet'] ?? 0) > 0);
       const hasSixSheet = marketLines.some((line) => (line.breakdown['6-sheet'] ?? 0) > 0);
       const hasEightSheet = marketLines.some((line) => ((line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0)) > 0);
 
-      const posterShipping = (hasTwoSheet ? twoSheeterPrice : 0)
+      return (hasTwoSheet ? twoSheeterPrice : 0)
         + (hasFourSheet ? fourSheeterPrice : 0)
         + (hasSixSheet ? sixSheeterPrice : 0)
         + (hasEightSheet ? eightSheeterPrice : 0);
+      })()
+      : (() => {
+        const totalTwoSheet = marketLines.reduce((total, line) => total + (line.breakdown['2-sheet'] ?? 0), 0);
+        const totalFourSheet = marketLines.reduce((total, line) => total + (line.breakdown['4-sheet'] ?? 0), 0);
+        const totalSixSheet = marketLines.reduce((total, line) => total + (line.breakdown['6-sheet'] ?? 0), 0);
+        const totalEightAndQa0 = marketLines.reduce((total, line) => total + (line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0), 0);
+        return calculatePosterShippingForSheeter(totalEightAndQa0, eightSheeterPrice, 4, eightSheeterSetsPerBox)
+          + calculatePosterShippingForSheeter(totalSixSheet, sixSheeterPrice, 3, sixSheeterSetsPerBox)
+          + calculatePosterShippingForSheeter(totalFourSheet, fourSheeterPrice, 2, fourSheeterSetsPerBox)
+          + calculatePosterShippingForSheeter(totalTwoSheet, twoSheeterPrice, 1, twoSheeterSetsPerBox);
+      })();
 
-      const megaShipping = marketLines.reduce((total, line) => {
+    const megaShipping = useFlatRateMegas
+      ? marketLines.reduce((total, line) => {
         const selectedAsset = selectedAssetByLineId.get(line.id);
         if (!selectedAsset) return total;
 
@@ -2532,34 +2550,21 @@ export function QuoteBuilderScreen({
           + ((line.breakdown.Mega ?? 0) > 0 ? megaRate : 0)
           + ((line.breakdown['DOT M'] ?? 0) > 0 ? dotMRate : 0)
           + ((line.breakdown.MP ?? 0) > 0 ? mpRate : 0);
+      }, 0)
+      : marketLines.reduce((total, line) => {
+        const selectedAsset = selectedAssetByLineId.get(line.id);
+        if (!selectedAsset) return total;
+
+        const assetShippingCosts = shippingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`);
+        const megaRate = assetShippingCosts?.megaShippingRate ?? (megaShippingRateByMarket.get(marketName) ?? 0);
+        const dotMRate = assetShippingCosts?.dotMShippingRate ?? (dotMShippingRateByMarket.get(marketName) ?? 0);
+        const mpRate = assetShippingCosts?.mpShippingRate ?? (mpShippingRateByMarket.get(marketName) ?? 0);
+
+        return total
+          + calculateShippingCost(line.breakdown.Mega ?? 0, megaRate, megasPerBox)
+          + calculateShippingCost(line.breakdown['DOT M'] ?? 0, dotMRate, megasPerBox)
+          + calculateShippingCost(line.breakdown.MP ?? 0, mpRate, megasPerBox);
       }, 0);
-
-      return posterShipping + megaShipping;
-    }
-
-    const totalTwoSheet = marketLines.reduce((total, line) => total + (line.breakdown['2-sheet'] ?? 0), 0);
-    const totalFourSheet = marketLines.reduce((total, line) => total + (line.breakdown['4-sheet'] ?? 0), 0);
-    const totalSixSheet = marketLines.reduce((total, line) => total + (line.breakdown['6-sheet'] ?? 0), 0);
-    const totalEightAndQa0 = marketLines.reduce((total, line) => total + (line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0), 0);
-    const posterShipping = calculatePosterShippingForSheeter(totalEightAndQa0, eightSheeterPrice, 4, eightSheeterSetsPerBox)
-      + calculatePosterShippingForSheeter(totalSixSheet, sixSheeterPrice, 3, sixSheeterSetsPerBox)
-      + calculatePosterShippingForSheeter(totalFourSheet, fourSheeterPrice, 2, fourSheeterSetsPerBox)
-      + calculatePosterShippingForSheeter(totalTwoSheet, twoSheeterPrice, 1, twoSheeterSetsPerBox);
-
-    const megaShipping = marketLines.reduce((total, line) => {
-      const selectedAsset = selectedAssetByLineId.get(line.id);
-      if (!selectedAsset) return total;
-
-      const assetShippingCosts = shippingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`);
-      const megaRate = assetShippingCosts?.megaShippingRate ?? (megaShippingRateByMarket.get(marketName) ?? 0);
-      const dotMRate = assetShippingCosts?.dotMShippingRate ?? (dotMShippingRateByMarket.get(marketName) ?? 0);
-      const mpRate = assetShippingCosts?.mpShippingRate ?? (mpShippingRateByMarket.get(marketName) ?? 0);
-
-      return total
-        + calculateShippingCost(line.breakdown.Mega ?? 0, megaRate, megasPerBox)
-        + calculateShippingCost(line.breakdown['DOT M'] ?? 0, dotMRate, megasPerBox)
-        + calculateShippingCost(line.breakdown.MP ?? 0, mpRate, megasPerBox);
-    }, 0);
 
     return posterShipping + megaShipping;
   }

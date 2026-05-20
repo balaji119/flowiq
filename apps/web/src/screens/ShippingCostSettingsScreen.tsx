@@ -51,7 +51,8 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
   const [marketSixSheeterSetsPerBox, setMarketSixSheeterSetsPerBox] = useState('15');
   const [marketEightSheeterSetsPerBox, setMarketEightSheeterSetsPerBox] = useState('15');
   const [marketMegasPerBox, setMarketMegasPerBox] = useState('1');
-  const [marketUseFlatRate, setMarketUseFlatRate] = useState(false);
+  const [marketUseFlatRateSheeters, setMarketUseFlatRateSheeters] = useState(false);
+  const [marketUseFlatRateMegas, setMarketUseFlatRateMegas] = useState(false);
   const [marketRateDirty, setMarketRateDirty] = useState(false);
   const [draftsByAsset, setDraftsByAsset] = useState<Record<string, AssetShippingDraft>>({});
   const [dirtyRows, setDirtyRows] = useState<Record<string, boolean>>({});
@@ -198,7 +199,9 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
     setMarketSixSheeterSetsPerBox(String(selectedMarketRate?.sixSheeterSetsPerBox ?? selectedMarketRate?.sheeterSetsPerBox ?? 15));
     setMarketEightSheeterSetsPerBox(String(selectedMarketRate?.eightSheeterSetsPerBox ?? selectedMarketRate?.sheeterSetsPerBox ?? 15));
     setMarketMegasPerBox(String(selectedMarketRate?.megasPerBox ?? 1));
-    setMarketUseFlatRate(Boolean(selectedMarketRate?.useFlatRate));
+    const fallbackFlatRate = Boolean(selectedMarketRate?.useFlatRate);
+    setMarketUseFlatRateSheeters(Boolean(selectedMarketRate?.useFlatRateSheeters ?? fallbackFlatRate));
+    setMarketUseFlatRateMegas(Boolean(selectedMarketRate?.useFlatRateMegas ?? fallbackFlatRate));
     setMarketRateDirty(false);
   }, [selectedMarketRate]);
 
@@ -249,37 +252,39 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
     if (!Number.isFinite(parsedFlatShippingRate) || parsedFlatShippingRate < 0) {
       throw new Error('Flat shipping rate must be a valid number greater than or equal to 0.');
     }
-    if (!marketUseFlatRate && (!Number.isFinite(parsedTwoSheeterSetsPerBox) || normalizedTwoSheeterSetsPerBox <= 0)) {
+    if (!marketUseFlatRateSheeters && (!Number.isFinite(parsedTwoSheeterSetsPerBox) || normalizedTwoSheeterSetsPerBox <= 0)) {
       throw new Error('2 Sheeter sets per shipping box must be a whole number greater than 0.');
     }
-    if (!marketUseFlatRate && (!Number.isFinite(parsedFourSheeterSetsPerBox) || normalizedFourSheeterSetsPerBox <= 0)) {
+    if (!marketUseFlatRateSheeters && (!Number.isFinite(parsedFourSheeterSetsPerBox) || normalizedFourSheeterSetsPerBox <= 0)) {
       throw new Error('4 Sheeter sets per shipping box must be a whole number greater than 0.');
     }
-    if (!marketUseFlatRate && (!Number.isFinite(parsedSixSheeterSetsPerBox) || normalizedSixSheeterSetsPerBox <= 0)) {
+    if (!marketUseFlatRateSheeters && (!Number.isFinite(parsedSixSheeterSetsPerBox) || normalizedSixSheeterSetsPerBox <= 0)) {
       throw new Error('6 Sheeter sets per shipping box must be a whole number greater than 0.');
     }
-    if (!marketUseFlatRate && (!Number.isFinite(parsedEightSheeterSetsPerBox) || normalizedEightSheeterSetsPerBox <= 0)) {
+    if (!marketUseFlatRateSheeters && (!Number.isFinite(parsedEightSheeterSetsPerBox) || normalizedEightSheeterSetsPerBox <= 0)) {
       throw new Error('8 Sheeter sets per shipping box must be a whole number greater than 0.');
     }
-    if (!marketUseFlatRate && (!Number.isFinite(parsedMegasPerBox) || normalizedMegasPerBox <= 0)) {
+    if (!marketUseFlatRateMegas && (!Number.isFinite(parsedMegasPerBox) || normalizedMegasPerBox <= 0)) {
       throw new Error('Mega units per shipping box must be a whole number greater than 0.');
     }
     const existing = rateByMarket.get(marketFilter);
     const response = await upsertMarketShippingRate({
       market: marketFilter,
-      useFlatRate: marketUseFlatRate,
+      useFlatRate: marketUseFlatRateSheeters || marketUseFlatRateMegas,
+      useFlatRateSheeters: marketUseFlatRateSheeters,
+      useFlatRateMegas: marketUseFlatRateMegas,
       shippingRate: parsedFlatShippingRate,
       postersPerBox: existing?.postersPerBox ?? 60,
-      sheeterSetsPerBox: marketUseFlatRate ? (existing?.sheeterSetsPerBox ?? 15) : normalizedTwoSheeterSetsPerBox,
-      twoSheeterSetsPerBox: marketUseFlatRate ? (existing?.twoSheeterSetsPerBox ?? existing?.sheeterSetsPerBox ?? 15) : normalizedTwoSheeterSetsPerBox,
-      fourSheeterSetsPerBox: marketUseFlatRate ? (existing?.fourSheeterSetsPerBox ?? existing?.sheeterSetsPerBox ?? 15) : normalizedFourSheeterSetsPerBox,
-      sixSheeterSetsPerBox: marketUseFlatRate ? (existing?.sixSheeterSetsPerBox ?? existing?.sheeterSetsPerBox ?? 15) : normalizedSixSheeterSetsPerBox,
-      eightSheeterSetsPerBox: marketUseFlatRate ? (existing?.eightSheeterSetsPerBox ?? existing?.sheeterSetsPerBox ?? 15) : normalizedEightSheeterSetsPerBox,
+      sheeterSetsPerBox: marketUseFlatRateSheeters ? (existing?.sheeterSetsPerBox ?? 15) : normalizedTwoSheeterSetsPerBox,
+      twoSheeterSetsPerBox: marketUseFlatRateSheeters ? (existing?.twoSheeterSetsPerBox ?? existing?.sheeterSetsPerBox ?? 15) : normalizedTwoSheeterSetsPerBox,
+      fourSheeterSetsPerBox: marketUseFlatRateSheeters ? (existing?.fourSheeterSetsPerBox ?? existing?.sheeterSetsPerBox ?? 15) : normalizedFourSheeterSetsPerBox,
+      sixSheeterSetsPerBox: marketUseFlatRateSheeters ? (existing?.sixSheeterSetsPerBox ?? existing?.sheeterSetsPerBox ?? 15) : normalizedSixSheeterSetsPerBox,
+      eightSheeterSetsPerBox: marketUseFlatRateSheeters ? (existing?.eightSheeterSetsPerBox ?? existing?.sheeterSetsPerBox ?? 15) : normalizedEightSheeterSetsPerBox,
       twoSheeterPrice: parsedTwoSheeterPrice,
       fourSheeterPrice: parsedFourSheeterPrice,
       sixSheeterPrice: parsedSixSheeterPrice,
       eightSheeterPrice: parsedEightSheeterPrice,
-      megasPerBox: marketUseFlatRate ? (existing?.megasPerBox ?? 1) : normalizedMegasPerBox,
+      megasPerBox: marketUseFlatRateMegas ? (existing?.megasPerBox ?? 1) : normalizedMegasPerBox,
       megaShippingRate: existing?.megaShippingRate ?? 0,
       dotMShippingRate: existing?.dotMShippingRate ?? 0,
       mpShippingRate: existing?.mpShippingRate ?? 0,
@@ -354,7 +359,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
     return () => {
       window.clearTimeout(timer);
     };
-  }, [dirtyRowKeys, draftsByAsset, loading, marketEightSheeterPrice, marketEightSheeterSetsPerBox, marketFilter, marketFlatShippingRate, marketFourSheeterPrice, marketFourSheeterSetsPerBox, marketMegasPerBox, marketRateDirty, marketSixSheeterPrice, marketSixSheeterSetsPerBox, marketTwoSheeterPrice, marketTwoSheeterSetsPerBox, marketUseFlatRate, saving, selectedTenantId]);
+  }, [dirtyRowKeys, draftsByAsset, loading, marketEightSheeterPrice, marketEightSheeterSetsPerBox, marketFilter, marketFlatShippingRate, marketFourSheeterPrice, marketFourSheeterSetsPerBox, marketMegasPerBox, marketRateDirty, marketSixSheeterPrice, marketSixSheeterSetsPerBox, marketTwoSheeterPrice, marketTwoSheeterSetsPerBox, marketUseFlatRateMegas, marketUseFlatRateSheeters, saving, selectedTenantId]);
 
   if (!isSuperAdmin) {
     return (
@@ -404,43 +409,6 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
             </select>
           </div>
         </div>
-        <div className="w-full sm:w-[220px]">
-          <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
-            <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Use flat rate</span>
-            <div className="inline-flex h-full flex-1 items-center gap-1 bg-slate-800 p-1">
-              <button
-                type="button"
-                aria-pressed={!marketUseFlatRate}
-                className={`h-full flex-1 rounded-md text-sm font-medium transition ${
-                  !marketUseFlatRate
-                    ? 'bg-slate-600/70 text-white'
-                    : 'text-slate-300 hover:bg-slate-700/60'
-                }`}
-                onClick={() => {
-                  setMarketUseFlatRate(false);
-                  setMarketRateDirty(true);
-                }}
-              >
-                No
-              </button>
-              <button
-                type="button"
-                aria-pressed={marketUseFlatRate}
-                className={`h-full flex-1 rounded-md text-sm font-medium transition ${
-                  marketUseFlatRate
-                    ? 'bg-orange-500/80 text-white'
-                    : 'text-slate-300 hover:bg-slate-700/60'
-                }`}
-                onClick={() => {
-                  setMarketUseFlatRate(true);
-                  setMarketRateDirty(true);
-                }}
-              >
-                Yes
-              </button>
-            </div>
-          </div>
-        </div>
       </section>
 
       <section className="space-y-4">
@@ -456,13 +424,51 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
         ) : (
           <>
             <div className="rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
+              <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
+                <p className="text-sm font-semibold text-slate-100">Sheeters</p>
+                <div className="inline-flex h-9 overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                  <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-3 text-xs font-medium text-slate-100">Flat rate</span>
+                  <div className="inline-flex h-full items-center gap-1 bg-slate-800 p-1">
+                    <button
+                      type="button"
+                      aria-pressed={!marketUseFlatRateSheeters}
+                      className={`h-full rounded-md px-2.5 text-xs font-medium transition ${
+                        !marketUseFlatRateSheeters
+                          ? 'bg-slate-600/70 text-white'
+                          : 'text-slate-300 hover:bg-slate-700/60'
+                      }`}
+                      onClick={() => {
+                        setMarketUseFlatRateSheeters(false);
+                        setMarketRateDirty(true);
+                      }}
+                    >
+                      No
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={marketUseFlatRateSheeters}
+                      className={`h-full rounded-md px-2.5 text-xs font-medium transition ${
+                        marketUseFlatRateSheeters
+                          ? 'bg-orange-500/80 text-white'
+                          : 'text-slate-300 hover:bg-slate-700/60'
+                      }`}
+                      onClick={() => {
+                        setMarketUseFlatRateSheeters(true);
+                        setMarketRateDirty(true);
+                      }}
+                    >
+                      Yes
+                    </button>
+                  </div>
+                </div>
+              </div>
               <table className="dense-table w-full table-fixed border-collapse text-xs sm:text-sm">
                 <thead>
                   <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
-                    <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Market</th>
-                    <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Sheeters</th>
-                    <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-center sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3'}>Sheeters - Freight ($)</th>
-                    {!marketUseFlatRate ? (
+                    <th className={marketUseFlatRateSheeters ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Market</th>
+                    <th className={marketUseFlatRateSheeters ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Sheeters</th>
+                    <th className={marketUseFlatRateSheeters ? 'w-1/3 border border-slate-700 px-2 py-2 text-center sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3'}>Sheeters - Freight ($)</th>
+                    {!marketUseFlatRateSheeters ? (
                       <th className="w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3">Sets / Shipping Box</th>
                     ) : null}
                   </tr>
@@ -489,7 +495,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                         />
                       </div>
                     </td>
-                    {!marketUseFlatRate ? (
+                    {!marketUseFlatRateSheeters ? (
                       <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
                         <Input
                           className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
@@ -527,7 +533,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                         />
                       </div>
                     </td>
-                    {!marketUseFlatRate ? (
+                    {!marketUseFlatRateSheeters ? (
                       <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
                         <Input
                           className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
@@ -565,7 +571,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                         />
                       </div>
                     </td>
-                    {!marketUseFlatRate ? (
+                    {!marketUseFlatRateSheeters ? (
                       <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
                         <Input
                           className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
@@ -603,7 +609,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                           />
                         </div>
                       </td>
-                      {!marketUseFlatRate ? (
+                      {!marketUseFlatRateSheeters ? (
                         <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
                           <Input
                             className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
@@ -624,13 +630,51 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
               </table>
             </div>
               <div className="rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
+                <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
+                  <p className="text-sm font-semibold text-slate-100">Megas</p>
+                  <div className="inline-flex h-9 overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                    <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-3 text-xs font-medium text-slate-100">Flat rate</span>
+                    <div className="inline-flex h-full items-center gap-1 bg-slate-800 p-1">
+                      <button
+                        type="button"
+                        aria-pressed={!marketUseFlatRateMegas}
+                        className={`h-full rounded-md px-2.5 text-xs font-medium transition ${
+                          !marketUseFlatRateMegas
+                            ? 'bg-slate-600/70 text-white'
+                            : 'text-slate-300 hover:bg-slate-700/60'
+                        }`}
+                        onClick={() => {
+                          setMarketUseFlatRateMegas(false);
+                          setMarketRateDirty(true);
+                        }}
+                      >
+                        No
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={marketUseFlatRateMegas}
+                        className={`h-full rounded-md px-2.5 text-xs font-medium transition ${
+                          marketUseFlatRateMegas
+                            ? 'bg-orange-500/80 text-white'
+                            : 'text-slate-300 hover:bg-slate-700/60'
+                        }`}
+                        onClick={() => {
+                          setMarketUseFlatRateMegas(true);
+                          setMarketRateDirty(true);
+                        }}
+                      >
+                        Yes
+                      </button>
+                    </div>
+                  </div>
+                </div>
                 <table className="dense-table w-full table-fixed border-collapse text-xs sm:text-sm">
                   <thead>
                     <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
-                      <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Market</th>
-                      <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Asset</th>
-                      <th className={marketUseFlatRate ? 'w-1/3 border border-slate-700 px-2 py-2 text-center sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3'}>MEGA SITES - FREIGHT ($)</th>
-                      {!marketUseFlatRate ? (
+                      <th className={marketUseFlatRateMegas ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Market</th>
+                      <th className={marketUseFlatRateMegas ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Asset</th>
+                      <th className={marketUseFlatRateMegas ? 'w-1/3 border border-slate-700 px-2 py-2 text-center sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3'}>MEGA SITES - FREIGHT ($)</th>
+                      {!marketUseFlatRateMegas ? (
                         <th className="w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3">Megas / Shipping Box</th>
                       ) : null}
                     </tr>
@@ -654,7 +698,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                               <Input className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm" type="number" min={0} step="0.01" value={draft.megaShippingRate} onChange={(event) => updateAssetDraft(mapping.market, mapping.id, event.target.value)} />
                             </div>
                           </td>
-                          {!marketUseFlatRate ? (
+                          {!marketUseFlatRateMegas ? (
                             <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
                               <Input
                                 className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
