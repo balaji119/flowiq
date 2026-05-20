@@ -335,7 +335,7 @@ export function UserManagementScreen({
       pageTitle="User Management"
       topBarActions={
         <Button
-          className="h-10 min-w-[126px] rounded-md px-4 text-sm font-semibold"
+          className="h-10 min-w-[138px] rounded-md border border-orange-300/35 bg-orange-500 px-5 text-sm font-semibold text-white shadow-[0_2px_10px_rgba(249,115,22,0.25)] transition-all duration-150 hover:-translate-y-[1px] hover:bg-orange-400 hover:shadow-[0_6px_16px_rgba(249,115,22,0.32)] focus-visible:ring-2 focus-visible:ring-orange-300/70 focus-visible:ring-offset-0 disabled:border-slate-600 disabled:bg-slate-700 disabled:text-slate-300 disabled:shadow-none disabled:hover:translate-y-0"
           disabled={!effectiveTenantId}
           onClick={openCreateUserDialog}
         >

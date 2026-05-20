@@ -145,6 +145,35 @@ type CreativeFormatKey = (typeof creativeFormatKeys)[number];
 
 type MultiCreativeImageMap = Partial<Record<CreativeFormatKey, string[]>>;
 const MULTI_ARTWORK_SLOT_UI_CAP = 24;
+const MARKET_PLANNING_THEMES = [
+  {
+    card: 'border-orange-500/28 bg-gradient-to-br from-orange-500/8 via-slate-900/78 to-slate-950/65',
+    cardActive: 'border-orange-300/70 shadow-[0_0_0_1px_rgba(251,146,60,0.34)]',
+    accent: 'bg-orange-300/85',
+    header: 'bg-gradient-to-r from-orange-500/22 to-orange-500/8 text-orange-100',
+  },
+  {
+    card: 'border-amber-500/28 bg-gradient-to-br from-amber-500/8 via-slate-900/78 to-slate-950/65',
+    cardActive: 'border-amber-300/70 shadow-[0_0_0_1px_rgba(252,211,77,0.32)]',
+    accent: 'bg-amber-300/85',
+    header: 'bg-gradient-to-r from-amber-500/22 to-amber-500/8 text-amber-100',
+  },
+  {
+    card: 'border-orange-300/16 bg-gradient-to-br from-orange-300/3 via-slate-900/72 to-slate-950/60',
+    cardActive: 'border-orange-200/55 shadow-[0_0_0_1px_rgba(251,191,36,0.20)]',
+    accent: 'bg-orange-200/65',
+    header: 'bg-gradient-to-r from-orange-300/10 to-orange-200/4 text-orange-100',
+  },
+  {
+    card: 'border-yellow-500/30 bg-gradient-to-br from-yellow-500/8 via-slate-900/78 to-slate-950/65',
+    cardActive: 'border-yellow-300/70 shadow-[0_0_0_1px_rgba(253,224,71,0.32)]',
+    accent: 'bg-yellow-300/85',
+    header: 'bg-gradient-to-r from-yellow-500/20 to-amber-500/8 text-yellow-100',
+  },
+] as const;
+
+const TOP_FORM_THEME =
+  'rounded-md border border-orange-500/28 bg-gradient-to-b from-slate-900/80 via-slate-900/72 to-slate-950/65 p-4 shadow-[0_0_0_1px_rgba(251,146,60,0.08)]';
 
 function creativeFormatLabel(key: CreativeFormatKey, overrides: SheetNameOverrides = {}) {
   if (key === '8-sheet') {
@@ -3863,7 +3892,7 @@ export function QuoteBuilderScreen({
         <section>
           <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
             <div className="space-y-6 lg:col-span-2">
-              <div className="space-y-4">
+              <div className={cn('space-y-4', TOP_FORM_THEME)}>
                 <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_226px_226px_136px]">
               <div className="flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
                 <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-slate-600 px-3 text-xs font-semibold text-slate-300">Campaign Name</span>
@@ -4028,6 +4057,7 @@ export function QuoteBuilderScreen({
 
                 <div className="space-y-4">
                   {visiblePlanningMarkets.map((market, marketIndex) => {
+                    const marketTheme = MARKET_PLANNING_THEMES[marketIndex % MARKET_PLANNING_THEMES.length];
                     const availableAssets = assetsForMarket(market.market);
                     const canRemoveMarket = visiblePlanningMarkets.length > 1;
                     const availableMarkets = marketOptionsFor(market.id, market.market);
@@ -4039,10 +4069,11 @@ export function QuoteBuilderScreen({
                     return (
                       <div
                         key={market.id}
-                        className={cn('rounded-md border bg-slate-800/60 p-4 sm:p-5', isActiveMarket ? 'border-orange-400/60 shadow-[0_0_0_1px_rgba(251,146,60,0.28)]' : 'border-slate-700')}
+                        className={cn('rounded-md border p-4 sm:p-5', marketTheme.card, isActiveMarket ? marketTheme.cardActive : '')}
                         onClick={() => setActiveMarketId(market.id)}
                         onFocusCapture={() => setActiveMarketId(market.id)}
                       >
+                        <div className={cn('mb-3 h-1.5 w-24 rounded-full', marketTheme.accent)} />
                         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                           <div className="flex-1">
                             <SearchableSelect
@@ -4090,7 +4121,7 @@ export function QuoteBuilderScreen({
                                 <col className="w-[24px]" />
                               </colgroup>
                               <thead>
-                                <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                                <tr className={cn('border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em]', marketTheme.header)}>
                                   <th className="px-4 py-3 text-left">Asset</th>
                                   <th className="px-4 py-3 text-left">Active Weeks</th>
                                   <th className="px-3 py-3 text-center">
@@ -4204,12 +4235,21 @@ export function QuoteBuilderScreen({
                 </div>
 
                 <div className="space-y-5">
-                  {values.campaignMarkets.map((market) => {
+                  {values.campaignMarkets.map((market, marketIndex) => {
+                    const marketTheme = MARKET_PLANNING_THEMES[marketIndex % MARKET_PLANNING_THEMES.length];
                     const deliveryAddressOptions = deliveryAddressOptionsFor(market.market);
                     return (
-                      <div key={`finalize-map-${market.id}`} className="relative rounded-md border border-slate-700 bg-slate-900/45">
-                        <div className="absolute inset-y-0 left-0 flex w-12 items-center justify-center border-r border-slate-700/70 bg-slate-900/65">
-                          <span className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-300 [writing-mode:vertical-rl] rotate-180">
+                      <div
+                        key={`finalize-map-${market.id}`}
+                        className={cn(
+                          'relative rounded-md border',
+                          marketTheme.card,
+                          'shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]',
+                        )}
+                      >
+                        <div className={cn('absolute left-12 right-0 top-0 h-1 rounded-tr-md', marketTheme.accent)} />
+                        <div className={cn('absolute inset-y-0 left-0 flex w-12 items-center justify-center border-r', marketTheme.header)}>
+                          <span className="text-[11px] font-black uppercase tracking-[0.18em] text-white [writing-mode:vertical-rl] rotate-180">
                             {market.market || 'Market'}
                           </span>
                         </div>
@@ -4233,7 +4273,7 @@ export function QuoteBuilderScreen({
                               <col className="w-[38%]" />
                             </colgroup>
                             <thead>
-                              <tr className="border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                              <tr className={cn('border-b border-slate-700/80 text-[11px] font-bold uppercase tracking-[0.18em]', marketTheme.header)}>
                                 <th className="px-4 py-3 text-left">Asset</th>
                                 <th className="px-4 py-3 text-left">Category</th>
                                 <th className="px-4 py-3 text-left">Creative</th>
@@ -4348,8 +4388,8 @@ export function QuoteBuilderScreen({
           <aside className="space-y-3 lg:sticky lg:top-2">
               {summary ? (
                     <>
-                    <div className="rounded-md border border-slate-700 bg-slate-900/70">
-                      <div className="flex items-center justify-between border-b border-slate-700/70 px-2 py-1.5">
+                    <div className="rounded-md border border-orange-500/35 bg-gradient-to-b from-slate-900/88 to-slate-950/80 shadow-[0_0_0_1px_rgba(251,146,60,0.08)]">
+                      <div className="flex items-center justify-between border-b border-orange-400/30 bg-gradient-to-r from-orange-500/16 to-transparent px-2 py-1.5">
                         <h3 className="px-1 text-lg font-black tracking-tight text-white">Posters</h3>
                         <Button
                           aria-label="Expand posters table"
@@ -4430,7 +4470,7 @@ export function QuoteBuilderScreen({
                     <div>
                       <h3 className="mb-2 text-lg font-black tracking-tight text-white">Cost</h3>
                     </div>
-                    <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/70">
+                    <div className="overflow-x-auto rounded-md border border-orange-500/35 bg-gradient-to-b from-slate-900/88 to-slate-950/80 shadow-[0_0_0_1px_rgba(251,146,60,0.08)]">
                       <table className="dense-table w-full border-collapse text-sm">
                         <thead>
                           <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">

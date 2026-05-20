@@ -291,7 +291,7 @@ export function AdminWorkspaceShell({
               <p className="whitespace-nowrap text-3xl font-black tracking-tight text-white">ADS Connect</p>
             </div>
           </div>
-          <div className="border-b border-slate-700/80 bg-slate-800/85">
+          <div className="border-b border-orange-500/22 bg-gradient-to-r from-slate-800/92 via-slate-800/88 to-orange-500/14">
             <div className="grid min-h-[56px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-6">
               <h1 className="truncate text-lg font-semibold tracking-tight text-slate-100">{pageTitle || 'Workspace'}</h1>
               <div className="min-w-0 px-1 text-center" id="workspace-topbar-center-slot" />
