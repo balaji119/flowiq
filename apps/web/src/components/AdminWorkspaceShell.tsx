@@ -197,11 +197,11 @@ export function AdminWorkspaceShell({
                 <button
                   key={item.id}
                   className={cn(
-                    'flex items-center text-[8px] font-semibold uppercase leading-none tracking-[0.02em] transition',
+                    'flex items-center rounded-md text-[8px] font-semibold uppercase leading-none tracking-[0.02em] transition-[background-color,border-color,color,transform,box-shadow] duration-200 [&_svg]:transition-opacity [&_svg]:duration-200',
                     expanded ? 'h-12 w-full justify-start gap-2.5 px-2.5' : 'mx-auto h-12 w-12 justify-center',
                     active
-                      ? 'bg-slate-700/55 text-white'
-                      : 'text-slate-300 hover:bg-slate-800/65 hover:text-white',
+                      ? 'border border-orange-300/35 bg-gradient-to-r from-orange-500/20 to-transparent text-white shadow-[0_0_0_1px_rgba(251,146,60,0.22),0_6px_14px_rgba(15,23,42,0.28)] [&_svg]:opacity-100'
+                      : 'border border-transparent text-slate-400 [&_svg]:opacity-80 hover:border-white/10 hover:bg-slate-800/65 hover:text-white hover:[&_svg]:opacity-100',
                   )}
                   onClick={item.onClick}
                   title={!expanded ? item.label : undefined}
@@ -286,13 +286,13 @@ export function AdminWorkspaceShell({
 
       <section className="min-w-0 flex h-screen flex-1 flex-col overflow-hidden">
         <header className="shrink-0">
-          <div className="border-b border-slate-700/80 bg-slate-900/70 backdrop-blur">
-            <div className="flex min-h-[72px] items-center justify-center px-6">
-              <p className="whitespace-nowrap text-3xl font-black tracking-tight text-white">ADS Connect</p>
+          <div className="border-b border-white/10 bg-slate-900/62 backdrop-blur">
+            <div className="flex min-h-[64px] items-center justify-center px-6">
+              <p className="whitespace-nowrap text-[28px] font-bold leading-none tracking-tight text-white">ADS Connect</p>
             </div>
           </div>
           <div className="border-b border-orange-500/22 bg-gradient-to-r from-slate-800/92 via-slate-800/88 to-orange-500/14">
-            <div className="grid min-h-[56px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-6">
+            <div className="grid min-h-[52px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-6">
               <h1 className="truncate text-lg font-semibold tracking-tight text-slate-100">{pageTitle || 'Workspace'}</h1>
               <div className="min-w-0 px-1 text-center" id="workspace-topbar-center-slot" />
               <div className="flex flex-wrap items-center justify-end gap-2" id="workspace-topbar-actions-slot">
