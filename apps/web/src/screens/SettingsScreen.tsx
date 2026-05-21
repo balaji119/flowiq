@@ -277,9 +277,9 @@ export function SettingsScreen({
                   </colgroup>
                   <thead>
                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
-                      <th className="border border-slate-700 px-4 py-3 text-left">Current Name</th>
-                      <th className="border border-slate-700 px-4 py-3 text-left">Override Name</th>
-                      <th className="border border-slate-700 px-4 py-3 text-center">Multiple Artwork</th>
+                      <th className="border border-slate-700 px-4 py-2 text-left">Current Name</th>
+                      <th className="border border-slate-700 px-4 py-2 text-left">Override Name</th>
+                      <th className="border border-slate-700 px-4 py-2 text-center">Multiple Artwork</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -288,10 +288,10 @@ export function SettingsScreen({
                         key={entry.key}
                         className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#1a2740]/70' : 'bg-[#162033]'}`}
                       >
-                        <td className="border border-slate-700 px-4 py-3 font-semibold text-white">{entry.label}</td>
-                        <td className="border border-slate-700 px-4 py-3">
+                        <td className="border border-slate-700 px-4 py-2 font-semibold text-white">{entry.label}</td>
+                        <td className="border border-slate-700 px-4 py-2">
                           <Input
-                            className="h-9 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-orange-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+                            className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-orange-400 focus-visible:ring-0 focus-visible:ring-offset-0"
                             onChange={(event) =>
                               setPresetOverrides((current) => ({
                                 ...current,
@@ -302,7 +302,7 @@ export function SettingsScreen({
                             value={presetOverrides[entry.key] || ''}
                           />
                         </td>
-                        <td className="border border-slate-700 px-4 py-3 text-center">
+                        <td className="border border-slate-700 px-4 py-2 text-center">
                           <input
                             checked={Boolean(multipleArtworkFormats[entry.key])}
                             className="h-4 w-4 accent-orange-400"

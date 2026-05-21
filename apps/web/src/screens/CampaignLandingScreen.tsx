@@ -303,19 +303,18 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
             </section>
           ) : (
             <section className="overflow-x-auto rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
-              <table className="dense-table min-w-[1080px] w-full border-collapse text-[14px]">
+              <table className="dense-table min-w-[980px] w-full border-collapse text-[14px]">
                 <thead>
                   <tr className="bg-slate-950/65 text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-200">
-                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-3.5 text-left backdrop-blur">Campaign</th>
-                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-3.5 text-left backdrop-blur">Status</th>
-                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-3.5 text-left backdrop-blur">Created By</th>
-                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-3.5 text-left backdrop-blur">Updated</th>
-                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-3.5 text-center backdrop-blur">Markets</th>
-                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-3.5 text-center backdrop-blur">Assets</th>
-                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-3.5 text-left backdrop-blur">Start</th>
-                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-3.5 text-left backdrop-blur">Due</th>
-                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-3.5 text-center backdrop-blur">Weeks</th>
-                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-3.5 text-center backdrop-blur">Action</th>
+                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Campaign</th>
+                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Created By</th>
+                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Updated</th>
+                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-center backdrop-blur">Markets</th>
+                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-center backdrop-blur">Assets</th>
+                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Start</th>
+                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Due</th>
+                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-center backdrop-blur">Weeks</th>
+                    <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-center backdrop-blur">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -326,7 +325,7 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                         rowIndex % 2 === 0 ? 'bg-[#1a2740]/70' : 'bg-[#162033]'
                       } hover:bg-[#1d2a40]`}
                     >
-                      <td className="px-5 py-3.5 font-semibold text-white">
+                      <td className="px-5 py-2.5 font-semibold text-white">
                         <button
                           className="block max-w-[320px] truncate whitespace-nowrap text-left text-white transition hover:text-orange-200"
                           onClick={() => void handleOpenCampaign(campaign.id)}
@@ -336,23 +335,18 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                           {campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}`}
                         </button>
                       </td>
-                      <td className="px-5 py-3.5">
-                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${statusStyles(campaign.status)}`}>
-                          {campaign.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-300">{campaign.createdBy || 'N/A'}</td>
-                      <td className="px-5 py-3.5 text-slate-300">{new Date(campaign.updatedAt).toLocaleString()}</td>
-                      <td className="px-5 py-3.5 text-center font-semibold text-white">{campaign.marketCount}</td>
-                      <td className="px-5 py-3.5 text-center font-semibold text-white">{campaign.assetCount}</td>
-                      <td className="px-5 py-3.5 text-slate-300">{formatCampaignDate(campaign.campaignStartDate)}</td>
-                      <td className="px-5 py-3.5 text-slate-300">{formatCampaignDate(campaign.dueDate)}</td>
-                      <td className="px-5 py-3.5 text-center text-slate-300">{campaign.numberOfWeeks || '0'}</td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex justify-center gap-2.5">
+                      <td className="px-5 py-2.5 text-slate-300">{campaign.createdBy || 'N/A'}</td>
+                      <td className="px-5 py-2.5 text-slate-300">{new Date(campaign.updatedAt).toLocaleString()}</td>
+                      <td className="px-5 py-2.5 text-center font-semibold text-white">{campaign.marketCount}</td>
+                      <td className="px-5 py-2.5 text-center font-semibold text-white">{campaign.assetCount}</td>
+                      <td className="px-5 py-2.5 text-slate-300">{formatCampaignDate(campaign.campaignStartDate)}</td>
+                      <td className="px-5 py-2.5 text-slate-300">{formatCampaignDate(campaign.dueDate)}</td>
+                      <td className="px-5 py-2.5 text-center text-slate-300">{campaign.numberOfWeeks || '0'}</td>
+                      <td className="px-5 py-2.5">
+                        <div className="flex justify-center gap-2">
                           <Button
                             aria-label="Edit campaign"
-                            className="h-9 w-9 rounded-md border border-white/10 p-0 text-slate-200 transition-[background-color,border-color,color,transform,box-shadow] duration-200 hover:-translate-y-[1px] hover:border-white/20 hover:bg-slate-700/70 hover:text-white hover:shadow-[0_6px_14px_rgba(15,23,42,0.26)]"
+                            className="h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200 transition-[background-color,border-color,color,transform,box-shadow] duration-200 hover:-translate-y-[1px] hover:border-white/20 hover:bg-slate-700/70 hover:text-white hover:shadow-[0_6px_14px_rgba(15,23,42,0.26)]"
                             onClick={() => void handleOpenCampaign(campaign.id)}
                             type="button"
                             variant="ghost"
@@ -362,8 +356,8 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                           <Button
                             aria-label="Delete campaign"
                             className={campaign.status === 'submitted'
-                              ? 'h-9 w-9 cursor-not-allowed rounded-md border border-white/10 p-0 text-slate-600 opacity-60'
-                              : 'h-9 w-9 rounded-md border border-white/10 p-0 text-rose-300 transition-[background-color,border-color,color,transform,box-shadow] duration-200 hover:-translate-y-[1px] hover:border-rose-300/35 hover:bg-rose-500/15 hover:text-rose-200 hover:shadow-[0_6px_14px_rgba(244,63,94,0.14)]'}
+                              ? 'h-8 w-8 cursor-not-allowed rounded-md border border-white/10 p-0 text-slate-600 opacity-60'
+                              : 'h-8 w-8 rounded-md border border-white/10 p-0 text-rose-300 transition-[background-color,border-color,color,transform,box-shadow] duration-200 hover:-translate-y-[1px] hover:border-rose-300/35 hover:bg-rose-500/15 hover:text-rose-200 hover:shadow-[0_6px_14px_rgba(244,63,94,0.14)]'}
                             disabled={campaign.status === 'submitted'}
                             onClick={() => openDeleteDialog(campaign)}
                             title={campaign.status === 'submitted' ? 'Submitted campaigns cannot be deleted' : 'Delete campaign'}

@@ -1,5 +1,5 @@
 import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, Eye, GripVertical, LayoutGrid, LoaderCircle, Maximize2, Pencil, Plus, Search, Table2, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, CircleAlert, Eye, GripVertical, LayoutGrid, LoaderCircle, Maximize2, Pencil, Plus, Search, Table2, Trash2, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignPrintImage,
@@ -746,6 +746,7 @@ function SearchableSelect({
   actionDisabled = false,
   triggerClassName,
   menuItemClassName,
+  menuClassName,
 }: {
   label: string;
   selectedValue: string;
@@ -759,6 +760,7 @@ function SearchableSelect({
   actionDisabled?: boolean;
   triggerClassName?: string;
   menuItemClassName?: string;
+  menuClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -799,17 +801,17 @@ function SearchableSelect({
         <ChevronDown className={cn('h-4 w-4 text-slate-400 transition-transform', open ? 'rotate-180' : '')} />
       </button>
       {open ? (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 rounded-md border border-slate-700 bg-slate-950 p-4 shadow-2xl shadow-slate-950/60">
-          <div className="space-y-3">
-            <Input autoFocus placeholder={`Search ${label || 'items'}`} value={query} onChange={(event) => setQuery(event.target.value)} />
-            <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
+        <div className={cn('absolute left-0 right-0 top-full z-50 mt-2 rounded-md border border-slate-700 bg-slate-950 p-4 shadow-2xl shadow-slate-950/60', menuClassName)}>
+          <div className="space-y-2.5">
+            <Input autoFocus className="h-8 text-[11px]" placeholder={`Search ${label || 'items'}`} value={query} onChange={(event) => setQuery(event.target.value)} />
+            <div className="max-h-[260px] space-y-1.5 overflow-auto pr-1">
               {filteredItems.map((item) => {
                 const active = item.value === selectedValue;
                 return (
                   <button
                     key={item.value}
                     className={cn(
-                      'flex w-full items-center justify-between rounded-md border px-4 py-3 text-left text-sm transition',
+                      'flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition',
                       active ? 'border-orange-400 bg-orange-500/10 text-white' : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500',
                       menuItemClassName,
                     )}
@@ -824,7 +826,7 @@ function SearchableSelect({
                   </button>
                 );
               })}
-              {filteredItems.length === 0 ? <p className="rounded-md border border-slate-700 bg-slate-900 px-4 py-6 text-center text-sm text-slate-400">{emptyMessage}</p> : null}
+              {filteredItems.length === 0 ? <p className="rounded-md border border-slate-700 bg-slate-900 px-3 py-4 text-center text-sm text-slate-400">{emptyMessage}</p> : null}
             </div>
             {actionLabel && onAction ? (
               <Button
@@ -3942,7 +3944,7 @@ export function QuoteBuilderScreen({
           <div className="grid gap-4 lg:grid-cols-1 lg:items-start">
             <div className="space-y-7">
               <div className={cn('space-y-4', TOP_FORM_THEME)}>
-                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_226px_226px_136px]">
+                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,226px)_minmax(0,226px)_minmax(0,136px)]">
               <div className="flex h-11 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
                 <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Campaign Name</span>
                 <Input
@@ -3953,27 +3955,33 @@ export function QuoteBuilderScreen({
                   onChange={(event) => updateField('campaignName', event.target.value)}
                 />
               </div>
-              <div className="flex h-11 w-[226px] overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
+              <div className="flex h-11 min-w-0 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
                 <span className="inline-flex items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Start Date</span>
-                <Input
-                  className="h-11 w-[142px] flex-none rounded-none border-0 bg-transparent px-2 pr-3 [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:block [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100"
-                  id="campaign-start"
-                  min={minSelectableDate}
-                  type="date"
-                  value={values.campaignStartDate}
-                  onChange={(event) => updateField('campaignStartDate', event.target.value)}
-                />
+                <div className="relative min-w-0 flex-1">
+                  <Input
+                    className="h-11 w-full rounded-none border-0 bg-transparent px-2 pr-9 text-[13px] [&::-webkit-calendar-picker-indicator]:opacity-0"
+                    id="campaign-start"
+                    min={minSelectableDate}
+                    type="date"
+                    value={values.campaignStartDate}
+                    onChange={(event) => updateField('campaignStartDate', event.target.value)}
+                  />
+                  <CalendarDays className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                </div>
               </div>
-              <div className="flex h-11 w-[226px] overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
+              <div className="flex h-11 min-w-0 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
                 <span className="inline-flex items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Due Date</span>
-                <Input
-                  className="h-11 w-[140px] flex-none rounded-none border-0 bg-transparent px-2 pr-2 [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:block [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100"
-                  id="due-date"
-                  min={minSelectableDate}
-                  type="date"
-                  value={values.dueDate}
-                  onChange={(event) => updateField('dueDate', event.target.value)}
-                />
+                <div className="relative min-w-0 flex-1">
+                  <Input
+                    className="h-11 w-full rounded-none border-0 bg-transparent px-2 pr-9 text-[13px] [&::-webkit-calendar-picker-indicator]:opacity-0"
+                    id="due-date"
+                    min={minSelectableDate}
+                    type="date"
+                    value={values.dueDate}
+                    onChange={(event) => updateField('dueDate', event.target.value)}
+                  />
+                  <CalendarDays className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                </div>
               </div>
               <div className="flex h-11 w-[136px] overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
                 <span className="inline-flex items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Weeks</span>
@@ -4870,11 +4878,11 @@ export function QuoteBuilderScreen({
           {draftMarket ? (
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 text-[13px]">
               <div className="space-y-3">
-                <div className="flex h-9 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                <div className="flex h-8 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
                   <span className="inline-flex w-28 shrink-0 items-center whitespace-nowrap border-r border-slate-600 px-2.5 text-[11px] font-semibold text-slate-300">Market</span>
                   <div className="relative flex-1">
                     <select
-                      className="h-9 w-full appearance-none border-0 bg-transparent px-2.5 pr-9 text-[13px] text-slate-50 focus:outline-none focus:ring-0"
+                      className="h-8 w-full appearance-none border-0 bg-transparent px-2.5 pr-9 text-[13px] text-slate-50 focus:outline-none focus:ring-0"
                       onChange={(event) =>
                         updateDraftMarket((current) => {
                           const value = event.target.value;
@@ -4993,6 +5001,7 @@ export function QuoteBuilderScreen({
                                     emptyMessage={availableAssets.length ? 'No assets available for this row.' : 'No assets available for this market.'}
                                     items={availableAssetOptions}
                                     label=""
+                                    menuClassName="p-3"
                                     menuItemClassName="text-[11px]"
                                     onValueChange={(value) =>
                                       updateDraftAsset(asset.id, (current) => ({
