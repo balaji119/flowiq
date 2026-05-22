@@ -23,6 +23,8 @@ type AppNavState = {
   selectedAdminTenantId: string | null;
   selectedCampaignId: string | null;
   startFreshCampaign: boolean;
+  autoDownloadVisuals: boolean;
+  closeAfterVisualsDownload: boolean;
 };
 
 function buildUrlFromState(state: AppNavState) {
@@ -31,6 +33,8 @@ function buildUrlFromState(state: AppNavState) {
   if (state.selectedAdminTenantId) params.set('tenantId', state.selectedAdminTenantId);
   if (state.selectedCampaignId) params.set('campaignId', state.selectedCampaignId);
   if (state.startFreshCampaign) params.set('fresh', '1');
+  if (state.autoDownloadVisuals) params.set('downloadVisuals', '1');
+  if (state.closeAfterVisualsDownload) params.set('closeAfterDownload', '1');
   const query = params.toString();
   return query ? `?${query}` : window.location.pathname;
 }
@@ -55,12 +59,16 @@ function readStateFromUrl(defaultTenantId: string | null): AppNavState {
   const campaignId = params.get('campaignId');
   const tenantId = params.get('tenantId');
   const fresh = params.get('fresh') === '1';
+  const autoDownloadVisuals = params.get('downloadVisuals') === '1';
+  const closeAfterVisualsDownload = params.get('closeAfterDownload') === '1';
 
   return {
     view,
     selectedAdminTenantId: tenantId ?? defaultTenantId,
     selectedCampaignId: campaignId,
     startFreshCampaign: fresh,
+    autoDownloadVisuals,
+    closeAfterVisualsDownload,
   };
 }
 
@@ -70,6 +78,8 @@ function AppShell() {
   const [selectedAdminTenantId, setSelectedAdminTenantId] = useState<string | null>(session?.user.tenantId ?? null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [startFreshCampaign, setStartFreshCampaign] = useState(false);
+  const [autoDownloadVisuals, setAutoDownloadVisuals] = useState(false);
+  const [closeAfterVisualsDownload, setCloseAfterVisualsDownload] = useState(false);
   const hydratedHistoryRef = useRef(false);
 
   function applyNavState(nextState: AppNavState) {
@@ -77,6 +87,8 @@ function AppShell() {
     setSelectedAdminTenantId(nextState.selectedAdminTenantId);
     setSelectedCampaignId(nextState.selectedCampaignId);
     setStartFreshCampaign(nextState.startFreshCampaign);
+    setAutoDownloadVisuals(nextState.autoDownloadVisuals);
+    setCloseAfterVisualsDownload(nextState.closeAfterVisualsDownload);
   }
 
   function navigate(nextState: AppNavState) {
@@ -91,6 +103,8 @@ function AppShell() {
       selectedAdminTenantId,
       selectedCampaignId,
       startFreshCampaign,
+      autoDownloadVisuals,
+      closeAfterVisualsDownload,
       ...overrides,
     });
   }
@@ -237,6 +251,8 @@ function AppShell() {
       <QuoteBuilderScreen
         campaignId={selectedCampaignId}
         startFresh={startFreshCampaign}
+        autoDownloadVisuals={autoDownloadVisuals}
+        closeAfterVisualsDownload={closeAfterVisualsDownload}
         onBack={() => navigateTo('landing')}
         onOpenAdmin={canAccessManagement ? () => navigateTo('users') : undefined}
       />,

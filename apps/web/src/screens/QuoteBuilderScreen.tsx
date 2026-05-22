@@ -1002,11 +1002,15 @@ const defaultValuesSerialized = stableSerialize(defaultValues);
 export function QuoteBuilderScreen({
   campaignId: selectedCampaignId,
   startFresh = false,
+  autoDownloadVisuals = false,
+  closeAfterVisualsDownload = false,
   onBack,
   onOpenAdmin,
 }: {
   campaignId?: string | null;
   startFresh?: boolean;
+  autoDownloadVisuals?: boolean;
+  closeAfterVisualsDownload?: boolean;
   onBack?: () => void;
   onOpenAdmin?: () => void;
 }) {
@@ -1089,6 +1093,7 @@ export function QuoteBuilderScreen({
   const artworkUploadQueueRef = useRef<File[]>([]);
   const artworkUploadWorkerActiveRef = useRef(false);
   const campaignHydratedRef = useRef(false);
+  const autoDownloadTriggeredRef = useRef(false);
   const lastPersistedValuesRef = useRef('');
   const lastAutoSaveFailedValuesRef = useRef<string | null>(null);
 
@@ -3935,14 +3940,14 @@ export function QuoteBuilderScreen({
   }
 
   async function downloadArtworkVisuals() {
-    if (exportingTemplates || sendingAdsEmail) return;
+    if (exportingTemplates || sendingAdsEmail) return false;
     if (!hasDeliveryDueDate) {
       setError('Add a due date before downloading visuals.');
-      return;
+      return false;
     }
     if (!hasMappedCreatives) {
       setError('Map at least one creative to a market asset before downloading visuals');
-      return;
+      return false;
     }
 
     setError('');
@@ -3953,14 +3958,32 @@ export function QuoteBuilderScreen({
       await generateArtworkTemplates(true, VISUALS_EXPORT_MODE);
       setExportProgressMessage('Download started. Check your browser download bar.');
       setError('');
+      return true;
     } catch (exportError) {
       const message = exportError instanceof Error ? exportError.message : 'Unable to download visual export. Please try again.';
       setError(message);
       setExportProgressMessage('');
+      return false;
     } finally {
       setExportingTemplates(false);
     }
   }
+
+  useEffect(() => {
+    if (!autoDownloadVisuals || autoDownloadTriggeredRef.current) return;
+    if (loadingMetadata || loadingCampaign) return;
+    if (!campaignId) return;
+    autoDownloadTriggeredRef.current = true;
+
+    void (async () => {
+      const success = await downloadArtworkVisuals();
+      if (!success) return;
+      if (!closeAfterVisualsDownload) return;
+      window.setTimeout(() => {
+        window.close();
+      }, 1200);
+    })();
+  }, [autoDownloadVisuals, closeAfterVisualsDownload, loadingMetadata, loadingCampaign, campaignId]);
 
   async function sendArtworkEmailToAds() {
     if (sendingAdsEmail || exportingTemplates) return;

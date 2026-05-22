@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, FolderKanban, LayoutGrid, LoaderCircle, Pencil, Plus, Rows3, Search, Trash2 } from 'lucide-react';
-import { CampaignListItem } from '@flowiq/shared';
+import { CalendarDays, Eye, FolderKanban, LayoutGrid, LoaderCircle, Pencil, Plus, Rows3, Search, Trash2 } from 'lucide-react';
+import { CampaignListItem, CampaignRecord } from '@flowiq/shared';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
 import { createPortal } from 'react-dom';
 import { fetchActiveUsersCount } from '../services/authApi';
-import { acquireCampaignEditLock, deleteCampaign, fetchCampaigns } from '../services/campaignApi';
+import { acquireCampaignEditLock, calculatePersistedCampaign, deleteCampaign, fetchCampaign, fetchCampaigns } from '../services/campaignApi';
+import { CampaignScheduleViewDialog } from './CampaignScheduleViewDialog';
 
 type CampaignLandingScreenProps = {
   onOpenCampaign: (campaignId: string | null) => void;
@@ -36,6 +37,11 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [campaignPendingDelete, setCampaignPendingDelete] = useState<CampaignListItem | null>(null);
   const [deletingCampaign, setDeletingCampaign] = useState(false);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewLoading, setViewLoading] = useState(false);
+  const [viewError, setViewError] = useState('');
+  const [campaignForView, setCampaignForView] = useState<CampaignRecord | null>(null);
+  const [viewCampaignId, setViewCampaignId] = useState<string | null>(null);
   const [activeUsersCount, setActiveUsersCount] = useState<number | null>(1);
   const [topBarCenterHost, setTopBarCenterHost] = useState<HTMLElement | null>(null);
   const [topBarActionsHost, setTopBarActionsHost] = useState<HTMLElement | null>(null);
@@ -107,6 +113,36 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
     } catch (lockError) {
       setError(lockError instanceof Error ? lockError.message : 'Unable to open campaign for editing');
     }
+  }
+
+  async function handleOpenCampaignView(campaignId: string) {
+    setViewDialogOpen(true);
+    setViewCampaignId(campaignId);
+    setViewLoading(true);
+    setViewError('');
+    setCampaignForView(null);
+    try {
+      // Ensure the persisted summary is up to date before rendering details totals.
+      await calculatePersistedCampaign(campaignId);
+      const response = await fetchCampaign(campaignId);
+      setCampaignForView(response.campaign);
+    } catch (loadError) {
+      setViewError(loadError instanceof Error ? loadError.message : 'Unable to load campaign details');
+    } finally {
+      setViewLoading(false);
+    }
+  }
+
+  async function handleEditFromView() {
+    if (!viewCampaignId) return;
+    setViewDialogOpen(false);
+    setCampaignForView(null);
+    setViewError('');
+    await handleOpenCampaign(viewCampaignId);
+  }
+
+  function campaignDisplayName(campaign: Pick<CampaignListItem, 'campaignName' | 'id'>) {
+    return campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}`;
   }
 
   function openDeleteDialog(campaign: CampaignListItem) {
@@ -237,11 +273,11 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                         <CardTitle className="text-xl leading-tight">
                           <button
                             className="w-full whitespace-normal break-words text-left text-white transition hover:text-orange-200"
-                            onClick={() => void handleOpenCampaign(campaign.id)}
-                            title="Open campaign for editing"
+                            onClick={() => void handleOpenCampaignView(campaign.id)}
+                            title="View campaign details"
                             type="button"
                           >
-                            {campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}`}
+                            {campaignDisplayName(campaign)}
                           </button>
                         </CardTitle>
                         <CardDescription className="text-xs">Updated {new Date(campaign.updatedAt).toLocaleString()}</CardDescription>
@@ -274,6 +310,15 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                     </div>
 
                     <div className="flex justify-end gap-1.5 pt-1">
+                      <Button
+                        aria-label="View campaign"
+                        className="h-7 w-7 rounded-md border-0 p-0 hover:bg-slate-700/70"
+                        onClick={() => void handleOpenCampaignView(campaign.id)}
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
                         <Button
                           aria-label="Edit campaign"
                           className="h-7 w-7 rounded-md border-0 p-0 hover:bg-slate-700/70"
@@ -328,11 +373,11 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                       <td className="px-5 py-2.5 font-semibold text-white">
                         <button
                           className="block max-w-[320px] truncate whitespace-nowrap text-left text-white transition hover:text-orange-200"
-                          onClick={() => void handleOpenCampaign(campaign.id)}
-                          title={campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}`}
+                          onClick={() => void handleOpenCampaignView(campaign.id)}
+                          title={campaignDisplayName(campaign)}
                           type="button"
                         >
-                          {campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}`}
+                          {campaignDisplayName(campaign)}
                         </button>
                       </td>
                       <td className="px-5 py-2.5 text-slate-300">{campaign.createdBy || 'N/A'}</td>
@@ -344,6 +389,15 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
                       <td className="px-5 py-2.5 text-center text-slate-300">{campaign.numberOfWeeks || '0'}</td>
                       <td className="px-5 py-2.5">
                         <div className="flex justify-center gap-2">
+                          <Button
+                            aria-label="View campaign"
+                            className="h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200 transition-[background-color,border-color,color,transform,box-shadow] duration-200 hover:-translate-y-[1px] hover:border-white/20 hover:bg-slate-700/70 hover:text-white hover:shadow-[0_6px_14px_rgba(15,23,42,0.26)]"
+                            onClick={() => void handleOpenCampaignView(campaign.id)}
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           <Button
                             aria-label="Edit campaign"
                             className="h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200 transition-[background-color,border-color,color,transform,box-shadow] duration-200 hover:-translate-y-[1px] hover:border-white/20 hover:bg-slate-700/70 hover:text-white hover:shadow-[0_6px_14px_rgba(15,23,42,0.26)]"
@@ -376,6 +430,24 @@ export function CampaignLandingScreen({ onOpenCampaign }: CampaignLandingScreenP
           )}
         </>
       )}
+
+      <CampaignScheduleViewDialog
+        campaign={campaignForView}
+        error={viewError}
+        loading={viewLoading}
+        onClose={() => setViewDialogOpen(false)}
+        onEdit={() => void handleEditFromView()}
+        onOpenChange={(open) => {
+          setViewDialogOpen(open);
+          if (!open) {
+            setViewLoading(false);
+            setViewError('');
+            setCampaignForView(null);
+            setViewCampaignId(null);
+          }
+        }}
+        open={viewDialogOpen}
+      />
 
       <Dialog
         open={deleteDialogOpen}
