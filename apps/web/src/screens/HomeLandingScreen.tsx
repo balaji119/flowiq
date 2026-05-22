@@ -1,4 +1,4 @@
-import { ArrowRight, LayoutDashboard, PlusCircle } from 'lucide-react';
+import { CalendarRange, ClipboardCheck, Printer, Rocket } from 'lucide-react';
 import { Button } from '@flowiq/ui';
 
 type HomeLandingScreenProps = {
@@ -6,68 +6,120 @@ type HomeLandingScreenProps = {
   onCreateCampaign: () => void;
 };
 
-const domainImages = [
-  'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1400&q=80',
-  'https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1400&q=80',
-  'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1400&q=80',
-];
+function WorkflowIllustration() {
+  return (
+    <div className="relative h-[260px] w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0C1424]/90 p-4 backdrop-blur-xl">
+      <div className="absolute -left-14 -top-12 h-40 w-40 rounded-full bg-orange-500/12 blur-3xl" />
+      <div className="absolute -right-14 bottom-0 h-44 w-44 rounded-full bg-cyan-400/10 blur-3xl" />
+      <svg className="relative h-full w-full" fill="none" viewBox="0 0 620 320" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="nodeFill" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stopColor="#142238" />
+            <stop offset="100%" stopColor="#101827" />
+          </linearGradient>
+          <linearGradient id="flowLine" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="#F97316" stopOpacity="0.72" />
+          </linearGradient>
+        </defs>
+
+        <rect fill="url(#nodeFill)" height="78" rx="14" stroke="rgba(255,255,255,0.14)" width="138" x="24" y="34" />
+        <text fill="#F9FAFB" fontFamily="Inter, Geist, sans-serif" fontSize="14" fontWeight="600" x="40" y="62">
+          Asset Plan
+        </text>
+        <text fill="#9CA3AF" fontFamily="Inter, Geist, sans-serif" fontSize="11" x="40" y="84">
+          Billboard nodes
+        </text>
+        <circle cx="132" cy="52" fill="#F97316" fillOpacity="0.32" r="8" />
+
+        <rect fill="url(#nodeFill)" height="78" rx="14" stroke="rgba(255,255,255,0.14)" width="138" x="236" y="116" />
+        <text fill="#F9FAFB" fontFamily="Inter, Geist, sans-serif" fontSize="14" fontWeight="600" x="252" y="144">
+          Schedule
+        </text>
+        <text fill="#9CA3AF" fontFamily="Inter, Geist, sans-serif" fontSize="11" x="252" y="166">
+          Week allocations
+        </text>
+        <circle cx="342" cy="134" fill="#38BDF8" fillOpacity="0.32" r="8" />
+
+        <rect fill="url(#nodeFill)" height="78" rx="14" stroke="rgba(255,255,255,0.14)" width="162" x="434" y="198" />
+        <text fill="#F9FAFB" fontFamily="Inter, Geist, sans-serif" fontSize="14" fontWeight="600" x="452" y="226">
+          PrintIQ Output
+        </text>
+        <text fill="#9CA3AF" fontFamily="Inter, Geist, sans-serif" fontSize="11" x="452" y="248">
+          Quote-ready export
+        </text>
+        <circle cx="564" cy="216" fill="#F97316" fillOpacity="0.36" r="8" />
+
+        <path d="M162 74 C214 74, 206 124, 236 134" stroke="url(#flowLine)" strokeWidth="2.4" />
+        <path d="M374 156 C426 168, 430 214, 434 224" stroke="url(#flowLine)" strokeWidth="2.4" />
+
+        <circle cx="90" cy="212" fill="#101827" r="46" stroke="rgba(255,255,255,0.1)" />
+        <path d="M66 212 L90 188 L114 212 L90 236 Z" stroke="#38BDF8" strokeOpacity="0.75" strokeWidth="1.6" />
+        <circle cx="90" cy="212" fill="#F97316" fillOpacity="0.18" r="12" />
+        <text fill="#9CA3AF" fontFamily="Inter, Geist, sans-serif" fontSize="10" x="52" y="272">
+          Market map
+        </text>
+      </svg>
+    </div>
+  );
+}
 
 export function HomeLandingScreen({ onOpenDashboard, onCreateCampaign }: HomeLandingScreenProps) {
   return (
-    <main className="h-full overflow-auto">
-      <section className="mx-auto flex w-full max-w-[1240px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 p-7">
-          <div className="absolute -right-14 -top-20 h-56 w-56 rounded-full bg-orange-400/20 blur-3xl" />
-          <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
-          <div className="relative z-10">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-300/70">Powered by ADS</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white sm:text-3xl">Turn Hours into Minutes</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-300 sm:text-base">
-              ADSconnect reduces order processing from hours to minutes - directly integrated with REV360 for faster campaign delivery.
-            </p>
-            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.24em] text-orange-200">ADS Connect</p>
-            <h2 className="mt-2 max-w-3xl text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-              Plan Outdoor Campaigns Faster With Clear Creative Mapping
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm text-slate-300 sm:text-base">
-              Build campaign schedules, map creatives, and generate download-ready visuals for print and installation workflows.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Button className="h-10 px-5" onClick={onOpenDashboard} type="button" variant="secondary">
-                <LayoutDashboard className="h-4 w-4" />
-                Go to Dashboard
-              </Button>
-              <Button className="h-10 border-orange-400/40 bg-orange-500 px-5 text-white hover:bg-orange-400" onClick={onCreateCampaign} type="button">
-                <PlusCircle className="h-4 w-4" />
-                Create New Campaign
-              </Button>
+    <main className="min-h-full bg-[#081120]">
+      <section className="mx-auto flex w-full max-w-[1220px] flex-col gap-5 px-5 py-8 sm:px-7 lg:px-10">
+        <div className="relative overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#101827]/82 p-5 shadow-[0_20px_60px_rgba(2,6,23,0.35)] backdrop-blur-xl md:p-6">
+          <div className="absolute -left-24 -top-20 h-56 w-56 rounded-full bg-orange-500/16 blur-3xl" />
+          <div className="absolute -right-24 -bottom-24 h-64 w-64 rounded-full bg-sky-400/12 blur-3xl" />
+          <div className="relative grid min-h-[300px] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)] lg:items-center">
+            <div className="max-w-xl">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">POWERED BY ADS</p>
+              <h1 className="mt-2 text-[36px] font-semibold leading-tight tracking-tight text-[#F9FAFB] md:text-[42px]">
+                Plan Outdoor Campaigns Faster
+              </h1>
+              <p className="mt-3 max-w-lg text-[15px] leading-relaxed text-[#9CA3AF]">
+                Build schedules, review poster quantities, and generate PrintIQ-ready quotes.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Button
+                  className="h-10 border border-orange-400/45 bg-[#F97316] px-5 text-white shadow-[0_8px_24px_rgba(249,115,22,0.32)] transition hover:brightness-110"
+                  onClick={onCreateCampaign}
+                  type="button"
+                >
+                  Create Campaign
+                </Button>
+                <Button className="h-10 border border-white/10 bg-[#0D1728] px-5 text-[#F9FAFB] transition hover:border-white/20 hover:bg-[#111d30]" onClick={onOpenDashboard} type="button" variant="secondary">
+                  Open Dashboard
+                </Button>
+              </div>
             </div>
+
+            <WorkflowIllustration />
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          {domainImages.map((src, index) => (
-            <div key={`home-domain-image-${index + 1}`} className="group relative overflow-hidden rounded-xl border border-white/10 bg-slate-900/60">
-              <img
-                alt={`Campaign planning visual ${index + 1}`}
-                className="h-52 w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-                loading="lazy"
-                src={src}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-900/10 to-transparent" />
-            </div>
-          ))}
-        </div>
-
-        <div className="rounded-xl border border-white/10 bg-slate-900/55 p-5">
-          <button
-            className="inline-flex items-center gap-2 text-sm font-semibold text-orange-200 transition hover:text-orange-100"
-            onClick={onOpenDashboard}
-            type="button"
-          >
-            Continue to Campaign Dashboard
-            <ArrowRight className="h-4 w-4" />
-          </button>
+        <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[#101827]/74 px-4 py-3 backdrop-blur-xl md:px-5">
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] sm:items-center">
+            {[
+              { icon: CalendarRange, title: 'Schedule', subtitle: 'Plan weekly slots' },
+              { icon: ClipboardCheck, title: 'Review', subtitle: 'Validate quantities' },
+              { icon: Rocket, title: 'Finalise', subtitle: 'Lock campaign workflow' },
+              { icon: Printer, title: 'PrintIQ', subtitle: 'Generate quote outputs' },
+            ].map((item, index, all) => (
+              <div key={item.title} className="contents">
+                <div className="rounded-lg border border-white/10 bg-[#0E1627]/90 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <item.icon className="h-4 w-4 text-orange-300" />
+                    <p className="text-sm font-semibold text-[#F9FAFB]">{item.title}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-[#9CA3AF]">{item.subtitle}</p>
+                </div>
+                {index < all.length - 1 ? (
+                  <div className="hidden h-px w-8 bg-gradient-to-r from-white/10 to-orange-400/45 sm:block" />
+                ) : null}
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     </main>
