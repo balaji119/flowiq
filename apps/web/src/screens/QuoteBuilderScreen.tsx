@@ -98,20 +98,22 @@ function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBre
 }
 
 function buildReviewRows(totals: CampaignTotals) {
+  const computedPosterTotal = formatKeys.reduce((sum, key) => sum + (totals.breakdown[key] ?? 0), 0);
   const frameBreakdown: QuantityBreakdown = {
     '8-sheet': totals.breakdown['8-sheet'] / 4,
     '6-sheet': totals.breakdown['6-sheet'] / 3,
     '4-sheet': totals.breakdown['4-sheet'] / 2,
     '2-sheet': totals.breakdown['2-sheet'],
     QA0: totals.breakdown.QA0 / 4,
-    Mega: 0,
-    'DOT M': 0,
-    MP: 0,
+    Mega: totals.breakdown.Mega,
+    'DOT M': totals.breakdown['DOT M'],
+    MP: totals.breakdown.MP,
   };
+  const computedFrameTotal = formatKeys.reduce((sum, key) => sum + (frameBreakdown[key] ?? 0), 0);
 
   return [
-    { label: 'Posters', breakdown: totals.breakdown, total: totals.posterTotal, shippingCost: 0 },
-    { label: 'Frames', breakdown: frameBreakdown, total: totals.frameTotal, shippingCost: null },
+    { label: 'Posters', breakdown: totals.breakdown, total: computedPosterTotal, shippingCost: 0 },
+    { label: 'Frames', breakdown: frameBreakdown, total: computedFrameTotal, shippingCost: null },
   ] as const;
 }
 
@@ -147,6 +149,7 @@ const creativeFormatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'Mega', 
 type CreativeFormatKey = (typeof creativeFormatKeys)[number];
 
 type MultiCreativeImageMap = Partial<Record<CreativeFormatKey, string[]>>;
+type MultiArtworkRecord = { id: string; imageId: string; frameCount: number };
 const MULTI_ARTWORK_SLOT_UI_CAP = 24;
 const MARKET_PLANNING_THEMES = [
   {
@@ -1039,7 +1042,8 @@ export function QuoteBuilderScreen({
   const [assignArtworkDialogOpen, setAssignArtworkDialogOpen] = useState(false);
   const [assignArtworkTarget, setAssignArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey; slotIndex?: number } | null>(null);
   const [multiArtworkDialogOpen, setMultiArtworkDialogOpen] = useState(false);
-  const [multiArtworkTarget, setMultiArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey; slotCount: number } | null>(null);
+  const [multiArtworkTarget, setMultiArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey; totalFrames: number } | null>(null);
+  const [multiArtworkRecords, setMultiArtworkRecords] = useState<MultiArtworkRecord[]>([]);
   const [previewArtworkDialogOpen, setPreviewArtworkDialogOpen] = useState(false);
   const [previewArtworkTarget, setPreviewArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey } | null>(null);
   const [previewArtworkFullLoaded, setPreviewArtworkFullLoaded] = useState(false);
@@ -1057,6 +1061,9 @@ export function QuoteBuilderScreen({
   const [deleteArtworkCandidate, setDeleteArtworkCandidate] = useState<CampaignPrintImage | null>(null);
   const [confirmingArtworkDelete, setConfirmingArtworkDelete] = useState(false);
   const [artworkDialogError, setArtworkDialogError] = useState('');
+  const [creativeNameAssignments, setCreativeNameAssignments] = useState<Record<string, string>>({});
+  const [draggingCreativeName, setDraggingCreativeName] = useState<string | null>(null);
+  const [creativeDropTarget, setCreativeDropTarget] = useState<{ name: string; position: 'above' | 'below' } | null>(null);
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
   const [newAddressDialogOpen, setNewAddressDialogOpen] = useState(false);
   const [addMarketDialogOpen, setAddMarketDialogOpen] = useState(false);
@@ -1537,6 +1544,54 @@ export function QuoteBuilderScreen({
       return name.includes(query);
     });
   }, [artworkSearchQuery, values.printImages]);
+  const creativeNames = useMemo(
+    () => Array.from({ length: Math.max(values.printImages.length, 1) }, (_, index) => `Creative${index + 1}`),
+    [values.printImages.length],
+  );
+  const artworkImageById = useMemo(() => {
+    const map = new Map<string, CampaignPrintImage>();
+    values.printImages.forEach((image) => map.set(image.id, image));
+    return map;
+  }, [values.printImages]);
+  const resolvedCreativeNameAssignments = useMemo(() => {
+    const resolved: Record<string, string> = {};
+    const usedImageIds = new Set<string>();
+
+    creativeNames.forEach((creativeName) => {
+      const mappedId = creativeNameAssignments[creativeName];
+      if (mappedId && artworkImageById.has(mappedId) && !usedImageIds.has(mappedId)) {
+        resolved[creativeName] = mappedId;
+        usedImageIds.add(mappedId);
+      }
+    });
+
+    const unassignedImages = values.printImages.filter((image) => !usedImageIds.has(image.id));
+    let unassignedIndex = 0;
+    creativeNames.forEach((creativeName) => {
+      if (resolved[creativeName]) return;
+      const nextImage = unassignedImages[unassignedIndex];
+      if (!nextImage) return;
+      resolved[creativeName] = nextImage.id;
+      usedImageIds.add(nextImage.id);
+      unassignedIndex += 1;
+    });
+    return resolved;
+  }, [artworkImageById, creativeNameAssignments, creativeNames, values.printImages]);
+  const creativeNumberByImageId = useMemo(() => {
+    const next = new Map<string, number>();
+    values.printImages.forEach((image, index) => {
+      next.set(image.id, index + 1);
+    });
+    Object.entries(resolvedCreativeNameAssignments).forEach(([creativeName, imageId]) => {
+      const match = /^Creative(\d+)$/i.exec((creativeName || '').trim());
+      if (!match) return;
+      const parsed = Number.parseInt(match[1] || '', 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) return;
+      if (!imageId) return;
+      next.set(imageId, parsed);
+    });
+    return next;
+  }, [resolvedCreativeNameAssignments, values.printImages]);
   const previewArtworkImage = useMemo(() => {
     if (!previewArtworkTarget) return null;
     const targetMarket = values.campaignMarkets.find((market) => market.id === previewArtworkTarget.marketId);
@@ -1965,7 +2020,26 @@ export function QuoteBuilderScreen({
   }
 
   function openMultiArtworkDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey, slotCount: number) {
-    setMultiArtworkTarget({ marketId, assetId, formatKey, slotCount: Math.min(MULTI_ARTWORK_SLOT_UI_CAP, Math.max(1, slotCount)) });
+    const totalFrames = Math.min(MULTI_ARTWORK_SLOT_UI_CAP, Math.max(1, slotCount));
+    const targetMarket = values.campaignMarkets.find((market) => market.id === marketId);
+    const targetAsset = targetMarket?.assets.find((asset) => asset.id === assetId);
+    const slotIds = (targetAsset?.multiCreativeImageIds?.[formatKey] ?? []).map((id) => (id || '').trim()).filter(Boolean);
+    const countsByImageId = new Map<string, number>();
+    const orderedImageIds: string[] = [];
+    slotIds.forEach((imageId) => {
+      if (!countsByImageId.has(imageId)) {
+        orderedImageIds.push(imageId);
+        countsByImageId.set(imageId, 0);
+      }
+      countsByImageId.set(imageId, (countsByImageId.get(imageId) ?? 0) + 1);
+    });
+    const recordsFromAsset = orderedImageIds.map((imageId, index) => ({
+      id: `multi-artwork-record-${Date.now()}-${index}`,
+      imageId,
+      frameCount: countsByImageId.get(imageId) ?? 0,
+    }));
+    setMultiArtworkRecords(recordsFromAsset.length > 0 ? recordsFromAsset : [{ id: `multi-artwork-record-${Date.now()}-0`, imageId: '', frameCount: 1 }]);
+    setMultiArtworkTarget({ marketId, assetId, formatKey, totalFrames });
     setMultiArtworkDialogOpen(true);
   }
 
@@ -2005,14 +2079,54 @@ export function QuoteBuilderScreen({
     setAssignArtworkTarget(null);
     setArtworkDialogError('');
     setArtworkSearchQuery('');
+    setDraggingCreativeName(null);
+    setCreativeDropTarget(null);
     if (artworkPdfInputRef.current) {
       artworkPdfInputRef.current.value = '';
     }
   }
 
+  function reorderCreativeAssignments(sourceCreativeName: string, targetCreativeName: string, position: 'above' | 'below') {
+    if (sourceCreativeName === targetCreativeName) return;
+    const orderedImageIds = creativeNames.map((creativeName) => resolvedCreativeNameAssignments[creativeName] || '');
+    const sourceIndex = creativeNames.indexOf(sourceCreativeName);
+    const targetIndex = creativeNames.indexOf(targetCreativeName);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    const movingImageId = orderedImageIds[sourceIndex];
+    if (!movingImageId) return;
+
+    const nextIds = [...orderedImageIds];
+    nextIds.splice(sourceIndex, 1);
+    let insertIndex = position === 'below' ? targetIndex + 1 : targetIndex;
+    if (sourceIndex < insertIndex) insertIndex -= 1;
+    nextIds.splice(insertIndex, 0, movingImageId);
+
+    const nextAssignments: Record<string, string> = {};
+    creativeNames.forEach((creativeName, index) => {
+      const imageId = nextIds[index] || '';
+      if (imageId) {
+        nextAssignments[creativeName] = imageId;
+      }
+    });
+    setCreativeNameAssignments(nextAssignments);
+  }
+
   function assignArtworkImageToTarget(imageId: string) {
     if (!assignArtworkTarget) return;
     const { marketId, assetId, formatKey, slotIndex } = assignArtworkTarget;
+    if (
+      slotIndex !== undefined
+      && multiArtworkDialogOpen
+      && multiArtworkTarget
+      && multiArtworkTarget.marketId === marketId
+      && multiArtworkTarget.assetId === assetId
+      && multiArtworkTarget.formatKey === formatKey
+    ) {
+      updateMultiArtworkRecordImage(slotIndex, imageId);
+      closeAssignArtworkDialog();
+      closeArtworkPreviewDialog();
+      return;
+    }
     if (slotIndex !== undefined) {
       assignArtworkToFormatSlot(marketId, assetId, formatKey, slotIndex, imageId);
     } else {
@@ -2037,6 +2151,65 @@ export function QuoteBuilderScreen({
         ...current,
         multiCreativeImageIds: nextMultiCreativeImageIds,
       };
+    });
+  }
+
+  function syncMultiArtworkRecordsToAsset(records: MultiArtworkRecord[]) {
+    if (!multiArtworkTarget) return;
+    const expandedIds = records.flatMap((record) => {
+      const cleanedId = (record.imageId || '').trim();
+      const safeCount = Math.max(0, Math.floor(record.frameCount || 0));
+      if (!cleanedId || safeCount <= 0) return [];
+      return Array.from({ length: safeCount }, () => cleanedId);
+    });
+    updateCampaignAsset(multiArtworkTarget.marketId, multiArtworkTarget.assetId, (current) => {
+      const nextMultiCreativeImageIds = {
+        ...normalizeMultiCreativeImageIds(current),
+      };
+      nextMultiCreativeImageIds[multiArtworkTarget.formatKey] = expandedIds;
+      return {
+        ...current,
+        multiCreativeImageIds: nextMultiCreativeImageIds,
+      };
+    });
+  }
+
+  function updateMultiArtworkRecordImage(recordIndex: number, imageId: string) {
+    setMultiArtworkRecords((current) => {
+      if (recordIndex < 0 || recordIndex >= current.length) return current;
+      const next = current.map((record, index) => (index === recordIndex ? { ...record, imageId } : record));
+      syncMultiArtworkRecordsToAsset(next);
+      return next;
+    });
+  }
+
+  function updateMultiArtworkRecordFrameCount(recordIndex: number, requestedFrameCount: number) {
+    setMultiArtworkRecords((current) => {
+      if (!multiArtworkTarget || recordIndex < 0 || recordIndex >= current.length) return current;
+      const sanitized = Math.max(0, Math.floor(Number.isFinite(requestedFrameCount) ? requestedFrameCount : 0));
+      const usedByOthers = current.reduce((sum, record, index) => sum + (index === recordIndex ? 0 : Math.max(0, Math.floor(record.frameCount || 0))), 0);
+      const maxForRow = Math.max(0, multiArtworkTarget.totalFrames - usedByOthers);
+      const nextValue = Math.max(0, Math.min(sanitized, maxForRow));
+      const next = current.map((record, index) => (index === recordIndex ? { ...record, frameCount: nextValue } : record));
+      syncMultiArtworkRecordsToAsset(next);
+      return next;
+    });
+  }
+
+  function addMultiArtworkRecord() {
+    setMultiArtworkRecords((current) => {
+      const next = [...current, { id: `multi-artwork-record-${Date.now()}-${current.length}`, imageId: '', frameCount: 1 }];
+      syncMultiArtworkRecordsToAsset(next);
+      return next;
+    });
+  }
+
+  function removeMultiArtworkRecord(recordIndex: number) {
+    setMultiArtworkRecords((current) => {
+      if (current.length <= 1 || recordIndex < 0 || recordIndex >= current.length) return current;
+      const next = current.filter((_, index) => index !== recordIndex);
+      syncMultiArtworkRecordsToAsset(next);
+      return next;
     });
   }
 
@@ -2616,7 +2789,12 @@ export function QuoteBuilderScreen({
         }
       });
 
-      const imageById = new Map(values.printImages.map((image, index) => [image.id, { image, creativeNumber: index + 1 }]));
+      const imageById = new Map(
+        values.printImages.map((image, index) => [
+          image.id,
+          { image, creativeNumber: creativeNumberByImageId.get(image.id) ?? (index + 1) },
+        ]),
+      );
       const mappingOptionByMarketAssetId = new Map<string, MarketMetadata['assets'][number]>();
       markets.forEach((marketMetadata) => {
         marketMetadata.assets.forEach((assetOption) => {
@@ -2963,13 +3141,19 @@ export function QuoteBuilderScreen({
 
         const inferCreativeTypeLabel = (creativeRows: typeof printRowsSorted) => {
           const totals = rowTotals(creativeRows);
-          const hasQuad = (totals.get(11) ?? 0) > 0 || (totals.get(16) ?? 0) > 0;
+          const hasEightSheet = (totals.get(9) ?? 0) > 0 || (totals.get(14) ?? 0) > 0;
+          const hasSixSheet = (totals.get(10) ?? 0) > 0 || (totals.get(15) ?? 0) > 0;
+          const hasFourSheet = (totals.get(11) ?? 0) > 0 || (totals.get(16) ?? 0) > 0;
+          const hasTwoSheet = (totals.get(12) ?? 0) > 0 || (totals.get(17) ?? 0) > 0;
           const hasQa0 = (totals.get(13) ?? 0) > 0;
           const hasMegaPortrait = (totals.get(20) ?? 0) > 0;
           const hasDotMega = (totals.get(19) ?? 0) > 0;
           const hasMega = (totals.get(18) ?? 0) > 0;
           const lowerNames = creativeRows.map((row) => row.fileName.toLowerCase()).join(' ');
-          if (hasQuad) return '4-sheet';
+          if (hasFourSheet) return '4-sheet';
+          if (hasTwoSheet) return '2-sheet';
+          if (hasSixSheet) return '6-sheet';
+          if (hasEightSheet) return '8-sheet';
           if (hasQa0) return 'QA0';
           if (hasMegaPortrait) return 'Mega Portrait';
           if (hasDotMega) return 'DOT Mega';
@@ -5080,19 +5264,6 @@ export function QuoteBuilderScreen({
                               </tr>
                             ))}
                           </tbody>
-                          <tfoot>
-                            <tr className="bg-orange-500/10 border-t border-orange-400/30">
-                              <th
-                                colSpan={formatKeys.filter((key) => (draftMarketSummary.breakdown[key] ?? 0) > 0).length + 1}
-                                className="border border-orange-300/30 px-3 py-2 text-right font-black uppercase tracking-[0.11em] text-orange-100"
-                              >
-                                Total
-                              </th>
-                              <td className="border border-orange-300/30 px-3 py-2 text-center font-black text-orange-100">
-                                {draftMarketSummary.posterTotal + draftMarketSummary.frameTotal}
-                              </td>
-                            </tr>
-                          </tfoot>
                         </table>
                       </div>
                     </div>
@@ -5307,6 +5478,7 @@ export function QuoteBuilderScreen({
           setMultiArtworkDialogOpen(open);
           if (!open) {
             setMultiArtworkTarget(null);
+            setMultiArtworkRecords([]);
           }
         }}
       >
@@ -5321,8 +5493,10 @@ export function QuoteBuilderScreen({
                   <colgroup>
                     <col className="w-[52px]" />
                     <col className="w-[120px]" />
+                    <col className="w-[170px]" />
+                    <col className="w-[120px]" />
                     <col className="w-auto" />
-                    <col className="w-[110px]" />
+                    <col className="w-[140px]" />
                   </colgroup>
                   <thead>
                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -5330,20 +5504,24 @@ export function QuoteBuilderScreen({
                       <th className="border border-slate-700 px-3 py-2 text-center">
                         <span className="whitespace-nowrap tracking-normal">Thumbnail</span>
                       </th>
+                      <th className="border border-slate-700 px-3 py-2 text-left">Name</th>
+                      <th className="border border-slate-700 px-3 py-2 text-center">Frame Count</th>
                       <th className="border border-slate-700 px-3 py-2 text-left">Filename</th>
                       <th className="border border-slate-700 px-3 py-2 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {Array.from({ length: multiArtworkTarget.slotCount }, (_, index) => {
-                      const targetMarket = values.campaignMarkets.find((market) => market.id === multiArtworkTarget.marketId);
-                      const targetAsset = targetMarket?.assets.find((asset) => asset.id === multiArtworkTarget.assetId);
-                      const slotImageId = targetAsset?.multiCreativeImageIds?.[multiArtworkTarget.formatKey]?.[index] || '';
-                      const slotImage = slotImageId ? values.printImages.find((image) => image.id === slotImageId) : null;
+                    {multiArtworkRecords.map((record, index) => {
+                      const slotImage = record.imageId ? values.printImages.find((image) => image.id === record.imageId) : null;
                       const thumbnailSrc = slotImage?.thumbnailUrl ? buildApiUrl(slotImage.thumbnailUrl) : (slotImage?.imageUrl ? buildApiUrl(slotImage.imageUrl) : '');
                       const fileName = slotImage?.fileName || slotImage?.name || '-';
+                      const mappedCreativeName = record.imageId
+                        ? Object.entries(resolvedCreativeNameAssignments).find(([, imageId]) => imageId === record.imageId)?.[0] || '-'
+                        : '-';
+                      const usedByOthers = multiArtworkRecords.reduce((sum, entry, entryIndex) => sum + (entryIndex === index ? 0 : Math.max(0, Math.floor(entry.frameCount || 0))), 0);
+                      const maxForRow = Math.max(0, multiArtworkTarget.totalFrames - usedByOthers);
                       return (
-                        <tr key={`multi-artwork-slot-${index + 1}`} className="border-t border-slate-700/70 bg-slate-800/65">
+                        <tr key={record.id} className="border-t border-slate-700/70 bg-slate-800/65">
                           <td className="border border-slate-700 px-3 py-2 text-slate-200">{index + 1}</td>
                           <td className="border border-slate-700 px-3 py-2">
                             <div className="mx-auto h-14 w-14 overflow-hidden rounded border border-slate-700 bg-slate-900">
@@ -5351,6 +5529,22 @@ export function QuoteBuilderScreen({
                                 <img alt={`Slot ${index + 1} thumbnail`} className="h-full w-full object-cover" loading="lazy" src={thumbnailSrc} />
                               ) : null}
                             </div>
+                          </td>
+                          <td className="border border-slate-700 px-3 py-2 text-slate-100">
+                            <p className="whitespace-normal break-all leading-snug">{mappedCreativeName}</p>
+                          </td>
+                          <td className="border border-slate-700 px-3 py-2">
+                            <Input
+                              className="h-8 border-slate-600 bg-slate-900 text-center text-slate-100"
+                              max={maxForRow}
+                              min={0}
+                              onChange={(event) => {
+                                const parsed = Number.parseInt(event.target.value || '0', 10);
+                                updateMultiArtworkRecordFrameCount(index, Number.isFinite(parsed) ? parsed : 0);
+                              }}
+                              type="number"
+                              value={record.frameCount}
+                            />
                           </td>
                           <td className="border border-slate-700 px-3 py-2 text-slate-100">
                             <p className="whitespace-normal break-all leading-snug">{fileName}</p>
@@ -5369,27 +5563,30 @@ export function QuoteBuilderScreen({
                                   )
                                 }
                                 type="button"
-                                variant={slotImageId ? 'outline' : 'secondary'}
+                                variant={record.imageId ? 'outline' : 'secondary'}
                               >
-                                {slotImageId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                                {record.imageId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                               </Button>
-                              {slotImageId ? (
+                              {record.imageId ? (
                                 <Button
                                   aria-label={`Remove artwork from slot ${index + 1}`}
                                   className="h-8 w-8 p-0"
-                                  onClick={() =>
-                                    assignArtworkToFormatSlot(
-                                      multiArtworkTarget.marketId,
-                                      multiArtworkTarget.assetId,
-                                      multiArtworkTarget.formatKey,
-                                      index,
-                                      '',
-                                    )
-                                  }
+                                  onClick={() => updateMultiArtworkRecordImage(index, '')}
                                   type="button"
                                   variant="destructive"
                                 >
                                   <Trash2 className="h-4 w-4" />
+                                </Button>
+                              ) : null}
+                              {multiArtworkRecords.length > 1 ? (
+                                <Button
+                                  aria-label={`Delete record ${index + 1}`}
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => removeMultiArtworkRecord(index)}
+                                  type="button"
+                                  variant="ghost"
+                                >
+                                  <X className="h-4 w-4" />
                                 </Button>
                               ) : null}
                             </div>
@@ -5400,6 +5597,24 @@ export function QuoteBuilderScreen({
                   </tbody>
                 </table>
               </div>
+              {(() => {
+                const usedFrames = multiArtworkRecords.reduce((sum, record) => sum + Math.max(0, Math.floor(record.frameCount || 0)), 0);
+                const remainingFrames = Math.max(0, multiArtworkTarget.totalFrames - usedFrames);
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
+                      <div className="space-y-1">
+                        <p>Total Frames: <span className="font-semibold text-white">{multiArtworkTarget.totalFrames}</span></p>
+                        <p>Remaining Frames: <span className="font-semibold text-white">{remainingFrames}</span></p>
+                      </div>
+                      <Button disabled={remainingFrames === 0} onClick={addMultiArtworkRecord} type="button" variant="secondary">
+                        <Plus className="h-4 w-4" />
+                        Add Record
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ) : null}
         </DialogContent>
@@ -5420,6 +5635,7 @@ export function QuoteBuilderScreen({
             <DialogTitle>Artwork</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {assignArtworkTarget !== null ? (
             <div className="relative min-w-[220px] flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
@@ -5429,6 +5645,7 @@ export function QuoteBuilderScreen({
                 value={artworkSearchQuery}
               />
             </div>
+            ) : null}
             {artworkDialogError ? (
               <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200">
                 {artworkDialogError}
@@ -5436,6 +5653,113 @@ export function QuoteBuilderScreen({
             ) : null}
             {values.printImages.length > 0 ? (
               <div className="max-h-[56vh] overflow-auto rounded-md border border-slate-700 bg-slate-900/65 p-3">
+                <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-950/70">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-900/90 text-slate-300">
+                        <th className="border-b border-slate-700 px-3 py-2 text-left font-semibold">Name</th>
+                        <th className="border-b border-slate-700 px-3 py-2 text-left font-semibold">Artwork</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {creativeNames.map((creativeName) => {
+                        const mappedImageId = resolvedCreativeNameAssignments[creativeName] || '';
+                        const mappedImage = mappedImageId ? artworkImageById.get(mappedImageId) ?? null : null;
+                        return (
+                          <tr
+                            key={`creative-name-row-${creativeName}`}
+                            className={cn(
+                              'border-b border-slate-800 last:border-b-0',
+                              creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'above' ? 'border-t-2 border-t-orange-400' : '',
+                              creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'below' ? 'border-b-2 border-b-orange-400' : '',
+                            )}
+                          >
+                            <td className="px-3 py-2 font-medium text-slate-100">{creativeName}</td>
+                            <td className={cn('px-3 py-2 transition', draggingCreativeName ? 'bg-slate-900/80' : '')}>
+                              <div className="flex min-h-10 items-center justify-between gap-2 rounded border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+                                <button
+                                  className={cn(
+                                    'flex min-w-0 flex-1 items-center gap-3 text-left',
+                                    assignArtworkTarget !== null ? 'cursor-pointer' : '',
+                                  )}
+                                  draggable={Boolean(mappedImageId)}
+                                  onClick={() => {
+                                    if (assignArtworkTarget !== null && mappedImageId) {
+                                      assignArtworkImageToTarget(mappedImageId);
+                                    }
+                                  }}
+                                  onDragEnd={() => {
+                                    setDraggingCreativeName(null);
+                                    setCreativeDropTarget(null);
+                                  }}
+                                  onDragOver={(event) => {
+                                    if (!draggingCreativeName || draggingCreativeName === creativeName) return;
+                                    event.preventDefault();
+                                    const rect = event.currentTarget.getBoundingClientRect();
+                                    const position = event.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
+                                    setCreativeDropTarget({ name: creativeName, position });
+                                  }}
+                                  onDragStart={(event) => {
+                                    if (!mappedImageId) return;
+                                    event.dataTransfer.setData('text/plain', creativeName);
+                                    event.dataTransfer.effectAllowed = 'move';
+                                    setDraggingCreativeName(creativeName);
+                                  }}
+                                  onDrop={(event) => {
+                                    event.preventDefault();
+                                    const sourceCreativeName = event.dataTransfer.getData('text/plain');
+                                    const dropTarget = creativeDropTarget;
+                                    if (!sourceCreativeName || !dropTarget || dropTarget.name !== creativeName) return;
+                                    reorderCreativeAssignments(sourceCreativeName, creativeName, dropTarget.position);
+                                    setDraggingCreativeName(null);
+                                    setCreativeDropTarget(null);
+                                  }}
+                                  type="button"
+                                >
+                                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded border border-slate-700 bg-slate-900">
+                                    {mappedImage?.thumbnailUrl || mappedImage?.imageUrl ? (
+                                      <img
+                                        alt={mappedImage.name || mappedImage.fileName}
+                                        className="h-full w-full object-cover"
+                                        loading="lazy"
+                                        src={buildApiUrl(mappedImage.thumbnailUrl || mappedImage.imageUrl || '')}
+                                      />
+                                    ) : (
+                                      <div className="flex h-full items-center justify-center px-1 text-center text-[10px] text-slate-400">N/A</div>
+                                    )}
+                                  </div>
+                                  <p className="min-w-0 truncate text-slate-200">
+                                    {mappedImage ? mappedImage.name || mappedImage.fileName : 'No artwork mapped'}
+                                  </p>
+                                </button>
+                                {mappedImage ? (
+                                  <Button
+                                    className={cn(
+                                      'h-7 w-7 rounded-full border p-0',
+                                      assignedArtworkIdSet.has(mappedImage.id)
+                                        ? 'cursor-not-allowed border-slate-800 bg-slate-900/70 text-slate-600 hover:bg-slate-900/70 hover:text-slate-600'
+                                        : 'border-slate-700 bg-slate-950/90 text-rose-200 hover:bg-rose-500/20 hover:text-rose-100',
+                                    )}
+                                    disabled={deletingArtworkIds.includes(mappedImage.id) || assignedArtworkIdSet.has(mappedImage.id)}
+                                    onClick={() => void handleDeleteArtwork(mappedImage)}
+                                    size="icon"
+                                    type="button"
+                                    variant="ghost"
+                                  >
+                                    {deletingArtworkIds.includes(mappedImage.id)
+                                      ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-orange-300" />
+                                      : <Trash2 className="h-3.5 w-3.5" />}
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {assignArtworkTarget !== null ? (
                 <div className="space-y-2">
                   {filteredArtworkImages.map((image) => {
                     const thumbnailSrc = image.thumbnailUrl ? buildApiUrl(image.thumbnailUrl) : '';
@@ -5501,6 +5825,7 @@ export function QuoteBuilderScreen({
                     </div>
                   ) : null}
                 </div>
+                ) : null}
               </div>
             ) : (
               <div className="rounded-md border border-slate-700 bg-slate-900 px-4 py-6 text-center text-sm text-slate-400">
