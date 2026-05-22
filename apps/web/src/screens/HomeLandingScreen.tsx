@@ -1,4 +1,4 @@
-import { CalendarRange, ClipboardCheck, Printer, Rocket } from 'lucide-react';
+import { CalendarRange, ClipboardCheck, Rocket, ShoppingCart } from 'lucide-react';
 import { Button } from '@flowiq/ui';
 
 type HomeLandingScreenProps = {
@@ -44,7 +44,7 @@ function WorkflowIllustration() {
 
         <rect fill="url(#nodeFill)" height="78" rx="14" stroke="rgba(255,255,255,0.14)" width="162" x="434" y="198" />
         <text fill="#F9FAFB" fontFamily="Inter, Geist, sans-serif" fontSize="14" fontWeight="600" x="452" y="226">
-          PrintIQ Output
+          ADS Output
         </text>
         <text fill="#9CA3AF" fontFamily="Inter, Geist, sans-serif" fontSize="11" x="452" y="248">
           Quote-ready export
@@ -85,7 +85,7 @@ export function HomeLandingScreen({ onOpenDashboard, onCreateCampaign }: HomeLan
                 Plan Outdoor Campaigns Faster
               </h1>
               <p className="mt-3 max-w-lg text-[15px] leading-relaxed text-[#9CA3AF] xl:text-[16px]">
-                Build schedules, review poster quantities, and generate PrintIQ-ready quotes.
+                Build schedules, review poster quantities, and generate ADS-ready quotes.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Button
@@ -110,8 +110,8 @@ export function HomeLandingScreen({ onOpenDashboard, onCreateCampaign }: HomeLan
             {[
               { icon: CalendarRange, title: 'Schedule', subtitle: 'Plan weekly slots' },
               { icon: ClipboardCheck, title: 'Review', subtitle: 'Validate quantities' },
-              { icon: Rocket, title: 'Finalise', subtitle: 'Lock campaign workflow' },
-              { icon: Printer, title: 'PrintIQ', subtitle: 'Generate quote outputs' },
+              { icon: Rocket, title: 'Export', subtitle: 'Prepare campaign outputs' },
+              { icon: ShoppingCart, title: 'ADS', subtitle: 'Place Order' },
             ].map((item, index, all) => (
               <div key={item.title} className="contents">
                 <div className="rounded-lg border border-white/10 bg-[#0E1627]/90 px-3 py-2.5 xl:px-4">
