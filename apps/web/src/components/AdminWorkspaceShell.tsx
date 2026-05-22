@@ -3,10 +3,11 @@ import { ArrowLeft, ChevronRight, CircleDollarSign, Database, Home, LogOut, MapP
 import { cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 
-export type AdminWorkspaceSection = 'landing' | 'quote' | 'artwork' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings';
+export type AdminWorkspaceSection = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings';
 
 export type AdminWorkspaceHandlers = {
   onBack?: () => void;
+  onOpenHome?: () => void;
   onOpenLanding?: () => void;
   onOpenUsers?: () => void;
   onOpenMappings?: () => void;
@@ -21,6 +22,7 @@ type AdminWorkspaceShellProps = AdminWorkspaceHandlers & {
   canAccessManagement: boolean;
   canAccessShippingCosts: boolean;
   canAccessPrintingCosts: boolean;
+  hideHeader?: boolean;
   pageTitle?: string;
   topBarActions?: ReactNode;
   children: ReactNode;
@@ -40,9 +42,11 @@ export function AdminWorkspaceShell({
   canAccessManagement,
   canAccessShippingCosts,
   canAccessPrintingCosts,
+  hideHeader,
   pageTitle,
   topBarActions,
   onBack,
+  onOpenHome,
   onOpenLanding,
   onOpenUsers,
   onOpenMappings,
@@ -151,9 +155,14 @@ export function AdminWorkspaceShell({
           {expanded ? (
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex items-center gap-1.5">
-                <div className="h-8 w-8 overflow-hidden border border-slate-600 bg-slate-900/90">
+                <button
+                  className="h-8 w-8 overflow-hidden border border-slate-600 bg-slate-900/90 transition hover:border-orange-300/50"
+                  onClick={() => (onOpenHome ?? onOpenLanding)?.()}
+                  title="Go to Landing Page"
+                  type="button"
+                >
                   <img alt="ADS logo" className="h-full w-full object-contain" src="/ads-logo.webp" />
-                </div>
+                </button>
                 <p className="truncate text-xs font-bold uppercase leading-none tracking-[0.16em] text-orange-300">Connect</p>
               </div>
               <button
@@ -167,9 +176,14 @@ export function AdminWorkspaceShell({
             </div>
           ) : (
             <div className="flex items-center justify-center">
-              <div className="h-10 w-10 overflow-hidden border border-slate-600 bg-slate-900/90">
+              <button
+                className="h-10 w-10 overflow-hidden border border-slate-600 bg-slate-900/90 transition hover:border-orange-300/50"
+                onClick={() => (onOpenHome ?? onOpenLanding)?.()}
+                title="Go to Landing Page"
+                type="button"
+              >
                 <img alt="ADS logo" className="h-full w-full object-contain" src="/ads-logo.webp" />
-              </div>
+              </button>
             </div>
           )}
         </div>
@@ -285,6 +299,7 @@ export function AdminWorkspaceShell({
       </aside>
 
       <section className="min-w-0 flex h-screen flex-1 flex-col overflow-hidden">
+        {!hideHeader ? (
         <header className="shrink-0">
           <div className="border-b border-white/10 bg-slate-900/62 backdrop-blur">
             <div
@@ -314,6 +329,7 @@ export function AdminWorkspaceShell({
             </div>
           </div>
         </header>
+        ) : null}
         <div className="flowiq-dialog-blur-target min-h-0 flex-1 overflow-y-auto">
           {children}
         </div>

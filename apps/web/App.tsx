@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AdminWorkspaceShell } from './src/components/AdminWorkspaceShell';
 import { CampaignArtworkFolderScreen } from './src/screens/CampaignArtworkFolderScreen';
 import { CampaignLandingScreen } from './src/screens/CampaignLandingScreen';
+import { HomeLandingScreen } from './src/screens/HomeLandingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { MappingAdminScreen } from './src/screens/MappingAdminScreen';
 import { PrintingCostSettingsScreen } from './src/screens/PrintingCostSettingsScreen';
@@ -15,7 +16,7 @@ import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { UserManagementScreen } from './src/screens/UserManagementScreen';
 
-type AppView = 'landing' | 'quote' | 'artwork' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings';
+type AppView = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings';
 
 type AppNavState = {
   view: AppView;
@@ -44,7 +45,8 @@ function parseView(raw: string | null): AppView {
   if (raw === 'quote') return 'quote';
   if (raw === 'artwork') return 'artwork';
   if (raw === 'admin') return 'users';
-  return 'landing';
+  if (raw === 'home') return 'home';
+  return 'home';
 }
 
 function readStateFromUrl(defaultTenantId: string | null): AppNavState {
@@ -64,7 +66,7 @@ function readStateFromUrl(defaultTenantId: string | null): AppNavState {
 
 function AppShell() {
   const { loading, session } = useAuth();
-  const [view, setView] = useState<AppView>('landing');
+  const [view, setView] = useState<AppView>('home');
   const [selectedAdminTenantId, setSelectedAdminTenantId] = useState<string | null>(session?.user.tenantId ?? null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [startFreshCampaign, setStartFreshCampaign] = useState(false);
@@ -131,15 +133,17 @@ function AppShell() {
   const canAccessManagement = session.user.role !== 'user';
   const canAccessSuperAdminPages = session.user.role === 'super_admin';
 
-  function renderGlobalSidebar(content: ReactNode, options?: { pageTitle?: string; topBarActions?: ReactNode }) {
+  function renderGlobalSidebar(content: ReactNode, options?: { pageTitle?: string; topBarActions?: ReactNode; hideHeader?: boolean }) {
     return (
       <AdminWorkspaceShell
         activeSection={view === 'quote' || view === 'artwork' ? 'landing' : view}
         canAccessManagement={canAccessManagement}
         canAccessPrintingCosts={canAccessSuperAdminPages}
         canAccessShippingCosts={canAccessSuperAdminPages}
+        hideHeader={options?.hideHeader}
         pageTitle={options?.pageTitle}
         topBarActions={options?.topBarActions}
+        onOpenHome={() => navigateTo('home')}
         onOpenLanding={() => navigateTo('landing')}
         onOpenMappings={canAccessManagement ? () => navigateTo('mappings') : undefined}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
@@ -253,6 +257,21 @@ function AppShell() {
         }
       />,
       { pageTitle: 'Master Artwork Folder' },
+    );
+  }
+
+  if (view === 'home') {
+    return renderGlobalSidebar(
+      <HomeLandingScreen
+        onCreateCampaign={() =>
+          navigateTo('quote', {
+            selectedCampaignId: null,
+            startFreshCampaign: true,
+          })
+        }
+        onOpenDashboard={() => navigateTo('landing')}
+      />,
+      { hideHeader: true },
     );
   }
 
