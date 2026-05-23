@@ -145,7 +145,7 @@ function formatKeyLabel(key: (typeof formatKeys)[number], overrides: SheetNameOv
   return resolved;
 }
 
-const creativeFormatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'Mega', 'DOT M', 'MP'] as const;
+const creativeFormatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0', 'Mega', 'DOT M', 'MP'] as const;
 type CreativeFormatKey = (typeof creativeFormatKeys)[number];
 
 type MultiCreativeImageMap = Partial<Record<CreativeFormatKey, string[]>>;
@@ -182,14 +182,10 @@ const TOP_FORM_THEME =
   'rounded-xl border border-white/10 bg-slate-900/75 p-5 shadow-[0_10px_22px_rgba(2,6,23,0.22)]';
 
 function creativeFormatLabel(key: CreativeFormatKey, overrides: SheetNameOverrides = {}) {
-  if (key === '8-sheet') {
-    return `${resolveFormatName('8-sheet', overrides)} / ${resolveFormatName('QA0', overrides)}`;
-  }
   return formatKeyLabel(key, overrides);
 }
 
 function toCreativeFormatKey(key: keyof QuantityBreakdown): CreativeFormatKey {
-  if (key === 'QA0') return '8-sheet';
   return key as CreativeFormatKey;
 }
 
@@ -227,6 +223,11 @@ function normalizeMultiCreativeImageIds(asset: CampaignAsset): MultiCreativeImag
 function getCreativeImageIdForFormat(asset: CampaignAsset, format: CreativeFormatKey) {
   const mapped = (asset.creativeImageIds?.[format] || '').trim();
   if (mapped) return mapped;
+  if (format === 'QA0') {
+    // Backward compatibility: legacy mappings often stored QA0 artwork in the 8-sheet slot.
+    const legacyQa0Mapped = (asset.creativeImageIds?.['8-sheet'] || '').trim();
+    if (legacyQa0Mapped) return legacyQa0Mapped;
+  }
   const hasExplicitFormatMappings = Object.values(asset.creativeImageIds ?? {}).some((value) => (value || '').trim().length > 0);
   if (hasExplicitFormatMappings) return '';
   return (asset.creativeImageId || '').trim();
@@ -2262,6 +2263,7 @@ export function QuoteBuilderScreen({
         || nextCreativeImageIds['6-sheet']
         || nextCreativeImageIds['4-sheet']
         || nextCreativeImageIds['2-sheet']
+        || nextCreativeImageIds.QA0
         || nextCreativeImageIds.Mega
         || nextCreativeImageIds['DOT M']
         || nextCreativeImageIds.MP
