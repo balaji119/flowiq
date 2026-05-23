@@ -6,7 +6,6 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AdminWorkspaceShell } from './src/components/AdminWorkspaceShell';
 import { CampaignArtworkFolderScreen } from './src/screens/CampaignArtworkFolderScreen';
 import { CampaignLandingScreen } from './src/screens/CampaignLandingScreen';
-import { HomeLandingScreen } from './src/screens/HomeLandingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { MappingAdminScreen } from './src/screens/MappingAdminScreen';
 import { PrintingCostSettingsScreen } from './src/screens/PrintingCostSettingsScreen';
@@ -278,14 +277,14 @@ function AppShell() {
 
   if (view === 'home') {
     return renderGlobalSidebar(
-      <HomeLandingScreen
-        onCreateCampaign={() =>
+      <CampaignLandingScreen
+        showHero
+        onOpenCampaign={(campaignId) => {
           navigateTo('quote', {
-            selectedCampaignId: null,
-            startFreshCampaign: true,
-          })
-        }
-        onOpenDashboard={() => navigateTo('landing')}
+            selectedCampaignId: campaignId,
+            startFreshCampaign: campaignId === null,
+          });
+        }}
       />,
       { hideHeader: true },
     );
@@ -293,6 +292,7 @@ function AppShell() {
 
   return renderGlobalSidebar(
     <CampaignLandingScreen
+      showHero
       onOpenCampaign={(campaignId) => {
         navigateTo('quote', {
           selectedCampaignId: campaignId,
@@ -300,7 +300,7 @@ function AppShell() {
         });
       }}
     />,
-    { pageTitle: 'Campaign Schedules' },
+    { hideHeader: true },
   );
 }
 
