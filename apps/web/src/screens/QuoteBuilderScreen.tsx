@@ -2043,7 +2043,7 @@ export function QuoteBuilderScreen({
       imageId,
       frameCount: countsByImageId.get(imageId) ?? 0,
     }));
-    setMultiArtworkRecords(recordsFromAsset.length > 0 ? recordsFromAsset : [{ id: `multi-artwork-record-${Date.now()}-0`, imageId: '', frameCount: 1 }]);
+    setMultiArtworkRecords(recordsFromAsset.length > 0 ? recordsFromAsset : [{ id: `multi-artwork-record-${Date.now()}-0`, imageId: '', frameCount: totalFrames }]);
     setMultiArtworkTarget({ marketId, assetId, formatKey, totalFrames });
     setMultiArtworkDialogOpen(true);
   }
@@ -2203,7 +2203,9 @@ export function QuoteBuilderScreen({
 
   function addMultiArtworkRecord() {
     setMultiArtworkRecords((current) => {
-      const next = [...current, { id: `multi-artwork-record-${Date.now()}-${current.length}`, imageId: '', frameCount: 1 }];
+      const usedFrames = current.reduce((sum, record) => sum + Math.max(0, Math.floor(record.frameCount || 0)), 0);
+      const remainingFrames = Math.max(0, (multiArtworkTarget?.totalFrames ?? 0) - usedFrames);
+      const next = [...current, { id: `multi-artwork-record-${Date.now()}-${current.length}`, imageId: '', frameCount: remainingFrames }];
       syncMultiArtworkRecordsToAsset(next);
       return next;
     });
