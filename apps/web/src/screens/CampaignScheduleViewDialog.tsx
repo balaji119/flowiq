@@ -555,7 +555,7 @@ export function CampaignScheduleViewDialog({
                               <div className="mb-3 flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2">
                                   <span className="h-2 w-2 rounded-full bg-orange-300 shadow-[0_0_12px_rgba(253,186,116,0.65)]" />
-                                  <p className="text-sm font-semibold text-white">{market.market}</p>
+                                  <p className="text-sm font-semibold uppercase tracking-[0.12em] text-orange-300">{market.market}</p>
                                 </div>
                                 <span className="text-xs text-slate-400">{market.assets.length} assets</span>
                               </div>

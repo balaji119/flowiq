@@ -4536,14 +4536,14 @@ export function QuoteBuilderScreen({
                     const deliveryAddressOptions = deliveryAddressOptionsFor(market.market);
                     return (
                       <div key={`finalize-map-${market.id}`} className={cn('relative rounded-xl border', marketTheme.card)}>
-                        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <span className={cn('h-2 w-2 rounded-full', marketTheme.accent)} />
-                            <span className="text-xs font-semibold uppercase tracking-[0.13em] text-slate-200">{market.market || 'Market'}</span>
+                        <div className="flex items-center justify-between border-b border-orange-300/20 bg-gradient-to-r from-orange-500/10 via-orange-400/5 to-transparent px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <span className={cn('h-2.5 w-2.5 rounded-full ring-2 ring-orange-300/35', marketTheme.accent)} />
+                            <span className="text-sm font-bold uppercase tracking-[0.13em] text-orange-300">{market.market || 'Market'}</span>
                           </div>
                         </div>
                         <Button
-                          className="absolute right-11 top-2.5 h-7 w-7"
+                          className="absolute right-11 top-2.5 h-7 w-7 border border-orange-300/20 bg-slate-900/80 hover:bg-orange-500/10"
                           onClick={() => setExpandedMarketId(market.id)}
                           size="icon"
                           title="Expand market"
@@ -4553,7 +4553,7 @@ export function QuoteBuilderScreen({
                           <Maximize2 className="h-3.5 w-3.5" />
                         </Button>
                         <Button
-                          className="absolute right-3 top-2.5 h-7 w-7"
+                          className="absolute right-3 top-2.5 h-7 w-7 border border-orange-300/20 bg-slate-900/80 hover:bg-orange-500/10"
                           onClick={() => openEditMarketDialog(market.id)}
                           size="icon"
                           title="Edit market"
