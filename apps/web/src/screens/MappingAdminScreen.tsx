@@ -1,17 +1,19 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { FileJson, LoaderCircle, Pencil, Plus, Shield, Trash2, Upload } from 'lucide-react';
-import { CalculatorMappingInput, CalculatorMappingRecord, MarketMetadata, TenantRecord, createEmptyBreakdown, formatKeys } from '@flowiq/shared';
+import { CalculatorMappingInput, CalculatorMappingRecord, MarketMetadata, SheetNameOverrides, TenantRecord, createEmptyBreakdown, formatKeys } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
 import { useAuth } from '../context/AuthContext';
 import {
   createCalculatorMapping,
   deleteCalculatorMapping,
+  fetchAdminSheetNameOverrides,
   fetchCalculatorMappings,
   fetchTenants,
   importCalculatorMappings,
   updateCalculatorMapping,
 } from '../services/adminApi';
+import { resolveFormatName, sanitizeSheetNameOverrides } from '../services/sheetNameOverrides';
 
 type MappingAdminScreenProps = {
   onBack: () => void;
@@ -36,8 +38,8 @@ function parseImportedMarkets(raw: unknown): MarketMetadata[] {
   return raw as MarketMetadata[];
 }
 
-function formatSheetHeader(key: (typeof formatKeys)[number]) {
-  return key.includes('-sheet') ? key.replace('-', ' ') : key;
+function formatSheetHeader(key: (typeof formatKeys)[number], overrides: SheetNameOverrides) {
+  return resolveFormatName(key, overrides);
 }
 
 export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings, onOpenShippingCosts, onOpenShippingSettings, onOpenUsers, tenantId }: MappingAdminScreenProps) {
@@ -50,6 +52,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(session?.user.tenantId ?? null);
   const [mappings, setMappings] = useState<CalculatorMappingRecord[]>([]);
+  const [sheetNameOverrides, setSheetNameOverrides] = useState<SheetNameOverrides>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<CalculatorMappingInput>(emptyForm);
   const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
@@ -124,6 +127,30 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
       active = false;
     };
   }, [canSwitchTenant, effectiveTenantId]);
+
+  useEffect(() => {
+    let active = true;
+    if (!effectiveTenantId) {
+      setSheetNameOverrides({});
+      return;
+    }
+
+    async function loadSheetNameOverrides() {
+      try {
+        const response = await fetchAdminSheetNameOverrides(effectiveTenantId);
+        if (!active) return;
+        setSheetNameOverrides(sanitizeSheetNameOverrides(response.settings.overrides));
+      } catch {
+        if (!active) return;
+        setSheetNameOverrides({});
+      }
+    }
+
+    void loadSheetNameOverrides();
+    return () => {
+      active = false;
+    };
+  }, [effectiveTenantId]);
 
   const marketOptions = useMemo(() => [...new Set(mappings.map((mapping) => mapping.market))].sort((left, right) => left.localeCompare(right)), [mappings]);
   const mappingById = useMemo(() => new Map(mappings.map((mapping) => [mapping.id, mapping])), [mappings]);
@@ -398,7 +425,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                     <th className="border border-slate-700 px-4 py-3 text-left">State</th>
                     <th className="border border-slate-700 px-4 py-3 text-left">Maintenance Asset</th>
                     {formatKeys.map((key) => (
-                      <th key={`mapping-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatSheetHeader(key)}</th>
+                      <th key={`mapping-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatSheetHeader(key, sheetNameOverrides)}</th>
                     ))}
                     <th className="sticky right-0 z-20 border border-slate-700 bg-slate-950 px-4 py-3 text-center">Actions</th>
                   </tr>
