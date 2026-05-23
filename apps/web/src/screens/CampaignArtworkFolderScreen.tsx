@@ -16,6 +16,8 @@ type CampaignArtworkFolderScreenProps = {
 type ArtworkFileGroup = {
   key: string;
   fileName: string;
+  creativeName: string;
+  creativeOrder: number;
   thumbnailUrl: string;
   pages: Array<{ id: string; url: string; fileName: string; mimeType: string; pageNumber: number }>;
 };
@@ -159,7 +161,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
   const artworkFiles = useMemo(() => {
     const grouped = new Map<string, ArtworkFileGroup>();
 
-    (campaign?.values.printImages ?? []).forEach((image) => {
+    (campaign?.values.printImages ?? []).forEach((image, index) => {
       const sourcePdfFileName = (image.sourcePdfFileName || '').trim();
       const sourcePdfStoredName = (image.sourcePdfStoredName || '').trim();
       const sourcePdfUrl = (image.sourcePdfUrl || '').trim();
@@ -179,9 +181,15 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
       const current = grouped.get(key) ?? {
         key,
         fileName: hasSourcePdf ? fileName : toPdfFileName(key),
+        creativeName: `Creative${index + 1}`,
+        creativeOrder: index + 1,
         thumbnailUrl: image.thumbnailUrl ? toAbsoluteUrl(buildApiUrl(image.thumbnailUrl)) : '',
         pages: [],
       };
+      if ((index + 1) < current.creativeOrder) {
+        current.creativeOrder = index + 1;
+        current.creativeName = `Creative${index + 1}`;
+      }
       if (!current.thumbnailUrl && image.thumbnailUrl) {
         current.thumbnailUrl = toAbsoluteUrl(buildApiUrl(image.thumbnailUrl));
       }
@@ -203,7 +211,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
         ...group,
         pages: [...group.pages].sort((a, b) => a.pageNumber - b.pageNumber),
       }))
-      .sort((a, b) => a.fileName.localeCompare(b.fileName));
+      .sort((a, b) => a.creativeOrder - b.creativeOrder || a.fileName.localeCompare(b.fileName));
   }, [campaign]);
 
   function openFile(group: ArtworkFileGroup) {
@@ -316,7 +324,8 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
             <thead>
               <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                 <th className="w-[14%] border border-slate-700 px-4 py-3 text-left">Thumbnail</th>
-                <th className="w-[64%] border border-slate-700 px-4 py-3 text-left">File</th>
+                <th className="w-[14%] border border-slate-700 px-4 py-3 text-left">Creative</th>
+                <th className="w-[50%] border border-slate-700 px-4 py-3 text-left">File</th>
                 <th className="w-[22%] border border-slate-700 px-4 py-3 text-center">Action</th>
               </tr>
             </thead>
@@ -338,6 +347,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
                       </div>
                     )}
                   </td>
+                  <td className="border border-slate-700 px-4 py-3 text-slate-200">{file.creativeName}</td>
                   <td className="border border-slate-700 px-4 py-3 text-slate-200 break-words whitespace-normal">{file.fileName}</td>
                   <td className="border border-slate-700 px-4 py-3">
                     {(() => {
