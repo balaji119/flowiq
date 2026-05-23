@@ -24,6 +24,7 @@ function createEmptyCostDraft(): AssetCostDraft {
     Mega: '0',
     'DOT M': '0',
     MP: '0',
+    FF: '0',
   };
 }
 

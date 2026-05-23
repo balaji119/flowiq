@@ -14,7 +14,7 @@ export const sheetNamePresetEntries: SheetNamePresetEntry[] = [
   { key: 'mega', label: 'Mega' },
   { key: 'dot-m', label: 'DOT Mega' },
   { key: 'mega-portrait', label: 'Mega Portrait' },
-  { key: 'mini-mega', label: 'Mini Mega' },
+  { key: 'ff', label: 'Ferro Film' },
 ];
 
 export const defaultSheetNamePresetOverrides: Record<string, string> = {
@@ -52,8 +52,7 @@ export function toCanonicalSheetNameKey(value: string) {
   if (normalized === 'mega') return 'mega';
   if (normalized === 'dot m' || normalized === 'dotm' || normalized === 'dot mega' || normalized === 'dot megasite') return 'dot-m';
   if (normalized === 'mega portrait' || normalized === 'mp') return 'mega-portrait';
-  if (normalized === 'mini mega') return 'mini-mega';
-
+  if (normalized === 'ff' || normalized === 'ferro film' || normalized === 'ferrofilm') return 'ff';
   return normalized.replace(/\s+/g, '-');
 }
 
@@ -73,6 +72,7 @@ export function defaultFormatDisplayName(key: FormatKey) {
   if (key === 'Mega') return 'Mega';
   if (key === 'DOT M') return 'DOT Mega';
   if (key === 'MP') return 'Mega Portrait';
+  if (key === 'FF') return 'Ferro Film';
   if (key === 'QA0') return 'QA0';
   return key;
 }
@@ -86,6 +86,7 @@ export function canonicalKeyForFormat(key: FormatKey) {
   if (key === 'Mega') return 'mega';
   if (key === 'DOT M') return 'dot-m';
   if (key === 'MP') return 'mega-portrait';
+  if (key === 'FF') return 'ff';
   return toCanonicalSheetNameKey(key);
 }
 

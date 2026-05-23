@@ -103,9 +103,21 @@ func newMappingStore(pool *pgxpool.Pool) *mappingStore {
 }
 
 func normalizeQuantityBreakdown(input quantityBreakdown) quantityBreakdown {
-	normalized := createEmptyBreakdown()
+	normalized := quantityBreakdown{}
+	for rawKey, value := range input {
+		key := strings.TrimSpace(rawKey)
+		if key == "" {
+			continue
+		}
+		if value < 0 {
+			value = 0
+		}
+		normalized[key] = value
+	}
 	for _, key := range formatKeys {
-		normalized[key] = input[key]
+		if _, exists := normalized[key]; !exists {
+			normalized[key] = 0
+		}
 	}
 	return normalized
 }

@@ -10,6 +10,7 @@ export function createEmptyBreakdown(): QuantityBreakdown {
     Mega: 0,
     'DOT M': 0,
     MP: 0,
+    FF: 0,
   };
 }
 
@@ -38,7 +39,7 @@ export function frameTotal(breakdown: QuantityBreakdown) {
 }
 
 export function specialFormatTotal(breakdown: QuantityBreakdown) {
-  return breakdown.Mega + breakdown['DOT M'] + breakdown.MP;
+  return breakdown.Mega + breakdown['DOT M'] + breakdown.MP + breakdown.FF;
 }
 
 export function totalUnits(breakdown: QuantityBreakdown) {

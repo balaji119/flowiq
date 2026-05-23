@@ -1,4 +1,4 @@
-export const formatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0', 'Mega', 'DOT M', 'MP'] as const;
+export const formatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0', 'Mega', 'DOT M', 'MP', 'FF'] as const;
 
 export type FormatKey = (typeof formatKeys)[number];
 
@@ -80,8 +80,8 @@ export type CampaignAsset = {
   assetSearch: string;
   selectedWeeks: number[];
   creativeImageId: string;
-  creativeImageIds?: Partial<Record<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'QA0' | 'Mega' | 'DOT M' | 'MP', string>>;
-  multiCreativeImageIds?: Partial<Record<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'QA0' | 'Mega' | 'DOT M' | 'MP', string[]>>;
+  creativeImageIds?: Partial<Record<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'QA0' | 'Mega' | 'DOT M' | 'MP' | 'FF', string>>;
+  multiCreativeImageIds?: Partial<Record<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'QA0' | 'Mega' | 'DOT M' | 'MP' | 'FF', string[]>>;
   deliveryAddress: string;
 };
 

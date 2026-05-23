@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, Plus, Save, Shield, Trash2 } from 'lucide-react';
 import { SheetNameOverrides, TenantRecord } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from '@flowiq/ui';
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
 import { useAuth } from '../context/AuthContext';
 import { fetchAdminSheetNameOverrides, fetchTenants, upsertAdminSheetNameOverrides } from '../services/adminApi';
@@ -45,10 +45,44 @@ export function SettingsScreen({
   const [presetOverrides, setPresetOverrides] = useState<Record<string, string>>({});
   const [multipleArtworkFormats, setMultipleArtworkFormats] = useState<Record<string, boolean>>({});
   const [customOverrides, setCustomOverrides] = useState<CustomOverrideRow[]>([]);
+  const [savedSnapshot, setSavedSnapshot] = useState('');
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
+  const [pendingNavigationAction, setPendingNavigationAction] = useState<(() => void) | null>(null);
 
   const canSwitchTenant = session?.user.role === 'super_admin' && !tenantId;
   const effectiveTenantId = tenantId ?? (canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined);
   const selectedTenant = useMemo(() => tenants.find((tenant) => tenant.id === selectedTenantId) ?? null, [selectedTenantId, tenants]);
+
+  function buildSettingsSnapshot(
+    presetValues: Record<string, string>,
+    customValues: CustomOverrideRow[],
+    multipleArtworkValues: Record<string, boolean>,
+  ) {
+    const merged: SheetNameOverrides = {};
+    sheetNamePresetEntries.forEach((entry) => {
+      const nextValue = (presetValues[entry.key] || '').trim();
+      if (nextValue) merged[entry.key] = nextValue;
+    });
+    customValues.forEach((row) => {
+      const sourceKey = toCanonicalSheetNameKey(row.source);
+      const nextValue = row.name.trim();
+      if (!sourceKey || !nextValue) return;
+      merged[sourceKey] = nextValue;
+    });
+    const normalizedMultipleArtworkFormats = Object.fromEntries(
+      Object.entries(multipleArtworkValues).filter(([, enabled]) => Boolean(enabled)),
+    );
+    return JSON.stringify({
+      overrides: merged,
+      multipleArtworkFormats: normalizedMultipleArtworkFormats,
+    });
+  }
+
+  const currentSnapshot = useMemo(
+    () => buildSettingsSnapshot(presetOverrides, customOverrides, multipleArtworkFormats),
+    [presetOverrides, customOverrides, multipleArtworkFormats],
+  );
+  const hasUnsavedChanges = savedSnapshot !== '' && currentSnapshot !== savedSnapshot;
 
   useEffect(() => {
     let active = true;
@@ -110,6 +144,7 @@ export function SettingsScreen({
           .map(([key, value]) => createCustomRow(key, value))
           .sort((left, right) => left.source.localeCompare(right.source));
         setCustomOverrides(nextCustom);
+        setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}));
       } catch (loadError) {
         if (active) {
           setError(loadError instanceof Error ? loadError.message : 'Unable to load settings');
@@ -170,6 +205,7 @@ export function SettingsScreen({
         .map(([key, value]) => createCustomRow(key, value))
         .sort((left, right) => left.source.localeCompare(right.source));
       setCustomOverrides(nextCustom);
+      setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}));
       setNotice('Sheet name overrides saved.');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save settings');
@@ -193,6 +229,26 @@ export function SettingsScreen({
     );
   }
 
+  useEffect(() => {
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      if (!hasUnsavedChanges) return;
+      event.preventDefault();
+      event.returnValue = '';
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  function confirmDiscardChanges(action: () => void) {
+    if (!hasUnsavedChanges) {
+      action();
+      return;
+    }
+    setPendingNavigationAction(() => action);
+    setDiscardDialogOpen(true);
+  }
+
   return (
     <AdminWorkspaceShell
       activeSection="settings"
@@ -206,14 +262,14 @@ export function SettingsScreen({
           {saving ? 'Saving...' : 'Save Changes'}
         </Button>
       }
-      onBack={onBack}
-      onOpenLanding={onBack}
-      onOpenMappings={onOpenMappings}
-      onOpenPrintingCosts={onOpenPrintingCosts}
+      onBack={() => confirmDiscardChanges(onBack)}
+      onOpenLanding={() => confirmDiscardChanges(onBack)}
+      onOpenMappings={onOpenMappings ? () => confirmDiscardChanges(onOpenMappings) : undefined}
+      onOpenPrintingCosts={onOpenPrintingCosts ? () => confirmDiscardChanges(onOpenPrintingCosts) : undefined}
       onOpenSettings={() => {}}
-      onOpenShippingCosts={onOpenShippingCosts}
-      onOpenShippingSettings={onOpenShippingSettings}
-      onOpenUsers={onOpenUsers}
+      onOpenShippingCosts={onOpenShippingCosts ? () => confirmDiscardChanges(onOpenShippingCosts) : undefined}
+      onOpenShippingSettings={onOpenShippingSettings ? () => confirmDiscardChanges(onOpenShippingSettings) : undefined}
+      onOpenUsers={onOpenUsers ? () => confirmDiscardChanges(onOpenUsers) : undefined}
     >
       <main className="dense-main flex min-h-0 w-full flex-col gap-6">
         {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
@@ -269,17 +325,32 @@ export function SettingsScreen({
           ) : (
             <>
               <div className="overflow-x-auto rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
+                <div className="flex items-center justify-between border-b border-slate-700/70 px-4 py-3">
+                  <Label className="text-sm font-semibold text-slate-100">Sheet Size Mappings</Label>
+                  <Button
+                    className="h-8 px-3"
+                    onClick={() => setCustomOverrides((current) => [...current, createCustomRow()])}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Custom
+                  </Button>
+                </div>
                 <table className="w-full table-fixed border-collapse text-sm">
                   <colgroup>
-                    <col className="w-[220px]" />
+                    <col className="w-[260px]" />
                     <col className="w-[420px]" />
-                    <col className="w-[160px]" />
+                    <col className="w-[180px]" />
+                    <col className="w-[90px]" />
                   </colgroup>
                   <thead>
                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                       <th className="border border-slate-700 px-4 py-2 text-left">Current Name</th>
                       <th className="border border-slate-700 px-4 py-2 text-left">Override Name</th>
                       <th className="border border-slate-700 px-4 py-2 text-center">Multiple Artwork</th>
+                      <th className="border border-slate-700 px-4 py-2 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -315,65 +386,131 @@ export function SettingsScreen({
                             type="checkbox"
                           />
                         </td>
+                        <td className="border border-slate-700 px-4 py-2 text-center">
+                          <Button
+                            className="h-8 w-8 cursor-not-allowed rounded-md border-0 p-0 text-slate-600 opacity-60"
+                            disabled
+                            title="Preset rows cannot be deleted"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
                       </tr>
                     ))}
+                    {customOverrides.map((row, rowIndex) => {
+                      const displayName = row.source.trim() || `Custom ${rowIndex + 1}`;
+                      return (
+                        <tr
+                          key={row.id}
+                          className={`border-t border-white/5 ${((sheetNamePresetEntries.length + rowIndex) % 2 === 0) ? 'bg-[#1a2740]/70' : 'bg-[#162033]'}`}
+                        >
+                          <td className="border border-slate-700 px-4 py-2">
+                            <Input
+                              className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-orange-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+                              onChange={(event) =>
+                                setCustomOverrides((current) => current.map((item) => (item.id === row.id ? { ...item, source: event.target.value } : item)))
+                              }
+                              placeholder={`Current name (for example ${displayName})`}
+                              value={row.source}
+                            />
+                          </td>
+                          <td className="border border-slate-700 px-4 py-2">
+                            <Input
+                              className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-orange-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+                              onChange={(event) =>
+                                setCustomOverrides((current) => current.map((item) => (item.id === row.id ? { ...item, name: event.target.value } : item)))
+                              }
+                              placeholder={`Override for ${displayName}`}
+                              value={row.name}
+                            />
+                          </td>
+                          <td className="border border-slate-700 px-4 py-2 text-center">
+                            <input
+                              checked={Boolean(multipleArtworkFormats[toCanonicalSheetNameKey(row.source)])}
+                              className="h-4 w-4 accent-orange-400"
+                              onChange={(event) => {
+                                const customKey = toCanonicalSheetNameKey(row.source);
+                                if (!customKey) return;
+                                setMultipleArtworkFormats((current) => ({
+                                  ...current,
+                                  [customKey]: event.target.checked,
+                                }));
+                              }}
+                              type="checkbox"
+                            />
+                          </td>
+                          <td className="border border-slate-700 px-4 py-2 text-center">
+                            <Button
+                              className="h-8 w-8 rounded-md border-0 p-0 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200"
+                              onClick={() => {
+                                const customKey = toCanonicalSheetNameKey(row.source);
+                                setCustomOverrides((current) => current.filter((item) => item.id !== row.id));
+                                if (customKey) {
+                                  setMultipleArtworkFormats((current) => {
+                                    const next = { ...current };
+                                    delete next[customKey];
+                                    return next;
+                                  });
+                                }
+                              }}
+                              type="button"
+                              variant="ghost"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-semibold text-slate-100">Additional custom sizes</Label>
-                  <Button
-                    className="h-8 px-3"
-                    onClick={() => setCustomOverrides((current) => [...current, createCustomRow()])}
-                    size="sm"
-                    type="button"
-                    variant="secondary"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Custom
-                  </Button>
-                </div>
-                {customOverrides.length === 0 ? (
-                  <p className="text-sm text-slate-400">No additional custom size mappings added.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {customOverrides.map((row) => (
-                      <div key={row.id} className="grid gap-2 rounded-md border border-slate-700 bg-slate-800/60 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                        <Input
-                          className="h-9 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-orange-400 focus-visible:ring-0 focus-visible:ring-offset-0"
-                          onChange={(event) =>
-                            setCustomOverrides((current) => current.map((item) => (item.id === row.id ? { ...item, source: event.target.value } : item)))
-                          }
-                          placeholder="Current name (for example 3 Sheet)"
-                          value={row.source}
-                        />
-                        <Input
-                          className="h-9 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-orange-400 focus-visible:ring-0 focus-visible:ring-offset-0"
-                          onChange={(event) =>
-                            setCustomOverrides((current) => current.map((item) => (item.id === row.id ? { ...item, name: event.target.value } : item)))
-                          }
-                          placeholder="Override name"
-                          value={row.name}
-                        />
-                        <Button
-                          className="h-9 px-3"
-                          onClick={() => setCustomOverrides((current) => current.filter((item) => item.id !== row.id))}
-                          type="button"
-                          variant="ghost"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </>
           )}
         </section>
       </main>
+      <Dialog
+        open={discardDialogOpen}
+        onOpenChange={(open) => {
+          setDiscardDialogOpen(open);
+          if (!open) setPendingNavigationAction(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader className="pb-1">
+            <DialogTitle>Unsaved Changes</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes in Settings. Leaving now will discard them.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              onClick={() => {
+                setDiscardDialogOpen(false);
+                setPendingNavigationAction(null);
+              }}
+              type="button"
+              variant="ghost"
+            >
+              Stay
+            </Button>
+            <Button
+              className="border border-rose-300/35 bg-rose-600 text-white hover:bg-rose-500"
+              onClick={() => {
+                const action = pendingNavigationAction;
+                setDiscardDialogOpen(false);
+                setPendingNavigationAction(null);
+                if (action) action();
+              }}
+              type="button"
+            >
+              Discard & Leave
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AdminWorkspaceShell>
   );
 }

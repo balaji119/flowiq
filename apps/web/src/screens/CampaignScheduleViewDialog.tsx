@@ -55,6 +55,13 @@ function resolveArtworkUrl(imageUrl?: string, thumbUrl?: string) {
   return candidate;
 }
 
+function formatBreakdownLabel(key: string) {
+  if (key === 'DOT M') return 'DOT Mega';
+  if (key === 'MP') return 'Mega Portrait';
+  if (key === 'FF') return 'Ferro Film';
+  return key;
+}
+
 export function CampaignScheduleViewDialog({
   open,
   loading,
@@ -413,16 +420,19 @@ export function CampaignScheduleViewDialog({
     return (value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
-  function formatArtworkType(typeKey: '8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'Mega' | 'DOT M' | 'MP') {
+  function formatArtworkType(typeKey: '8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'Mega' | 'DOT M' | 'MP' | 'FF') {
     if (typeKey === '8-sheet' || typeKey === '6-sheet' || typeKey === '4-sheet' || typeKey === '2-sheet') return 'Quad';
+    if (typeKey === 'DOT M') return 'DOT Mega';
+    if (typeKey === 'MP') return 'Mega Portrait';
+    if (typeKey === 'FF') return 'Ferro Film';
     return typeKey;
   }
 
   function buildAttachedArtworkRows(asset: CampaignRecord['values']['campaignMarkets'][number]['assets'][number]) {
     const rowsByImageAndType = new Map<string, { imageId: string; frameCount: number; type: string }>();
-    const formatKeys: Array<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'Mega' | 'DOT M' | 'MP'> = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'Mega', 'DOT M', 'MP'];
+    const formatKeys: Array<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'Mega' | 'DOT M' | 'MP' | 'FF'> = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'Mega', 'DOT M', 'MP', 'FF'];
 
-    const pushArtwork = (rawImageId: string, typeKey: '8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'Mega' | 'DOT M' | 'MP', frameCount: number) => {
+    const pushArtwork = (rawImageId: string, typeKey: '8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'Mega' | 'DOT M' | 'MP' | 'FF', frameCount: number) => {
       const imageId = (rawImageId || '').trim();
       if (!imageId || frameCount <= 0) return;
       const type = formatArtworkType(typeKey);
@@ -584,6 +594,7 @@ export function CampaignScheduleViewDialog({
                               Mega: line?.breakdown.Mega ?? 0,
                               'DOT M': line?.breakdown['DOT M'] ?? 0,
                               MP: line?.breakdown.MP ?? 0,
+                              FF: line?.breakdown.FF ?? 0,
                             };
                             const frameBreakdown = {
                               '8-sheet': (line?.breakdown['8-sheet'] ?? 0) / 4,
@@ -594,6 +605,7 @@ export function CampaignScheduleViewDialog({
                               Mega: line?.breakdown.Mega ?? 0,
                               'DOT M': line?.breakdown['DOT M'] ?? 0,
                               MP: line?.breakdown.MP ?? 0,
+                              FF: line?.breakdown.FF ?? 0,
                             };
                             return (
                                     <button
@@ -715,7 +727,7 @@ export function CampaignScheduleViewDialog({
                 <p className="mt-1 text-xs text-slate-400">Total: {selectedAssetDetails.postersTotal}</p>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-200">
                   {Object.entries(selectedAssetDetails.posterBreakdown).map(([k, v]) => (
-                    <p key={`poster-${k}`}>{k}: {v}</p>
+                    <p key={`poster-${k}`}>{formatBreakdownLabel(k)}: {v}</p>
                   ))}
                 </div>
               </div>
@@ -724,7 +736,7 @@ export function CampaignScheduleViewDialog({
                 <p className="mt-1 text-xs text-slate-400">Total: {selectedAssetDetails.framesTotal}</p>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-200">
                   {Object.entries(selectedAssetDetails.frameBreakdown).map(([k, v]) => (
-                    <p key={`frame-${k}`}>{k}: {v}</p>
+                    <p key={`frame-${k}`}>{formatBreakdownLabel(k)}: {v}</p>
                   ))}
                 </div>
               </div>
