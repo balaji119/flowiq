@@ -85,11 +85,16 @@ function applyCampaignToScreen(
 }
 
 function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBreakdown; inverse?: boolean }) {
+  const displayLabel: Partial<Record<keyof QuantityBreakdown, string>> = {
+    'DOT M': 'DOT Mega',
+    MP: 'Mega Portrait',
+    FF: 'Ferro Film',
+  };
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {formatKeys.map((key) => (
         <div key={key} className={cn('rounded-md border px-4 py-3', inverse ? 'border-slate-700 bg-slate-900' : 'border-slate-700/70 bg-slate-800/80')}>
-          <p className={cn('text-xs font-bold uppercase tracking-[0.18em]', inverse ? 'text-orange-200' : 'text-slate-300')}>{key}</p>
+          <p className={cn('text-xs font-bold uppercase tracking-[0.18em]', inverse ? 'text-orange-200' : 'text-slate-300')}>{displayLabel[key] ?? key}</p>
           <p className="mt-2 text-xl font-black text-white">{breakdown[key]}</p>
         </div>
       ))}
@@ -108,6 +113,7 @@ function buildReviewRows(totals: CampaignTotals) {
     Mega: totals.breakdown.Mega,
     'DOT M': totals.breakdown['DOT M'],
     MP: totals.breakdown.MP,
+    FF: totals.breakdown.FF,
   };
   const computedFrameTotal = formatKeys.reduce((sum, key) => sum + (frameBreakdown[key] ?? 0), 0);
 
@@ -145,7 +151,7 @@ function formatKeyLabel(key: (typeof formatKeys)[number], overrides: SheetNameOv
   return resolved;
 }
 
-const creativeFormatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0', 'Mega', 'DOT M', 'MP'] as const;
+const creativeFormatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0', 'Mega', 'DOT M', 'MP', 'FF'] as const;
 type CreativeFormatKey = (typeof creativeFormatKeys)[number];
 
 type MultiCreativeImageMap = Partial<Record<CreativeFormatKey, string[]>>;
@@ -2267,6 +2273,7 @@ export function QuoteBuilderScreen({
         || nextCreativeImageIds.Mega
         || nextCreativeImageIds['DOT M']
         || nextCreativeImageIds.MP
+        || nextCreativeImageIds.FF
         || '';
       return {
         ...current,
@@ -2874,7 +2881,7 @@ export function QuoteBuilderScreen({
 
       const updateSummary = (creativeNumber: number, key: keyof QuantityBreakdown, quantity: number) => {
         if (quantity <= 0) return;
-        const bucket = creativeSummary.get(creativeNumber) ?? { '8-sheet': 0, '6-sheet': 0, '4-sheet': 0, '2-sheet': 0, QA0: 0, Mega: 0, 'DOT M': 0, MP: 0 };
+        const bucket = creativeSummary.get(creativeNumber) ?? { '8-sheet': 0, '6-sheet': 0, '4-sheet': 0, '2-sheet': 0, QA0: 0, Mega: 0, 'DOT M': 0, MP: 0, FF: 0 };
         bucket[key] += quantity;
         creativeSummary.set(creativeNumber, bucket);
       };
@@ -2931,6 +2938,7 @@ export function QuoteBuilderScreen({
         Mega: 1,
         'DOT M': 1,
         MP: 1,
+        FF: 1,
       };
       const summaryLabels: Record<keyof QuantityBreakdown, string> = {
         '8-sheet': 'posters',
@@ -2941,6 +2949,7 @@ export function QuoteBuilderScreen({
         Mega: resolveFormatName('Mega', normalizedSheetNameOverrides),
         'DOT M': resolveFormatName('DOT M', normalizedSheetNameOverrides),
         MP: resolveFormatName('MP', normalizedSheetNameOverrides),
+        FF: resolveFormatName('FF', normalizedSheetNameOverrides),
       };
 
       // Collect delivery addresses from campaign data regardless of mapped creatives.
@@ -3164,7 +3173,7 @@ export function QuoteBuilderScreen({
           rowsByCreative.set(row.creativeNumber, bucket);
         });
 
-        const quantityColumns = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+        const quantityColumns = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
         const rowTotals = (creativeRows: typeof printRowsSorted) => {
           const totals = new Map<number, number>();
           creativeRows.forEach((row) => {
@@ -3186,7 +3195,7 @@ export function QuoteBuilderScreen({
           const hasMegaPortrait = (totals.get(20) ?? 0) > 0;
           const hasDotMega = (totals.get(19) ?? 0) > 0;
           const hasMega = (totals.get(18) ?? 0) > 0;
-          const lowerNames = creativeRows.map((row) => row.fileName.toLowerCase()).join(' ');
+          const hasFerroFilm = (totals.get(21) ?? 0) > 0;
           if (hasFourSheet) return '4-sheet';
           if (hasTwoSheet) return '2-sheet';
           if (hasSixSheet) return '6-sheet';
@@ -3194,12 +3203,12 @@ export function QuoteBuilderScreen({
           if (hasQa0) return 'QA0';
           if (hasMegaPortrait) return 'Mega Portrait';
           if (hasDotMega) return 'DOT Mega';
-          if (hasMega) return lowerNames.includes('mini') ? 'Mini Mega' : 'Mega';
+          if (hasMega) return 'Mega';
+          if (hasFerroFilm) return 'FF';
           return 'Artwork';
         };
 
         const resolveCreativeTypeLabel = (label: string) => {
-          if (label === 'Mini Mega') return resolveSheetName('Mini Mega', normalizedSheetNameOverrides, 'mini-mega');
           if (label === '8-sheet') return resolveFormatName('8-sheet', normalizedSheetNameOverrides);
           if (label === '6-sheet') return resolveFormatName('6-sheet', normalizedSheetNameOverrides);
           if (label === '4-sheet') return resolveFormatName('4-sheet', normalizedSheetNameOverrides);
@@ -3208,6 +3217,7 @@ export function QuoteBuilderScreen({
           if (label === 'Mega') return resolveFormatName('Mega', normalizedSheetNameOverrides);
           if (label === 'DOT Mega') return resolveFormatName('DOT M', normalizedSheetNameOverrides);
           if (label === 'Mega Portrait') return resolveFormatName('MP', normalizedSheetNameOverrides);
+          if (label === 'FF') return resolveFormatName('FF', normalizedSheetNameOverrides);
           return label;
         };
 
@@ -3221,9 +3231,10 @@ export function QuoteBuilderScreen({
           if (column === 15) return `Brisbane sized ${resolveFormatName('6-sheet', normalizedSheetNameOverrides)} posters`;
           if (column === 16) return `Brisbane sized ${resolveFormatName('4-sheet', normalizedSheetNameOverrides)} posters`;
           if (column === 17) return `Brisbane sized ${resolveFormatName('2-sheet', normalizedSheetNameOverrides)} posters`;
-          if (column === 18) return rawCreativeTypeLabel === 'Mini Mega' ? resolveCreativeTypeLabel('Mini Mega') : resolveFormatName('Mega', normalizedSheetNameOverrides);
+          if (column === 18) return resolveFormatName('Mega', normalizedSheetNameOverrides);
           if (column === 19) return resolveFormatName('DOT M', normalizedSheetNameOverrides);
-          return resolveFormatName('MP', normalizedSheetNameOverrides);
+          if (column === 20) return resolveFormatName('MP', normalizedSheetNameOverrides);
+          return resolveFormatName('FF', normalizedSheetNameOverrides);
         };
 
         const creativeTypeByNumber = new Map<number, string>();
@@ -5546,7 +5557,6 @@ export function QuoteBuilderScreen({
               <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/70">
                 <table className="w-full table-fixed border-collapse text-sm">
                   <colgroup>
-                    <col className="w-[52px]" />
                     <col className="w-[120px]" />
                     <col className="w-[170px]" />
                     <col className="w-[120px]" />
@@ -5555,7 +5565,6 @@ export function QuoteBuilderScreen({
                   </colgroup>
                   <thead>
                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
-                      <th className="border border-slate-700 px-3 py-2 text-left">No</th>
                       <th className="border border-slate-700 px-3 py-2 text-center">
                         <span className="whitespace-nowrap tracking-normal">Thumbnail</span>
                       </th>
@@ -5577,7 +5586,6 @@ export function QuoteBuilderScreen({
                       const maxForRow = Math.max(0, multiArtworkTarget.totalFrames - usedByOthers);
                       return (
                         <tr key={record.id} className="border-t border-slate-700/70 bg-slate-800/65">
-                          <td className="border border-slate-700 px-3 py-2 text-slate-200">{index + 1}</td>
                           <td className="border border-slate-700 px-3 py-2">
                             <div className="mx-auto h-14 w-14 overflow-hidden rounded border border-slate-700 bg-slate-900">
                               {thumbnailSrc ? (
@@ -6052,3 +6060,4 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
+
