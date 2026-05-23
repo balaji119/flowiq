@@ -1068,6 +1068,7 @@ export function QuoteBuilderScreen({
   const [creativeNameAssignments, setCreativeNameAssignments] = useState<Record<string, string>>({});
   const [draggingCreativeName, setDraggingCreativeName] = useState<string | null>(null);
   const [creativeDropTarget, setCreativeDropTarget] = useState<{ name: string; position: 'above' | 'below' } | null>(null);
+  const [recentCreativeSwap, setRecentCreativeSwap] = useState<{ source: string; target: string } | null>(null);
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
   const [newAddressDialogOpen, setNewAddressDialogOpen] = useState(false);
   const [addMarketDialogOpen, setAddMarketDialogOpen] = useState(false);
@@ -1096,6 +1097,16 @@ export function QuoteBuilderScreen({
   const autoDownloadTriggeredRef = useRef(false);
   const lastPersistedValuesRef = useRef('');
   const lastAutoSaveFailedValuesRef = useRef<string | null>(null);
+  const creativeSwapFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (creativeSwapFeedbackTimerRef.current) {
+        clearTimeout(creativeSwapFeedbackTimerRef.current);
+        creativeSwapFeedbackTimerRef.current = null;
+      }
+    };
+  }, []);
 
   async function releaseActiveCampaignLock(targetCampaignId?: string | null) {
     const id = targetCampaignId ?? campaignId;
@@ -2086,9 +2097,25 @@ export function QuoteBuilderScreen({
     setArtworkSearchQuery('');
     setDraggingCreativeName(null);
     setCreativeDropTarget(null);
+    setRecentCreativeSwap(null);
+    if (creativeSwapFeedbackTimerRef.current) {
+      clearTimeout(creativeSwapFeedbackTimerRef.current);
+      creativeSwapFeedbackTimerRef.current = null;
+    }
     if (artworkPdfInputRef.current) {
       artworkPdfInputRef.current.value = '';
     }
+  }
+
+  function showCreativeSwapFeedback(sourceCreativeName: string, targetCreativeName: string) {
+    setRecentCreativeSwap({ source: sourceCreativeName, target: targetCreativeName });
+    if (creativeSwapFeedbackTimerRef.current) {
+      clearTimeout(creativeSwapFeedbackTimerRef.current);
+    }
+    creativeSwapFeedbackTimerRef.current = setTimeout(() => {
+      setRecentCreativeSwap(null);
+      creativeSwapFeedbackTimerRef.current = null;
+    }, 650);
   }
 
   function reorderCreativeAssignments(sourceCreativeName: string, targetCreativeName: string, position: 'above' | 'below') {
@@ -2114,6 +2141,7 @@ export function QuoteBuilderScreen({
       }
     });
     setCreativeNameAssignments(nextAssignments);
+    showCreativeSwapFeedback(sourceCreativeName, targetCreativeName);
   }
 
   function assignArtworkImageToTarget(imageId: string) {
@@ -5690,16 +5718,38 @@ export function QuoteBuilderScreen({
                       {creativeNames.map((creativeName) => {
                         const mappedImageId = resolvedCreativeNameAssignments[creativeName] || '';
                         const mappedImage = mappedImageId ? artworkImageById.get(mappedImageId) ?? null : null;
+                        const isSwapFeedbackRow = recentCreativeSwap?.source === creativeName || recentCreativeSwap?.target === creativeName;
                         return (
                           <tr
                             key={`creative-name-row-${creativeName}`}
                             className={cn(
-                              'border-b border-slate-800 last:border-b-0',
+                              'border-b border-slate-800 transition-colors duration-500 ease-out last:border-b-0',
+                              isSwapFeedbackRow ? 'bg-orange-500/10' : '',
                               creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'above' ? 'border-t-2 border-t-orange-400' : '',
                               creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'below' ? 'border-b-2 border-b-orange-400' : '',
                             )}
+                            onDragOver={(event) => {
+                              if (!draggingCreativeName || draggingCreativeName === creativeName) return;
+                              event.preventDefault();
+                              event.dataTransfer.dropEffect = 'move';
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              const position = event.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
+                              if (creativeDropTarget?.name !== creativeName || creativeDropTarget.position !== position) {
+                                setCreativeDropTarget({ name: creativeName, position });
+                              }
+                            }}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              const sourceCreativeName = event.dataTransfer.getData('text/plain');
+                              if (!sourceCreativeName || sourceCreativeName === creativeName) return;
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              const position = event.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
+                              reorderCreativeAssignments(sourceCreativeName, creativeName, position);
+                              setDraggingCreativeName(null);
+                              setCreativeDropTarget(null);
+                            }}
                           >
-                            <td className="px-3 py-2 font-medium text-slate-100">{creativeName}</td>
+                            <td className={cn('px-3 py-2 font-medium text-slate-100 transition-colors duration-500', isSwapFeedbackRow ? 'bg-orange-500/10' : '')}>{creativeName}</td>
                             <td className={cn('px-3 py-2 transition', draggingCreativeName ? 'bg-slate-900/80' : '')}>
                               <div className="flex min-h-10 items-center justify-between gap-2 rounded border border-slate-700 bg-slate-900/70 px-2 py-1.5">
                                 <button
@@ -5717,27 +5767,11 @@ export function QuoteBuilderScreen({
                                     setDraggingCreativeName(null);
                                     setCreativeDropTarget(null);
                                   }}
-                                  onDragOver={(event) => {
-                                    if (!draggingCreativeName || draggingCreativeName === creativeName) return;
-                                    event.preventDefault();
-                                    const rect = event.currentTarget.getBoundingClientRect();
-                                    const position = event.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
-                                    setCreativeDropTarget({ name: creativeName, position });
-                                  }}
                                   onDragStart={(event) => {
                                     if (!mappedImageId) return;
                                     event.dataTransfer.setData('text/plain', creativeName);
                                     event.dataTransfer.effectAllowed = 'move';
                                     setDraggingCreativeName(creativeName);
-                                  }}
-                                  onDrop={(event) => {
-                                    event.preventDefault();
-                                    const sourceCreativeName = event.dataTransfer.getData('text/plain');
-                                    const dropTarget = creativeDropTarget;
-                                    if (!sourceCreativeName || !dropTarget || dropTarget.name !== creativeName) return;
-                                    reorderCreativeAssignments(sourceCreativeName, creativeName, dropTarget.position);
-                                    setDraggingCreativeName(null);
-                                    setCreativeDropTarget(null);
                                   }}
                                   type="button"
                                 >
