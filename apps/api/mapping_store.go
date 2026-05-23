@@ -815,20 +815,15 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 	}
 	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx, `
-		DELETE FROM market_assets
-		WHERE market_id IN (SELECT id FROM markets WHERE tenant_id = $1)
-	`, tenantID); err != nil {
-		return 0, err
-	}
-
 	type normalizedImportRow struct {
 		id                  string
+		sourceID            string
 		marketID            string
 		market              string
 		asset               string
 		label               string
 		state               string
+		hasMaintenanceField bool
 		maintenanceSourceID string
 		quantities          string
 	}
@@ -837,7 +832,6 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 	order := make([]string, 0)
 
 	marketIDs := make(map[string]string)
-	count := 0
 	for _, market := range metadata {
 		marketName, err := sanitizeMappingText(market.Name, "market")
 		if err != nil {
@@ -890,49 +884,136 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 				order = append(order, key)
 			}
 			maintenanceSourceID := ""
+			hasMaintenanceField := false
 			if asset.MaintenanceAssetID != nil {
+				hasMaintenanceField = true
 				maintenanceSourceID = strings.TrimSpace(*asset.MaintenanceAssetID)
 			}
+			sourceID := strings.TrimSpace(asset.ID)
 
 			uniqueRows[key] = normalizedImportRow{
 				id:                  normalizeMappingID(asset.ID),
+				sourceID:            sourceID,
 				marketID:            marketID,
 				market:              marketName,
 				asset:               assetName,
 				label:               label,
 				state:               strings.TrimSpace(asset.State),
+				hasMaintenanceField: hasMaintenanceField,
 				maintenanceSourceID: maintenanceSourceID,
 				quantities:          quantitiesJSON,
 			}
 		}
 	}
 
-	rowsByID := make(map[string]normalizedImportRow, len(order))
-	for _, key := range order {
-		row := uniqueRows[key]
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO market_assets (id, market_id, asset, label, state, maintenance_asset_id, quantities, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, NULL, $6::jsonb, NOW(), NOW())
-		`, row.id, row.marketID, row.asset, row.label, row.state, row.quantities); err != nil {
+	type existingMappingRow struct {
+		id       string
+		marketID string
+		market   string
+		asset    string
+	}
+
+	existingByKey := make(map[string]existingMappingRow)
+	existingByID := make(map[string]existingMappingRow)
+	existingRows, err := tx.Query(ctx, `
+		SELECT ma.id, ma.market_id, m.name, ma.asset
+		FROM market_assets ma
+		JOIN markets m ON m.id = ma.market_id
+		WHERE m.tenant_id = $1
+	`, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	defer existingRows.Close()
+	for existingRows.Next() {
+		var row existingMappingRow
+		if err := existingRows.Scan(&row.id, &row.marketID, &row.market, &row.asset); err != nil {
 			return 0, err
 		}
-		rowsByID[row.id] = row
-		count++
+		key := row.market + "\x00" + row.asset
+		existingByKey[key] = row
+		existingByID[row.id] = row
 	}
-	for _, key := range order {
-		row := uniqueRows[key]
-		if row.maintenanceSourceID == "" || row.maintenanceSourceID == row.id {
+	if err := existingRows.Err(); err != nil {
+		return 0, err
+	}
+
+	for key, existing := range existingByKey {
+		if _, keep := uniqueRows[key]; keep {
 			continue
 		}
-		targetRow, exists := rowsByID[row.maintenanceSourceID]
-		if !exists || targetRow.marketID != row.marketID {
+		if _, err := tx.Exec(ctx, `DELETE FROM market_assets WHERE id = $1`, existing.id); err != nil {
+			return 0, err
+		}
+	}
+
+	rowsByID := make(map[string]normalizedImportRow, len(order))
+	sourceIDToTargetID := make(map[string]string, len(order)*2)
+	for _, key := range order {
+		row := uniqueRows[key]
+
+		if existing, exists := existingByKey[key]; exists {
+			row.id = existing.id
+			if _, err := tx.Exec(ctx, `
+				UPDATE market_assets
+				SET market_id = $2,
+					asset = $3,
+					label = $4,
+					state = $5,
+					quantities = $6::jsonb,
+					updated_at = NOW()
+				WHERE id = $1
+			`, row.id, row.marketID, row.asset, row.label, row.state, row.quantities); err != nil {
+				return 0, err
+			}
+		} else {
+			if existing, idTaken := existingByID[row.id]; idTaken {
+				if existing.market != row.market || existing.asset != row.asset {
+					row.id = uuid.NewString()
+				}
+			}
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO market_assets (id, market_id, asset, label, state, maintenance_asset_id, quantities, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, NULL, $6::jsonb, NOW(), NOW())
+			`, row.id, row.marketID, row.asset, row.label, row.state, row.quantities); err != nil {
+				return 0, err
+			}
+		}
+
+		uniqueRows[key] = row
+		rowsByID[row.id] = row
+		if row.sourceID != "" {
+			sourceIDToTargetID[row.sourceID] = row.id
+		}
+		sourceIDToTargetID[row.id] = row.id
+	}
+	count := len(order)
+
+	for _, key := range order {
+		row := uniqueRows[key]
+		if !row.hasMaintenanceField {
+			// Preserve existing maintenance link when the import payload does not
+			// explicitly include maintenanceAssetId for this row.
 			continue
+		}
+		maintenanceTargetID := ""
+		sourceMaintenanceID := strings.TrimSpace(row.maintenanceSourceID)
+		if sourceMaintenanceID != "" && sourceMaintenanceID != row.id && sourceMaintenanceID != row.sourceID {
+			if candidateID, exists := sourceIDToTargetID[sourceMaintenanceID]; exists && candidateID != row.id {
+				if candidateRow, candidateExists := rowsByID[candidateID]; candidateExists && candidateRow.marketID == row.marketID {
+					maintenanceTargetID = candidateID
+				}
+			}
+		}
+		var maintenanceValue any
+		if maintenanceTargetID != "" {
+			maintenanceValue = maintenanceTargetID
 		}
 		if _, err := tx.Exec(ctx, `
 			UPDATE market_assets
 			SET maintenance_asset_id = $2, updated_at = NOW()
 			WHERE id = $1
-		`, row.id, targetRow.id); err != nil {
+		`, row.id, maintenanceValue); err != nil {
 			return 0, err
 		}
 	}

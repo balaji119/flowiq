@@ -503,7 +503,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                   <option value="">No maintenance asset</option>
                   {maintenanceCandidates.map((candidate) => (
                     <option key={`maintenance-candidate-${candidate.id}`} value={candidate.id}>
-                      {candidate.label} ({candidate.asset})
+                      {candidate.label || candidate.asset}
                     </option>
                   ))}
                 </select>
