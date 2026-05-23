@@ -938,15 +938,6 @@ func (s *mappingStore) replaceMappingsFromImport(ctx context.Context, tenantID s
 		return 0, err
 	}
 
-	for key, existing := range existingByKey {
-		if _, keep := uniqueRows[key]; keep {
-			continue
-		}
-		if _, err := tx.Exec(ctx, `DELETE FROM market_assets WHERE id = $1`, existing.id); err != nil {
-			return 0, err
-		}
-	}
-
 	rowsByID := make(map[string]normalizedImportRow, len(order))
 	sourceIDToTargetID := make(map[string]string, len(order)*2)
 	for _, key := range order {
