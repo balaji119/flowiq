@@ -103,19 +103,16 @@ function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBre
 }
 
 function buildReviewRows(totals: CampaignTotals) {
-  const computedPosterTotal = formatKeys.reduce((sum, key) => sum + (totals.breakdown[key] ?? 0), 0);
-  const frameBreakdown: QuantityBreakdown = {
-    '8-sheet': totals.breakdown['8-sheet'] / 4,
-    '6-sheet': totals.breakdown['6-sheet'] / 3,
-    '4-sheet': totals.breakdown['4-sheet'] / 2,
-    '2-sheet': totals.breakdown['2-sheet'],
-    QA0: totals.breakdown.QA0 / 4,
-    Mega: totals.breakdown.Mega,
-    'DOT M': totals.breakdown['DOT M'],
-    MP: totals.breakdown.MP,
-    FF: totals.breakdown.FF,
-  };
-  const computedFrameTotal = formatKeys.reduce((sum, key) => sum + (frameBreakdown[key] ?? 0), 0);
+  const breakdownRecord = totals.breakdown as Record<string, number>;
+  const computedPosterTotal = Object.values(breakdownRecord).reduce((sum, value) => sum + (value ?? 0), 0);
+  const frameBreakdown: QuantityBreakdown = { ...(totals.breakdown as Record<string, number>) } as QuantityBreakdown;
+  const dynamicFrameBreakdown = frameBreakdown as Record<string, number>;
+  dynamicFrameBreakdown['8-sheet'] = Math.ceil(breakdownValueForKey(totals.breakdown, '8-sheet') / 4);
+  dynamicFrameBreakdown['6-sheet'] = Math.ceil(breakdownValueForKey(totals.breakdown, '6-sheet') / 3);
+  dynamicFrameBreakdown['4-sheet'] = Math.ceil(breakdownValueForKey(totals.breakdown, '4-sheet') / 2);
+  dynamicFrameBreakdown['2-sheet'] = breakdownValueForKey(totals.breakdown, '2-sheet');
+  dynamicFrameBreakdown.QA0 = Math.ceil(breakdownValueForKey(totals.breakdown, 'QA0') / 4);
+  const computedFrameTotal = Object.values(dynamicFrameBreakdown).reduce((sum, value) => sum + (value ?? 0), 0);
 
   return [
     { label: 'Posters', breakdown: totals.breakdown, total: computedPosterTotal, shippingCost: 0 },
@@ -151,12 +148,32 @@ function formatKeyLabel(key: (typeof formatKeys)[number], overrides: SheetNameOv
   return resolved;
 }
 
+function isKnownFormatKey(key: string): key is (typeof formatKeys)[number] {
+  return (formatKeys as readonly string[]).includes(key);
+}
+
+function breakdownValueForKey(breakdown: QuantityBreakdown, key: string) {
+  return (breakdown as Record<string, number>)[key] ?? 0;
+}
+
+function formatBreakdownKeyLabel(key: string, overrides: SheetNameOverrides = {}) {
+  if (isKnownFormatKey(key)) {
+    return formatKeyLabel(key, overrides);
+  }
+  return resolveSheetName(key, overrides);
+}
+
+function visibleBreakdownKeys(breakdown: QuantityBreakdown) {
+  const dynamicKeys = Object.keys((breakdown ?? {}) as Record<string, number>);
+  const all = Array.from(new Set([...formatKeys, ...dynamicKeys]));
+  return all.filter((key) => breakdownValueForKey(breakdown, key) > 0);
+}
+
 const creativeFormatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0', 'Mega', 'DOT M', 'MP', 'FF'] as const;
 type CreativeFormatKey = (typeof creativeFormatKeys)[number];
 
 type MultiCreativeImageMap = Partial<Record<CreativeFormatKey, string[]>>;
 type MultiArtworkRecord = { id: string; imageId: string; frameCount: number };
-const MULTI_ARTWORK_SLOT_UI_CAP = 24;
 const MARKET_PLANNING_THEMES = [
   {
     card: 'border-white/10 bg-slate-900/70',
@@ -1090,6 +1107,8 @@ export function QuoteBuilderScreen({
   const [expandedMarketId, setExpandedMarketId] = useState<string | null>(null);
   const [reviewDrawerOpen, setReviewDrawerOpen] = useState(false);
   const [reviewDrawerMode, setReviewDrawerMode] = useState<ReviewDrawerMode>('high-level');
+  const [reviewActionError, setReviewActionError] = useState('');
+  const [reviewActionNeedsDueDate, setReviewActionNeedsDueDate] = useState(false);
   const [newAddressTarget, setNewAddressTarget] = useState<{ marketId: string; assetId: string; marketName: string } | null>(null);
   const [newAddressForm, setNewAddressForm] = useState<AddressFormState>(() => emptyAddressForm());
   const [newAddressError, setNewAddressError] = useState('');
@@ -1428,9 +1447,20 @@ export function QuoteBuilderScreen({
     () => (summary ? summary.perMarket.filter((entry) => selectedCampaignMarketNames.has(entry.market)) : []),
     [selectedCampaignMarketNames, summary],
   );
-  const detailedReviewFormatKeys = useMemo(
-    () => formatKeys.filter((key) => visibleReviewMarkets.some((marketSummary) => buildReviewRows(marketSummary).some((row) => (row.breakdown[key] ?? 0) > 0))),
-    [visibleReviewMarkets],
+  const detailedReviewFormatKeys = useMemo(() => {
+    const keys = new Set<string>();
+    visibleReviewMarkets.forEach((marketSummary) => {
+      buildReviewRows(marketSummary).forEach((row) => {
+        Object.entries(row.breakdown as Record<string, number>).forEach(([key, value]) => {
+          if ((value ?? 0) > 0) keys.add(key);
+        });
+      });
+    });
+    return Array.from(keys);
+  }, [visibleReviewMarkets]);
+  const grandReviewRows = useMemo(
+    () => (summary ? buildReviewRows(summary.grandTotal) : null),
+    [summary],
   );
   const detailedDrawerWidth = useMemo(() => {
     const extraColumns = Math.max(0, detailedReviewFormatKeys.length - 3);
@@ -1699,6 +1729,27 @@ export function QuoteBuilderScreen({
       setError('');
     }
   }, [error, hasDeliveryDueDate, isCampaignStartDatePast, isDeliveryDueDatePast]);
+
+  useEffect(() => {
+    if (!hasDeliveryDueDate && reviewActionNeedsDueDate) return;
+    if (!reviewActionError) return;
+    setReviewActionError('');
+    setReviewActionNeedsDueDate(false);
+  }, [hasDeliveryDueDate, reviewActionError, reviewActionNeedsDueDate]);
+
+  const setReviewValidationError = (message: string, options?: { dueDate?: boolean }) => {
+    setError(message);
+    setReviewActionError(message);
+    setReviewActionNeedsDueDate(Boolean(options?.dueDate));
+  };
+
+  const focusDueDateField = () => {
+    setReviewDrawerOpen(false);
+    window.setTimeout(() => {
+      const dueDateInput = document.getElementById('due-date') as HTMLInputElement | null;
+      dueDateInput?.focus();
+    }, 80);
+  };
 
   useEffect(() => {
     setPreviewArtworkFullLoaded(false);
@@ -2043,7 +2094,7 @@ export function QuoteBuilderScreen({
   }
 
   function openMultiArtworkDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey, slotCount: number) {
-    const totalFrames = Math.min(MULTI_ARTWORK_SLOT_UI_CAP, Math.max(1, slotCount));
+    const totalFrames = Math.max(1, slotCount);
     const targetMarket = values.campaignMarkets.find((market) => market.id === marketId);
     const targetAsset = targetMarket?.assets.find((asset) => asset.id === assetId);
     const slotIds = (targetAsset?.multiCreativeImageIds?.[formatKey] ?? []).map((id) => (id || '').trim()).filter(Boolean);
@@ -2882,7 +2933,8 @@ export function QuoteBuilderScreen({
       const updateSummary = (creativeNumber: number, key: keyof QuantityBreakdown, quantity: number) => {
         if (quantity <= 0) return;
         const bucket = creativeSummary.get(creativeNumber) ?? { '8-sheet': 0, '6-sheet': 0, '4-sheet': 0, '2-sheet': 0, QA0: 0, Mega: 0, 'DOT M': 0, MP: 0, FF: 0 };
-        bucket[key] += quantity;
+        const dynamicBucket = bucket as Record<string, number>;
+        dynamicBucket[key as string] = (dynamicBucket[key as string] ?? 0) + quantity;
         creativeSummary.set(creativeNumber, bucket);
       };
       const splitQuantityAcrossSlots = (total: number, slots: number) => {
@@ -2973,15 +3025,19 @@ export function QuoteBuilderScreen({
 
           const state = normalizeExportState(line.state) ?? inferStateFromMarket(market.market);
           if (!state) return;
-          (Object.keys(line.breakdown) as Array<keyof QuantityBreakdown>).forEach((key) => {
-            const quantity = line.breakdown[key] ?? 0;
+          Object.entries(line.breakdown as Record<string, number>).forEach(([key, quantity]) => {
             if (quantity <= 0) return;
 
-            const creativeFormat = toCreativeFormatKey(key);
-            const multiSlotImageIds = (asset.multiCreativeImageIds?.[creativeFormat] ?? [])
-              .map((imageId) => (imageId || '').trim())
-              .filter((imageId) => Boolean(imageById.get(imageId)));
-            const useMultiArtworkForFormat = Boolean(normalizedMultipleArtworkFormats[canonicalKeyForFormat(creativeFormat)]);
+            const isStandardFormat = isKnownFormatKey(key);
+            const creativeFormat = isStandardFormat ? toCreativeFormatKey(key as keyof QuantityBreakdown) : null;
+            const multiSlotImageIds = creativeFormat
+              ? (asset.multiCreativeImageIds?.[creativeFormat] ?? [])
+                .map((imageId) => (imageId || '').trim())
+                .filter((imageId) => Boolean(imageById.get(imageId)))
+              : [];
+            const useMultiArtworkForFormat = creativeFormat
+              ? Boolean(normalizedMultipleArtworkFormats[canonicalKeyForFormat(creativeFormat)])
+              : false;
             const useMultiArtwork = useMultiArtworkForFormat && multiSlotImageIds.length > 0;
 
             const creativeAssignments = useMultiArtwork
@@ -2994,7 +3050,9 @@ export function QuoteBuilderScreen({
                   })).filter((assignment) => assignment.quantity > 0);
                 })()
               : (() => {
-                  const creativeImageId = getCreativeImageIdForFormat(asset, creativeFormat);
+                  const creativeImageId = creativeFormat
+                    ? getCreativeImageIdForFormat(asset, creativeFormat)
+                    : (asset.creativeImageId || '').trim();
                   return creativeImageId ? [{ imageId: creativeImageId, quantity }] : [];
                 })();
 
@@ -3013,30 +3071,34 @@ export function QuoteBuilderScreen({
                 quantities: {},
               };
 
-              const column = getPrintColumn(state, key);
-              printRow.quantities[column] = (printRow.quantities[column] ?? 0) + assignment.quantity;
+              if (isStandardFormat) {
+                const column = getPrintColumn(state, key as keyof QuantityBreakdown);
+                printRow.quantities[column] = (printRow.quantities[column] ?? 0) + assignment.quantity;
+              }
               printRows.set(printRowKey, printRow);
 
-              const typeLabel = getDeliveryTypeLabel(state, key);
-              const deliveredTo = `VIM ${state}`;
-              const rolled = state !== 'NSW';
-              const deliveryKey = `${creativeCode}\x00${fileName}\x00${typeLabel}\x00${deliveredTo}`;
-              const existingDeliveryRow = deliveryRows.get(deliveryKey);
-              if (existingDeliveryRow) {
-                existingDeliveryRow.quantity += assignment.quantity;
-              } else {
-                deliveryRows.set(deliveryKey, {
-                  creativeCode,
-                  fileName,
-                  state,
-                  typeLabel,
-                  quantity: assignment.quantity,
-                  deliveredTo,
-                  rolled,
-                });
+              if (isStandardFormat) {
+                const typeLabel = getDeliveryTypeLabel(state, key as keyof QuantityBreakdown);
+                const deliveredTo = `VIM ${state}`;
+                const rolled = state !== 'NSW';
+                const deliveryKey = `${creativeCode}\x00${fileName}\x00${typeLabel}\x00${deliveredTo}`;
+                const existingDeliveryRow = deliveryRows.get(deliveryKey);
+                if (existingDeliveryRow) {
+                  existingDeliveryRow.quantity += assignment.quantity;
+                } else {
+                  deliveryRows.set(deliveryKey, {
+                    creativeCode,
+                    fileName,
+                    state,
+                    typeLabel,
+                    quantity: assignment.quantity,
+                    deliveredTo,
+                    rolled,
+                  });
+                }
               }
 
-              updateSummary(creative.creativeNumber, key, assignment.quantity);
+              updateSummary(creative.creativeNumber, key as keyof QuantityBreakdown, assignment.quantity);
             });
           });
 
@@ -3220,7 +3282,7 @@ export function QuoteBuilderScreen({
           if (label === 'DOT Mega') return resolveFormatName('DOT M', normalizedSheetNameOverrides);
           if (label === 'Mega Portrait') return resolveFormatName('MP', normalizedSheetNameOverrides);
           if (label === 'FF') return resolveFormatName('FF', normalizedSheetNameOverrides);
-          return label;
+          return resolveSheetName(label, normalizedSheetNameOverrides);
         };
 
         const quantityLabelForColumn = (column: number, rawCreativeTypeLabel: string) => {
@@ -3243,8 +3305,13 @@ export function QuoteBuilderScreen({
         const typeCounts = new Map<string, number>();
         Array.from(rowsByCreative.entries()).sort((a, b) => a[0] - b[0]).forEach(([creativeNumber, creativeRows]) => {
           const typeLabel = inferCreativeTypeLabel(creativeRows);
-          creativeTypeByNumber.set(creativeNumber, typeLabel);
-          typeCounts.set(typeLabel, (typeCounts.get(typeLabel) ?? 0) + 1);
+          const summaryBucket = (creativeSummary.get(creativeNumber) ?? {}) as Record<string, number>;
+          const customTypes = Object.entries(summaryBucket).filter(([key, value]) => !isKnownFormatKey(key) && (value ?? 0) > 0);
+          const finalTypeLabel = customTypes.length > 0
+            ? customTypes.sort((left, right) => right[1] - left[1])[0][0]
+            : typeLabel;
+          creativeTypeByNumber.set(creativeNumber, finalTypeLabel);
+          typeCounts.set(finalTypeLabel, (typeCounts.get(finalTypeLabel) ?? 0) + 1);
         });
 
         const creativeHeadline = Array.from(typeCounts.entries())
@@ -3253,14 +3320,27 @@ export function QuoteBuilderScreen({
           .join(', ') || 'No mapped creatives';
 
         const quantityPartsByCreative = new Map<number, string[]>();
-        Array.from(rowsByCreative.entries()).forEach(([creativeNumber, creativeRows]) => {
-          const rawCreativeTypeLabel = creativeTypeByNumber.get(creativeNumber) ?? 'Artwork';
-          const totals = rowTotals(creativeRows);
+        Array.from(rowsByCreative.keys()).forEach((creativeNumber) => {
+          const summaryBucket = (creativeSummary.get(creativeNumber) ?? {}) as Record<string, number>;
           const parts: string[] = [];
-          quantityColumns.forEach((column) => {
-            const quantity = totals.get(column) ?? 0;
-            if (quantity <= 0) return;
-            parts.push(`${quantity} x ${quantityLabelForColumn(column, rawCreativeTypeLabel)}`);
+          Object.entries(summaryBucket).forEach(([key, quantity]) => {
+            if ((quantity ?? 0) <= 0) return;
+            if (isKnownFormatKey(key)) {
+              const quantityLabel = key === 'QA0'
+                ? `${resolveFormatName('QA0', normalizedSheetNameOverrides)} posters`
+                : key === 'Mega'
+                  ? resolveFormatName('Mega', normalizedSheetNameOverrides)
+                  : key === 'DOT M'
+                    ? resolveFormatName('DOT M', normalizedSheetNameOverrides)
+                    : key === 'MP'
+                      ? resolveFormatName('MP', normalizedSheetNameOverrides)
+                      : key === 'FF'
+                        ? resolveFormatName('FF', normalizedSheetNameOverrides)
+                        : `${resolveFormatName(key, normalizedSheetNameOverrides)} posters`;
+              parts.push(`${quantity} x ${quantityLabel}`);
+              return;
+            }
+            parts.push(`${quantity} x ${resolveSheetName(key, normalizedSheetNameOverrides)}`);
           });
           quantityPartsByCreative.set(creativeNumber, parts);
         });
@@ -3987,15 +4067,17 @@ export function QuoteBuilderScreen({
   async function downloadArtworkVisuals() {
     if (exportingTemplates || sendingAdsEmail) return false;
     if (!hasDeliveryDueDate) {
-      setError('Add a due date before downloading visuals.');
+      setReviewValidationError('Add a due date before downloading visuals.', { dueDate: true });
       return false;
     }
     if (!hasMappedCreatives) {
-      setError('Map at least one creative to a market asset before downloading visuals');
+      setReviewValidationError('Map at least one creative to a market asset before downloading visuals');
       return false;
     }
 
     setError('');
+    setReviewActionError('');
+    setReviewActionNeedsDueDate(false);
     setExportingTemplates(true);
     setExportProgressMessage('Preparing export...');
 
@@ -4003,10 +4085,12 @@ export function QuoteBuilderScreen({
       await generateArtworkTemplates(true, VISUALS_EXPORT_MODE);
       setExportProgressMessage('Download started. Check your browser download bar.');
       setError('');
+      setReviewActionError('');
+      setReviewActionNeedsDueDate(false);
       return true;
     } catch (exportError) {
       const message = exportError instanceof Error ? exportError.message : 'Unable to download visual export. Please try again.';
-      setError(message);
+      setReviewValidationError(message);
       setExportProgressMessage('');
       return false;
     } finally {
@@ -4033,19 +4117,21 @@ export function QuoteBuilderScreen({
   async function sendArtworkEmailToAds() {
     if (sendingAdsEmail || exportingTemplates) return;
     if (!hasDeliveryDueDate) {
-      setError('Add a due date before sending email to ADS.');
+      setReviewValidationError('Add a due date before sending email to ADS.', { dueDate: true });
       return;
     }
     if (!hasUploadedPurchaseOrder) {
-      setError('Upload a purchase order file before sending email to ADS');
+      setReviewValidationError('Upload a purchase order file before sending email to ADS');
       return;
     }
     if (!hasMappedCreatives) {
-      setError('Map at least one creative to a market asset before sending email to ADS');
+      setReviewValidationError('Map at least one creative to a market asset before sending email to ADS');
       return;
     }
 
     setError('');
+    setReviewActionError('');
+    setReviewActionNeedsDueDate(false);
     setSendingAdsEmail(true);
     setExportProgressMessage('Preparing export for email...');
 
@@ -4152,7 +4238,7 @@ export function QuoteBuilderScreen({
       setError('');
     } catch (sendError) {
       const message = sendError instanceof Error ? sendError.message : 'Unable to send email to ADS. Please try again.';
-      setError(message);
+      setReviewValidationError(message);
       setExportProgressMessage('');
     } finally {
       setSendingAdsEmail(false);
@@ -4373,8 +4459,8 @@ export function QuoteBuilderScreen({
                     const isActiveMarket = market.id === activeMarket?.id;
                     const marketSummary = marketSummaryByName.get(market.market);
                     const visibleMarketFormatKeys = marketSummary
-                      ? formatKeys.filter((key) => (marketSummary.breakdown[key] ?? 0) > 0)
-                      : formatKeys;
+                      ? visibleBreakdownKeys(marketSummary.breakdown)
+                      : [...formatKeys];
                     return (
                       <div
                         key={market.id}
@@ -4503,7 +4589,7 @@ export function QuoteBuilderScreen({
                                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                                       <th className="border border-slate-700 px-4 py-3 text-left">Type</th>
                                       {visibleMarketFormatKeys.map((key) => (
-                                        <th key={`schedule-market-head-${market.id}-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatKeyLabel(key, normalizedSheetNameOverrides)}</th>
+                                        <th key={`schedule-market-head-${market.id}-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatBreakdownKeyLabel(key, normalizedSheetNameOverrides)}</th>
                                       ))}
                                       <th className="border border-slate-700 px-4 py-3 text-center">Total</th>
                                     </tr>
@@ -4514,7 +4600,7 @@ export function QuoteBuilderScreen({
                                         <th className="border border-slate-700 px-4 py-3 text-left font-semibold text-slate-100">{row.label}</th>
                                         {visibleMarketFormatKeys.map((key) => (
                                           <td key={`schedule-market-cell-${market.id}-${row.label}-${key}`} className="border border-slate-700 px-4 py-3 text-center font-semibold text-white">
-                                            {row.breakdown[key]}
+                                            {breakdownValueForKey(row.breakdown, key)}
                                           </td>
                                         ))}
                                         <td className="border border-slate-700 px-4 py-3 text-center font-black text-white">{row.total}</td>
@@ -4749,11 +4835,11 @@ export function QuoteBuilderScreen({
                       <div className="grid grid-cols-2 gap-2.5">
                         <div className="rounded-xl bg-gradient-to-br from-slate-800/65 to-slate-900/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_24px_rgba(2,6,23,0.28)]">
                           <p className="text-[11px] font-semibold text-slate-400">Total Posters</p>
-                          <p className="mt-1.5 text-[25px] font-bold leading-none text-white">{summary.grandTotal.posterTotal}</p>
+                          <p className="mt-1.5 text-[25px] font-bold leading-none text-white">{grandReviewRows?.[0].total ?? 0}</p>
                         </div>
                         <div className="rounded-xl bg-gradient-to-br from-slate-800/65 to-slate-900/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_24px_rgba(2,6,23,0.28)]">
                           <p className="text-[11px] font-semibold text-slate-400">Total Frames</p>
-                          <p className="mt-1.5 text-[25px] font-bold leading-none text-white">{summary.grandTotal.frameTotal}</p>
+                          <p className="mt-1.5 text-[25px] font-bold leading-none text-white">{grandReviewRows?.[1].total ?? 0}</p>
                         </div>
                         <div className="rounded-xl bg-gradient-to-br from-slate-800/65 to-slate-900/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_24px_rgba(2,6,23,0.28)]">
                           <p className="text-[11px] font-semibold text-slate-400">Printing Cost</p>
@@ -4774,14 +4860,21 @@ export function QuoteBuilderScreen({
                               <p className="flex-1 text-left text-[17px] font-semibold text-slate-100">{marketSummary.market}</p>
                             </div>
                             <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[14px]">
+                              {(() => {
+                                const rows = buildReviewRows(marketSummary);
+                                return (
+                                  <>
                               <div className="text-slate-400">Posters</div>
-                              <div className="text-right font-semibold tabular-nums text-white">{marketSummary.posterTotal}</div>
+                              <div className="text-right font-semibold tabular-nums text-white">{rows[0].total}</div>
                               <div className="text-slate-400">Frames</div>
-                              <div className="text-right font-semibold tabular-nums text-white">{marketSummary.frameTotal}</div>
+                              <div className="text-right font-semibold tabular-nums text-white">{rows[1].total}</div>
                               <div className="text-slate-400">Printing</div>
                               <div className="text-right font-semibold tabular-nums text-white">{formatCurrency(calculateMarketPrintingCost(marketSummary.market))}</div>
                               <div className="text-slate-400">Shipping</div>
                               <div className="text-right font-semibold tabular-nums text-white">{formatCurrency(calculateMarketShippingCost(marketSummary.market))}</div>
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
                         ))}
@@ -4798,7 +4891,7 @@ export function QuoteBuilderScreen({
                                 <th className="border border-white/10 px-2.5 py-2 text-left">Market</th>
                                 <th className="border border-white/10 px-2.5 py-2 text-left">Type</th>
                                 {detailedReviewFormatKeys.map((key) => (
-                                  <th key={`detail-head-${key}`} className="border border-white/10 px-2.5 py-2 text-right">{formatKeyLabel(key, normalizedSheetNameOverrides)}</th>
+                                  <th key={`detail-head-${key}`} className="border border-white/10 px-2.5 py-2 text-right">{formatBreakdownKeyLabel(key, normalizedSheetNameOverrides)}</th>
                                 ))}
                                 <th className="border border-white/10 px-2.5 py-2 text-right">Total</th>
                               </tr>
@@ -4812,14 +4905,14 @@ export function QuoteBuilderScreen({
                                       <td className="border border-white/10 px-2.5 py-2 font-semibold text-white" rowSpan={2}>{marketSummary.market}</td>
                                       <td className="border border-white/10 px-2.5 py-2 font-semibold text-white">Posters</td>
                                       {detailedReviewFormatKeys.map((key) => (
-                                        <td key={`detail-row-posters-${marketSummary.market}-${key}`} className="border border-white/10 px-2.5 py-2 text-right tabular-nums text-white">{rows[0].breakdown[key]}</td>
+                                        <td key={`detail-row-posters-${marketSummary.market}-${key}`} className="border border-white/10 px-2.5 py-2 text-right tabular-nums text-white">{breakdownValueForKey(rows[0].breakdown, key)}</td>
                                       ))}
                                       <td className="border border-white/10 px-2.5 py-2 text-right font-semibold tabular-nums text-white">{rows[0].total}</td>
                                     </tr>
                                     <tr className="bg-slate-900/60">
                                       <td className="border border-white/10 px-2.5 py-2 font-semibold text-white">Frames</td>
                                       {detailedReviewFormatKeys.map((key) => (
-                                        <td key={`detail-row-frames-${marketSummary.market}-${key}`} className="border border-white/10 px-2.5 py-2 text-right tabular-nums text-white">{rows[1].breakdown[key]}</td>
+                                        <td key={`detail-row-frames-${marketSummary.market}-${key}`} className="border border-white/10 px-2.5 py-2 text-right tabular-nums text-white">{breakdownValueForKey(rows[1].breakdown, key)}</td>
                                       ))}
                                       <td className="border border-white/10 px-2.5 py-2 text-right font-semibold tabular-nums text-white">{rows[1].total}</td>
                                     </tr>
@@ -4834,14 +4927,14 @@ export function QuoteBuilderScreen({
                                       <td className="border border-orange-300/25 px-2.5 py-2 font-semibold text-orange-100" rowSpan={2}>All Markets</td>
                                       <td className="border border-orange-300/25 px-2.5 py-2 font-semibold text-orange-100">Posters</td>
                                       {detailedReviewFormatKeys.map((key) => (
-                                        <td key={`detail-all-posters-${key}`} className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{allRows[0].breakdown[key]}</td>
+                                        <td key={`detail-all-posters-${key}`} className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{breakdownValueForKey(allRows[0].breakdown, key)}</td>
                                       ))}
                                       <td className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{allRows[0].total}</td>
                                     </tr>
                                     <tr className="bg-orange-500/10">
                                       <td className="border border-orange-300/25 px-2.5 py-2 font-semibold text-orange-100">Frames</td>
                                       {detailedReviewFormatKeys.map((key) => (
-                                        <td key={`detail-all-frames-${key}`} className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{allRows[1].breakdown[key]}</td>
+                                        <td key={`detail-all-frames-${key}`} className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{breakdownValueForKey(allRows[1].breakdown, key)}</td>
                                       ))}
                                       <td className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{allRows[1].total}</td>
                                     </tr>
@@ -4885,6 +4978,23 @@ export function QuoteBuilderScreen({
                 </div>
 
                 <div className="border-t border-white/5 bg-gradient-to-b from-slate-900/96 via-slate-900/98 to-slate-950 px-5 py-4">
+                  {reviewActionError ? (
+                    <div className="mb-3 rounded-lg border border-rose-400/35 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-100">
+                      <p>{reviewActionError}</p>
+                      {reviewActionNeedsDueDate ? (
+                        <div className="mt-2">
+                          <Button
+                            className="h-7 rounded-md border-rose-300/40 bg-rose-500/15 px-2.5 text-xs text-rose-100 hover:bg-rose-500/25"
+                            onClick={focusDueDateField}
+                            type="button"
+                            variant="outline"
+                          >
+                            Go To Due Date
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <p className="text-[11px] font-semibold text-slate-400">Total Estimate</p>
                   <p className="mt-1 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-[30px] font-extrabold leading-none text-transparent drop-shadow-[0_0_18px_rgba(255,255,255,0.12)]">
                     {formatCurrency(totalEstimateCost)}
@@ -5306,14 +5416,16 @@ export function QuoteBuilderScreen({
                       <p className="text-[13px] font-semibold text-white">Market Totals</p>
                       <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/65">
                         <table className="dense-table w-full table-fixed border-collapse text-[13px]">
+                          {(() => {
+                            const visibleDraftMarketFormatKeys = visibleBreakdownKeys(draftMarketSummary.breakdown);
+                            return (
+                              <>
                           <thead>
                             <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-300">
                               <th className="border border-slate-700 px-3 py-2 text-left">Type</th>
-                              {formatKeys
-                                .filter((key) => (draftMarketSummary.breakdown[key] ?? 0) > 0)
-                                .map((key) => (
-                                  <th key={`draft-market-head-${key}`} className="border border-slate-700 px-3 py-2 text-center">{formatKeyLabel(key, normalizedSheetNameOverrides)}</th>
-                                ))}
+                              {visibleDraftMarketFormatKeys.map((key) => (
+                                <th key={`draft-market-head-${key}`} className="border border-slate-700 px-3 py-2 text-center">{formatBreakdownKeyLabel(key, normalizedSheetNameOverrides)}</th>
+                              ))}
                               <th className="border border-slate-700 px-3 py-2 text-center">Total</th>
                             </tr>
                           </thead>
@@ -5321,17 +5433,18 @@ export function QuoteBuilderScreen({
                             {buildReviewRows(draftMarketSummary).map((row) => (
                               <tr key={`draft-market-row-${row.label}`} className="bg-slate-800/70 border-t border-slate-700/70">
                                 <th className="border border-slate-700 px-3 py-2 text-left font-semibold text-slate-100">{row.label}</th>
-                                {formatKeys
-                                  .filter((key) => (draftMarketSummary.breakdown[key] ?? 0) > 0)
-                                  .map((key) => (
-                                    <td key={`draft-market-cell-${row.label}-${key}`} className="border border-slate-700 px-3 py-2 text-center font-semibold text-white">
-                                      {row.breakdown[key]}
-                                    </td>
-                                  ))}
+                                {visibleDraftMarketFormatKeys.map((key) => (
+                                  <td key={`draft-market-cell-${row.label}-${key}`} className="border border-slate-700 px-3 py-2 text-center font-semibold text-white">
+                                    {breakdownValueForKey(row.breakdown, key)}
+                                  </td>
+                                ))}
                                 <td className="border border-slate-700 px-3 py-2 text-center font-black text-white">{row.total}</td>
                               </tr>
                             ))}
                           </tbody>
+                              </>
+                            );
+                          })()}
                         </table>
                       </div>
                     </div>

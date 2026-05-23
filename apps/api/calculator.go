@@ -5,7 +5,7 @@ import (
 	"sort"
 )
 
-var formatKeys = []string{"8-sheet", "6-sheet", "4-sheet", "2-sheet", "QA0", "Mega", "DOT M", "MP"}
+var formatKeys = []string{"8-sheet", "6-sheet", "4-sheet", "2-sheet", "QA0", "Mega", "DOT M", "MP", "FF"}
 
 type calculatorService struct {
 	mappings *mappingStore
@@ -34,8 +34,8 @@ func createEmptyBreakdown() quantityBreakdown {
 }
 
 func addBreakdown(target, source quantityBreakdown, multiplier int) {
-	for _, key := range formatKeys {
-		target[key] += source[key] * multiplier
+	for key, value := range source {
+		target[key] += value * multiplier
 	}
 }
 
@@ -48,7 +48,7 @@ func frameTotal(breakdown quantityBreakdown) int {
 }
 
 func specialFormatTotal(breakdown quantityBreakdown) int {
-	return breakdown["Mega"] + breakdown["DOT M"] + breakdown["MP"]
+	return breakdown["Mega"] + breakdown["DOT M"] + breakdown["MP"] + breakdown["FF"]
 }
 
 func totalUnits(breakdown quantityBreakdown) int {

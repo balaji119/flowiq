@@ -15,6 +15,8 @@ import {
 } from '../services/adminApi';
 import { resolveFormatName, sanitizeSheetNameOverrides } from '../services/sheetNameOverrides';
 
+const BUILT_IN_OVERRIDE_KEYS = new Set(['8-sheet', '8-sheet-a0', '6-sheet', '4-sheet', '2-sheet', 'mega', 'dot-m', 'mega-portrait', 'ff']);
+
 type MappingAdminScreenProps = {
   onBack: () => void;
   tenantId?: string | null;
@@ -153,6 +155,12 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
   }, [effectiveTenantId]);
 
   const marketOptions = useMemo(() => [...new Set(mappings.map((mapping) => mapping.market))].sort((left, right) => left.localeCompare(right)), [mappings]);
+  const customQuantityKeys = useMemo(() => {
+    return Object.keys(sheetNameOverrides)
+      .filter((key) => !BUILT_IN_OVERRIDE_KEYS.has(key))
+      .sort((left, right) => left.localeCompare(right));
+  }, [sheetNameOverrides]);
+  const allQuantityKeys = useMemo(() => [...formatKeys, ...customQuantityKeys], [customQuantityKeys]);
   const mappingById = useMemo(() => new Map(mappings.map((mapping) => [mapping.id, mapping])), [mappings]);
   const maintenanceCandidates = useMemo(() => {
     if (!form.market) return [] as CalculatorMappingRecord[];
@@ -167,6 +175,11 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
       .filter((mapping) => mapping.market === selectedMarketFilter)
       .sort((left, right) => left.asset.localeCompare(right.asset) || left.label.localeCompare(right.label));
   }, [mappings, selectedMarketFilter]);
+
+  function quantityValue(quantities: CalculatorMappingRecord['quantities'], key: string) {
+    const dynamicQuantities = quantities as Record<string, number>;
+    return dynamicQuantities[key] ?? 0;
+  }
 
   useEffect(() => {
     if (marketOptions.length === 0) {
@@ -183,7 +196,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
     setForm(emptyForm());
   }
 
-  function updateQuantity(key: (typeof formatKeys)[number], value: string) {
+  function updateQuantity(key: string, value: string) {
     setForm((current) => ({
       ...current,
       quantities: {
@@ -204,12 +217,24 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
     setNotice('');
 
     try {
+      const quantityKeysForPayload = Array.from(
+        new Set([...Object.keys((form.quantities as Record<string, number>) ?? {}), ...allQuantityKeys]),
+      );
+      const normalizedQuantities = quantityKeysForPayload.reduce<Record<string, number>>((acc, key) => {
+        const raw = Number((form.quantities as Record<string, number>)[key] ?? 0);
+        acc[key] = Number.isFinite(raw) ? Math.max(0, raw) : 0;
+        return acc;
+      }, {});
+      const payload: CalculatorMappingInput = {
+        ...form,
+        quantities: normalizedQuantities as CalculatorMappingInput['quantities'],
+      };
       if (editingId) {
-        const response = await updateCalculatorMapping(editingId, form, effectiveTenantId);
+        const response = await updateCalculatorMapping(editingId, payload, effectiveTenantId);
         setMappings((current) => current.map((item) => (item.id === editingId ? response.mapping : item)));
         setNotice(`Updated mapping ${response.mapping.label}.`);
       } else {
-        const response = await createCalculatorMapping(form, effectiveTenantId);
+        const response = await createCalculatorMapping(payload, effectiveTenantId);
         setMappings((current) => [...current, response.mapping].sort((left, right) => left.market.localeCompare(right.market) || left.label.localeCompare(right.label)));
         setNotice(`Added mapping ${response.mapping.label}.`);
       }
@@ -424,8 +449,10 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                     <th className="border border-slate-700 px-4 py-3 text-left">Label</th>
                     <th className="border border-slate-700 px-4 py-3 text-left">State</th>
                     <th className="border border-slate-700 px-4 py-3 text-left">Maintenance Asset</th>
-                    {formatKeys.map((key) => (
-                      <th key={`mapping-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">{formatSheetHeader(key, sheetNameOverrides)}</th>
+                    {allQuantityKeys.map((key) => (
+                      <th key={`mapping-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">
+                        {formatKeys.includes(key as (typeof formatKeys)[number]) ? formatSheetHeader(key as (typeof formatKeys)[number], sheetNameOverrides) : (sheetNameOverrides[key] || key)}
+                      </th>
                     ))}
                     <th className="sticky right-0 z-20 border border-slate-700 bg-slate-950 px-4 py-3 text-center">Actions</th>
                   </tr>
@@ -442,9 +469,9 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                       <td className="border border-slate-700 px-4 py-3 text-slate-300">
                         {mapping.maintenanceAssetId ? (mappingById.get(mapping.maintenanceAssetId)?.label ?? mappingById.get(mapping.maintenanceAssetId)?.asset ?? 'Unknown') : '-'}
                       </td>
-                      {formatKeys.map((key) => (
+                      {allQuantityKeys.map((key) => (
                         <td key={`mapping-cell-${mapping.id}-${key}`} className="border border-slate-700 px-4 py-3 text-center font-semibold text-white">
-                          {mapping.quantities[key]}
+                          {quantityValue(mapping.quantities, key)}
                         </td>
                       ))}
                       <td className="sticky right-0 z-10 border border-slate-700 bg-slate-800/95 px-3 py-3">
@@ -538,14 +565,16 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              {formatKeys.map((key) => (
+              {allQuantityKeys.map((key) => (
                 <div key={key} className="space-y-2">
-                  <Label htmlFor={`qty-${key}`}>{key}</Label>
+                  <Label htmlFor={`qty-${key}`}>
+                    {formatKeys.includes(key as (typeof formatKeys)[number]) ? formatSheetHeader(key as (typeof formatKeys)[number], sheetNameOverrides) : (sheetNameOverrides[key] || key)}
+                  </Label>
                   <Input
                     id={`qty-${key}`}
                     inputMode="numeric"
                     onChange={(event) => updateQuantity(key, event.target.value)}
-                    value={String(form.quantities[key])}
+                    value={String((form.quantities as Record<string, number>)[key] ?? 0)}
                   />
                 </div>
               ))}
