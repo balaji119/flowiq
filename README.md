@@ -65,6 +65,38 @@ The default local URLs are:
 - `npm run db:seed`
 - `npm run db:setup`
 
+## Theme Quick-Change (Frontend)
+
+To quickly change the app theme color, edit global tokens in:
+
+- `apps/web/app/globals.css`
+
+Primary theme tokens live under `:root`:
+
+- `--primary-500` and `--primary-500-rgb`: main brand/button color
+- `--primary-400` and `--primary-400-rgb`: hover/accent shade
+- `--primary-300`, `--primary-200`, `--primary-100`: lighter accents
+- `--primary-600`, `--primary-700`, `--primary-800`, `--primary-900`: darker shades
+
+Where these are used globally:
+
+- `.btn-theme-primary` uses `--primary-500`, `--primary-400`, and RGB vars
+- `body` background gradients use `--primary-500-rgb` and `--primary-400-rgb`
+- `::selection` uses `--primary-500-rgb`
+
+Quick purple-to-teal example:
+
+```css
+:root {
+  --primary-500: #0ea5a4;
+  --primary-500-rgb: 14, 165, 164;
+  --primary-400: #2dd4bf;
+  --primary-400-rgb: 45, 212, 191;
+}
+```
+
+After updating tokens, restart `npm run web` (or refresh the running app) to verify button, hover, and background updates.
+
 ## Architecture
 
 - `apps/web/app/page.tsx`: Next.js route entry point

@@ -556,7 +556,7 @@ export function CampaignScheduleViewDialog({
               <Button className="h-9 rounded-md border border-white/10 bg-slate-900/50 px-4 text-xs text-slate-100 hover:bg-slate-800/70" onClick={onClose} type="button" variant="ghost">
                 Close
               </Button>
-              <Button className="h-9 px-4" onClick={onEdit} type="button">
+              <Button className="h-9 px-4 btn-theme-primary" onClick={onEdit} type="button">
                 Edit Schedule
               </Button>
             </div>
@@ -724,7 +724,7 @@ export function CampaignScheduleViewDialog({
             <div className="shrink-0 border-t border-white/10 bg-gradient-to-b from-[#21193f] to-[#16122f] px-5 py-4 sm:px-7">
               <div className="flex items-center justify-end gap-2.5">
                 <Button
-                  className="h-9 px-4"
+                  className="h-9 px-4 btn-theme-primary"
                   disabled={downloadingVisuals}
                   onClick={downloadVisualsViaQuoteBuilder}
                   type="button"
@@ -785,13 +785,13 @@ export function CampaignScheduleViewDialog({
               </div>
             </div>
             <button
-              className="w-full rounded-lg border border-white/10 bg-slate-900/40 p-4 text-left transition-colors hover:bg-slate-800/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300/70"
+              className="w-full rounded-lg border border-violet-400/35 bg-violet-500/10 p-4 text-left transition-colors hover:border-violet-300/60 hover:bg-violet-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/80"
               onClick={() => setSelectedArtworkAsset({ title: selectedAssetDetails.title, rows: selectedAssetDetails.attachedArtworkRows })}
               type="button"
             >
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-white">Attached Artwork</p>
-                <p className="text-sm font-semibold text-white">{selectedAssetDetails.imageIds.length}</p>
+                <p className="text-sm font-semibold text-violet-100">Attached Artwork</p>
+                <p className="text-sm font-semibold text-violet-100">{selectedAssetDetails.imageIds.length}</p>
               </div>
             </button>
           </div>

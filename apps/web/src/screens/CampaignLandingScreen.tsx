@@ -262,7 +262,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                 >
                   <td className="px-5 py-2.5 font-semibold text-white">
                     <button
-                      className="block max-w-[320px] truncate whitespace-nowrap text-left text-white transition hover:text-violet-200"
+                      className="block w-full max-w-[320px] truncate whitespace-nowrap text-left text-white transition hover:text-violet-200"
                       onClick={() => void handleOpenCampaignView(campaign.id)}
                       title={campaignDisplayName(campaign)}
                       type="button"
