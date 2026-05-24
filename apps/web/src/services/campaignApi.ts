@@ -48,6 +48,12 @@ export async function submitCampaignToPrintIQ(campaignId: string) {
   });
 }
 
+export async function markCampaignSubmitted(campaignId: string) {
+  return apiFetchJson<{ campaign: CampaignRecord }>(`/api/campaigns/${encodeURIComponent(campaignId)}/mark-submitted`, {
+    method: 'POST',
+  });
+}
+
 export async function acquireCampaignEditLock(campaignId: string) {
   return apiFetchJson<{ lock: CampaignEditLockInfo }>(`/api/campaigns/${encodeURIComponent(campaignId)}/edit-lock`, {
     method: 'POST',

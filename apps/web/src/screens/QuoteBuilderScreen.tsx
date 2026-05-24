@@ -26,7 +26,7 @@ import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dial
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { buildApiUrl } from '../services/apiBase';
-import { acquireCampaignEditLock, createCampaign, fetchCampaign, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
+import { acquireCampaignEditLock, createCampaign, fetchCampaign, markCampaignSubmitted, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { deleteCampaignImage, uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
@@ -44,6 +44,7 @@ const REVIEW_DRAWER_OPEN_KEY = 'adsconnect-review-drawer-open';
 const REVIEW_DRAWER_MODE_KEY = 'adsconnect-review-drawer-mode';
 const VISUALS_EXPORT_MODE = parseVisualsExportMode(process.env.EXPORT_EXCEL);
 const QUOTE_AUTOMATION_RESULT_EVENT = 'flowiq:quote-automation-result';
+const LANDING_NOTICE_KEY = 'flowiq:landing-notice';
 
 type VisualsExportMode = 'excel' | 'pdf';
 type ReviewDrawerMode = 'high-level' | 'detailed';
@@ -1669,6 +1670,7 @@ export function QuoteBuilderScreen({
     return byMarket;
   }, [marketDeliveryAddresses]);
   const hasUnsavedChanges = !loadingCampaign && stableSerialize(values) !== lastPersistedValuesRef.current;
+  const isSubmittedCampaign = campaignStatus === 'submitted';
   const hasMappedCreatives = useMemo(() => {
     return values.campaignMarkets.some((market) =>
       market.assets.some((asset) => {
@@ -2813,6 +2815,10 @@ export function QuoteBuilderScreen({
 
   async function saveCampaignDraft(options?: { fromAutoSave?: boolean }) {
     const fromAutoSave = options?.fromAutoSave ?? false;
+    if (isSubmittedCampaign) {
+      if (!fromAutoSave) setError('Submitted campaigns are read-only and cannot be saved.');
+      return campaignId;
+    }
     const currentValuesSerialized = stableSerialize(values);
     if (fromAutoSave && lastAutoSaveFailedValuesRef.current === currentValuesSerialized) {
       return null;
@@ -2849,7 +2855,7 @@ export function QuoteBuilderScreen({
   }
 
   useEffect(() => {
-    if (loadingCampaign || savingCampaign || !hasUnsavedChanges) return;
+    if (loadingCampaign || savingCampaign || !hasUnsavedChanges || isSubmittedCampaign) return;
 
     const timeoutId = window.setTimeout(() => {
       void saveCampaignDraft({ fromAutoSave: true });
@@ -2858,7 +2864,7 @@ export function QuoteBuilderScreen({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [campaignId, hasUnsavedChanges, loadingCampaign, savingCampaign, values]);
+  }, [campaignId, hasUnsavedChanges, isSubmittedCampaign, loadingCampaign, savingCampaign, values]);
 
   async function handleBackToDashboard() {
     if (!onBack) return;
@@ -4486,10 +4492,27 @@ export function QuoteBuilderScreen({
       const creativeLinks = Array.from(creativeLinksByUrl.values());
       setExportProgressMessage('Sending email to ADS...');
       await sendEmailToAds(files, values.campaignName, creativeLinks);
+      if (campaignId) {
+        try {
+          const response = await markCampaignSubmitted(campaignId);
+          setCampaignStatus(response.campaign.status);
+        } catch {
+          // Email already succeeded; do not fail success flow if status sync is delayed.
+        }
+      }
       setExportProgressMessage('Email sent to ADS.');
       setError('');
       setReviewActionError('');
       setReviewActionNeedsDueDate(false);
+      if (!autoSendEmailToAds) {
+        try {
+          window.sessionStorage.setItem(LANDING_NOTICE_KEY, 'Email sent to ADS.');
+        } catch {
+          // Best effort only.
+        }
+        await releaseActiveCampaignLock(campaignId);
+        onBack?.();
+      }
       if (closeAfterEmailSend) {
         window.setTimeout(() => {
           window.close();
@@ -6404,7 +6427,7 @@ export function QuoteBuilderScreen({
             <Button disabled={savingCampaign} onClick={handleDiscardAndLeave} type="button" variant="ghost">
               Discard
             </Button>
-            <Button disabled={savingCampaign} onClick={() => void handleSaveAndLeave()} type="button">
+            <Button disabled={savingCampaign || isSubmittedCampaign} onClick={() => void handleSaveAndLeave()} type="button">
               {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : null}
               {savingCampaign ? 'Saving…' : 'Save'}
             </Button>

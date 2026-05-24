@@ -118,6 +118,7 @@ export function CampaignScheduleViewDialog({
   const [automationFrameUrl, setAutomationFrameUrl] = useState('');
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
+  const [emailSubmitted, setEmailSubmitted] = useState(false);
   const automationFrameRef = useRef<HTMLIFrameElement | null>(null);
   const hasMappedCreatives = useMemo(() => {
     if (!campaign) return false;
@@ -135,6 +136,7 @@ export function CampaignScheduleViewDialog({
   }, [campaign]);
   const hasUploadedPurchaseOrder = Boolean((campaign?.purchaseOrder?.originalName || '').trim());
   const hasDeliveryDueDate = Boolean((campaign?.values.dueDate || '').trim());
+  const isSubmittedCampaign = (campaign?.status === 'submitted') || emailSubmitted;
 
   function startQuoteAutomation(action: QuoteAutomationAction) {
     if (!campaign || typeof window === 'undefined') return;
@@ -252,6 +254,7 @@ export function CampaignScheduleViewDialog({
         setActionError('');
         setActionSuccess('Downloaded');
       } else if (data.action === 'send-email-to-ads') {
+        setEmailSubmitted(true);
         setActionError('');
         setActionSuccess('Email sent to ADS.');
       }
@@ -262,6 +265,10 @@ export function CampaignScheduleViewDialog({
       window.removeEventListener('message', onMessage);
     };
   }, [pendingAutomation]);
+
+  useEffect(() => {
+    setEmailSubmitted(false);
+  }, [campaign?.id]);
 
   useEffect(() => {
     if (!pendingAutomation) return undefined;
@@ -282,7 +289,7 @@ export function CampaignScheduleViewDialog({
     if (!actionSuccess) return undefined;
     const timeoutId = window.setTimeout(() => {
       setActionSuccess('');
-    }, 2000);
+    }, 4000);
     return () => {
       window.clearTimeout(timeoutId);
     };
@@ -697,7 +704,7 @@ export function CampaignScheduleViewDialog({
               <Button className="h-9 rounded-md border border-white/10 bg-slate-900/50 px-4 text-xs text-slate-100 hover:bg-slate-800/70" onClick={onClose} type="button" variant="ghost">
                 Close
               </Button>
-              <Button className="h-9 px-4 btn-theme-primary" onClick={onEdit} type="button">
+              <Button className="h-9 px-4 btn-theme-primary" disabled={isSubmittedCampaign} onClick={onEdit} title={isSubmittedCampaign ? 'Submitted campaigns are read-only' : 'Edit schedule'} type="button">
                 Edit Schedule
               </Button>
             </div>
@@ -886,8 +893,9 @@ export function CampaignScheduleViewDialog({
                 </Button>
                 <Button
                   className="h-9 px-4 btn-theme-primary"
-                  disabled={downloadingVisuals || sendingAdsEmail}
+                  disabled={isSubmittedCampaign || downloadingVisuals || sendingAdsEmail}
                   onClick={sendEmailViaQuoteBuilder}
+                  title={isSubmittedCampaign ? 'Submitted campaigns cannot be emailed again' : 'Send email'}
                   type="button"
                 >
                   {sendingAdsEmail ? 'Sending...' : 'Send Email'}

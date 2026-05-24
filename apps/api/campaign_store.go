@@ -583,3 +583,26 @@ func (s *campaignStore) deleteCampaign(ctx context.Context, user AuthUser, campa
 	}
 	return nil
 }
+
+func (s *campaignStore) markCampaignSubmitted(ctx context.Context, user AuthUser, campaignID string) (*campaignRecord, error) {
+	if user.TenantID == nil {
+		return nil, errors.New("current user is not assigned to a tenant")
+	}
+
+	commandTag, err := s.pool.Exec(ctx, `
+		UPDATE campaigns
+		SET status = 'submitted',
+			submitted_at = NOW(),
+			updated_by_user_id = $3,
+			updated_at = NOW()
+		WHERE id = $1 AND tenant_id = $2
+	`, campaignID, *user.TenantID, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if commandTag.RowsAffected() == 0 {
+		return nil, errors.New("Campaign not found")
+	}
+
+	return s.getCampaign(ctx, user, campaignID)
+}

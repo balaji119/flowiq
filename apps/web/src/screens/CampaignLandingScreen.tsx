@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Eye, FolderKanban, LoaderCircle, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { CampaignListItem, CampaignRecord } from '@flowiq/shared';
 import { Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
@@ -10,11 +11,17 @@ type CampaignLandingScreenProps = {
   showHero?: boolean;
 };
 
+const LANDING_NOTICE_KEY = 'flowiq:landing-notice';
+
 function formatCampaignDate(value: string) {
   if (!value) return 'TBC';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleDateString('en-GB');
+}
+
+function formatCampaignStatus(status: CampaignListItem['status']) {
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 function WorkflowIllustration() {
@@ -75,30 +82,47 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
   const [viewError, setViewError] = useState('');
   const [campaignForView, setCampaignForView] = useState<CampaignRecord | null>(null);
   const [viewCampaignId, setViewCampaignId] = useState<string | null>(null);
+  const [landingNotice, setLandingNotice] = useState('');
+  const [bottomBarHost, setBottomBarHost] = useState<HTMLElement | null>(null);
+
+  const loadCampaigns = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await fetchCampaigns();
+      setCampaigns(response.campaigns);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load campaign schedules');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let active = true;
-
-    async function loadCampaigns() {
-      try {
-        setLoading(true);
-        const response = await fetchCampaigns();
-        if (!active) return;
-        setCampaigns(response.campaigns);
-      } catch (loadError) {
-        if (active) {
-          setError(loadError instanceof Error ? loadError.message : 'Unable to load campaign schedules');
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-
     void loadCampaigns();
-    return () => {
-      active = false;
-    };
+  }, [loadCampaigns]);
+
+  useEffect(() => {
+    setBottomBarHost(document.getElementById('workspace-bottom-bar-slot'));
+    try {
+      const message = window.sessionStorage.getItem(LANDING_NOTICE_KEY) || '';
+      if (message.trim()) {
+        setLandingNotice(message);
+        window.sessionStorage.removeItem(LANDING_NOTICE_KEY);
+      }
+    } catch {
+      // Ignore storage errors.
+    }
   }, []);
+
+  useEffect(() => {
+    if (!landingNotice) return undefined;
+    const timeoutId = window.setTimeout(() => {
+      setLandingNotice('');
+    }, 4000);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [landingNotice]);
 
   function handleCreateCampaign() {
     setError('');
@@ -134,6 +158,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
 
   async function handleEditFromView() {
     if (!viewCampaignId) return;
+    if (campaignForView?.status === 'submitted') return;
     setViewDialogOpen(false);
     setCampaignForView(null);
     setViewError('');
@@ -249,6 +274,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Start</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Due</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-center backdrop-blur">Weeks</th>
+                <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-center backdrop-blur">Status</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-center backdrop-blur">Action</th>
               </tr>
             </thead>
@@ -277,12 +303,32 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                   <td className="px-5 py-2.5 text-slate-300">{formatCampaignDate(campaign.campaignStartDate)}</td>
                   <td className="px-5 py-2.5 text-slate-300">{formatCampaignDate(campaign.dueDate)}</td>
                   <td className="px-5 py-2.5 text-center text-slate-300">{campaign.numberOfWeeks || '0'}</td>
+                  <td className="px-5 py-2.5 text-center">
+                    <span className={campaign.status === 'submitted'
+                      ? 'inline-flex rounded-full border border-emerald-300/35 bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-200'
+                      : campaign.status === 'calculated'
+                        ? 'inline-flex rounded-full border border-sky-300/35 bg-sky-500/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-sky-200'
+                        : 'inline-flex rounded-full border border-amber-300/35 bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-200'}
+                    >
+                      {formatCampaignStatus(campaign.status)}
+                    </span>
+                  </td>
                   <td className="px-5 py-2.5">
                     <div className="flex justify-center gap-2">
                       <Button aria-label="View campaign" className="h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200" onClick={() => void handleOpenCampaignView(campaign.id)} type="button" variant="ghost">
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button aria-label="Edit campaign" className="h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200" onClick={() => void handleOpenCampaign(campaign.id)} type="button" variant="ghost">
+                      <Button
+                        aria-label="Edit campaign"
+                        className={campaign.status === 'submitted'
+                          ? 'h-8 w-8 cursor-not-allowed rounded-md border border-white/10 p-0 text-slate-600 opacity-60'
+                          : 'h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200'}
+                        disabled={campaign.status === 'submitted'}
+                        onClick={() => void handleOpenCampaign(campaign.id)}
+                        title={campaign.status === 'submitted' ? 'Submitted campaigns are read-only' : 'Edit campaign'}
+                        type="button"
+                        variant="ghost"
+                      >
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button
@@ -316,6 +362,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
         onOpenChange={(open) => {
           setViewDialogOpen(open);
           if (!open) {
+            void loadCampaigns();
             setViewLoading(false);
             setViewError('');
             setCampaignForView(null);
@@ -324,6 +371,19 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
         }}
         open={viewDialogOpen}
       />
+
+      {landingNotice
+        ? (bottomBarHost
+            ? createPortal(
+                <div className="z-20 border-t border-slate-800/90 bg-slate-950/92 backdrop-blur">
+                  <div className="w-full px-3 py-2 sm:px-4 lg:px-5">
+                    <div className="px-1 py-1 text-sm text-slate-300" role="status">{landingNotice}</div>
+                  </div>
+                </div>,
+                bottomBarHost,
+              )
+            : null)
+        : null}
 
       <Dialog
         open={deleteDialogOpen}

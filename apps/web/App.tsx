@@ -122,6 +122,13 @@ function AppShell() {
     });
   }
 
+  const clearAutomationFlags: Pick<AppNavState, 'autoDownloadVisuals' | 'closeAfterVisualsDownload' | 'autoSendEmailToAds' | 'closeAfterEmailSend'> = {
+    autoDownloadVisuals: false,
+    closeAfterVisualsDownload: false,
+    autoSendEmailToAds: false,
+    closeAfterEmailSend: false,
+  };
+
   useEffect(() => {
     if (loading || !session || hydratedHistoryRef.current) return;
     const defaultTenantId = session.user.tenantId ?? null;
@@ -268,7 +275,7 @@ function AppShell() {
         closeAfterVisualsDownload={closeAfterVisualsDownload}
         autoSendEmailToAds={autoSendEmailToAds}
         closeAfterEmailSend={closeAfterEmailSend}
-        onBack={() => navigateTo('landing')}
+        onBack={() => navigateTo('landing', clearAutomationFlags)}
         onOpenAdmin={canAccessManagement ? () => navigateTo('users') : undefined}
       />,
       { pageTitle: 'Campaign Builder' },
@@ -284,6 +291,7 @@ function AppShell() {
           navigateTo('quote', {
             selectedCampaignId: campaignId,
             startFreshCampaign: false,
+            ...clearAutomationFlags,
           })
         }
       />,
@@ -299,6 +307,7 @@ function AppShell() {
           navigateTo('quote', {
             selectedCampaignId: campaignId,
             startFreshCampaign: campaignId === null,
+            ...clearAutomationFlags,
           });
         }}
       />,
@@ -313,6 +322,7 @@ function AppShell() {
         navigateTo('quote', {
           selectedCampaignId: campaignId,
           startFreshCampaign: campaignId === null,
+          ...clearAutomationFlags,
         });
       }}
     />,

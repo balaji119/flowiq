@@ -53,17 +53,27 @@ func (s *campaignStore) acquireCampaignEditLock(ctx context.Context, user AuthUs
 	defer tx.Rollback(ctx)
 
 	var campaignExists bool
+	var campaignStatus string
 	if err := tx.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1
 			FROM campaigns
 			WHERE id = $1 AND tenant_id = $2
-		)
-	`, campaignID, tenantID).Scan(&campaignExists); err != nil {
+		),
+		COALESCE((
+			SELECT status
+			FROM campaigns
+			WHERE id = $1 AND tenant_id = $2
+			LIMIT 1
+		), '')
+	`, campaignID, tenantID).Scan(&campaignExists, &campaignStatus); err != nil {
 		return nil, err
 	}
 	if !campaignExists {
 		return nil, errors.New("Campaign not found")
+	}
+	if strings.EqualFold(strings.TrimSpace(campaignStatus), "submitted") {
+		return nil, errors.New("Submitted campaigns are read-only")
 	}
 
 	if _, err := tx.Exec(ctx, `
