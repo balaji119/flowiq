@@ -18,7 +18,7 @@ function formatCampaignDate(value: string) {
   if (!value) return 'TBC';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString();
+  return parsed.toLocaleDateString('en-GB');
 }
 
 function formatCurrency(value: number) {

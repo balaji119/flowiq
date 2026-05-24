@@ -399,7 +399,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                       </div>
                       {active ? <Badge>Selected</Badge> : null}
                     </div>
-                    {tenant.createdAt ? <p className="mt-3 text-xs text-slate-500">Created {new Date(tenant.createdAt).toLocaleString()}</p> : null}
+                    {tenant.createdAt ? <p className="mt-3 text-xs text-slate-500">Created {new Date(tenant.createdAt).toLocaleString('en-GB')}</p> : null}
                   </button>
                 );
               })}

@@ -14,12 +14,12 @@ function formatCampaignDate(value: string) {
   if (!value) return 'TBC';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString();
+  return parsed.toLocaleDateString('en-GB');
 }
 
 function WorkflowIllustration() {
   return (
-    <div className="relative h-[280px] w-full overflow-hidden rounded-2xl border border-white/10 bg-[#110f24]/92 p-4 backdrop-blur-xl sm:h-[300px] lg:h-[336px] xl:h-[360px]">
+    <div className="relative h-[210px] w-full overflow-hidden rounded-2xl border border-white/10 bg-[#110f24]/92 p-4 backdrop-blur-xl sm:h-[225px] lg:h-[252px] xl:h-[270px]">
       <div className="absolute -left-14 -top-12 h-44 w-44 rounded-full bg-violet-500/14 blur-3xl" />
       <div className="absolute -right-14 bottom-0 h-52 w-52 rounded-full bg-violet-400/12 blur-3xl" />
       <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: 'linear-gradient(rgba(148,163,184,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.3) 1px, transparent 1px)', backgroundSize: '44px 44px' }} />
@@ -178,15 +178,16 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
   return (
     <main className="dense-main flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden">
       {showHero ? (
-        <section className="relative shrink-0 overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#161231]/82 p-6 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:p-7 xl:p-8">
+        <section className="relative shrink-0 overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#161231]/82 px-6 pb-4 pt-4 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:px-7 sm:pb-5 sm:pt-5 xl:px-8 xl:pb-6 xl:pt-6">
           <div className="absolute -left-24 -top-20 h-64 w-64 rounded-full bg-violet-500/16 blur-3xl" />
           <div className="absolute -right-24 -bottom-24 h-72 w-72 rounded-full bg-violet-400/12 blur-3xl" />
-          <div className="relative grid min-h-[324px] gap-6 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,1.18fr)] lg:items-center xl:min-h-[369px] xl:gap-10">
+          <div className="relative grid min-h-[220px] gap-6 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,1.18fr)] lg:items-center xl:min-h-[252px] xl:gap-10">
             <div className="max-w-xl">
+              <p className="text-[14px] font-semibold uppercase tracking-[0.14em] text-slate-300">Revolution 360</p>
               <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">POWERED BY ADS</p>
-              <h1 className="mt-2 text-[36px] font-semibold leading-tight tracking-tight text-[#F9FAFB] md:text-[42px] xl:text-[48px]">Plan Outdoor Campaigns Faster</h1>
-              <p className="mt-3 max-w-lg text-[15px] leading-relaxed text-[#9CA3AF] xl:text-[16px]">Build schedules, review poster quantities, and generate ADS-ready quotes.</p>
-              <div className="mt-6 flex flex-wrap items-center gap-3">
+              <h1 className="mt-1 text-[32px] font-semibold leading-tight tracking-tight text-[#F9FAFB] md:text-[38px] xl:text-[44px]">Plan Outdoor Campaigns Faster</h1>
+              <p className="mt-2 max-w-lg text-[14px] leading-relaxed text-[#9CA3AF] xl:text-[15px]">Build schedules, review poster quantities, and generate ADS-ready orders.</p>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
                 <Button
                   className="h-10 px-5 btn-theme-primary"
                   onClick={handleCreateCampaign}
@@ -270,7 +271,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                     </button>
                   </td>
                   <td className="px-5 py-2.5 text-slate-300">{campaign.createdBy || 'N/A'}</td>
-                  <td className="px-5 py-2.5 text-slate-300">{new Date(campaign.updatedAt).toLocaleString()}</td>
+                  <td className="px-5 py-2.5 text-slate-300">{new Date(campaign.updatedAt).toLocaleString('en-GB')}</td>
                   <td className="px-5 py-2.5 text-center font-semibold text-white">{campaign.marketCount}</td>
                   <td className="px-5 py-2.5 text-center font-semibold text-white">{campaign.assetCount}</td>
                   <td className="px-5 py-2.5 text-slate-300">{formatCampaignDate(campaign.campaignStartDate)}</td>

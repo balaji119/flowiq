@@ -388,7 +388,30 @@ function escapeHtml(value: string) {
 function formatDocumentDate(value: string) {
   const parsed = parseDateOnly(value);
   if (!parsed) return 'TBC';
-  return parsed.toLocaleDateString('en-AU');
+  return parsed.toLocaleDateString('en-GB');
+}
+
+function formatDateInputDisplay(value: string) {
+  const parsed = parseDateOnly(value);
+  if (!parsed) return '';
+  const day = String(parsed.getDate()).padStart(2, '0');
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const year = String(parsed.getFullYear());
+  return `${day}/${month}/${year}`;
+}
+
+function parseDisplayDateToIso(value: string) {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return null;
+  const normalizedDay = String(day).padStart(2, '0');
+  const normalizedMonth = String(month).padStart(2, '0');
+  return `${year}-${normalizedMonth}-${normalizedDay}`;
 }
 
 function toOrdinalDay(day: number) {
@@ -1086,6 +1109,8 @@ export function QuoteBuilderScreen({
 }) {
   const { session } = useAuth();
   const [values, setValues] = useState<OrderFormValues>(() => defaultValues);
+  const [campaignStartDateInput, setCampaignStartDateInput] = useState('');
+  const [dueDateInput, setDueDateInput] = useState('');
   const [campaignId, setCampaignId] = useState<string | null>(selectedCampaignId ?? null);
   const [campaignStatus, setCampaignStatus] = useState<CampaignRecord['status']>('draft');
   const [markets, setMarkets] = useState<MarketMetadata[]>([]);
@@ -1179,6 +1204,14 @@ export function QuoteBuilderScreen({
       }
     };
   }, []);
+
+  useEffect(() => {
+    setCampaignStartDateInput(formatDateInputDisplay(values.campaignStartDate));
+  }, [values.campaignStartDate]);
+
+  useEffect(() => {
+    setDueDateInput(formatDateInputDisplay(values.dueDate));
+  }, [values.dueDate]);
 
   async function releaseActiveCampaignLock(targetCampaignId?: string | null) {
     const id = targetCampaignId ?? campaignId;
@@ -3596,8 +3629,8 @@ export function QuoteBuilderScreen({
             font,
             color: rgb(0.85, 0.9, 0.97),
           });
-          const startLabel = values.campaignStartDate?.trim() ? values.campaignStartDate : '-';
-          const dueLabel = values.dueDate?.trim() ? values.dueDate : '-';
+          const startLabel = values.campaignStartDate?.trim() ? formatDocumentDate(values.campaignStartDate) : '-';
+          const dueLabel = values.dueDate?.trim() ? formatDocumentDate(values.dueDate) : '-';
           page.drawText(`Start Date: ${startLabel}    Due Date: ${dueLabel}`, {
             x: titleTextX + (adsLogoImage ? 56 : 0),
             y: cursorY - 50,
@@ -4457,10 +4490,30 @@ export function QuoteBuilderScreen({
                   <Input
                     className="h-11 w-full rounded-none border-0 bg-transparent px-2 pr-9 text-[13px] [&::-webkit-calendar-picker-indicator]:opacity-0"
                     id="campaign-start"
-                    min={minSelectableDate}
-                    type="date"
-                    value={values.campaignStartDate}
-                    onChange={(event) => updateField('campaignStartDate', event.target.value)}
+                    inputMode="numeric"
+                    placeholder="dd/mm/yyyy"
+                    type="text"
+                    value={campaignStartDateInput}
+                    onBlur={() => {
+                      if (!campaignStartDateInput.trim()) {
+                        updateField('campaignStartDate', '');
+                        setCampaignStartDateInput('');
+                        return;
+                      }
+                      const parsed = parseDisplayDateToIso(campaignStartDateInput);
+                      if (parsed) {
+                        updateField('campaignStartDate', parsed);
+                        setCampaignStartDateInput(formatDateInputDisplay(parsed));
+                        return;
+                      }
+                      setCampaignStartDateInput(formatDateInputDisplay(values.campaignStartDate));
+                    }}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      setCampaignStartDateInput(nextValue);
+                      const parsed = parseDisplayDateToIso(nextValue);
+                      if (parsed) updateField('campaignStartDate', parsed);
+                    }}
                   />
                   <CalendarDays className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 </div>
@@ -4471,10 +4524,30 @@ export function QuoteBuilderScreen({
                   <Input
                     className="h-11 w-full rounded-none border-0 bg-transparent px-2 pr-9 text-[13px] [&::-webkit-calendar-picker-indicator]:opacity-0"
                     id="due-date"
-                    min={minSelectableDate}
-                    type="date"
-                    value={values.dueDate}
-                    onChange={(event) => updateField('dueDate', event.target.value)}
+                    inputMode="numeric"
+                    placeholder="dd/mm/yyyy"
+                    type="text"
+                    value={dueDateInput}
+                    onBlur={() => {
+                      if (!dueDateInput.trim()) {
+                        updateField('dueDate', '');
+                        setDueDateInput('');
+                        return;
+                      }
+                      const parsed = parseDisplayDateToIso(dueDateInput);
+                      if (parsed) {
+                        updateField('dueDate', parsed);
+                        setDueDateInput(formatDateInputDisplay(parsed));
+                        return;
+                      }
+                      setDueDateInput(formatDateInputDisplay(values.dueDate));
+                    }}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      setDueDateInput(nextValue);
+                      const parsed = parseDisplayDateToIso(nextValue);
+                      if (parsed) updateField('dueDate', parsed);
+                    }}
                   />
                   <CalendarDays className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 </div>
