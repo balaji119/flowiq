@@ -171,6 +171,23 @@ function visibleBreakdownKeys(breakdown: QuantityBreakdown) {
 
 const creativeFormatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0', 'Mega', 'DOT M', 'MP', 'FF'] as const;
 type CreativeFormatKey = (typeof creativeFormatKeys)[number];
+const formatToFrameDivisor: Record<CreativeFormatKey, number> = {
+  '8-sheet': 4,
+  '6-sheet': 3,
+  '4-sheet': 2,
+  '2-sheet': 1,
+  QA0: 4,
+  Mega: 1,
+  'DOT M': 1,
+  MP: 1,
+  FF: 1,
+};
+
+function frameCountForFormat(breakdown: QuantityBreakdown | null | undefined, formatKey: CreativeFormatKey) {
+  const quantity = breakdown ? breakdownValueForKey(breakdown, formatKey) : 0;
+  const divisor = formatToFrameDivisor[formatKey] ?? 1;
+  return Math.max(1, Math.ceil(Math.max(0, quantity) / Math.max(1, divisor)));
+}
 
 type MultiCreativeImageMap = Partial<Record<CreativeFormatKey, string[]>>;
 type MultiArtworkRecord = { id: string; imageId: string; frameCount: number };
@@ -2093,8 +2110,8 @@ export function QuoteBuilderScreen({
     setAssignArtworkDialogOpen(true);
   }
 
-  function openMultiArtworkDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey, slotCount: number) {
-    const totalFrames = Math.max(1, slotCount);
+  function openMultiArtworkDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey, totalFrames: number) {
+    const safeTotalFrames = Math.max(1, totalFrames);
     const targetMarket = values.campaignMarkets.find((market) => market.id === marketId);
     const targetAsset = targetMarket?.assets.find((asset) => asset.id === assetId);
     const slotIds = (targetAsset?.multiCreativeImageIds?.[formatKey] ?? []).map((id) => (id || '').trim()).filter(Boolean);
@@ -2112,8 +2129,8 @@ export function QuoteBuilderScreen({
       imageId,
       frameCount: countsByImageId.get(imageId) ?? 0,
     }));
-    setMultiArtworkRecords(recordsFromAsset.length > 0 ? recordsFromAsset : [{ id: `multi-artwork-record-${Date.now()}-0`, imageId: '', frameCount: totalFrames }]);
-    setMultiArtworkTarget({ marketId, assetId, formatKey, totalFrames });
+    setMultiArtworkRecords(recordsFromAsset.length > 0 ? recordsFromAsset : [{ id: `multi-artwork-record-${Date.now()}-0`, imageId: '', frameCount: safeTotalFrames }]);
+    setMultiArtworkTarget({ marketId, assetId, formatKey, totalFrames: safeTotalFrames });
     setMultiArtworkDialogOpen(true);
   }
 
@@ -4690,6 +4707,7 @@ export function QuoteBuilderScreen({
                                     {displayFormats.map((formatKey, index) => {
                                       const selectedCreativeId = formatKey ? getCreativeImageIdForFormat(asset, formatKey) : '';
                                       const multiArtworkSlotCount = formatKey && normalizedMultipleArtworkFormats[canonicalKeyForFormat(formatKey)] ? Math.max(1, metadataAsset?.quantities?.[formatKey] ?? 1) : 0;
+                                      const multiArtworkFrameCount = formatKey ? frameCountForFormat(line?.breakdown, formatKey) : 0;
                                       const slotArtworkIds = formatKey ? (asset.multiCreativeImageIds?.[formatKey] ?? []) : [];
                                       const hasAnySlotArtwork = slotArtworkIds.some((id) => Boolean((id || '').trim()));
                                       return (
@@ -4713,7 +4731,7 @@ export function QuoteBuilderScreen({
                                                   className="h-9 w-24 px-3 text-xs font-semibold"
                                                   onClick={() =>
                                                     multiArtworkSlotCount > 0
-                                                      ? openMultiArtworkDialog(market.id, asset.id, formatKey, multiArtworkSlotCount)
+                                                      ? openMultiArtworkDialog(market.id, asset.id, formatKey, multiArtworkFrameCount)
                                                       : selectedCreativeId
                                                         ? openArtworkPreviewDialog(market.id, asset.id, formatKey)
                                                         : openAssignArtworkDialog(market.id, asset.id, formatKey)
@@ -5128,6 +5146,7 @@ export function QuoteBuilderScreen({
                             {displayFormats.map((formatKey, index) => {
                               const selectedCreativeId = formatKey ? getCreativeImageIdForFormat(asset, formatKey) : '';
                               const multiArtworkSlotCount = formatKey && normalizedMultipleArtworkFormats[canonicalKeyForFormat(formatKey)] ? Math.max(1, metadataAsset?.quantities?.[formatKey] ?? 1) : 0;
+                              const multiArtworkFrameCount = formatKey ? frameCountForFormat(line?.breakdown, formatKey) : 0;
                               const slotArtworkIds = formatKey ? (asset.multiCreativeImageIds?.[formatKey] ?? []) : [];
                               const hasAnySlotArtwork = slotArtworkIds.some((id) => Boolean((id || '').trim()));
                               return (
@@ -5151,7 +5170,7 @@ export function QuoteBuilderScreen({
                                           className="h-9 w-24 px-3 text-xs font-semibold"
                                           onClick={() =>
                                             multiArtworkSlotCount > 0
-                                              ? openMultiArtworkDialog(expandedMarket.id, asset.id, formatKey, multiArtworkSlotCount)
+                                              ? openMultiArtworkDialog(expandedMarket.id, asset.id, formatKey, multiArtworkFrameCount)
                                               : selectedCreativeId
                                                 ? openArtworkPreviewDialog(expandedMarket.id, asset.id, formatKey)
                                                 : openAssignArtworkDialog(expandedMarket.id, asset.id, formatKey)
