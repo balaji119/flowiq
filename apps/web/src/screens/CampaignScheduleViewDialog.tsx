@@ -106,6 +106,13 @@ export function CampaignScheduleViewDialog({
   const [assetShippingCosts, setAssetShippingCosts] = useState<MarketAssetShippingCostRecord[]>([]);
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<Array<{ market: string; deliveryAddress: string }>>([]);
   const [downloadingVisuals, setDownloadingVisuals] = useState(false);
+  const [sendingAdsEmail, setSendingAdsEmail] = useState(false);
+
+  function openQuoteActionWindow(targetUrl: string) {
+    if (typeof window === 'undefined') return false;
+    const actionWindow = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    return Boolean(actionWindow);
+  }
 
   useEffect(() => {
     if (!open || !campaign) return;
@@ -454,8 +461,32 @@ export function CampaignScheduleViewDialog({
     nextParams.set('downloadVisuals', '1');
     nextParams.set('closeAfterDownload', '1');
     const targetUrl = `${window.location.origin}${window.location.pathname}?${nextParams.toString()}`;
-    window.open(targetUrl, '_blank', 'noopener,noreferrer');
-    window.setTimeout(() => setDownloadingVisuals(false), 900);
+    const opened = openQuoteActionWindow(targetUrl);
+    if (!opened) {
+      setDownloadingVisuals(false);
+      return;
+    }
+    window.setTimeout(() => setDownloadingVisuals(false), 1000);
+  }
+
+  function sendEmailViaQuoteBuilder() {
+    if (!campaign || typeof window === 'undefined') return;
+    setSendingAdsEmail(true);
+    const currentParams = new URLSearchParams(window.location.search);
+    const nextParams = new URLSearchParams();
+    nextParams.set('view', 'quote');
+    nextParams.set('campaignId', campaign.id);
+    const tenantId = currentParams.get('tenantId');
+    if (tenantId) nextParams.set('tenantId', tenantId);
+    nextParams.set('sendEmailToAds', '1');
+    nextParams.set('closeAfterSend', '1');
+    const targetUrl = `${window.location.origin}${window.location.pathname}?${nextParams.toString()}`;
+    const opened = openQuoteActionWindow(targetUrl);
+    if (!opened) {
+      setSendingAdsEmail(false);
+      return;
+    }
+    window.setTimeout(() => setSendingAdsEmail(false), 1000);
   }
 
   function normalizeToken(value: string) {
@@ -724,12 +755,20 @@ export function CampaignScheduleViewDialog({
             <div className="shrink-0 border-t border-white/10 bg-gradient-to-b from-[#21193f] to-[#16122f] px-5 py-4 sm:px-7">
               <div className="flex items-center justify-end gap-2.5">
                 <Button
-                  className="h-9 px-4 btn-theme-primary"
-                  disabled={downloadingVisuals}
+                  className="h-9 rounded-md border border-white/10 bg-slate-900/50 px-4 text-xs text-slate-100 hover:bg-slate-800/70"
+                  disabled={downloadingVisuals || sendingAdsEmail}
                   onClick={downloadVisualsViaQuoteBuilder}
                   type="button"
                 >
                   {downloadingVisuals ? 'Generating...' : 'Download Visuals'}
+                </Button>
+                <Button
+                  className="h-9 px-4 btn-theme-primary"
+                  disabled={downloadingVisuals || sendingAdsEmail}
+                  onClick={sendEmailViaQuoteBuilder}
+                  type="button"
+                >
+                  {sendingAdsEmail ? 'Sending...' : 'Send Email'}
                 </Button>
               </div>
             </div>

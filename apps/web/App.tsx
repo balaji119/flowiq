@@ -24,6 +24,8 @@ type AppNavState = {
   startFreshCampaign: boolean;
   autoDownloadVisuals: boolean;
   closeAfterVisualsDownload: boolean;
+  autoSendEmailToAds: boolean;
+  closeAfterEmailSend: boolean;
 };
 
 function buildUrlFromState(state: AppNavState) {
@@ -34,6 +36,8 @@ function buildUrlFromState(state: AppNavState) {
   if (state.startFreshCampaign) params.set('fresh', '1');
   if (state.autoDownloadVisuals) params.set('downloadVisuals', '1');
   if (state.closeAfterVisualsDownload) params.set('closeAfterDownload', '1');
+  if (state.autoSendEmailToAds) params.set('sendEmailToAds', '1');
+  if (state.closeAfterEmailSend) params.set('closeAfterSend', '1');
   const query = params.toString();
   return query ? `?${query}` : window.location.pathname;
 }
@@ -60,6 +64,8 @@ function readStateFromUrl(defaultTenantId: string | null): AppNavState {
   const fresh = params.get('fresh') === '1';
   const autoDownloadVisuals = params.get('downloadVisuals') === '1';
   const closeAfterVisualsDownload = params.get('closeAfterDownload') === '1';
+  const autoSendEmailToAds = params.get('sendEmailToAds') === '1';
+  const closeAfterEmailSend = params.get('closeAfterSend') === '1';
 
   return {
     view,
@@ -68,6 +74,8 @@ function readStateFromUrl(defaultTenantId: string | null): AppNavState {
     startFreshCampaign: fresh,
     autoDownloadVisuals,
     closeAfterVisualsDownload,
+    autoSendEmailToAds,
+    closeAfterEmailSend,
   };
 }
 
@@ -79,6 +87,8 @@ function AppShell() {
   const [startFreshCampaign, setStartFreshCampaign] = useState(false);
   const [autoDownloadVisuals, setAutoDownloadVisuals] = useState(false);
   const [closeAfterVisualsDownload, setCloseAfterVisualsDownload] = useState(false);
+  const [autoSendEmailToAds, setAutoSendEmailToAds] = useState(false);
+  const [closeAfterEmailSend, setCloseAfterEmailSend] = useState(false);
   const hydratedHistoryRef = useRef(false);
 
   function applyNavState(nextState: AppNavState) {
@@ -88,6 +98,8 @@ function AppShell() {
     setStartFreshCampaign(nextState.startFreshCampaign);
     setAutoDownloadVisuals(nextState.autoDownloadVisuals);
     setCloseAfterVisualsDownload(nextState.closeAfterVisualsDownload);
+    setAutoSendEmailToAds(nextState.autoSendEmailToAds);
+    setCloseAfterEmailSend(nextState.closeAfterEmailSend);
   }
 
   function navigate(nextState: AppNavState) {
@@ -104,6 +116,8 @@ function AppShell() {
       startFreshCampaign,
       autoDownloadVisuals,
       closeAfterVisualsDownload,
+      autoSendEmailToAds,
+      closeAfterEmailSend,
       ...overrides,
     });
   }
@@ -252,6 +266,8 @@ function AppShell() {
         startFresh={startFreshCampaign}
         autoDownloadVisuals={autoDownloadVisuals}
         closeAfterVisualsDownload={closeAfterVisualsDownload}
+        autoSendEmailToAds={autoSendEmailToAds}
+        closeAfterEmailSend={closeAfterEmailSend}
         onBack={() => navigateTo('landing')}
         onOpenAdmin={canAccessManagement ? () => navigateTo('users') : undefined}
       />,

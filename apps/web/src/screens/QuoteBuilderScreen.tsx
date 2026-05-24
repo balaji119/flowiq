@@ -1097,6 +1097,8 @@ export function QuoteBuilderScreen({
   startFresh = false,
   autoDownloadVisuals = false,
   closeAfterVisualsDownload = false,
+  autoSendEmailToAds = false,
+  closeAfterEmailSend = false,
   onBack,
   onOpenAdmin,
 }: {
@@ -1104,6 +1106,8 @@ export function QuoteBuilderScreen({
   startFresh?: boolean;
   autoDownloadVisuals?: boolean;
   closeAfterVisualsDownload?: boolean;
+  autoSendEmailToAds?: boolean;
+  closeAfterEmailSend?: boolean;
   onBack?: () => void;
   onOpenAdmin?: () => void;
 }) {
@@ -1187,11 +1191,14 @@ export function QuoteBuilderScreen({
   const [topBarActionsHost, setTopBarActionsHost] = useState<HTMLElement | null>(null);
   const [bottomBarHost, setBottomBarHost] = useState<HTMLElement | null>(null);
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
+  const campaignStartPickerRef = useRef<HTMLInputElement | null>(null);
+  const dueDatePickerRef = useRef<HTMLInputElement | null>(null);
   const artworkPdfInputRef = useRef<HTMLInputElement | null>(null);
   const artworkUploadQueueRef = useRef<File[]>([]);
   const artworkUploadWorkerActiveRef = useRef(false);
   const campaignHydratedRef = useRef(false);
   const autoDownloadTriggeredRef = useRef(false);
+  const autoSendEmailTriggeredRef = useRef(false);
   const lastPersistedValuesRef = useRef('');
   const lastAutoSaveFailedValuesRef = useRef<string | null>(null);
   const creativeSwapFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2001,6 +2008,16 @@ export function QuoteBuilderScreen({
   function updateWeekCount(nextValue: number) {
     const normalized = Math.max(1, Math.min(20, Math.floor(nextValue)));
     updateField('numberOfWeeks', String(normalized));
+  }
+
+  function openDatePicker(ref: React.RefObject<HTMLInputElement | null>) {
+    const input = ref.current;
+    if (!input) return;
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+    input.click();
   }
 
   function updateCampaignMarket(marketId: string, updater: (market: CampaignMarket) => CampaignMarket) {
@@ -4292,10 +4309,12 @@ export function QuoteBuilderScreen({
   useEffect(() => {
     if (!autoDownloadVisuals || autoDownloadTriggeredRef.current) return;
     if (loadingMetadata || loadingCampaign) return;
+    if (!campaignHydratedRef.current) return;
     if (!campaignId) return;
     autoDownloadTriggeredRef.current = true;
 
     void (async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 180));
       const success = await downloadArtworkVisuals();
       if (!success) return;
       if (!closeAfterVisualsDownload) return;
@@ -4304,6 +4323,18 @@ export function QuoteBuilderScreen({
       }, 1200);
     })();
   }, [autoDownloadVisuals, closeAfterVisualsDownload, loadingMetadata, loadingCampaign, campaignId]);
+
+  useEffect(() => {
+    if (!autoSendEmailToAds || autoSendEmailTriggeredRef.current) return;
+    if (loadingMetadata || loadingCampaign) return;
+    if (!campaignHydratedRef.current) return;
+    if (!campaignId) return;
+    autoSendEmailTriggeredRef.current = true;
+    void (async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 180));
+      await sendArtworkEmailToAds();
+    })();
+  }, [autoSendEmailToAds, loadingMetadata, loadingCampaign, campaignId]);
 
   async function sendArtworkEmailToAds() {
     if (sendingAdsEmail || exportingTemplates) return;
@@ -4427,6 +4458,11 @@ export function QuoteBuilderScreen({
       await sendEmailToAds(files, values.campaignName, creativeLinks);
       setExportProgressMessage('Email sent to ADS.');
       setError('');
+      if (closeAfterEmailSend) {
+        window.setTimeout(() => {
+          window.close();
+        }, 1200);
+      }
     } catch (sendError) {
       const message = sendError instanceof Error ? sendError.message : 'Unable to send email to ADS. Please try again.';
       setReviewValidationError(message);
@@ -4515,7 +4551,27 @@ export function QuoteBuilderScreen({
                       if (parsed) updateField('campaignStartDate', parsed);
                     }}
                   />
-                  <CalendarDays className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    ref={campaignStartPickerRef}
+                    className="pointer-events-none absolute h-0 w-0 opacity-0"
+                    min={minSelectableDate}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      updateField('campaignStartDate', nextValue);
+                      setCampaignStartDateInput(formatDateInputDisplay(nextValue));
+                    }}
+                    tabIndex={-1}
+                    type="date"
+                    value={values.campaignStartDate}
+                  />
+                  <button
+                    aria-label="Open start date picker"
+                    className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-800 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300/70"
+                    onClick={() => openDatePicker(campaignStartPickerRef)}
+                    type="button"
+                  >
+                    <CalendarDays className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
               <div className="flex h-11 min-w-0 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
@@ -4549,7 +4605,27 @@ export function QuoteBuilderScreen({
                       if (parsed) updateField('dueDate', parsed);
                     }}
                   />
-                  <CalendarDays className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    ref={dueDatePickerRef}
+                    className="pointer-events-none absolute h-0 w-0 opacity-0"
+                    min={minSelectableDate}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      updateField('dueDate', nextValue);
+                      setDueDateInput(formatDateInputDisplay(nextValue));
+                    }}
+                    tabIndex={-1}
+                    type="date"
+                    value={values.dueDate}
+                  />
+                  <button
+                    aria-label="Open due date picker"
+                    className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-800 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300/70"
+                    onClick={() => openDatePicker(dueDatePickerRef)}
+                    type="button"
+                  >
+                    <CalendarDays className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
               <div className="flex h-11 w-[136px] overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
@@ -4588,11 +4664,14 @@ export function QuoteBuilderScreen({
                 </div>
               </div>
                 </div>
-                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_226px_226px_136px]">
+                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,226px)_minmax(0,226px)_minmax(0,136px)] xl:items-center">
                   <div className="flex h-11 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
                     <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Purchase Order</span>
                     <button
-                      className="h-11 min-w-0 flex-1 truncate border-0 bg-transparent px-3 text-left text-sm font-medium text-slate-100 transition hover:bg-slate-700/30"
+                      className={cn(
+                        'h-11 min-w-0 flex-1 truncate border-0 bg-transparent px-3 text-left text-sm font-medium transition hover:bg-slate-700/30',
+                        uploadedPurchaseOrderName ? 'text-slate-200' : uploadingPurchaseOrder ? 'text-slate-300' : 'text-slate-400',
+                      )}
                       disabled={uploadingPurchaseOrder}
                       onClick={openPurchaseOrderPicker}
                       type="button"
@@ -4621,6 +4700,39 @@ export function QuoteBuilderScreen({
                       type="file"
                     />
                   </div>
+                  <Button
+                    className="h-10 min-w-0 rounded-lg border-white/15 px-4 text-sm font-semibold"
+                    onClick={openUploadManagerDialog}
+                    type="button"
+                    variant="outline"
+                  >
+                    {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Upload className="h-4 w-4" />}
+                    {uploadingArtworkPages
+                      ? pendingArtworkUploadCount > 0
+                        ? `Upload Artwork (${pendingArtworkUploadCount} queued)`
+                        : 'Upload Artwork'
+                      : 'Upload Artwork'}
+                  </Button>
+                  <Button
+                    className="h-10 min-w-0 rounded-lg border-white/15 px-4 text-sm font-semibold"
+                    onClick={openArtworkManagerDialog}
+                    type="button"
+                    variant="outline"
+                  >
+                    Manage Artwork
+                  </Button>
+                  <div title={canAddMarketInPlanning ? 'Add another market' : addMarketDisabledReason}>
+                    <Button
+                      className="h-10 w-full min-w-0 rounded-lg border border-violet-300/40 bg-violet-600 px-4 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(105,53,228,0.2)] transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-violet-600"
+                      disabled={!canAddMarketInPlanning}
+                      onClick={openAddMarketDialog}
+                      type="button"
+                      variant="secondary"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Market
+                    </Button>
+                  </div>
                   <input
                     ref={artworkPdfInputRef}
                     accept="application/pdf,.pdf"
@@ -4636,44 +4748,6 @@ export function QuoteBuilderScreen({
               </div>
 
               <div className="space-y-6">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <h3 className="text-lg font-bold tracking-tight text-white">Market Planning</h3>
-                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-                  <Button
-                    className="h-10 min-w-[180px] rounded-lg border-white/15 px-5 text-sm font-semibold"
-                    onClick={openUploadManagerDialog}
-                    type="button"
-                    variant="outline"
-                  >
-                    {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Upload className="h-4 w-4" />}
-                    {uploadingArtworkPages
-                      ? pendingArtworkUploadCount > 0
-                        ? `Upload Artwork (${pendingArtworkUploadCount} queued)`
-                        : 'Upload Artwork'
-                      : 'Upload Artwork'}
-                  </Button>
-                  <Button
-                    className="h-10 min-w-[180px] rounded-lg border-white/15 px-5 text-sm font-semibold"
-                    onClick={openArtworkManagerDialog}
-                    type="button"
-                    variant="outline"
-                  >
-                    Manage Artwork
-                  </Button>
-                  <div title={canAddMarketInPlanning ? 'Add another market' : addMarketDisabledReason}>
-                    <Button
-                      className="h-10 min-w-[160px] rounded-lg border border-violet-300/40 bg-violet-600 px-5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(105, 53, 228,0.2)] transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-violet-600"
-                      disabled={!canAddMarketInPlanning}
-                      onClick={openAddMarketDialog}
-                      type="button"
-                      variant="secondary"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add Market
-                    </Button>
-                  </div>
-                  </div>
-                </div>
                 {loadingMetadata ? (
                   <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-slate-300">
                     <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
@@ -4866,7 +4940,7 @@ export function QuoteBuilderScreen({
                     const deliveryAddressOptions = deliveryAddressOptionsFor(market.market);
                     return (
                       <div key={`finalize-map-${market.id}`} className={cn('relative rounded-xl border', marketTheme.card)}>
-                        <div className="flex items-center justify-between border-b border-white/10 bg-slate-900/35 px-4 py-3">
+                        <div className="flex items-center justify-between border-b border-white/10 bg-slate-950/85 px-4 py-2">
                           <div className="flex items-center gap-3">
                             <span className={cn('h-2.5 w-2.5 rounded-full ring-2 ring-violet-300/35', marketTheme.accent)} />
                             <span className="rounded-md border border-violet-300/35 bg-[rgb(var(--primary-500-rgb)/0.18)] px-2.5 py-1 text-sm font-extrabold uppercase tracking-[0.13em] text-[var(--primary-100)]">
@@ -4875,7 +4949,7 @@ export function QuoteBuilderScreen({
                           </div>
                         </div>
                         <Button
-                          className="absolute right-11 top-2.5 h-7 w-7 border border-violet-300/20 bg-slate-900/80 hover:bg-violet-500/10"
+                          className="absolute right-11 top-2 h-7 w-7 border border-violet-300/20 bg-slate-900/80 hover:bg-violet-500/10"
                           onClick={() => setExpandedMarketId(market.id)}
                           size="icon"
                           title="Expand market"
@@ -4885,7 +4959,7 @@ export function QuoteBuilderScreen({
                           <Maximize2 className="h-3.5 w-3.5" />
                         </Button>
                         <Button
-                          className="absolute right-3 top-2.5 h-7 w-7 border border-violet-300/20 bg-slate-900/80 hover:bg-violet-500/10"
+                          className="absolute right-3 top-2 h-7 w-7 border border-violet-300/20 bg-slate-900/80 hover:bg-violet-500/10"
                           onClick={() => openEditMarketDialog(market.id)}
                           size="icon"
                           title="Edit market"
@@ -4894,7 +4968,7 @@ export function QuoteBuilderScreen({
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        <div className="space-y-3 p-4">
+                        <div className="space-y-2 p-2 pb-0.5">
                           <div className={cn(market.assets.length > 4 ? 'max-h-[220px] overflow-y-auto' : 'overflow-visible')}>
                               <table className="dense-table w-full border-collapse table-fixed text-sm">
                               <colgroup>
@@ -4905,10 +4979,10 @@ export function QuoteBuilderScreen({
                               </colgroup>
                               <thead>
                                 <tr className={cn('border-b border-white/10 text-[11px] font-semibold uppercase tracking-[0.15em]', marketTheme.header)}>
-                                  <th className="px-4 py-3.5 text-left">Asset</th>
-                                  <th className="px-4 py-3.5 text-left">Category</th>
-                                  <th className="px-4 py-3.5 text-left">Creative</th>
-                                  <th className="px-4 py-3.5 text-left">Delivery Address</th>
+                                  <th className="px-4 py-1.5 text-left">Asset</th>
+                                  <th className="px-4 py-1.5 text-left">Category</th>
+                                  <th className="px-4 py-1.5 text-left">Creative</th>
+                                  <th className="px-4 py-1.5 text-left">Delivery Address</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -4927,24 +5001,24 @@ export function QuoteBuilderScreen({
                                       const slotArtworkIds = formatKey ? (asset.multiCreativeImageIds?.[formatKey] ?? []) : [];
                                       const hasAnySlotArtwork = slotArtworkIds.some((id) => Boolean((id || '').trim()));
                                       return (
-                                        <tr key={`finalize-map-row-${asset.id}-${formatKey ?? 'none'}-${index}`} className="border-b border-slate-700/70 align-top last:border-b-0">
+                                        <tr key={`finalize-map-row-${asset.id}-${formatKey ?? 'none'}-${index}`} className="border-b border-slate-700/70 align-middle last:border-b-0">
                                           {index === 0 ? (
-                                            <td className="px-4 py-3" rowSpan={rowSpan}>
+                                            <td className="align-middle px-4 py-1.5" rowSpan={rowSpan}>
                                               <p className="text-sm font-semibold text-white">{asset.assetSearch || asset.assetId || 'Asset not selected'}</p>
                                             </td>
                                           ) : null}
-                                          <td className="px-4 py-3">
+                                          <td className="align-middle px-4 py-1.5">
                                             {formatKey ? (
                                               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">{creativeFormatLabel(formatKey, normalizedSheetNameOverrides)}</p>
                                             ) : (
                                               <p className="text-sm text-slate-400">No active quantity formats</p>
                                             )}
                                           </td>
-                                          <td className="px-4 py-3">
+                                          <td className="px-4 py-1.5">
                                             {formatKey ? (
                                               <div className="flex items-center">
                                                 <Button
-                                                  className="h-9 w-24 px-3 text-xs font-semibold"
+                                                  className="h-8 w-20 px-2 text-[11px] font-semibold"
                                                   onClick={() =>
                                                     multiArtworkSlotCount > 0
                                                       ? openMultiArtworkDialog(market.id, asset.id, formatKey, multiArtworkFrameCount)
@@ -4979,7 +5053,7 @@ export function QuoteBuilderScreen({
                                             )}
                                           </td>
                                           {index === 0 ? (
-                                            <td className="px-4 py-3" rowSpan={rowSpan}>
+                                            <td className="px-4 py-1.5" rowSpan={rowSpan}>
                                               <SearchableSelect
                                                 actionDisabled={!market.market}
                                                 actionLabel={canAddAddressInFinalize ? 'Add new address' : undefined}
@@ -4996,6 +5070,7 @@ export function QuoteBuilderScreen({
                                                 placeholder={deliveryAddressOptions.length ? 'Choose delivery address' : 'No addresses available'}
                                                 selectedLabel={asset.deliveryAddress || ''}
                                                 selectedValue={asset.deliveryAddress || ''}
+                                                triggerClassName="h-8 px-2.5 text-[13px]"
                                               />
                                             </td>
                                           ) : null}
@@ -5233,9 +5308,9 @@ export function QuoteBuilderScreen({
                   <p className="mt-1 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-[30px] font-extrabold leading-none text-transparent drop-shadow-[0_0_18px_rgba(255,255,255,0.12)]">
                     {formatCurrency(totalEstimateCost)}
                   </p>
-                  <div className="mt-5 flex gap-2.5">
+                  <div className="mt-5 grid grid-cols-3 gap-2">
                     <Button
-                      className="h-9 flex-1 rounded-xl border-white/10 bg-slate-800/65 px-4 text-sm font-semibold text-slate-100 transition hover:bg-slate-700/75"
+                      className="h-9 rounded-xl border-white/10 bg-slate-800/65 px-2 text-xs font-semibold text-slate-100 transition hover:bg-slate-700/75"
                       disabled={exportingTemplates || sendingAdsEmail}
                       onClick={() => void downloadArtworkVisuals()}
                       type="button"
@@ -5244,13 +5319,21 @@ export function QuoteBuilderScreen({
                       {exportingTemplates ? 'Generating...' : 'Download Visuals'}
                     </Button>
                     <Button
-                      className="h-9 flex-1 rounded-xl border border-violet-300/35 bg-gradient-to-r from-violet-600 to-violet-500 px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(105, 53, 228,0.26)] transition hover:brightness-105"
+                      className="h-9 rounded-xl border border-violet-300/35 bg-gradient-to-r from-violet-600 to-violet-500 px-2 text-xs font-semibold text-white shadow-[0_10px_24px_rgba(105, 53, 228,0.26)] transition hover:brightness-105"
                       disabled={exportingTemplates || sendingAdsEmail}
                       onClick={() => void sendArtworkEmailToAds()}
                       type="button"
                       variant="secondary"
                     >
                       {sendingAdsEmail ? 'Sending...' : 'Send Email'}
+                    </Button>
+                    <Button
+                      className="h-9 rounded-xl border border-violet-300/25 bg-violet-500/25 px-2 text-xs font-semibold text-violet-100 opacity-70"
+                      disabled
+                      type="button"
+                      variant="secondary"
+                    >
+                      Submit Order
                     </Button>
                   </div>
                 </div>
