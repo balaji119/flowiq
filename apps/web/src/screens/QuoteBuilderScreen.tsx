@@ -421,6 +421,35 @@ function formatDeliveryAddressOptionLabel(address: string) {
   return postcode ? `${name} - ${postcode}` : name;
 }
 
+function deliveryContactName(address: string) {
+  const lines = address
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return '';
+  const first = lines[0];
+  if (first.toUpperCase().startsWith('VIM ') && lines[1]) return lines[1];
+  return first;
+}
+
+function formatDeliveryDestinationForExport(address: string, fallbackState: ExportState | null): { fullAddress: string; contactName: string } {
+  const lines = address
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const normalizedLines = lines.length > 0
+    ? lines
+    : (fallbackState ? [`VIM ${fallbackState}`] : ['DELIVERY']);
+  const firstLineUpper = normalizedLines[0].toUpperCase();
+  const contactName = firstLineUpper.startsWith('VIM ') && normalizedLines[1]
+    ? normalizedLines[1]
+    : normalizedLines[0];
+  return {
+    fullAddress: normalizedLines.join(', '),
+    contactName: contactName || (fallbackState ? `VIM ${fallbackState}` : 'DELIVERY'),
+  };
+}
+
 type AddressFormState = {
   name: string;
   unitStreetNumber: string;
@@ -1813,6 +1842,51 @@ export function QuoteBuilderScreen({
   }, [loadingCampaign, preferredDeliveryAddressByMarket]);
 
   useEffect(() => {
+    if (loadingCampaign) return;
+    if (marketDeliveryAddresses.length === 0) return;
+
+    setValues((current) => {
+      let changed = false;
+      const nextCampaignMarkets = current.campaignMarkets.map((market) => {
+        const marketAddressEntries = marketDeliveryAddresses
+          .filter((entry) => entry.market === market.market)
+          .map((entry) => entry.deliveryAddress)
+          .filter((address) => Boolean(address.trim()));
+        if (marketAddressEntries.length === 0) return market;
+
+        const byName = new Map<string, string[]>();
+        marketAddressEntries.forEach((address) => {
+          const nameKey = deliveryContactName(address).trim().toLowerCase();
+          if (!nameKey) return;
+          byName.set(nameKey, [...(byName.get(nameKey) ?? []), address]);
+        });
+
+        let marketChanged = false;
+        const nextAssets = market.assets.map((asset) => {
+          const currentAddress = (asset.deliveryAddress || '').trim();
+          if (!currentAddress) return asset;
+          const nameKey = deliveryContactName(currentAddress).trim().toLowerCase();
+          if (!nameKey) return asset;
+          const matches = byName.get(nameKey) ?? [];
+          if (matches.length !== 1) return asset;
+          const latestAddress = matches[0];
+          if (latestAddress === asset.deliveryAddress) return asset;
+          changed = true;
+          marketChanged = true;
+          return {
+            ...asset,
+            deliveryAddress: latestAddress,
+          };
+        });
+
+        return marketChanged ? { ...market, assets: nextAssets } : market;
+      });
+
+      return changed ? { ...current, campaignMarkets: nextCampaignMarkets } : current;
+    });
+  }, [loadingCampaign, marketDeliveryAddresses]);
+
+  useEffect(() => {
     if (values.campaignMarkets.length === 0) {
       setActiveMarketId(null);
       return;
@@ -2931,6 +3005,7 @@ export function QuoteBuilderScreen({
         typeLabel: string;
         quantity: number;
         deliveredTo: string;
+        deliveredToName: string;
         rolled: boolean;
       }>();
       const creativeSummary = new Map<number, QuantityBreakdown>();
@@ -3096,7 +3171,11 @@ export function QuoteBuilderScreen({
 
               if (isStandardFormat) {
                 const typeLabel = getDeliveryTypeLabel(state, key as keyof QuantityBreakdown);
-                const deliveredTo = `VIM ${state}`;
+                const destination = formatDeliveryDestinationForExport(
+                  asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || '',
+                  state,
+                );
+                const deliveredTo = destination.fullAddress;
                 const rolled = state !== 'NSW';
                 const deliveryKey = `${creativeCode}\x00${fileName}\x00${typeLabel}\x00${deliveredTo}`;
                 const existingDeliveryRow = deliveryRows.get(deliveryKey);
@@ -3110,6 +3189,7 @@ export function QuoteBuilderScreen({
                     typeLabel,
                     quantity: assignment.quantity,
                     deliveredTo,
+                    deliveredToName: destination.contactName,
                     rolled,
                   });
                 }
@@ -3400,15 +3480,15 @@ export function QuoteBuilderScreen({
           return storedName ? buildPdfDownloadUrl(storedName, fileName) : '';
         };
 
-        const deliveryByDestination = new Map<string, Map<number, Map<string, number>>>();
+        const deliveryByDestination = new Map<string, { name: string; creativeMap: Map<number, Map<string, number>> }>();
         Array.from(deliveryRows.values()).forEach((row) => {
           const creativeNumber = getCreativeNumberFromCode(row.creativeCode);
           const destinationKey = row.deliveredTo || 'DELIVERY';
-          const destinationBucket = deliveryByDestination.get(destinationKey) ?? new Map<number, Map<string, number>>();
-          const creativeBucket = destinationBucket.get(creativeNumber) ?? new Map<string, number>();
+          const destinationBucket = deliveryByDestination.get(destinationKey) ?? { name: row.deliveredToName || destinationKey, creativeMap: new Map<number, Map<string, number>>() };
+          const creativeBucket = destinationBucket.creativeMap.get(creativeNumber) ?? new Map<string, number>();
           const label = row.typeLabel;
           creativeBucket.set(label, (creativeBucket.get(label) ?? 0) + row.quantity);
-          destinationBucket.set(creativeNumber, creativeBucket);
+          destinationBucket.creativeMap.set(creativeNumber, creativeBucket);
           deliveryByDestination.set(destinationKey, destinationBucket);
         });
 
@@ -3600,6 +3680,56 @@ export function QuoteBuilderScreen({
           flush();
         };
 
+        const drawWrappedSegments = (
+          segments: Array<{ text: string; isBold?: boolean }>,
+          indent = 0,
+          color: ReturnType<typeof rgb> = rgb(0.08, 0.12, 0.18),
+        ) => {
+          const xBase = marginX + indent;
+          const maxWidthForLine = maxWidth - indent;
+          const tokens: Array<{ text: string; isBold: boolean }> = [];
+          segments.forEach((segment) => {
+            segment.text.split(/(\s+)/).forEach((part) => {
+              if (!part) return;
+              tokens.push({ text: part, isBold: Boolean(segment.isBold) });
+            });
+          });
+          let lineTokens: Array<{ text: string; isBold: boolean }> = [];
+          const lineWidth = (items: Array<{ text: string; isBold: boolean }>) => items.reduce((sum, item) => {
+            const useFont = item.isBold ? bold : font;
+            return sum + useFont.widthOfTextAtSize(item.text, fontSize);
+          }, 0);
+          const flush = () => {
+            ensureSpace(lineHeight);
+            let cursorX = xBase;
+            if (lineTokens.length === 0) {
+              cursorY -= lineHeight;
+              return;
+            }
+            lineTokens.forEach((item) => {
+              const useFont = item.isBold ? bold : font;
+              page.drawText(item.text, {
+                x: cursorX,
+                y: cursorY,
+                size: fontSize,
+                font: useFont,
+                color,
+              });
+              cursorX += useFont.widthOfTextAtSize(item.text, fontSize);
+            });
+            cursorY -= lineHeight;
+            lineTokens = [];
+          };
+          tokens.forEach((token) => {
+            const candidate = [...lineTokens, token];
+            if (lineTokens.length > 0 && lineWidth(candidate) > maxWidthForLine) {
+              flush();
+            }
+            lineTokens.push(token);
+          });
+          flush();
+        };
+
         drawTitleBlock(values.campaignName.trim() || 'Artwork', `Creative Mix: ${creativeHeadline}`);
         if (artworkFolderUrl) {
           drawSectionHeader('Resources');
@@ -3647,16 +3777,27 @@ export function QuoteBuilderScreen({
           drawWrappedLine('');
         }
         drawSectionHeader('Delivery Instructions');
-        Array.from(deliveryByDestination.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([destination, creativeMap]) => {
-          drawWrappedLine(
-            `Deliver to ${destination} by ${deadlineText} by COB:`,
-            true,
-            undefined,
+        Array.from(deliveryByDestination.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([destination, destinationEntry]) => {
+          const destinationName = (destinationEntry.name || '').trim() || 'DELIVERY';
+          const fullDestination = (destination || '').trim();
+          const fullLower = fullDestination.toLowerCase();
+          const nameLower = destinationName.toLowerCase();
+          const hasNamePrefix = Boolean(nameLower) && fullLower.startsWith(nameLower);
+          const destinationRemainder = hasNamePrefix
+            ? fullDestination.slice(destinationName.length).replace(/^[,\s-]+/, '')
+            : fullDestination;
+          drawWrappedSegments([
+            { text: '• Deliver to ' },
+            { text: destinationName, isBold: true },
+            { text: destinationRemainder ? `, ${destinationRemainder} by ` : ' by ' },
+            { text: deadlineText, isBold: true },
+            { text: ' by COB:' },
+          ],
             16,
             rgb(0.09, 0.2, 0.35),
           );
           cursorY -= 2;
-          Array.from(creativeMap.entries()).sort((a, b) => a[0] - b[0]).forEach(([creativeNumber, quantityMap]) => {
+          Array.from(destinationEntry.creativeMap.entries()).sort((a, b) => a[0] - b[0]).forEach(([creativeNumber, quantityMap]) => {
             const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
             const parts = Array.from(quantityMap.entries()).map(([quantityLabel, quantity]) => `${quantity} x ${quantityLabel}`);
             drawWrappedLine(`• Creative ${creativeNumber} (${creativeTypeLabel}): ${parts.join(' & ')}`, false, undefined, 32);

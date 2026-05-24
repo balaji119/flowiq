@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, ShoppingCart } from 'lucide-react';
 import { CampaignRecord, formatKeys, frameTotal, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketShippingRateRecord, posterTotal } from '@flowiq/shared';
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
-import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
+import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 
 type CampaignScheduleViewDialogProps = {
   open: boolean;
@@ -62,6 +62,17 @@ function formatBreakdownLabel(key: string) {
   return key;
 }
 
+function deliveryContactName(address: string) {
+  const lines = address
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return '';
+  const first = lines[0];
+  if (first.toUpperCase().startsWith('VIM ') && lines[1]) return lines[1];
+  return first;
+}
+
 export function CampaignScheduleViewDialog({
   open,
   loading,
@@ -93,6 +104,7 @@ export function CampaignScheduleViewDialog({
   const [shippingRates, setShippingRates] = useState<MarketShippingRateRecord[]>([]);
   const [assetPrintingCosts, setAssetPrintingCosts] = useState<MarketAssetPrintingCostRecord[]>([]);
   const [assetShippingCosts, setAssetShippingCosts] = useState<MarketAssetShippingCostRecord[]>([]);
+  const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<Array<{ market: string; deliveryAddress: string }>>([]);
   const [downloadingVisuals, setDownloadingVisuals] = useState(false);
 
   useEffect(() => {
@@ -101,20 +113,23 @@ export function CampaignScheduleViewDialog({
 
     async function loadCosts() {
       try {
-        const [ratesResponse, printingResponse, shippingResponse] = await Promise.all([
+        const [ratesResponse, printingResponse, shippingResponse, deliveryAddressesResponse] = await Promise.all([
           fetchCampaignMarketShippingRates(),
           fetchCampaignMarketAssetPrintingCosts(),
           fetchCampaignMarketAssetShippingCosts(),
+          fetchCampaignMarketDeliveryAddresses(),
         ]);
         if (!active) return;
         setShippingRates(ratesResponse.rates);
         setAssetPrintingCosts(printingResponse.costs);
         setAssetShippingCosts(shippingResponse.costs);
+        setMarketDeliveryAddresses(deliveryAddressesResponse.addresses);
       } catch {
         if (!active) return;
         setShippingRates([]);
         setAssetPrintingCosts([]);
         setAssetShippingCosts([]);
+        setMarketDeliveryAddresses([]);
       }
     }
 
@@ -123,6 +138,33 @@ export function CampaignScheduleViewDialog({
       active = false;
     };
   }, [campaign?.id, campaign?.summary, open]);
+
+  const latestDeliveryAddressByMarketAndName = useMemo(() => {
+    const index = new Map<string, Map<string, string[]>>();
+    marketDeliveryAddresses.forEach((entry) => {
+      const marketKey = normalizeToken(entry.market || '');
+      if (!marketKey) return;
+      const nameKey = deliveryContactName(entry.deliveryAddress || '').trim().toLowerCase();
+      if (!nameKey) return;
+      const byName = index.get(marketKey) ?? new Map<string, string[]>();
+      byName.set(nameKey, [...(byName.get(nameKey) ?? []), entry.deliveryAddress]);
+      index.set(marketKey, byName);
+    });
+    return index;
+  }, [marketDeliveryAddresses]);
+
+  function resolveAssetDeliveryAddress(marketName: string, currentAddress: string) {
+    const trimmed = (currentAddress || '').trim();
+    if (!trimmed) return 'N/A';
+    const marketKey = normalizeToken(marketName || '');
+    const byName = latestDeliveryAddressByMarketAndName.get(marketKey);
+    if (!byName) return trimmed;
+    const nameKey = deliveryContactName(trimmed).trim().toLowerCase();
+    if (!nameKey) return trimmed;
+    const matches = byName.get(nameKey) ?? [];
+    if (matches.length !== 1) return trimmed;
+    return matches[0];
+  }
 
   const printingCostByMarketAsset = useMemo(
     () => new Map(assetPrintingCosts.map((entry) => [`${entry.market}\x00${entry.assetId}`, entry.costs])),
@@ -607,6 +649,7 @@ export function CampaignScheduleViewDialog({
                               MP: line?.breakdown.MP ?? 0,
                               FF: line?.breakdown.FF ?? 0,
                             };
+                            const resolvedDeliveryAddress = resolveAssetDeliveryAddress(market.market, asset.deliveryAddress || '');
                             return (
                                     <button
                                       key={asset.id}
@@ -617,7 +660,7 @@ export function CampaignScheduleViewDialog({
                                           market: market.market,
                                           assetName: asset.assetSearch || asset.assetId,
                                           selectedWeeks: asset.selectedWeeks,
-                                          deliveryAddress: asset.deliveryAddress || 'N/A',
+                                          deliveryAddress: resolvedDeliveryAddress,
                                           imageIds: attachedImageIds,
                                           attachedArtworkRows,
                                           posterBreakdown,
@@ -635,7 +678,7 @@ export function CampaignScheduleViewDialog({
                                 <p className="mt-0.5 text-sm text-slate-100">{asset.selectedWeeks.length > 0 ? asset.selectedWeeks.join(', ') : 'None'}</p>
                               </div>
                               <div>
-                                <p className="mt-0.5 line-clamp-2 text-sm text-slate-100">{asset.deliveryAddress || 'N/A'}</p>
+                                <p className="mt-0.5 line-clamp-2 text-sm text-slate-100">{resolvedDeliveryAddress}</p>
                               </div>
                             </button>
                           );
