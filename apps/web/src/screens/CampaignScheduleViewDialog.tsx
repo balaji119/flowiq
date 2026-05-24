@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LoaderCircle, ShoppingCart } from 'lucide-react';
 import { CampaignRecord, formatKeys, frameTotal, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketShippingRateRecord, posterTotal } from '@flowiq/shared';
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
 import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
+
+const QUOTE_AUTOMATION_RESULT_EVENT = 'flowiq:quote-automation-result';
 
 type CampaignScheduleViewDialogProps = {
   open: boolean;
@@ -73,6 +75,11 @@ function deliveryContactName(address: string) {
   return first;
 }
 
+type QuoteAutomationAction = 'download-visuals' | 'send-email-to-ads';
+type PendingQuoteAutomation = {
+  action: QuoteAutomationAction;
+};
+
 export function CampaignScheduleViewDialog({
   open,
   loading,
@@ -107,11 +114,80 @@ export function CampaignScheduleViewDialog({
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<Array<{ market: string; deliveryAddress: string }>>([]);
   const [downloadingVisuals, setDownloadingVisuals] = useState(false);
   const [sendingAdsEmail, setSendingAdsEmail] = useState(false);
+  const [pendingAutomation, setPendingAutomation] = useState<PendingQuoteAutomation | null>(null);
+  const [automationFrameUrl, setAutomationFrameUrl] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [actionSuccess, setActionSuccess] = useState('');
+  const automationFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const hasMappedCreatives = useMemo(() => {
+    if (!campaign) return false;
+    return campaign.values.campaignMarkets.some((market) =>
+      market.assets.some((asset) => {
+        const hasFormatMapping = Object.values(asset.creativeImageIds ?? {}).some((imageId) => Boolean((imageId || '').trim()));
+        if (hasFormatMapping) return true;
+        const hasMultiFormatMapping = Object.values(asset.multiCreativeImageIds ?? {}).some((imageIds) =>
+          (imageIds ?? []).some((imageId) => Boolean((imageId || '').trim())),
+        );
+        if (hasMultiFormatMapping) return true;
+        return Boolean((asset.creativeImageId || '').trim());
+      }),
+    );
+  }, [campaign]);
+  const hasUploadedPurchaseOrder = Boolean((campaign?.purchaseOrder?.originalName || '').trim());
+  const hasDeliveryDueDate = Boolean((campaign?.values.dueDate || '').trim());
 
-  function openQuoteActionWindow(targetUrl: string) {
-    if (typeof window === 'undefined') return false;
-    const actionWindow = window.open(targetUrl, '_blank', 'noopener,noreferrer');
-    return Boolean(actionWindow);
+  function startQuoteAutomation(action: QuoteAutomationAction) {
+    if (!campaign || typeof window === 'undefined') return;
+    if (downloadingVisuals || sendingAdsEmail) return;
+
+    if (action === 'download-visuals') {
+      if (!hasDeliveryDueDate) {
+        setActionSuccess('');
+        setActionError('Add a due date before downloading visuals.');
+        return;
+      }
+      if (!hasMappedCreatives) {
+        setActionSuccess('');
+        setActionError('Map at least one creative to a market asset before downloading visuals');
+        return;
+      }
+    } else {
+      if (!hasDeliveryDueDate) {
+        setActionSuccess('');
+        setActionError('Add a due date before sending email to ADS.');
+        return;
+      }
+      if (!hasUploadedPurchaseOrder) {
+        setActionSuccess('');
+        setActionError('Upload a purchase order file before sending email to ADS');
+        return;
+      }
+      if (!hasMappedCreatives) {
+        setActionSuccess('');
+        setActionError('Map at least one creative to a market asset before sending email to ADS');
+        return;
+      }
+    }
+
+    setActionError('');
+    setActionSuccess('');
+    setDownloadingVisuals(action === 'download-visuals');
+    setSendingAdsEmail(action === 'send-email-to-ads');
+
+    const currentParams = new URLSearchParams(window.location.search);
+    const nextParams = new URLSearchParams();
+    nextParams.set('view', 'quote');
+    nextParams.set('campaignId', campaign.id);
+    const tenantId = currentParams.get('tenantId');
+    if (tenantId) nextParams.set('tenantId', tenantId);
+    if (action === 'download-visuals') {
+      nextParams.set('downloadVisuals', '1');
+    } else {
+      nextParams.set('sendEmailToAds', '1');
+    }
+
+    setPendingAutomation({ action });
+    setAutomationFrameUrl(`${window.location.origin}${window.location.pathname}?${nextParams.toString()}`);
   }
 
   useEffect(() => {
@@ -145,6 +221,72 @@ export function CampaignScheduleViewDialog({
       active = false;
     };
   }, [campaign?.id, campaign?.summary, open]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (!pendingAutomation) return;
+      const data = event.data as {
+        type?: string;
+        action?: QuoteAutomationAction;
+        status?: 'success' | 'error';
+        message?: string;
+      };
+      if (data?.type !== QUOTE_AUTOMATION_RESULT_EVENT) return;
+      if (data.action !== pendingAutomation.action) return;
+      if (event.source !== automationFrameRef.current?.contentWindow) return;
+
+      const failed = data.status !== 'success';
+      setDownloadingVisuals(false);
+      setSendingAdsEmail(false);
+      setPendingAutomation(null);
+      setAutomationFrameUrl('');
+      if (failed) {
+        setActionSuccess('');
+        setActionError(data.message || (data.action === 'download-visuals' ? 'Unable to download visuals. Open campaign in Edit and try again.' : 'Unable to send email. Open campaign in Edit and try again.'));
+        return;
+      }
+      if (data.action === 'download-visuals') {
+        setActionError('');
+        setActionSuccess('Downloaded');
+      } else if (data.action === 'send-email-to-ads') {
+        setActionError('');
+        setActionSuccess('Email sent to ADS.');
+      }
+    };
+
+    window.addEventListener('message', onMessage);
+    return () => {
+      window.removeEventListener('message', onMessage);
+    };
+  }, [pendingAutomation]);
+
+  useEffect(() => {
+    if (!pendingAutomation) return undefined;
+    const timeoutId = window.setTimeout(() => {
+      setDownloadingVisuals(false);
+      setSendingAdsEmail(false);
+      setPendingAutomation(null);
+      setAutomationFrameUrl('');
+      setActionSuccess('');
+      setActionError('Action timed out. Open campaign in Edit and try again.');
+    }, 180000);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [pendingAutomation]);
+
+  useEffect(() => {
+    if (!actionSuccess) return undefined;
+    const timeoutId = window.setTimeout(() => {
+      setActionSuccess('');
+    }, 2000);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [actionSuccess]);
 
   const latestDeliveryAddressByMarketAndName = useMemo(() => {
     const index = new Map<string, Map<string, string[]>>();
@@ -450,43 +592,11 @@ export function CampaignScheduleViewDialog({
   }, [imageById, selectedArtworkAsset]);
 
   function downloadVisualsViaQuoteBuilder() {
-    if (!campaign || typeof window === 'undefined') return;
-    setDownloadingVisuals(true);
-    const currentParams = new URLSearchParams(window.location.search);
-    const nextParams = new URLSearchParams();
-    nextParams.set('view', 'quote');
-    nextParams.set('campaignId', campaign.id);
-    const tenantId = currentParams.get('tenantId');
-    if (tenantId) nextParams.set('tenantId', tenantId);
-    nextParams.set('downloadVisuals', '1');
-    nextParams.set('closeAfterDownload', '1');
-    const targetUrl = `${window.location.origin}${window.location.pathname}?${nextParams.toString()}`;
-    const opened = openQuoteActionWindow(targetUrl);
-    if (!opened) {
-      setDownloadingVisuals(false);
-      return;
-    }
-    window.setTimeout(() => setDownloadingVisuals(false), 1000);
+    startQuoteAutomation('download-visuals');
   }
 
   function sendEmailViaQuoteBuilder() {
-    if (!campaign || typeof window === 'undefined') return;
-    setSendingAdsEmail(true);
-    const currentParams = new URLSearchParams(window.location.search);
-    const nextParams = new URLSearchParams();
-    nextParams.set('view', 'quote');
-    nextParams.set('campaignId', campaign.id);
-    const tenantId = currentParams.get('tenantId');
-    if (tenantId) nextParams.set('tenantId', tenantId);
-    nextParams.set('sendEmailToAds', '1');
-    nextParams.set('closeAfterSend', '1');
-    const targetUrl = `${window.location.origin}${window.location.pathname}?${nextParams.toString()}`;
-    const opened = openQuoteActionWindow(targetUrl);
-    if (!opened) {
-      setSendingAdsEmail(false);
-      return;
-    }
-    window.setTimeout(() => setSendingAdsEmail(false), 1000);
+    startQuoteAutomation('send-email-to-ads');
   }
 
   function normalizeToken(value: string) {
@@ -753,7 +863,19 @@ export function CampaignScheduleViewDialog({
               </div>
             </div>
             <div className="shrink-0 border-t border-white/10 bg-gradient-to-b from-[#21193f] to-[#16122f] px-5 py-4 sm:px-7">
-              <div className="flex items-center justify-end gap-2.5">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-h-[1.5rem] flex-1">
+                  {actionError ? (
+                    <p className="px-1 py-1 text-sm text-rose-200" role="alert">
+                      {actionError}
+                    </p>
+                  ) : actionSuccess ? (
+                    <p className="px-1 py-1 text-sm text-slate-300" role="status">
+                      {actionSuccess}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex items-center justify-end gap-2.5">
                 <Button
                   className="h-9 rounded-md border border-white/10 bg-slate-900/50 px-4 text-xs text-slate-100 hover:bg-slate-800/70"
                   disabled={downloadingVisuals || sendingAdsEmail}
@@ -770,12 +892,22 @@ export function CampaignScheduleViewDialog({
                 >
                   {sendingAdsEmail ? 'Sending...' : 'Send Email'}
                 </Button>
+                </div>
               </div>
             </div>
           </>
         ) : null}
       </DialogContent>
     </Dialog>
+    {automationFrameUrl ? (
+      <iframe
+        aria-hidden
+        className="hidden"
+        ref={automationFrameRef}
+        src={automationFrameUrl}
+        title="quote-automation"
+      />
+    ) : null}
     <Dialog
       open={Boolean(selectedAssetDetails)}
       onOpenChange={(nextOpen) => {

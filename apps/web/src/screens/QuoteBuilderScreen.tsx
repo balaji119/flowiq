@@ -43,6 +43,7 @@ const ACTIVE_CAMPAIGN_ID_KEY = 'adsconnect-active-campaign-id';
 const REVIEW_DRAWER_OPEN_KEY = 'adsconnect-review-drawer-open';
 const REVIEW_DRAWER_MODE_KEY = 'adsconnect-review-drawer-mode';
 const VISUALS_EXPORT_MODE = parseVisualsExportMode(process.env.EXPORT_EXCEL);
+const QUOTE_AUTOMATION_RESULT_EVENT = 'flowiq:quote-automation-result';
 
 type VisualsExportMode = 'excel' | 'pdf';
 type ReviewDrawerMode = 'high-level' | 'detailed';
@@ -52,6 +53,9 @@ type GeneratedVisualExportFile = {
   blob: Blob;
   mimeType: string;
 };
+
+type AutomatedQuoteAction = 'download-visuals' | 'send-email-to-ads';
+type AutomatedQuoteActionStatus = 'success' | 'error';
 
 function parseVisualsExportMode(value: string | undefined): VisualsExportMode {
   const normalized = (value || '').trim().toLowerCase();
@@ -1202,6 +1206,30 @@ export function QuoteBuilderScreen({
   const lastPersistedValuesRef = useRef('');
   const lastAutoSaveFailedValuesRef = useRef<string | null>(null);
   const creativeSwapFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function reportQuoteAutomationResult(action: AutomatedQuoteAction, status: AutomatedQuoteActionStatus, message?: string) {
+    if (typeof window === 'undefined') return;
+    const payload = {
+      type: QUOTE_AUTOMATION_RESULT_EVENT,
+      action,
+      status,
+      message,
+    };
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(payload, window.location.origin);
+      }
+    } catch {
+      // Best effort only.
+    }
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(payload, window.location.origin);
+      }
+    } catch {
+      // Best effort only.
+    }
+  }
 
   useEffect(() => {
     return () => {
@@ -4316,6 +4344,7 @@ export function QuoteBuilderScreen({
     void (async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 180));
       const success = await downloadArtworkVisuals();
+      reportQuoteAutomationResult('download-visuals', success ? 'success' : 'error');
       if (!success) return;
       if (!closeAfterVisualsDownload) return;
       window.setTimeout(() => {
@@ -4332,23 +4361,24 @@ export function QuoteBuilderScreen({
     autoSendEmailTriggeredRef.current = true;
     void (async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 180));
-      await sendArtworkEmailToAds();
+      const success = await sendArtworkEmailToAds();
+      reportQuoteAutomationResult('send-email-to-ads', success ? 'success' : 'error');
     })();
   }, [autoSendEmailToAds, loadingMetadata, loadingCampaign, campaignId]);
 
   async function sendArtworkEmailToAds() {
-    if (sendingAdsEmail || exportingTemplates) return;
+    if (sendingAdsEmail || exportingTemplates) return false;
     if (!hasDeliveryDueDate) {
       setReviewValidationError('Add a due date before sending email to ADS.', { dueDate: true });
-      return;
+      return false;
     }
     if (!hasUploadedPurchaseOrder) {
       setReviewValidationError('Upload a purchase order file before sending email to ADS');
-      return;
+      return false;
     }
     if (!hasMappedCreatives) {
       setReviewValidationError('Map at least one creative to a market asset before sending email to ADS');
-      return;
+      return false;
     }
 
     setError('');
@@ -4458,15 +4488,19 @@ export function QuoteBuilderScreen({
       await sendEmailToAds(files, values.campaignName, creativeLinks);
       setExportProgressMessage('Email sent to ADS.');
       setError('');
+      setReviewActionError('');
+      setReviewActionNeedsDueDate(false);
       if (closeAfterEmailSend) {
         window.setTimeout(() => {
           window.close();
         }, 1200);
       }
+      return true;
     } catch (sendError) {
       const message = sendError instanceof Error ? sendError.message : 'Unable to send email to ADS. Please try again.';
       setReviewValidationError(message);
       setExportProgressMessage('');
+      return false;
     } finally {
       setSendingAdsEmail(false);
     }
