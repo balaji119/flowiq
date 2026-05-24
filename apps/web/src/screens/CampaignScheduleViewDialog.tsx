@@ -548,8 +548,8 @@ export function CampaignScheduleViewDialog({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden border-0 bg-[#111a2c]/95 p-0 shadow-2xl shadow-black/50 sm:h-[92vh] sm:w-[92vw] sm:rounded-xl sm:border sm:border-white/10 md:h-[85vh] md:w-[96vw] md:max-w-[1800px] lg:min-w-[1320px] lg:w-[84vw]">
-        <DialogHeader className="sticky top-0 z-20 space-y-3 border-b border-white/10 bg-gradient-to-b from-[#18233b] to-[#111a2c] px-7 py-5 backdrop-blur-sm">
+      <DialogContent className="flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden border-0 bg-[#181433]/95 p-0 shadow-2xl shadow-black/50 sm:h-[92vh] sm:w-[92vw] sm:rounded-xl sm:border sm:border-white/10 md:h-[85vh] md:w-[96vw] md:max-w-[1800px] lg:min-w-[1320px] lg:w-[84vw]">
+        <DialogHeader className="sticky top-0 z-20 space-y-3 border-b border-white/10 bg-gradient-to-b from-[#241b45] to-[#181433] px-7 py-5 backdrop-blur-sm">
           <div className="flex items-start justify-between gap-4">
             <DialogTitle className="text-2xl font-semibold text-white">Campaign Schedule Details</DialogTitle>
             <div className="hidden items-center gap-2 md:flex">
@@ -564,7 +564,7 @@ export function CampaignScheduleViewDialog({
         </DialogHeader>
         {loading ? (
           <div className="flex min-h-[220px] flex-1 items-center justify-center">
-            <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
+            <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
           </div>
         ) : error ? (
           <div className="m-6 rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div>
@@ -606,8 +606,8 @@ export function CampaignScheduleViewDialog({
                             <div key={market.id} className="py-1">
                               <div className="mb-3 flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2">
-                                  <span className="h-2 w-2 rounded-full bg-orange-300 shadow-[0_0_12px_rgba(253,186,116,0.65)]" />
-                                  <p className="text-sm font-semibold uppercase tracking-[0.12em] text-orange-300">{market.market}</p>
+                                  <span className="h-2 w-2 rounded-full bg-violet-300 shadow-[0_0_12px_rgba(145, 118, 224,0.65)]" />
+                                  <p className="text-sm font-semibold uppercase tracking-[0.12em] text-violet-300">{market.market}</p>
                                 </div>
                                 <span className="text-xs text-slate-400">{market.assets.length} assets</span>
                               </div>
@@ -653,7 +653,7 @@ export function CampaignScheduleViewDialog({
                             return (
                                     <button
                                       key={asset.id}
-                                      className="grid w-full gap-4 border-b border-white/5 px-4 py-4 text-left transition-colors hover:bg-slate-800/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-orange-300/70 last:border-b-0 md:grid-cols-[1.45fr_1fr_1.9fr]"
+                                      className="grid w-full gap-4 border-b border-white/5 px-4 py-4 text-left transition-colors hover:bg-slate-800/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300/70 last:border-b-0 md:grid-cols-[1.45fr_1fr_1.9fr]"
                                       onClick={() =>
                                         setSelectedAssetDetails({
                                           title: `${market.market} - ${asset.assetSearch || asset.assetId}`,
@@ -695,7 +695,7 @@ export function CampaignScheduleViewDialog({
                   <aside className="space-y-4">
                     <div className="rounded-xl border border-white/10 bg-gradient-to-b from-slate-900/55 to-slate-900/35 p-5 backdrop-blur-sm">
                       <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                        <ShoppingCart className="h-4 w-4 text-orange-300" />
+                        <ShoppingCart className="h-4 w-4 text-violet-300" />
                         <span>Order Assets Summary</span>
                       </div>
                       <div className="mt-4 space-y-3">
@@ -711,9 +711,9 @@ export function CampaignScheduleViewDialog({
                           <p className="text-xs uppercase tracking-[0.1em] text-slate-400">Shipping</p>
                           <p className="text-sm font-semibold text-white">{formatCurrency(totalShippingCost)}</p>
                         </div>
-                        <div className="flex items-center justify-between rounded-md border border-orange-400/30 bg-orange-500/10 px-3 py-2">
-                          <p className="text-xs uppercase tracking-[0.1em] text-orange-200">Total</p>
-                          <p className="text-sm font-semibold text-orange-100">{formatCurrency(totalPrintingCost + totalShippingCost)}</p>
+                        <div className="flex items-center justify-between rounded-md border border-violet-400/30 bg-violet-500/10 px-3 py-2">
+                          <p className="text-xs uppercase tracking-[0.1em] text-violet-200">Total</p>
+                          <p className="text-sm font-semibold text-violet-100">{formatCurrency(totalPrintingCost + totalShippingCost)}</p>
                         </div>
                       </div>
                     </div>
@@ -721,7 +721,7 @@ export function CampaignScheduleViewDialog({
                 </div>
               </div>
             </div>
-            <div className="shrink-0 border-t border-white/10 bg-gradient-to-b from-[#15213a] to-[#101a2e] px-5 py-4 sm:px-7">
+            <div className="shrink-0 border-t border-white/10 bg-gradient-to-b from-[#21193f] to-[#16122f] px-5 py-4 sm:px-7">
               <div className="flex items-center justify-end gap-2.5">
                 <Button
                   className="h-9 px-4"
@@ -743,7 +743,7 @@ export function CampaignScheduleViewDialog({
         if (!nextOpen) setSelectedAssetDetails(null);
       }}
     >
-      <DialogContent className="max-h-[90vh] w-[95vw] max-w-[95vw] overflow-y-auto border border-white/10 bg-[#111a2c] md:w-[66vw] md:max-w-[66vw]">
+      <DialogContent className="max-h-[90vh] w-[95vw] max-w-[95vw] overflow-y-auto border border-white/10 bg-[#181433] md:w-[66vw] md:max-w-[66vw]">
         <DialogHeader>
           <DialogTitle className="text-white">Asset Details</DialogTitle>
           <DialogDescription className="text-slate-300">{selectedAssetDetails?.title || ''}</DialogDescription>
@@ -785,7 +785,7 @@ export function CampaignScheduleViewDialog({
               </div>
             </div>
             <button
-              className="w-full rounded-lg border border-white/10 bg-slate-900/40 p-4 text-left transition-colors hover:bg-slate-800/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-orange-300/70"
+              className="w-full rounded-lg border border-white/10 bg-slate-900/40 p-4 text-left transition-colors hover:bg-slate-800/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300/70"
               onClick={() => setSelectedArtworkAsset({ title: selectedAssetDetails.title, rows: selectedAssetDetails.attachedArtworkRows })}
               type="button"
             >
@@ -805,7 +805,7 @@ export function CampaignScheduleViewDialog({
       }}
     >
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto border border-white/10 bg-[#111a2c] p-6"
+        className="max-h-[90vh] overflow-y-auto border border-white/10 bg-[#181433] p-6"
         style={{ width: '70vw', maxWidth: '70vw', maxHeight: '90vh' }}
       >
         <DialogHeader>

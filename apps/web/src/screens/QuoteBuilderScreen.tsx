@@ -94,7 +94,7 @@ function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBre
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {formatKeys.map((key) => (
         <div key={key} className={cn('rounded-md border px-4 py-3', inverse ? 'border-slate-700 bg-slate-900' : 'border-slate-700/70 bg-slate-800/80')}>
-          <p className={cn('text-xs font-bold uppercase tracking-[0.18em]', inverse ? 'text-orange-200' : 'text-slate-300')}>{displayLabel[key] ?? key}</p>
+          <p className={cn('text-xs font-bold uppercase tracking-[0.18em]', inverse ? 'text-violet-200' : 'text-slate-300')}>{displayLabel[key] ?? key}</p>
           <p className="mt-2 text-xl font-black text-white">{breakdown[key]}</p>
         </div>
       ))}
@@ -194,26 +194,26 @@ type MultiArtworkRecord = { id: string; imageId: string; frameCount: number };
 const MARKET_PLANNING_THEMES = [
   {
     card: 'border-white/10 bg-slate-900/70',
-    cardActive: 'border-orange-300/45 shadow-[0_0_0_1px_rgba(251,146,60,0.14)]',
-    accent: 'bg-orange-300/70',
+    cardActive: 'border-violet-300/45 shadow-[0_0_0_1px_rgba(119, 87, 217,0.14)]',
+    accent: 'bg-violet-300/70',
     header: 'bg-slate-900/92 text-slate-300',
   },
   {
     card: 'border-white/10 bg-slate-900/70',
-    cardActive: 'border-orange-300/45 shadow-[0_0_0_1px_rgba(251,146,60,0.14)]',
-    accent: 'bg-orange-300/70',
+    cardActive: 'border-violet-300/45 shadow-[0_0_0_1px_rgba(119, 87, 217,0.14)]',
+    accent: 'bg-violet-300/70',
     header: 'bg-slate-900/92 text-slate-300',
   },
   {
     card: 'border-white/10 bg-slate-900/70',
-    cardActive: 'border-orange-300/45 shadow-[0_0_0_1px_rgba(251,146,60,0.14)]',
-    accent: 'bg-orange-300/70',
+    cardActive: 'border-violet-300/45 shadow-[0_0_0_1px_rgba(119, 87, 217,0.14)]',
+    accent: 'bg-violet-300/70',
     header: 'bg-slate-900/92 text-slate-300',
   },
   {
     card: 'border-white/10 bg-slate-900/70',
-    cardActive: 'border-orange-300/45 shadow-[0_0_0_1px_rgba(251,146,60,0.14)]',
-    accent: 'bg-orange-300/70',
+    cardActive: 'border-violet-300/45 shadow-[0_0_0_1px_rgba(119, 87, 217,0.14)]',
+    accent: 'bg-violet-300/70',
     header: 'bg-slate-900/92 text-slate-300',
   },
 ] as const;
@@ -885,7 +885,7 @@ function SearchableSelect({
                     key={item.value}
                     className={cn(
                       'flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition',
-                      active ? 'border-orange-400 bg-orange-500/10 text-white' : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500',
+                      active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500',
                       menuItemClassName,
                     )}
                     onClick={() => {
@@ -895,7 +895,7 @@ function SearchableSelect({
                     type="button"
                   >
                     <span>{item.label}</span>
-                    {active ? <Check className="h-4 w-4 text-orange-300" /> : null}
+                    {active ? <Check className="h-4 w-4 text-violet-300" /> : null}
                   </button>
                 );
               })}
@@ -950,7 +950,7 @@ function WeekSelector({
             className={cn(
               'rounded-full border font-semibold transition',
               compact ? 'px-2.5 py-1 text-[11px]' : small ? 'px-2 py-1 text-[10px]' : 'px-3 py-1.5 text-xs',
-              selected ? 'border-orange-400 bg-orange-500 text-white' : 'border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500',
+              selected ? 'border-violet-400 bg-violet-500 text-white' : 'border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500',
             )}
             aria-pressed={selected}
             disabled={readOnly}
@@ -1005,7 +1005,7 @@ function ConfirmationDialog({
             {cancelLabel}
           </Button>
           <Button className="w-full sm:w-auto" disabled={confirming} onClick={onConfirm} type="button" variant="destructive">
-            {confirming ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
+            {confirming ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : null}
             {confirming ? 'Deleting...' : confirmLabel}
           </Button>
         </div>
@@ -4572,7 +4572,7 @@ export function QuoteBuilderScreen({
                     type="button"
                     variant="outline"
                   >
-                    {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Upload className="h-4 w-4" />}
+                    {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Upload className="h-4 w-4" />}
                     {uploadingArtworkPages
                       ? pendingArtworkUploadCount > 0
                         ? `Upload Artwork (${pendingArtworkUploadCount} queued)`
@@ -4589,7 +4589,7 @@ export function QuoteBuilderScreen({
                   </Button>
                   <div title={canAddMarketInPlanning ? 'Add another market' : addMarketDisabledReason}>
                     <Button
-                      className="h-10 min-w-[160px] rounded-lg border border-orange-300/40 bg-orange-600 px-5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(249,115,22,0.2)] transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-orange-600"
+                      className="h-10 min-w-[160px] rounded-lg border border-violet-300/40 bg-violet-600 px-5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(105, 53, 228,0.2)] transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-violet-600"
                       disabled={!canAddMarketInPlanning}
                       onClick={openAddMarketDialog}
                       type="button"
@@ -4603,7 +4603,7 @@ export function QuoteBuilderScreen({
                 </div>
                 {loadingMetadata ? (
                   <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-slate-300">
-                    <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" />
+                    <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
                     Loading campaign mappings…
                   </div>
                 ) : null}
@@ -4766,11 +4766,11 @@ export function QuoteBuilderScreen({
                                     ))}
                                   </tbody>
                                   <tfoot>
-                                    <tr className="bg-orange-500/10 border-t border-orange-400/30">
-                                      <th colSpan={visibleMarketFormatKeys.length + 1} className="border border-orange-300/30 px-4 py-3 text-right font-black uppercase tracking-[0.12em] text-orange-100">
+                                    <tr className="bg-violet-500/10 border-t border-violet-400/30">
+                                      <th colSpan={visibleMarketFormatKeys.length + 1} className="border border-violet-300/30 px-4 py-3 text-right font-black uppercase tracking-[0.12em] text-violet-100">
                                         Total
                                       </th>
-                                      <td className="border border-orange-300/30 px-4 py-3 text-center font-black text-orange-100">
+                                      <td className="border border-violet-300/30 px-4 py-3 text-center font-black text-violet-100">
                                         {marketSummary.posterTotal + marketSummary.frameTotal}
                                       </td>
                                     </tr>
@@ -4795,12 +4795,14 @@ export function QuoteBuilderScreen({
                       <div key={`finalize-map-${market.id}`} className={cn('relative rounded-xl border', marketTheme.card)}>
                         <div className="flex items-center justify-between border-b border-white/10 bg-slate-900/35 px-4 py-3">
                           <div className="flex items-center gap-3">
-                            <span className={cn('h-2.5 w-2.5 rounded-full ring-2 ring-orange-300/35', marketTheme.accent)} />
-                            <span className="text-sm font-bold uppercase tracking-[0.13em] text-orange-300">{market.market || 'Market'}</span>
+                            <span className={cn('h-2.5 w-2.5 rounded-full ring-2 ring-violet-300/35', marketTheme.accent)} />
+                            <span className="rounded-md border border-violet-300/35 bg-[rgb(var(--primary-500-rgb)/0.18)] px-2.5 py-1 text-sm font-extrabold uppercase tracking-[0.13em] text-[var(--primary-100)]">
+                              {market.market || 'Market'}
+                            </span>
                           </div>
                         </div>
                         <Button
-                          className="absolute right-11 top-2.5 h-7 w-7 border border-orange-300/20 bg-slate-900/80 hover:bg-orange-500/10"
+                          className="absolute right-11 top-2.5 h-7 w-7 border border-violet-300/20 bg-slate-900/80 hover:bg-violet-500/10"
                           onClick={() => setExpandedMarketId(market.id)}
                           size="icon"
                           title="Expand market"
@@ -4810,7 +4812,7 @@ export function QuoteBuilderScreen({
                           <Maximize2 className="h-3.5 w-3.5" />
                         </Button>
                         <Button
-                          className="absolute right-3 top-2.5 h-7 w-7 border border-orange-300/20 bg-slate-900/80 hover:bg-orange-500/10"
+                          className="absolute right-3 top-2.5 h-7 w-7 border border-violet-300/20 bg-slate-900/80 hover:bg-violet-500/10"
                           onClick={() => openEditMarketDialog(market.id)}
                           size="icon"
                           title="Edit market"
@@ -5015,7 +5017,7 @@ export function QuoteBuilderScreen({
                         {visibleReviewMarkets.map((marketSummary) => (
                           <div key={`review-market-card-${marketSummary.market}`} className="rounded-xl bg-gradient-to-b from-slate-800/52 to-slate-900/62 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                             <div className="-m-1.5 flex w-full items-center gap-3 rounded-xl p-1.5">
-                              <span className="h-2.5 w-2.5 rounded-full bg-orange-300/80" />
+                              <span className="h-2.5 w-2.5 rounded-full bg-violet-300/80" />
                               <p className="flex-1 text-left text-[17px] font-semibold text-slate-100">{marketSummary.market}</p>
                             </div>
                             <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[14px]">
@@ -5082,20 +5084,20 @@ export function QuoteBuilderScreen({
                                 const allRows = buildReviewRows(summary.grandTotal);
                                 return (
                                   <>
-                                    <tr className="bg-orange-500/10">
-                                      <td className="border border-orange-300/25 px-2.5 py-2 font-semibold text-orange-100" rowSpan={2}>All Markets</td>
-                                      <td className="border border-orange-300/25 px-2.5 py-2 font-semibold text-orange-100">Posters</td>
+                                    <tr className="bg-violet-500/10">
+                                      <td className="border border-violet-300/25 px-2.5 py-2 font-semibold text-violet-100" rowSpan={2}>All Markets</td>
+                                      <td className="border border-violet-300/25 px-2.5 py-2 font-semibold text-violet-100">Posters</td>
                                       {detailedReviewFormatKeys.map((key) => (
-                                        <td key={`detail-all-posters-${key}`} className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{breakdownValueForKey(allRows[0].breakdown, key)}</td>
+                                        <td key={`detail-all-posters-${key}`} className="border border-violet-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-violet-100">{breakdownValueForKey(allRows[0].breakdown, key)}</td>
                                       ))}
-                                      <td className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{allRows[0].total}</td>
+                                      <td className="border border-violet-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-violet-100">{allRows[0].total}</td>
                                     </tr>
-                                    <tr className="bg-orange-500/10">
-                                      <td className="border border-orange-300/25 px-2.5 py-2 font-semibold text-orange-100">Frames</td>
+                                    <tr className="bg-violet-500/10">
+                                      <td className="border border-violet-300/25 px-2.5 py-2 font-semibold text-violet-100">Frames</td>
                                       {detailedReviewFormatKeys.map((key) => (
-                                        <td key={`detail-all-frames-${key}`} className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{breakdownValueForKey(allRows[1].breakdown, key)}</td>
+                                        <td key={`detail-all-frames-${key}`} className="border border-violet-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-violet-100">{breakdownValueForKey(allRows[1].breakdown, key)}</td>
                                       ))}
-                                      <td className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{allRows[1].total}</td>
+                                      <td className="border border-violet-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-violet-100">{allRows[1].total}</td>
                                     </tr>
                                   </>
                                 );
@@ -5123,10 +5125,10 @@ export function QuoteBuilderScreen({
                                   <td className="border border-white/10 px-2.5 py-2 text-right font-semibold tabular-nums text-white">{formatCurrency(calculateMarketShippingCost(marketSummary.market))}</td>
                                 </tr>
                               ))}
-                              <tr className="bg-orange-500/10">
-                                <td className="border border-orange-300/25 px-2.5 py-2 font-semibold text-orange-100">All Markets</td>
-                                <td className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{formatCurrency(totalPrintingCost)}</td>
-                                <td className="border border-orange-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-orange-100">{formatCurrency(totalShippingCost)}</td>
+                              <tr className="bg-violet-500/10">
+                                <td className="border border-violet-300/25 px-2.5 py-2 font-semibold text-violet-100">All Markets</td>
+                                <td className="border border-violet-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-violet-100">{formatCurrency(totalPrintingCost)}</td>
+                                <td className="border border-violet-300/25 px-2.5 py-2 text-right font-semibold tabular-nums text-violet-100">{formatCurrency(totalShippingCost)}</td>
                               </tr>
                             </tbody>
                           </table>
@@ -5169,7 +5171,7 @@ export function QuoteBuilderScreen({
                       {exportingTemplates ? 'Generating...' : 'Download Visuals'}
                     </Button>
                     <Button
-                      className="h-9 flex-1 rounded-xl border border-orange-300/35 bg-gradient-to-r from-orange-600 to-orange-500 px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(249,115,22,0.26)] transition hover:brightness-105"
+                      className="h-9 flex-1 rounded-xl border border-violet-300/35 bg-gradient-to-r from-violet-600 to-violet-500 px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(105, 53, 228,0.26)] transition hover:brightness-105"
                       disabled={exportingTemplates || sendingAdsEmail}
                       onClick={() => void sendArtworkEmailToAds()}
                       type="button"
@@ -5184,7 +5186,7 @@ export function QuoteBuilderScreen({
             ) : (
               <div className="rounded-xl border border-white/10 bg-slate-900/70 p-6">
                 <div className="flex items-start gap-3">
-                  <CircleAlert className="mt-0.5 h-5 w-5 text-amber-300" />
+                  <CircleAlert className="mt-0.5 h-5 w-5 text-violet-300" />
                   <div>
                     <p className="font-semibold text-white">No totals yet</p>
                     <p className="mt-1 text-sm text-slate-400">Configure campaign assets above to generate totals.</p>
@@ -5209,7 +5211,7 @@ export function QuoteBuilderScreen({
 
       {!reviewDrawerOpen ? (
         <button
-          className="fixed bottom-6 right-6 z-40 rounded-full border border-orange-300/45 bg-gradient-to-r from-orange-600 to-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(249,115,22,0.36)] transition duration-200 ease-out hover:-translate-y-[1px] hover:brightness-105"
+          className="fixed bottom-6 right-6 z-40 rounded-full border border-violet-300/45 bg-gradient-to-r from-violet-600 to-violet-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(105, 53, 228,0.36)] transition duration-200 ease-out hover:-translate-y-[1px] hover:brightness-105"
           onClick={() => setReviewDrawerOpen(true)}
           type="button"
         >
@@ -5473,7 +5475,7 @@ export function QuoteBuilderScreen({
                                 className={cn(
                                   'border-b border-slate-700/70 align-top last:border-b-0',
                                   isDragging ? 'bg-slate-700/30 opacity-70' : '',
-                                  isDragOver ? 'bg-orange-500/10 ring-1 ring-inset ring-orange-400/50' : '',
+                                  isDragOver ? 'bg-violet-500/10 ring-1 ring-inset ring-violet-400/50' : '',
                                 )}
                                 onDragLeave={() => {
                                   if (dragOverDraftAssetId === asset.id) setDragOverDraftAssetId(null);
@@ -5501,7 +5503,7 @@ export function QuoteBuilderScreen({
                                     aria-label={`Reorder ${asset.assetSearch || 'asset'}`}
                                     className={cn(
                                       'mx-auto inline-flex h-6 w-6 cursor-grab items-center justify-center rounded border border-slate-700 bg-slate-900 text-slate-400 transition hover:border-slate-500 hover:text-slate-200',
-                                      isDragging ? 'cursor-grabbing border-orange-400 text-orange-200' : '',
+                                      isDragging ? 'cursor-grabbing border-violet-400 text-violet-200' : '',
                                     )}
                                     draggable
                                     onDragEnd={() => {
@@ -5610,7 +5612,7 @@ export function QuoteBuilderScreen({
                     </div>
                   ) : draftMarketCalculating ? (
                     <div className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900/65 px-2.5 py-2 text-[13px] text-slate-300">
-                      <LoaderCircle className="h-3.5 w-3.5 animate-spin text-orange-300" />
+                      <LoaderCircle className="h-3.5 w-3.5 animate-spin text-violet-300" />
                       Calculating market totals...
                     </div>
                   ) : (
@@ -5647,7 +5649,12 @@ export function QuoteBuilderScreen({
             >
               Cancel
             </Button>
-            <Button disabled={!draftMarket?.market.trim() || (!editingMarketId && !canAddMarket)} onClick={handleSaveAddMarket} type="button">
+            <Button
+              className="btn-theme-primary"
+              disabled={!draftMarket?.market.trim() || (!editingMarketId && !canAddMarket)}
+              onClick={handleSaveAddMarket}
+              type="button"
+            >
               Save
             </Button>
             </div>
@@ -5799,7 +5806,11 @@ export function QuoteBuilderScreen({
                   <Button onClick={removeArtworkFromPreview} type="button" variant="destructive">
                     Remove
                   </Button>
-                  <Button onClick={openChangeArtworkFromPreview} type="button" variant="secondary">
+                  <Button
+                    className="btn-theme-primary"
+                    onClick={openChangeArtworkFromPreview}
+                    type="button"
+                  >
                     Change
                   </Button>
                 </div>
@@ -5945,7 +5956,12 @@ export function QuoteBuilderScreen({
                         <p>Total Frames: <span className="font-semibold text-white">{multiArtworkTarget.totalFrames}</span></p>
                         <p>Remaining Frames: <span className="font-semibold text-white">{remainingFrames}</span></p>
                       </div>
-                      <Button disabled={remainingFrames === 0} onClick={addMultiArtworkRecord} type="button" variant="secondary">
+                      <Button
+                        className="btn-theme-primary"
+                        disabled={remainingFrames === 0}
+                        onClick={addMultiArtworkRecord}
+                        type="button"
+                      >
                         <Plus className="h-4 w-4" />
                         Add Record
                       </Button>
@@ -5977,7 +5993,7 @@ export function QuoteBuilderScreen({
             <div className="relative min-w-[220px] flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
-                className="h-9 border-slate-600 bg-slate-900 pl-9 text-slate-100 placeholder:text-slate-500"
+                className="h-9 border-slate-600 bg-slate-900 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:border-violet-400 focus-visible:ring-violet-400/70"
                 onChange={(event) => setArtworkSearchQuery(event.target.value)}
                 placeholder="Search by file name"
                 value={artworkSearchQuery}
@@ -6009,9 +6025,9 @@ export function QuoteBuilderScreen({
                             key={`creative-name-row-${creativeName}`}
                             className={cn(
                               'border-b border-slate-800 transition-colors duration-500 ease-out last:border-b-0',
-                              isSwapFeedbackRow ? 'bg-orange-500/10' : '',
-                              creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'above' ? 'border-t-2 border-t-orange-400' : '',
-                              creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'below' ? 'border-b-2 border-b-orange-400' : '',
+                              isSwapFeedbackRow ? 'bg-violet-500/10' : '',
+                              creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'above' ? 'border-t-2 border-t-violet-400' : '',
+                              creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'below' ? 'border-b-2 border-b-violet-400' : '',
                             )}
                             onDragOver={(event) => {
                               if (!draggingCreativeName || draggingCreativeName === creativeName) return;
@@ -6034,7 +6050,7 @@ export function QuoteBuilderScreen({
                               setCreativeDropTarget(null);
                             }}
                           >
-                            <td className={cn('px-3 py-2 font-medium text-slate-100 transition-colors duration-500', isSwapFeedbackRow ? 'bg-orange-500/10' : '')}>{creativeName}</td>
+                            <td className={cn('px-3 py-2 font-medium text-slate-100 transition-colors duration-500', isSwapFeedbackRow ? 'bg-violet-500/10' : '')}>{creativeName}</td>
                             <td className={cn('px-3 py-2 transition', draggingCreativeName ? 'bg-slate-900/80' : '')}>
                               <div className="flex min-h-10 items-center justify-between gap-2 rounded border border-slate-700 bg-slate-900/70 px-2 py-1.5">
                                 <button
@@ -6091,7 +6107,7 @@ export function QuoteBuilderScreen({
                                     variant="ghost"
                                   >
                                     {deletingArtworkIds.includes(mappedImage.id)
-                                      ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-orange-300" />
+                                      ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-violet-300" />
                                       : <Trash2 className="h-3.5 w-3.5" />}
                                   </Button>
                                 ) : null}
@@ -6128,7 +6144,7 @@ export function QuoteBuilderScreen({
                   : 'No active uploads'}
               </div>
               <Button onClick={openArtworkPdfPicker} type="button" variant="secondary">
-                {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Upload className="h-4 w-4" />}
+                {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Upload className="h-4 w-4" />}
                 {uploadingArtworkPages || hasChosenArtworkInSession ? 'Choose More PDFs' : 'Choose PDFs'}
               </Button>
             </div>
@@ -6165,7 +6181,7 @@ export function QuoteBuilderScreen({
             )}
             <div className="flex justify-end">
               <Button
-                className="border-orange-500 bg-orange-500 text-white hover:bg-orange-400"
+                className="border-violet-500 bg-violet-500 text-white hover:bg-violet-400"
                 onClick={() => setUploadManagerOpen(false)}
                 type="button"
                 variant="secondary"
@@ -6199,7 +6215,7 @@ export function QuoteBuilderScreen({
               Discard
             </Button>
             <Button disabled={savingCampaign} onClick={() => void handleSaveAndLeave()} type="button">
-              {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : null}
+              {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : null}
               {savingCampaign ? 'Saving…' : 'Save'}
             </Button>
           </div>

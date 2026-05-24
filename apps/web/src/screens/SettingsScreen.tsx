@@ -219,7 +219,7 @@ export function SettingsScreen({
       <main className="dense-main mx-auto flex min-h-0 w-full max-w-3xl items-center px-6 py-8">
         <Card className="w-full">
           <CardContent className="space-y-4 p-8 text-center">
-            <Shield className="mx-auto h-8 w-8 text-amber-300" />
+            <Shield className="mx-auto h-8 w-8 text-violet-300" />
             <CardTitle>Access restricted</CardTitle>
             <CardDescription>Only admin and super admin users can manage sheet name settings.</CardDescription>
             <Button onClick={onBack} variant="secondary">Back</Button>
@@ -257,8 +257,13 @@ export function SettingsScreen({
       canAccessPrintingCosts={session?.user.role === 'super_admin'}
       pageTitle="Settings"
       topBarActions={
-        <Button className="h-9 min-w-[132px] rounded-md px-3 text-sm font-semibold" disabled={!effectiveTenantId || saving || loading} onClick={() => void handleSave()} type="button">
-          {saving ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Save className="h-4 w-4" />}
+        <Button
+          className="h-9 min-w-[132px] rounded-md px-3 text-sm font-semibold btn-theme-primary"
+          disabled={!effectiveTenantId || saving || loading}
+          onClick={() => void handleSave()}
+          type="button"
+        >
+          {saving ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Save className="h-4 w-4" />}
           {saving ? 'Saving...' : 'Save Changes'}
         </Button>
       }
@@ -297,7 +302,7 @@ export function SettingsScreen({
                     <button
                       key={tenant.id}
                       className={active
-                        ? 'rounded-md border border-orange-400 bg-orange-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(249,115,22,0.85)] transition'
+                        ? 'rounded-md border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(105, 53, 228,0.85)] transition'
                         : 'rounded-md border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
                       onClick={() => setSelectedTenantId(tenant.id)}
                       type="button"
@@ -320,11 +325,11 @@ export function SettingsScreen({
         <section className="max-w-5xl space-y-5">
           {loading ? (
             <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
-              <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
+              <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
+              <div className="overflow-x-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
                 <div className="flex items-center justify-between border-b border-slate-700/70 px-4 py-3">
                   <Label className="text-sm font-semibold text-slate-100">Sheet Size Mappings</Label>
                   <Button
@@ -357,12 +362,12 @@ export function SettingsScreen({
                     {sheetNamePresetEntries.map((entry, rowIndex) => (
                       <tr
                         key={entry.key}
-                        className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#1a2740]/70' : 'bg-[#162033]'}`}
+                        className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}`}
                       >
                         <td className="border border-slate-700 px-4 py-2 font-semibold text-white">{entry.label}</td>
                         <td className="border border-slate-700 px-4 py-2">
                           <Input
-                            className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-orange-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+                            className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-violet-400 focus-visible:ring-0 focus-visible:ring-offset-0"
                             onChange={(event) =>
                               setPresetOverrides((current) => ({
                                 ...current,
@@ -376,7 +381,7 @@ export function SettingsScreen({
                         <td className="border border-slate-700 px-4 py-2 text-center">
                           <input
                             checked={Boolean(multipleArtworkFormats[entry.key])}
-                            className="h-4 w-4 accent-orange-400"
+                            className="h-4 w-4 accent-violet-400"
                             onChange={(event) =>
                               setMultipleArtworkFormats((current) => ({
                                 ...current,
@@ -404,11 +409,11 @@ export function SettingsScreen({
                       return (
                         <tr
                           key={row.id}
-                          className={`border-t border-white/5 ${((sheetNamePresetEntries.length + rowIndex) % 2 === 0) ? 'bg-[#1a2740]/70' : 'bg-[#162033]'}`}
+                          className={`border-t border-white/5 ${((sheetNamePresetEntries.length + rowIndex) % 2 === 0) ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}`}
                         >
                           <td className="border border-slate-700 px-4 py-2">
                             <Input
-                              className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-orange-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+                              className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-violet-400 focus-visible:ring-0 focus-visible:ring-offset-0"
                               onChange={(event) =>
                                 setCustomOverrides((current) => current.map((item) => (item.id === row.id ? { ...item, source: event.target.value } : item)))
                               }
@@ -418,7 +423,7 @@ export function SettingsScreen({
                           </td>
                           <td className="border border-slate-700 px-4 py-2">
                             <Input
-                              className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-orange-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+                              className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-violet-400 focus-visible:ring-0 focus-visible:ring-offset-0"
                               onChange={(event) =>
                                 setCustomOverrides((current) => current.map((item) => (item.id === row.id ? { ...item, name: event.target.value } : item)))
                               }
@@ -429,7 +434,7 @@ export function SettingsScreen({
                           <td className="border border-slate-700 px-4 py-2 text-center">
                             <input
                               checked={Boolean(multipleArtworkFormats[toCanonicalSheetNameKey(row.source)])}
-                              className="h-4 w-4 accent-orange-400"
+                              className="h-4 w-4 accent-violet-400"
                               onChange={(event) => {
                                 const customKey = toCanonicalSheetNameKey(row.source);
                                 if (!customKey) return;

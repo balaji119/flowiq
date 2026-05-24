@@ -69,7 +69,7 @@ function PickerChip({
       className={[
         "rounded-full border px-4 py-2 text-sm font-semibold capitalize transition",
         active
-          ? "border-orange-400 bg-orange-500 text-white shadow-[0_10px_25px_-12px_rgba(249,115,22,0.85)]"
+          ? "border-violet-400 bg-violet-500 text-white shadow-[0_10px_25px_-12px_rgba(105, 53, 228,0.85)]"
           : "border-slate-600 bg-slate-800 text-slate-200 hover:border-slate-500 hover:bg-slate-700",
       ].join(" ")}
       onClick={onPress}
@@ -312,7 +312,7 @@ export function UserManagementScreen({
       <main className="dense-main mx-auto flex min-h-0 w-full max-w-3xl items-center px-6 py-8">
         <Card className="w-full">
           <CardContent className="space-y-4 p-8 text-center">
-            <Shield className="mx-auto h-8 w-8 text-amber-300" />
+            <Shield className="mx-auto h-8 w-8 text-violet-300" />
             <CardTitle>Access restricted</CardTitle>
             <CardDescription>
               Only admin and super admin users can manage users.
@@ -335,7 +335,7 @@ export function UserManagementScreen({
       pageTitle="User Management"
       topBarActions={
         <Button
-          className="h-10 min-w-[138px] rounded-md border border-orange-300/35 bg-orange-500 px-5 text-sm font-semibold text-white shadow-[0_2px_10px_rgba(249,115,22,0.25)] transition-all duration-150 hover:-translate-y-[1px] hover:bg-orange-400 hover:shadow-[0_6px_16px_rgba(249,115,22,0.32)] focus-visible:ring-2 focus-visible:ring-orange-300/70 focus-visible:ring-offset-0 disabled:border-slate-600 disabled:bg-slate-700 disabled:text-slate-300 disabled:shadow-none disabled:hover:translate-y-0"
+          className="h-10 min-w-[138px] rounded-md border border-violet-300/35 bg-violet-500 px-5 text-sm font-semibold text-white shadow-[0_2px_10px_rgba(105, 53, 228,0.25)] transition-all duration-150 hover:-translate-y-[1px] hover:bg-violet-400 hover:shadow-[0_6px_16px_rgba(105, 53, 228,0.32)] focus-visible:ring-2 focus-visible:ring-violet-300/70 focus-visible:ring-offset-0 disabled:border-slate-600 disabled:bg-slate-700 disabled:text-slate-300 disabled:shadow-none disabled:hover:translate-y-0"
           disabled={!effectiveTenantId}
           onClick={openCreateUserDialog}
         >
@@ -373,7 +373,7 @@ export function UserManagementScreen({
                 </span>
                 <select
                   id="tenant-picker"
-                  className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70 disabled:opacity-70"
+                  className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70 disabled:opacity-70"
                   disabled={!isSuperAdmin || tenantOptions.length === 0}
                   onChange={(event) => setSelectedTenantId(event.target.value)}
                   value={effectiveTenantId}
@@ -396,10 +396,10 @@ export function UserManagementScreen({
 
           {loading ? (
             <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
-              <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
+              <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
+            <div className="overflow-x-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
               <table className="dense-table min-w-[980px] w-full border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -428,7 +428,7 @@ export function UserManagementScreen({
                         <tr
                           key={user.id}
                           className={`border-t border-white/5 ${
-                            rowIndex % 2 === 0 ? 'bg-[#1a2740]/70' : 'bg-[#162033]'
+                            rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'
                           }`}
                         >
                           <td className="border border-slate-700 px-4 py-3 font-semibold text-white">
@@ -474,7 +474,7 @@ export function UserManagementScreen({
                                     variant="destructive"
                                   >
                                     {deletingUserId === user.id ? (
-                                      <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" />
+                                      <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
                                     ) : (
                                       <Trash2 className="h-4 w-4" />
                                     )}
@@ -492,7 +492,7 @@ export function UserManagementScreen({
                       );
                     })
                   ) : (
-                    <tr className="bg-[#162033]">
+                    <tr className="bg-[#1a1733]">
                       <td
                         className="border border-slate-700 px-4 py-8 text-center text-sm text-slate-400"
                         colSpan={5}
@@ -619,7 +619,7 @@ export function UserManagementScreen({
                       className={[
                         "rounded-full border px-4 py-2 text-sm font-semibold transition",
                         userForm.active
-                          ? "border-orange-400 bg-orange-500 text-white shadow-[0_10px_25px_-12px_rgba(249,115,22,0.85)]"
+                          ? "border-violet-400 bg-violet-500 text-white shadow-[0_10px_25px_-12px_rgba(105, 53, 228,0.85)]"
                           : "border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500 hover:bg-slate-700",
                       ].join(" ")}
                       onClick={() =>
@@ -633,7 +633,7 @@ export function UserManagementScreen({
                       className={[
                         "rounded-full border px-4 py-2 text-sm font-semibold transition",
                         !userForm.active
-                          ? "border-orange-400 bg-orange-500 text-white shadow-[0_10px_25px_-12px_rgba(249,115,22,0.85)]"
+                          ? "border-violet-400 bg-violet-500 text-white shadow-[0_10px_25px_-12px_rgba(105, 53, 228,0.85)]"
                           : "border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500 hover:bg-slate-700",
                       ].join(" ")}
                       onClick={() =>
@@ -665,7 +665,7 @@ export function UserManagementScreen({
                   onClick={() => void handleSaveUser()}
                 >
                   {savingUser ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" />
+                    <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
                   ) : editingUserId ? (
                     <Pencil className="h-4 w-4" />
                   ) : (

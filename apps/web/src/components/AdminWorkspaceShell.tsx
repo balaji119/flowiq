@@ -156,14 +156,14 @@ export function AdminWorkspaceShell({
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex items-center gap-1.5">
                 <button
-                  className="h-8 w-8 overflow-hidden border border-slate-600 bg-slate-900/90 transition hover:border-orange-300/50"
+                  className="h-8 w-8 overflow-hidden border border-slate-600 bg-slate-900/90 transition hover:border-violet-300/50"
                   onClick={() => (onOpenHome ?? onOpenLanding)?.()}
                   title="Go to Landing Page"
                   type="button"
                 >
                   <img alt="ADS logo" className="h-full w-full object-contain" src="/ads-logo.webp" />
                 </button>
-                <p className="truncate text-xs font-bold uppercase leading-none tracking-[0.16em] text-orange-300">Connect</p>
+                <p className="truncate text-xs font-bold uppercase leading-none tracking-[0.16em] text-violet-300">Connect</p>
               </div>
               <button
                 className="rounded-md p-2 text-slate-300 transition-[background-color,color,transform,box-shadow] duration-200 hover:-translate-y-[1px] hover:bg-slate-800 hover:text-white hover:shadow-[0_5px_12px_rgba(15,23,42,0.28)]"
@@ -177,7 +177,7 @@ export function AdminWorkspaceShell({
           ) : (
             <div className="flex items-center justify-center">
               <button
-                className="h-10 w-10 overflow-hidden border border-slate-600 bg-slate-900/90 transition hover:border-orange-300/50"
+                className="h-10 w-10 overflow-hidden border border-slate-600 bg-slate-900/90 transition hover:border-violet-300/50"
                 onClick={() => (onOpenHome ?? onOpenLanding)?.()}
                 title="Go to Landing Page"
                 type="button"
@@ -214,7 +214,7 @@ export function AdminWorkspaceShell({
                     'flex items-center rounded-md text-[8px] font-semibold uppercase leading-none tracking-[0.02em] transition-[background-color,border-color,color,transform,box-shadow] duration-200 [&_svg]:transition-opacity [&_svg]:duration-200',
                     expanded ? 'h-11 w-full justify-start gap-2.5 px-2.5' : 'mx-auto h-11 w-11 justify-center',
                     active
-                      ? 'border border-orange-300/35 bg-gradient-to-r from-orange-500/20 to-transparent text-white shadow-[0_0_0_1px_rgba(251,146,60,0.22),0_6px_14px_rgba(15,23,42,0.28)] [&_svg]:opacity-100'
+                      ? 'border border-violet-300/35 bg-gradient-to-r from-violet-500/20 to-transparent text-white shadow-[0_0_0_1px_rgba(119, 87, 217,0.22),0_6px_14px_rgba(15,23,42,0.28)] [&_svg]:opacity-100'
                       : 'border border-transparent text-slate-400 [&_svg]:opacity-80 hover:-translate-y-[1px] hover:border-white/10 hover:bg-slate-800/65 hover:text-white hover:shadow-[0_6px_14px_rgba(15,23,42,0.24)] hover:[&_svg]:opacity-100',
                   )}
                   onClick={item.onClick}
@@ -317,7 +317,7 @@ export function AdminWorkspaceShell({
               </div>
             </div>
           </div>
-          <div className="border-b border-orange-500/22 bg-gradient-to-r from-slate-800/92 via-slate-800/88 to-orange-500/14">
+          <div className="border-b border-violet-500/22 bg-gradient-to-r from-slate-800/92 via-slate-800/88 to-violet-500/14">
             <div className="flex min-h-[48px] items-center justify-between gap-3 px-6">
               <h2 className="truncate text-lg font-semibold tracking-tight text-slate-100">{pageTitle || 'Workspace'}</h2>
               <div className="flex min-w-0 flex-1 items-center justify-end gap-3">

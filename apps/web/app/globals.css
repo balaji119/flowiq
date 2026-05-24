@@ -2,6 +2,30 @@
 
 :root {
   color-scheme: dark;
+  --black: #000000;
+  --white: #ffffff;
+  --primary-500: #6935e4;
+  --primary-500-rgb: 105, 53, 228;
+  --primary-600: #5035cc;
+  --primary-700: #3e2dc3;
+  --primary-200: #b19ee8;
+  --primary-100: #d0c5f1;
+  --primary-50-2: #ede7f9;
+  --primary-900: #001bb0;
+  --primary-400: #7757d9;
+  --primary-400-rgb: 119, 87, 217;
+  --primary-800: #2b28bc;
+  --primary-300: #9176e0;
+  --neutral-600: #7c7c7c;
+  --neutral-700: #676767;
+  --neutral-300: #e6e6e6;
+  --neutral-200: #f1f1f1;
+  --neutral-900: #262626;
+  --neutral-100: #f6f6f6;
+  --neutral-50-2: #fbfbfb;
+  --neutral-500: #a5a5a5;
+  --neutral-800: #484848;
+  --neutral-400: #c4c4c4;
 }
 
 html,
@@ -12,8 +36,8 @@ body {
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top right, rgba(249, 115, 22, 0.18), transparent 28%),
-    radial-gradient(circle at bottom left, rgba(251, 146, 60, 0.1), transparent 22%),
+    radial-gradient(circle at top right, rgb(var(--primary-500-rgb) / 0.18), transparent 28%),
+    radial-gradient(circle at bottom left, rgb(var(--primary-400-rgb) / 0.1), transparent 22%),
     linear-gradient(180deg, #1b2330 0%, #111827 100%);
   color: #f8fafc;
   font-family: Arial, Helvetica, sans-serif;
@@ -39,7 +63,18 @@ select {
 }
 
 ::selection {
-  background: rgba(249, 115, 22, 0.35);
+  background: rgb(var(--primary-500-rgb) / 0.35);
+}
+
+.btn-theme-primary {
+  border: 1px solid rgb(var(--primary-400-rgb) / 0.45) !important;
+  background: var(--primary-500) !important;
+  color: var(--white) !important;
+  box-shadow: 0 8px 24px rgb(var(--primary-500-rgb) / 0.32);
+}
+
+.btn-theme-primary:hover:not(:disabled) {
+  background: var(--primary-400) !important;
 }
 
 .dense-main {

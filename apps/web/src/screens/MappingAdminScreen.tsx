@@ -317,7 +317,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
       <main className="dense-main mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-8">
         <Card className="w-full">
           <CardContent className="space-y-4 p-8 text-center">
-            <Shield className="mx-auto h-8 w-8 text-amber-300" />
+            <Shield className="mx-auto h-8 w-8 text-violet-300" />
             <CardTitle>Access restricted</CardTitle>
             <CardDescription>Only admin and super admin users can manage quantity mappings.</CardDescription>
             <Button onClick={onBack} variant="secondary">Back</Button>
@@ -337,10 +337,15 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
       topBarActions={
         <>
           <Button className="h-10 min-w-[128px] rounded-md px-4 text-sm font-semibold" disabled={importing || !effectiveTenantId} onClick={() => fileInputRef.current?.click()} type="button" variant="outline">
-            {importing ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Upload className="h-4 w-4" />}
+            {importing ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Upload className="h-4 w-4" />}
             {importing ? 'Importing...' : 'Import JSON'}
           </Button>
-          <Button className="h-10 min-w-[130px] rounded-md px-4 text-sm font-semibold" disabled={!effectiveTenantId || !selectedMarketFilter} onClick={openAddMappingDialog} type="button">
+          <Button
+            className="h-10 min-w-[130px] rounded-md px-4 text-sm font-semibold btn-theme-primary"
+            disabled={!effectiveTenantId || !selectedMarketFilter}
+            onClick={openAddMappingDialog}
+            type="button"
+          >
             <Plus className="h-4 w-4" />
             Add Mapping
           </Button>
@@ -382,7 +387,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                   <button
                     key={tenant.id}
                     className={active
-                      ? 'rounded-md border border-orange-400 bg-orange-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(249,115,22,0.85)] transition'
+                      ? 'rounded-md border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(105, 53, 228,0.85)] transition'
                       : 'rounded-md border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
                     onClick={() => setSelectedTenantId(tenant.id)}
                     type="button"
@@ -410,7 +415,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                 <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
               <select
                 id="market-filter"
-                  className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
+                  className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
                 onChange={(event) => setSelectedMarketFilter(event.target.value)}
                 value={selectedMarketFilter}
               >
@@ -427,7 +432,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
 
           {loading ? (
             <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
-              <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
+              <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
             </div>
           ) : marketOptions.length === 0 ? (
             <div className="rounded-md border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
@@ -441,7 +446,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
               <p className="mt-2 text-sm text-slate-400">Choose Add Mapping to create the first asset mapping for {selectedMarketFilter}.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
+            <div className="overflow-x-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
               <table className="dense-table min-w-[1180px] w-full border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -461,7 +466,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                   {filteredMappings.map((mapping, rowIndex) => (
                     <tr
                       key={`mapping-row-${mapping.id}`}
-                      className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#1a2740]/70' : 'bg-[#162033]'}`}
+                      className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}`}
                     >
                       <td className="border border-slate-700 px-4 py-3 font-semibold text-white">{mapping.asset}</td>
                       <td className="border border-slate-700 px-4 py-3 text-slate-200">{mapping.label}</td>
@@ -545,7 +550,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                 <Label htmlFor="mapping-maintenance-asset">Maintenance asset (optional)</Label>
                 <select
                   id="mapping-maintenance-asset"
-                  className="h-10 w-full rounded-md border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
+                  className="h-10 w-full rounded-md border border-slate-600 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
@@ -591,8 +596,12 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
               >
                 Cancel
               </Button>
-              <Button disabled={saving || !effectiveTenantId} onClick={() => void handleSubmit()}>
-                {saving ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : editingId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              <Button
+                className="btn-theme-primary"
+                disabled={saving || !effectiveTenantId}
+                onClick={() => void handleSubmit()}
+              >
+                {saving ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : editingId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                 {saving ? 'Saving...' : editingId ? 'Update Mapping' : 'Add Mapping'}
               </Button>
             </div>

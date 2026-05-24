@@ -355,7 +355,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
       <main className="dense-main flex min-h-0 w-full flex-col gap-6">
         <Card>
           <CardHeader className="p-6">
-            <CardTitle className="flex items-center gap-3"><Shield className="h-5 w-5 text-orange-300" /> Printing Costs</CardTitle>
+            <CardTitle className="flex items-center gap-3"><Shield className="h-5 w-5 text-violet-300" /> Printing Costs</CardTitle>
             <CardDescription>This section is available to super admin only.</CardDescription>
             <div>
               <Button className="mt-3" onClick={onBack} type="button" variant="secondary">
@@ -378,7 +378,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
               <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Tenant</span>
             <select
               id="printing-cost-tenant"
-                className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
+                className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
               value={selectedTenantId ?? ''}
               onChange={(event) => setSelectedTenantId(event.target.value || null)}
             >
@@ -393,7 +393,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
               <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
             <select
               id="printing-cost-market-filter"
-                className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
+                className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
               value={marketFilter}
               onChange={(event) => setMarketFilter(event.target.value)}
             >
@@ -433,7 +433,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
         ) : null}
           {loading ? (
             <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
-              <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" />
+              <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
               Loading assets and costs...
             </div>
           ) : visibleMappings.length === 0 ? (
@@ -441,7 +441,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
               No assets found for this market.
             </div>
           ) : (
-            <div className="rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
+            <div className="rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
               <table className="dense-table w-full table-fixed border-collapse text-xs sm:text-sm">
                 <colgroup>
                   <col className="w-[24%]" />
@@ -462,7 +462,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
                     return (
                       <tr
                         key={`cost-row-${mapping.id}`}
-                        className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#1a2740]/70' : 'bg-[#162033]'}`}
+                        className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}`}
                       >
                         <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{mapping.market}</td>
                         <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">

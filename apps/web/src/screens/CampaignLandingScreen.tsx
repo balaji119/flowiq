@@ -19,26 +19,26 @@ function formatCampaignDate(value: string) {
 
 function WorkflowIllustration() {
   return (
-    <div className="relative h-[280px] w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0C1424]/92 p-4 backdrop-blur-xl sm:h-[300px] lg:h-[336px] xl:h-[360px]">
-      <div className="absolute -left-14 -top-12 h-44 w-44 rounded-full bg-orange-500/14 blur-3xl" />
-      <div className="absolute -right-14 bottom-0 h-52 w-52 rounded-full bg-cyan-400/12 blur-3xl" />
+    <div className="relative h-[280px] w-full overflow-hidden rounded-2xl border border-white/10 bg-[#110f24]/92 p-4 backdrop-blur-xl sm:h-[300px] lg:h-[336px] xl:h-[360px]">
+      <div className="absolute -left-14 -top-12 h-44 w-44 rounded-full bg-violet-500/14 blur-3xl" />
+      <div className="absolute -right-14 bottom-0 h-52 w-52 rounded-full bg-violet-400/12 blur-3xl" />
       <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: 'linear-gradient(rgba(148,163,184,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.3) 1px, transparent 1px)', backgroundSize: '44px 44px' }} />
       <svg className="relative h-full w-full" fill="none" viewBox="0 0 620 320" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="nodeFill" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor="#142238" />
-            <stop offset="100%" stopColor="#101827" />
+            <stop offset="0%" stopColor="#1e163c" />
+            <stop offset="100%" stopColor="#161231" />
           </linearGradient>
           <linearGradient id="flowLine" x1="0" x2="1" y1="0" y2="0">
             <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#F97316" stopOpacity="0.72" />
+            <stop offset="100%" stopColor="var(--primary-500)" stopOpacity="0.72" />
           </linearGradient>
         </defs>
 
         <rect fill="url(#nodeFill)" height="78" rx="14" stroke="rgba(255,255,255,0.14)" width="138" x="24" y="34" />
         <text fill="#F9FAFB" fontFamily="Inter, Geist, sans-serif" fontSize="14" fontWeight="600" x="40" y="62">Asset Plan</text>
         <text fill="#9CA3AF" fontFamily="Inter, Geist, sans-serif" fontSize="11" x="40" y="84">Billboard nodes</text>
-        <circle cx="132" cy="52" fill="#F97316" fillOpacity="0.32" r="8" />
+        <circle cx="132" cy="52" fill="var(--primary-500)" fillOpacity="0.32" r="8" />
 
         <rect fill="url(#nodeFill)" height="78" rx="14" stroke="rgba(255,255,255,0.14)" width="138" x="236" y="116" />
         <text fill="#F9FAFB" fontFamily="Inter, Geist, sans-serif" fontSize="14" fontWeight="600" x="252" y="144">Schedule</text>
@@ -48,14 +48,14 @@ function WorkflowIllustration() {
         <rect fill="url(#nodeFill)" height="78" rx="14" stroke="rgba(255,255,255,0.14)" width="162" x="434" y="198" />
         <text fill="#F9FAFB" fontFamily="Inter, Geist, sans-serif" fontSize="14" fontWeight="600" x="452" y="226">ADS Output</text>
         <text fill="#9CA3AF" fontFamily="Inter, Geist, sans-serif" fontSize="11" x="452" y="248">Quote-ready export</text>
-        <circle cx="564" cy="216" fill="#F97316" fillOpacity="0.36" r="8" />
+        <circle cx="564" cy="216" fill="var(--primary-500)" fillOpacity="0.36" r="8" />
 
         <path d="M162 74 C214 74, 206 124, 236 134" stroke="url(#flowLine)" strokeWidth="2.4" />
         <path d="M374 156 C426 168, 430 214, 434 224" stroke="url(#flowLine)" strokeWidth="2.4" />
 
-        <circle cx="90" cy="212" fill="#101827" r="46" stroke="rgba(255,255,255,0.1)" />
+        <circle cx="90" cy="212" fill="#161231" r="46" stroke="rgba(255,255,255,0.1)" />
         <path d="M66 212 L90 188 L114 212 L90 236 Z" stroke="#38BDF8" strokeOpacity="0.75" strokeWidth="1.6" />
-        <circle cx="90" cy="212" fill="#F97316" fillOpacity="0.18" r="12" />
+        <circle cx="90" cy="212" fill="var(--primary-500)" fillOpacity="0.18" r="12" />
         <text fill="#9CA3AF" fontFamily="Inter, Geist, sans-serif" fontSize="10" x="52" y="272">Market map</text>
       </svg>
     </div>
@@ -178,9 +178,9 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
   return (
     <main className="dense-main flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden">
       {showHero ? (
-        <section className="relative shrink-0 overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#101827]/82 p-6 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:p-7 xl:p-8">
-          <div className="absolute -left-24 -top-20 h-64 w-64 rounded-full bg-orange-500/16 blur-3xl" />
-          <div className="absolute -right-24 -bottom-24 h-72 w-72 rounded-full bg-sky-400/12 blur-3xl" />
+        <section className="relative shrink-0 overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#161231]/82 p-6 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:p-7 xl:p-8">
+          <div className="absolute -left-24 -top-20 h-64 w-64 rounded-full bg-violet-500/16 blur-3xl" />
+          <div className="absolute -right-24 -bottom-24 h-72 w-72 rounded-full bg-violet-400/12 blur-3xl" />
           <div className="relative grid min-h-[324px] gap-6 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,1.18fr)] lg:items-center xl:min-h-[369px] xl:gap-10">
             <div className="max-w-xl">
               <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">POWERED BY ADS</p>
@@ -188,13 +188,13 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
               <p className="mt-3 max-w-lg text-[15px] leading-relaxed text-[#9CA3AF] xl:text-[16px]">Build schedules, review poster quantities, and generate ADS-ready quotes.</p>
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <Button
-                  className="h-10 border border-orange-400/45 bg-[#F97316] px-5 text-white shadow-[0_8px_24px_rgba(249,115,22,0.32)] transition hover:-translate-y-[1px] hover:brightness-110"
+                  className="h-10 px-5 btn-theme-primary"
                   onClick={handleCreateCampaign}
                   type="button"
                 >
                   Create Campaign
                 </Button>
-                <div className="flex h-10 w-[220px] items-center gap-2 rounded-lg border border-white/15 bg-[#0D1728]/90 px-3 text-slate-200 shadow-[0_6px_20px_rgba(2,6,23,0.25)]">
+                <div className="flex h-10 w-[220px] items-center gap-2 rounded-lg border border-white/15 bg-[#15122b]/90 px-3 text-slate-200 shadow-[0_6px_20px_rgba(2,6,23,0.25)]">
                   <Search className="h-4 w-4 shrink-0 text-slate-400" />
                   <input
                     className="w-full bg-transparent text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
@@ -215,12 +215,12 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
 
       {loading ? (
         <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-900/90 px-6 py-20">
-          <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
+          <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
         </div>
       ) : filteredCampaigns.length === 0 ? (
-        <Card className="border-white/10 bg-[#162033]">
+        <Card className="border-white/10 bg-[#1a1733]">
           <CardContent className="flex flex-col items-center gap-4 px-6 py-16 text-center">
-            <FolderKanban className="h-12 w-12 text-orange-300" />
+            <FolderKanban className="h-12 w-12 text-violet-300" />
             <div className="space-y-2">
               <h2 className="text-2xl font-black text-white">{campaigns.length === 0 ? 'No campaign schedules yet' : 'No matching campaigns'}</h2>
               <p className="max-w-xl text-sm leading-6 text-slate-400">
@@ -229,14 +229,14 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                   : 'Try another campaign name in the search box.'}
               </p>
             </div>
-            <Button className="h-10 rounded-xl border border-orange-300/35 bg-orange-600 px-[18px] text-sm font-semibold text-white" onClick={handleCreateCampaign}>
+            <Button className="h-10 rounded-xl border border-violet-300/35 bg-violet-600 px-[18px] text-sm font-semibold text-white" onClick={handleCreateCampaign}>
               <Plus className="h-4 w-4" />
               Create Campaign
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <section className="min-h-0 flex-1 overflow-auto rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
+        <section className="min-h-0 flex-1 overflow-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
           <table className="dense-table min-w-[980px] w-full border-collapse text-[14px]">
             <thead>
               <tr className="bg-slate-950/65 text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-200">
@@ -256,12 +256,12 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                 <tr
                   key={`campaign-table-${campaign.id}`}
                   className={`border-t border-white/5 align-middle transition-[background-color,border-color] duration-200 ${
-                    rowIndex % 2 === 0 ? 'bg-[#1a2740]/70' : 'bg-[#162033]'
+                    rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'
                   } hover:bg-[#1d2a40]`}
                 >
                   <td className="px-5 py-2.5 font-semibold text-white">
                     <button
-                      className="block max-w-[320px] truncate whitespace-nowrap text-left text-white transition hover:text-orange-200"
+                      className="block max-w-[320px] truncate whitespace-nowrap text-left text-white transition hover:text-violet-200"
                       onClick={() => void handleOpenCampaignView(campaign.id)}
                       title={campaignDisplayName(campaign)}
                       type="button"
@@ -355,7 +355,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                 Cancel
               </Button>
               <Button disabled={deletingCampaign} onClick={() => void handleConfirmDeleteCampaign()}>
-                {deletingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" /> : <Trash2 className="h-4 w-4" />}
+                {deletingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Trash2 className="h-4 w-4" />}
                 {deletingCampaign ? 'Deleting...' : 'Delete Campaign'}
               </Button>
             </div>

@@ -3,11 +3,11 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-sm font-semibold transition-all duration-150 hover:-translate-y-[1px] active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70 disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-sm font-semibold transition-all duration-150 hover:-translate-y-[1px] active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-400)] disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
-        default: 'bg-orange-500 text-white shadow-[0_8px_20px_-12px_rgba(249,115,22,0.72)] hover:bg-orange-400 hover:shadow-[0_12px_24px_-14px_rgba(251,146,60,0.85)]',
+        default: 'bg-[var(--primary-500)] text-white shadow-[0_8px_20px_-12px_rgba(var(--primary-500-rgb),0.72)] hover:bg-[var(--primary-400)] hover:shadow-[0_12px_24px_-14px_rgba(var(--primary-400-rgb),0.85)]',
         secondary: 'border border-slate-600 bg-slate-900 text-slate-100 hover:border-slate-500 hover:bg-slate-800 hover:shadow-[0_10px_20px_-14px_rgba(15,23,42,0.95)]',
         outline: 'border border-slate-600 bg-transparent text-slate-100 hover:border-slate-500 hover:bg-slate-900/60 hover:shadow-[0_10px_20px_-14px_rgba(15,23,42,0.95)]',
         ghost: 'text-slate-200 hover:bg-slate-900/60 hover:shadow-[0_10px_20px_-14px_rgba(15,23,42,0.95)]',

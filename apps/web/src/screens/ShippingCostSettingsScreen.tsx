@@ -366,7 +366,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
       <main className="dense-main mx-auto flex min-h-0 w-full max-w-7xl flex-col gap-6 px-6 py-8">
         <Card>
           <CardHeader className="p-6">
-            <CardTitle className="flex items-center gap-3"><Shield className="h-5 w-5 text-orange-300" /> Shipping Costs</CardTitle>
+            <CardTitle className="flex items-center gap-3"><Shield className="h-5 w-5 text-violet-300" /> Shipping Costs</CardTitle>
             <CardDescription>This section is available to super admin only.</CardDescription>
           </CardHeader>
         </Card>
@@ -384,7 +384,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
             <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Tenant</span>
             <select
               id="shipping-cost-tenant"
-              className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
+              className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
               value={selectedTenantId ?? ''}
               onChange={(event) => setSelectedTenantId(event.target.value || null)}
             >
@@ -399,7 +399,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
             <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
             <select
               id="shipping-cost-market-filter"
-              className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
+              className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
               value={marketFilter}
               onChange={(event) => setMarketFilter(event.target.value)}
             >
@@ -414,7 +414,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
       <section className="space-y-4">
         {loading ? (
           <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
-            <LoaderCircle className="h-4 w-4 animate-spin text-orange-300" />
+            <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
             Loading shipping costs...
           </div>
         ) : visibleMappings.length === 0 ? (
@@ -423,7 +423,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
           </div>
         ) : (
           <>
-            <div className="rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
+            <div className="rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
               <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
                 <p className="text-sm font-semibold text-slate-100">Sheeters</p>
                 <div className="inline-flex h-9 overflow-hidden rounded-md border border-slate-600 bg-slate-800">
@@ -449,7 +449,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                       aria-pressed={marketUseFlatRateSheeters}
                       className={`h-full rounded-md px-2.5 text-xs font-medium transition ${
                         marketUseFlatRateSheeters
-                          ? 'bg-orange-500/80 text-white'
+                          ? 'bg-violet-500/80 text-white'
                           : 'text-slate-300 hover:bg-slate-700/60'
                       }`}
                       onClick={() => {
@@ -474,7 +474,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-t border-white/5 bg-[#1a2740]/70">
+                  <tr className="border-t border-white/5 bg-[#241c45]/70">
                     <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
                     <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">2 Sheeter</td>
                     <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
@@ -512,7 +512,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                       </td>
                     ) : null}
                   </tr>
-                  <tr className="border-t border-white/5 bg-[#162033]">
+                  <tr className="border-t border-white/5 bg-[#1a1733]">
                     <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
                     <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">4 Sheeter</td>
                     <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
@@ -550,7 +550,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                       </td>
                     ) : null}
                   </tr>
-                  <tr className="border-t border-white/5 bg-[#1a2740]/70">
+                  <tr className="border-t border-white/5 bg-[#241c45]/70">
                     <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
                     <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">6 Sheeter</td>
                     <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
@@ -588,7 +588,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                       </td>
                     ) : null}
                   </tr>
-                  <tr className="border-t border-white/5 bg-[#162033]">
+                  <tr className="border-t border-white/5 bg-[#1a1733]">
                       <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{marketFilter || '-'}</td>
                       <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">8 Sheeter</td>
                       <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
@@ -629,7 +629,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                 </tbody>
               </table>
             </div>
-              <div className="rounded-md border border-white/10 bg-[#162033] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
+              <div className="rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
                 <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
                   <p className="text-sm font-semibold text-slate-100">Megas</p>
                   <div className="inline-flex h-9 overflow-hidden rounded-md border border-slate-600 bg-slate-800">
@@ -655,7 +655,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                         aria-pressed={marketUseFlatRateMegas}
                         className={`h-full rounded-md px-2.5 text-xs font-medium transition ${
                           marketUseFlatRateMegas
-                            ? 'bg-orange-500/80 text-white'
+                            ? 'bg-violet-500/80 text-white'
                             : 'text-slate-300 hover:bg-slate-700/60'
                         }`}
                         onClick={() => {
@@ -686,7 +686,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                       return (
                         <tr
                           key={`shipping-asset-row-${mapping.id}`}
-                          className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#1a2740]/70' : 'bg-[#162033]'}`}
+                          className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}`}
                         >
                           <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{mapping.market}</td>
                           <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">
