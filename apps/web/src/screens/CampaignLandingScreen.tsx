@@ -26,11 +26,8 @@ function formatCampaignStatus(status: CampaignListItem['status']) {
 
 function WorkflowIllustration() {
   return (
-    <div className="relative h-[210px] w-full overflow-hidden rounded-2xl border border-white/10 bg-[#110f24]/92 p-4 backdrop-blur-xl sm:h-[225px] lg:h-[252px] xl:h-[270px]">
-      <div className="absolute -left-14 -top-12 h-44 w-44 rounded-full bg-violet-500/14 blur-3xl" />
-      <div className="absolute -right-14 bottom-0 h-52 w-52 rounded-full bg-violet-400/12 blur-3xl" />
-      <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: 'linear-gradient(rgba(148,163,184,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.3) 1px, transparent 1px)', backgroundSize: '44px 44px' }} />
-      <svg className="relative h-full w-full" fill="none" viewBox="0 0 620 320" xmlns="http://www.w3.org/2000/svg">
+    <div className="relative h-[205px] w-full bg-transparent p-0 sm:h-[223px] lg:h-[248px] xl:h-[268px]">
+      <svg className="relative h-full w-full" fill="none" viewBox="34 14 548 280" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="nodeFill" x1="0" x2="1" y1="0" y2="1">
             <stop offset="0%" stopColor="#1e163c" />
@@ -203,27 +200,33 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
   return (
     <main className="dense-main flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden">
       {showHero ? (
-        <section className="relative shrink-0 overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#161231]/82 px-6 pb-4 pt-4 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:px-7 sm:pb-5 sm:pt-5 xl:px-8 xl:pb-6 xl:pt-6">
+        <section className="relative shrink-0 overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#161231]/70 px-6 pb-3 pt-2 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:px-7 sm:pb-4 sm:pt-3 xl:px-8 xl:pb-5 xl:pt-4">
           <div className="absolute -left-24 -top-20 h-64 w-64 rounded-full bg-violet-500/16 blur-3xl" />
           <div className="absolute -right-24 -bottom-24 h-72 w-72 rounded-full bg-violet-400/12 blur-3xl" />
-          <div className="relative grid min-h-[220px] gap-6 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,1.18fr)] lg:items-center xl:min-h-[252px] xl:gap-10">
-            <div className="max-w-xl">
-              <p className="text-[14px] font-semibold uppercase tracking-[0.14em] text-slate-300">Revolution 360</p>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">POWERED BY ADS</p>
-              <h1 className="mt-1 text-[32px] font-semibold leading-tight tracking-tight text-[#F9FAFB] md:text-[38px] xl:text-[44px]">Plan Outdoor Campaigns Faster</h1>
-              <p className="mt-2 max-w-lg text-[14px] leading-relaxed text-[#9CA3AF] xl:text-[15px]">Build schedules, review poster quantities, and generate ADS-ready orders.</p>
-              <div className="mt-5 flex flex-wrap items-center gap-3">
+          <div className="relative grid min-h-[216px] items-start gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:items-start xl:min-h-[243px] xl:gap-11">
+            <div className="max-w-xl pt-2 lg:self-stretch lg:flex lg:flex-col">
+              <div className="mb-5 w-fit max-w-full">
+                <img
+                  alt="Revolution360"
+                  className="h-auto w-[320px] max-w-full md:w-[390px] xl:w-[460px]"
+                  src="/images/revolution360-wordmark-white.png"
+                />
+                <p className="-mt-0.5 text-right text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">POWERED BY ADS</p>
+              </div>
+              <h1 className="mt-3 pl-3 overflow-hidden text-ellipsis whitespace-nowrap text-[29px] font-semibold leading-tight tracking-tight text-[#F9FAFB] md:text-[33px] xl:text-[37px]">Plan Outdoor Campaigns Faster</h1>
+              <p className="mt-3 max-w-xl pl-3 text-[16px] leading-relaxed text-[#9CA3AF] xl:text-[17px]">Build schedules, review poster quantities, and generate ADS-ready orders.</p>
+              <div className="mt-10 flex flex-wrap items-center gap-3 pl-3 lg:mt-auto">
                 <Button
-                  className="h-10 px-5 btn-theme-primary"
+                  className="h-11 px-6 text-[15px] btn-theme-primary"
                   onClick={handleCreateCampaign}
                   type="button"
                 >
                   Create Campaign
                 </Button>
-                <div className="flex h-10 w-[220px] items-center gap-2 rounded-lg border border-white/15 bg-[#15122b]/90 px-3 text-slate-200 shadow-[0_6px_20px_rgba(2,6,23,0.25)]">
-                  <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                <div className="flex h-11 w-[250px] items-center gap-2 rounded-lg border border-white/15 bg-[#15122b]/90 px-3 text-slate-200 shadow-[0_6px_20px_rgba(2,6,23,0.25)]">
+                  <Search className="h-[18px] w-[18px] shrink-0 text-slate-400" />
                   <input
-                    className="w-full bg-transparent text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
+                    className="w-full bg-transparent text-[15px] text-slate-100 placeholder:text-slate-500 focus:outline-none"
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Search campaign"
                     type="text"
