@@ -554,6 +554,12 @@ function inferStateFromMarket(marketName: string) {
   return normalizeExportState(marketName);
 }
 
+function marketShortLabelForState(state: ExportState) {
+  if (state === 'NSW') return 'Syd';
+  if (state === 'QLD') return 'Bris';
+  return '';
+}
+
 function sanitizeFileName(value: string) {
   return value.replace(/[\\/:*?"<>|]/g, '').trim();
 }
@@ -3188,10 +3194,10 @@ export function QuoteBuilderScreen({
       };
 
       const getDeliveryTypeLabel = (state: ExportState, key: keyof QuantityBreakdown) => {
-        if (state === 'QLD') {
-          if (key === '8-sheet' || key === '6-sheet' || key === '4-sheet' || key === '2-sheet') {
-            return `BRIS ${getSizeDisplayName(key).toUpperCase()}`;
-          }
+        const isPosterFormat = key === '8-sheet' || key === '6-sheet' || key === '4-sheet' || key === '2-sheet' || key === 'QA0';
+        if (isPosterFormat) {
+          const marketLabel = marketShortLabelForState(state);
+          if (marketLabel) return `${marketLabel.toUpperCase()} ${getSizeDisplayName(key).toUpperCase()}`;
         }
         return getSizeDisplayName(key).toUpperCase();
       };
@@ -3455,7 +3461,6 @@ export function QuoteBuilderScreen({
           rowsByCreative.set(row.creativeNumber, bucket);
         });
 
-        const quantityColumns = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
         const rowTotals = (creativeRows: typeof printRowsSorted) => {
           const totals = new Map<number, number>();
           creativeRows.forEach((row) => {
@@ -3503,20 +3508,24 @@ export function QuoteBuilderScreen({
           return resolveSheetName(label, normalizedSheetNameOverrides);
         };
 
-        const quantityLabelForColumn = (column: number, rawCreativeTypeLabel: string) => {
-          if (column === 9) return `${resolveFormatName('8-sheet', normalizedSheetNameOverrides)} posters`;
-          if (column === 10) return `${resolveFormatName('6-sheet', normalizedSheetNameOverrides)} posters`;
-          if (column === 11) return `${resolveFormatName('4-sheet', normalizedSheetNameOverrides)} posters`;
-          if (column === 12) return `${resolveFormatName('2-sheet', normalizedSheetNameOverrides)} posters`;
-          if (column === 13) return rawCreativeTypeLabel === 'QA0' ? resolveFormatName('QA0', normalizedSheetNameOverrides) : `${resolveFormatName('QA0', normalizedSheetNameOverrides)} posters`;
-          if (column === 14) return `Brisbane sized ${resolveFormatName('8-sheet', normalizedSheetNameOverrides)} posters`;
-          if (column === 15) return `Brisbane sized ${resolveFormatName('6-sheet', normalizedSheetNameOverrides)} posters`;
-          if (column === 16) return `Brisbane sized ${resolveFormatName('4-sheet', normalizedSheetNameOverrides)} posters`;
-          if (column === 17) return `Brisbane sized ${resolveFormatName('2-sheet', normalizedSheetNameOverrides)} posters`;
-          if (column === 18) return resolveFormatName('Mega', normalizedSheetNameOverrides);
-          if (column === 19) return resolveFormatName('DOT M', normalizedSheetNameOverrides);
-          if (column === 20) return resolveFormatName('MP', normalizedSheetNameOverrides);
-          return resolveFormatName('FF', normalizedSheetNameOverrides);
+        const formatKeyForPrintColumn = (column: number): keyof QuantityBreakdown | null => {
+          if (column === 9 || column === 14) return '8-sheet';
+          if (column === 10 || column === 15) return '6-sheet';
+          if (column === 11 || column === 16) return '4-sheet';
+          if (column === 12 || column === 17) return '2-sheet';
+          if (column === 13) return 'QA0';
+          if (column === 18) return 'Mega';
+          if (column === 19) return 'DOT M';
+          if (column === 20) return 'MP';
+          if (column === 21) return 'FF';
+          return null;
+        };
+
+        const quantityLabelForStateAndKey = (state: ExportState, key: keyof QuantityBreakdown) => {
+          const base = getSizeDisplayName(key);
+          const isPosterFormat = key === '8-sheet' || key === '6-sheet' || key === '4-sheet' || key === '2-sheet' || key === 'QA0';
+          const marketLabel = isPosterFormat ? marketShortLabelForState(state) : '';
+          return marketLabel ? `${marketLabel} ${base}` : base;
         };
 
         const creativeTypeByNumber = new Map<number, string>();
@@ -3539,27 +3548,37 @@ export function QuoteBuilderScreen({
 
         const quantityPartsByCreative = new Map<number, string[]>();
         Array.from(rowsByCreative.keys()).forEach((creativeNumber) => {
-          const summaryBucket = (creativeSummary.get(creativeNumber) ?? {}) as Record<string, number>;
-          const parts: string[] = [];
-          Object.entries(summaryBucket).forEach(([key, quantity]) => {
-            if ((quantity ?? 0) <= 0) return;
-            if (isKnownFormatKey(key)) {
-              const quantityLabel = key === 'QA0'
-                ? `${resolveFormatName('QA0', normalizedSheetNameOverrides)} posters`
-                : key === 'Mega'
-                  ? resolveFormatName('Mega', normalizedSheetNameOverrides)
-                  : key === 'DOT M'
-                    ? resolveFormatName('DOT M', normalizedSheetNameOverrides)
-                    : key === 'MP'
-                      ? resolveFormatName('MP', normalizedSheetNameOverrides)
-                      : key === 'FF'
-                        ? resolveFormatName('FF', normalizedSheetNameOverrides)
-                        : `${resolveFormatName(key, normalizedSheetNameOverrides)} posters`;
-              parts.push(`${quantity} x ${quantityLabel}`);
-              return;
-            }
-            parts.push(`${quantity} x ${resolveSheetName(key, normalizedSheetNameOverrides)}`);
+          const creativeRows = rowsByCreative.get(creativeNumber) ?? [];
+          const totalsByStateAndKey = new Map<string, number>();
+          creativeRows.forEach((row) => {
+            Object.entries(row.quantities).forEach(([column, quantity]) => {
+              if ((quantity ?? 0) <= 0) return;
+              const formatKey = formatKeyForPrintColumn(Number(column));
+              if (!formatKey) return;
+              const bucketKey = `${row.state}\x00${formatKey}`;
+              totalsByStateAndKey.set(bucketKey, (totalsByStateAndKey.get(bucketKey) ?? 0) + quantity);
+            });
           });
+          const parts: string[] = [];
+          const formatOrder: Array<keyof QuantityBreakdown> = ['8-sheet', 'QA0', '6-sheet', '4-sheet', '2-sheet', 'Mega', 'DOT M', 'MP', 'FF'];
+          Array.from(totalsByStateAndKey.entries())
+            .sort((left, right) => {
+              const [leftState, leftFormat] = left[0].split('\x00') as [ExportState, keyof QuantityBreakdown];
+              const [rightState, rightFormat] = right[0].split('\x00') as [ExportState, keyof QuantityBreakdown];
+              const leftMarketOrder = leftState === 'NSW' ? 1 : leftState === 'QLD' ? 2 : 0;
+              const rightMarketOrder = rightState === 'NSW' ? 1 : rightState === 'QLD' ? 2 : 0;
+              if (leftMarketOrder !== rightMarketOrder) return leftMarketOrder - rightMarketOrder;
+              const leftFormatOrder = formatOrder.indexOf(leftFormat);
+              const rightFormatOrder = formatOrder.indexOf(rightFormat);
+              if (leftFormatOrder !== rightFormatOrder) return leftFormatOrder - rightFormatOrder;
+              return leftState.localeCompare(rightState);
+            })
+            .forEach(([compositeKey, quantity]) => {
+              if ((quantity ?? 0) <= 0) return;
+              const [state, formatKey] = compositeKey.split('\x00') as [ExportState, keyof QuantityBreakdown];
+              const quantityLabel = quantityLabelForStateAndKey(state, formatKey);
+              parts.push(`${quantity} x ${quantityLabel}`);
+            });
           quantityPartsByCreative.set(creativeNumber, parts);
         });
 
@@ -3868,9 +3887,13 @@ export function QuoteBuilderScreen({
         for (const [creativeNumber, creativeRows] of Array.from(rowsByCreative.entries()).sort((a, b) => a[0] - b[0])) {
           const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
           drawWrappedLine(`Creative ${creativeNumber} (${creativeTypeLabel}):`, true, undefined, 16);
+          const seenCreativeFileNames = new Set<string>();
           for (const row of creativeRows) {
+            const normalizedFileName = `${row.fileName}.pdf`;
+            if (seenCreativeFileNames.has(normalizedFileName)) continue;
+            seenCreativeFileNames.add(normalizedFileName);
             const link = buildCreativePdfLink(row.creativeImageId, row.fileName || 'Artwork');
-            drawWrappedLine(`${row.state}: ${row.fileName}.pdf`, false, link || undefined, 32);
+            drawWrappedLine(normalizedFileName, false, link || undefined, 32);
           }
           const firstImageId = creativeRows[0]?.creativeImageId || '';
           const preview = creativePreviewById.get(firstImageId);
