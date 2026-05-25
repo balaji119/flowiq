@@ -3197,9 +3197,15 @@ export function QuoteBuilderScreen({
         const isPosterFormat = key === '8-sheet' || key === '6-sheet' || key === '4-sheet' || key === '2-sheet' || key === 'QA0';
         if (isPosterFormat) {
           const marketLabel = marketShortLabelForState(state);
-          if (marketLabel) return `${marketLabel.toUpperCase()} ${getSizeDisplayName(key).toUpperCase()}`;
+          if (marketLabel) return `${marketLabel} ${getSizeDisplayName(key)}`;
         }
-        return getSizeDisplayName(key).toUpperCase();
+        return getSizeDisplayName(key);
+      };
+
+      const getExportQuantityForFormat = (key: keyof QuantityBreakdown, posters: number) => {
+        if (exportMode !== 'pdf') return posters;
+        const divisor = formatToFrameDivisor[key as CreativeFormatKey] ?? 1;
+        return Math.max(0, Math.ceil(Math.max(0, posters) / Math.max(1, divisor)));
       };
 
       const posterDivisors: Record<keyof QuantityBreakdown, number> = {
@@ -3244,10 +3250,14 @@ export function QuoteBuilderScreen({
 
           const state = normalizeExportState(line.state) ?? inferStateFromMarket(market.market);
           if (!state) return;
-          Object.entries(line.breakdown as Record<string, number>).forEach(([key, quantity]) => {
-            if (quantity <= 0) return;
+          Object.entries(line.breakdown as Record<string, number>).forEach(([key, posterQuantity]) => {
+            if (posterQuantity <= 0) return;
 
             const isStandardFormat = isKnownFormatKey(key);
+            const exportQuantity = isStandardFormat
+              ? getExportQuantityForFormat(key as keyof QuantityBreakdown, posterQuantity)
+              : posterQuantity;
+            if (exportQuantity <= 0) return;
             const creativeFormat = isStandardFormat ? toCreativeFormatKey(key as keyof QuantityBreakdown) : null;
             const multiSlotImageIds = creativeFormat
               ? (asset.multiCreativeImageIds?.[creativeFormat] ?? [])
@@ -3262,7 +3272,7 @@ export function QuoteBuilderScreen({
             const creativeAssignments = useMultiArtwork
               ? (() => {
                   const slotCount = Math.max(1, multiSlotImageIds.length);
-                  const slotQuantities = splitQuantityAcrossSlots(quantity, slotCount);
+                  const slotQuantities = splitQuantityAcrossSlots(exportQuantity, slotCount);
                   return multiSlotImageIds.slice(0, slotCount).map((imageId, index) => ({
                     imageId,
                     quantity: slotQuantities[index] ?? 0,
@@ -3272,7 +3282,7 @@ export function QuoteBuilderScreen({
                   const creativeImageId = creativeFormat
                     ? getCreativeImageIdForFormat(asset, creativeFormat)
                     : (asset.creativeImageId || '').trim();
-                  return creativeImageId ? [{ imageId: creativeImageId, quantity }] : [];
+                  return creativeImageId ? [{ imageId: creativeImageId, quantity: exportQuantity }] : [];
                 })();
 
             creativeAssignments.forEach((assignment) => {
