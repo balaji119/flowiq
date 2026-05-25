@@ -271,6 +271,7 @@ export type OrderFormValues = {
   dueDate: string;
   numberOfWeeks: string;
   printImages: CampaignPrintImage[];
+  creativeNameAssignments?: Record<string, string>;
   campaignMarkets: CampaignMarket[];
   contact: ContactDetails;
   selectedJobOperations: string[];

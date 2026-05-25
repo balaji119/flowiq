@@ -85,6 +85,7 @@ type orderFormValues struct {
 	DueDate                   string               `json:"dueDate"`
 	NumberOfWeeks             string               `json:"numberOfWeeks"`
 	PrintImages               []campaignPrintImage `json:"printImages"`
+	CreativeNameAssignments   map[string]string    `json:"creativeNameAssignments,omitempty"`
 	CampaignMarkets           []campaignMarket     `json:"campaignMarkets"`
 	Contact                   contactDetails       `json:"contact"`
 	SelectedJobOperations     []string             `json:"selectedJobOperations"`

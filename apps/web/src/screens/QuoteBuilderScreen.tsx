@@ -343,6 +343,17 @@ function isPdfFile(file: File) {
   return file.type === 'application/pdf' || lowerName.endsWith('.pdf');
 }
 
+function normalizeCreativeNameAssignments(input?: Record<string, string>) {
+  const normalized: Record<string, string> = {};
+  Object.entries(input ?? {}).forEach(([creativeName, imageId]) => {
+    const safeCreativeName = (creativeName || '').trim();
+    const safeImageId = (imageId || '').trim();
+    if (!safeCreativeName || !safeImageId) return;
+    normalized[safeCreativeName] = safeImageId;
+  });
+  return normalized;
+}
+
 function normalizeFormValues(values: OrderFormValues): OrderFormValues {
   const normalizeCampaignImageUrl = (url?: string) =>
     url && url.startsWith('/uploads/campaign-images/')
@@ -378,6 +389,7 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
       sourcePdfStoredName: image.sourcePdfStoredName,
       sourcePdfUrl: normalizeCampaignImageUrl(image.sourcePdfUrl),
     })),
+    creativeNameAssignments: normalizeCreativeNameAssignments(values.creativeNameAssignments),
   };
 }
 
@@ -1240,6 +1252,12 @@ export function QuoteBuilderScreen({
       }
     };
   }, []);
+
+  useEffect(() => {
+    const nextAssignments = normalizeCreativeNameAssignments(values.creativeNameAssignments);
+    if (stableSerialize(nextAssignments) === stableSerialize(creativeNameAssignments)) return;
+    setCreativeNameAssignments(nextAssignments);
+  }, [creativeNameAssignments, values.creativeNameAssignments]);
 
   useEffect(() => {
     setCampaignStartDateInput(formatDateInputDisplay(values.campaignStartDate));
@@ -2382,13 +2400,16 @@ export function QuoteBuilderScreen({
       });
       if (reorderedImages.length === 0) return current;
       if (imageById.size > 0) reorderedImages.push(...Array.from(imageById.values()));
+      const normalizedCurrentAssignments = normalizeCreativeNameAssignments(current.creativeNameAssignments);
       const isSameOrder =
         reorderedImages.length === current.printImages.length
         && reorderedImages.every((image, index) => image.id === current.printImages[index]?.id);
-      if (isSameOrder) return current;
+      const isSameAssignments = stableSerialize(normalizedCurrentAssignments) === stableSerialize(nextAssignments);
+      if (isSameOrder && isSameAssignments) return current;
       return {
         ...current,
         printImages: reorderedImages,
+        creativeNameAssignments: nextAssignments,
       };
     });
     showCreativeSwapFeedback(sourceCreativeName, targetCreativeName);
