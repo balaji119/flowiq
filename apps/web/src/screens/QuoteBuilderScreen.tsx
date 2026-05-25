@@ -2370,6 +2370,27 @@ export function QuoteBuilderScreen({
       }
     });
     setCreativeNameAssignments(nextAssignments);
+    setValues((current) => {
+      if (current.printImages.length <= 1) return current;
+      const imageById = new Map(current.printImages.map((image) => [image.id, image]));
+      const reorderedImages: CampaignPrintImage[] = [];
+      nextIds.forEach((imageId) => {
+        const image = imageById.get(imageId);
+        if (!image) return;
+        reorderedImages.push(image);
+        imageById.delete(imageId);
+      });
+      if (reorderedImages.length === 0) return current;
+      if (imageById.size > 0) reorderedImages.push(...Array.from(imageById.values()));
+      const isSameOrder =
+        reorderedImages.length === current.printImages.length
+        && reorderedImages.every((image, index) => image.id === current.printImages[index]?.id);
+      if (isSameOrder) return current;
+      return {
+        ...current,
+        printImages: reorderedImages,
+      };
+    });
     showCreativeSwapFeedback(sourceCreativeName, targetCreativeName);
   }
 
