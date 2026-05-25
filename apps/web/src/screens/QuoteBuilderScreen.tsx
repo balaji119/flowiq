@@ -1688,7 +1688,6 @@ export function QuoteBuilderScreen({
     return byMarket;
   }, [marketDeliveryAddresses]);
   const hasUnsavedChanges = !loadingCampaign && stableSerialize(values) !== lastPersistedValuesRef.current;
-  const isSubmittedCampaign = campaignStatus === 'submitted';
   const hasMappedCreatives = useMemo(() => {
     return values.campaignMarkets.some((market) =>
       market.assets.some((asset) => {
@@ -2857,10 +2856,6 @@ export function QuoteBuilderScreen({
 
   async function saveCampaignDraft(options?: { fromAutoSave?: boolean }) {
     const fromAutoSave = options?.fromAutoSave ?? false;
-    if (isSubmittedCampaign) {
-      if (!fromAutoSave) setError('Submitted campaigns are read-only and cannot be saved.');
-      return campaignId;
-    }
     const currentValuesSerialized = stableSerialize(values);
     if (fromAutoSave && lastAutoSaveFailedValuesRef.current === currentValuesSerialized) {
       return null;
@@ -2897,7 +2892,7 @@ export function QuoteBuilderScreen({
   }
 
   useEffect(() => {
-    if (loadingCampaign || savingCampaign || !hasUnsavedChanges || isSubmittedCampaign) return;
+    if (loadingCampaign || savingCampaign || !hasUnsavedChanges) return;
 
     const timeoutId = window.setTimeout(() => {
       void saveCampaignDraft({ fromAutoSave: true });
@@ -2906,7 +2901,7 @@ export function QuoteBuilderScreen({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [campaignId, hasUnsavedChanges, isSubmittedCampaign, loadingCampaign, savingCampaign, values]);
+  }, [campaignId, hasUnsavedChanges, loadingCampaign, savingCampaign, values]);
 
   async function handleBackToDashboard() {
     if (!onBack) return;
@@ -6469,7 +6464,7 @@ export function QuoteBuilderScreen({
             <Button disabled={savingCampaign} onClick={handleDiscardAndLeave} type="button" variant="ghost">
               Discard
             </Button>
-            <Button disabled={savingCampaign || isSubmittedCampaign} onClick={() => void handleSaveAndLeave()} type="button">
+            <Button disabled={savingCampaign} onClick={() => void handleSaveAndLeave()} type="button">
               {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : null}
               {savingCampaign ? 'Saving…' : 'Save'}
             </Button>
