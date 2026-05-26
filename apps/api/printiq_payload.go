@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const forcedPrintIQCustomerCode = "C00648"
+
 func resolveQuantity(values orderFormValues, summary *campaignSummary) int {
 	explicitQuantity, err := strconv.Atoi(strings.TrimSpace(values.Quantity))
 	if err == nil && explicitQuantity > 0 {
@@ -72,7 +74,7 @@ func buildPrintIQPayload(values orderFormValues, summary *campaignSummary) map[s
 
 	processReverse := strings.TrimSpace(values.ProcessReverse)
 	if processReverse == "" {
-		processReverse = "None"
+		processReverse = "No Print"
 	}
 
 	notes := any(nil)
@@ -129,7 +131,7 @@ func buildPrintIQPayload(values orderFormValues, summary *campaignSummary) map[s
 		},
 		"Deliveries":           []any{},
 		"TargetFreightPrice":   values.TargetFreightPrice,
-		"CustomerCode":         values.CustomerCode,
+		"CustomerCode":         forcedPrintIQCustomerCode,
 		"AcceptQuote":          false,
 		"JobDescription":       resolvedDescription,
 		"JobTitle":             values.CampaignName,

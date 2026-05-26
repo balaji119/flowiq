@@ -155,7 +155,6 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
 
   async function handleEditFromView() {
     if (!viewCampaignId) return;
-    if (campaignForView?.status === 'submitted') return;
     setViewDialogOpen(false);
     setCampaignForView(null);
     setViewError('');
@@ -167,7 +166,6 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
   }
 
   function openDeleteDialog(campaign: CampaignListItem) {
-    if (campaign.status === 'submitted') return;
     setCampaignPendingDelete(campaign);
     setDeleteDialogOpen(true);
   }
@@ -327,12 +325,9 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                       </Button>
                       <Button
                         aria-label="Edit campaign"
-                        className={campaign.status === 'submitted'
-                          ? 'h-8 w-8 cursor-not-allowed rounded-md border border-white/10 p-0 text-slate-600 opacity-60'
-                          : 'h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200'}
-                        disabled={campaign.status === 'submitted'}
+                        className="h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200"
                         onClick={() => void handleOpenCampaign(campaign.id)}
-                        title={campaign.status === 'submitted' ? 'Submitted campaigns are read-only' : 'Edit campaign'}
+                        title="Edit campaign"
                         type="button"
                         variant="ghost"
                       >
@@ -340,12 +335,9 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                       </Button>
                       <Button
                         aria-label="Delete campaign"
-                        className={campaign.status === 'submitted'
-                          ? 'h-8 w-8 cursor-not-allowed rounded-md border border-white/10 p-0 text-slate-600 opacity-60'
-                          : 'h-8 w-8 rounded-md border border-white/10 p-0 text-rose-300'}
-                        disabled={campaign.status === 'submitted'}
+                        className="h-8 w-8 rounded-md border border-white/10 p-0 text-rose-300"
                         onClick={() => openDeleteDialog(campaign)}
-                        title={campaign.status === 'submitted' ? 'Submitted campaigns cannot be deleted' : 'Delete campaign'}
+                        title="Delete campaign"
                         type="button"
                         variant="ghost"
                       >

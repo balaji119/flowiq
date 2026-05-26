@@ -1,4 +1,5 @@
 import { CampaignCalculationSummary, OrderFormValues, PrintIqQuotePayload } from './types';
+import { defaultFormValues } from './constants';
 
 function resolveQuantity(values: OrderFormValues, summary: CampaignCalculationSummary | null) {
   const explicitQuantity = Number(values.quantity);
@@ -48,7 +49,7 @@ export function buildPrintIqPayload(
           SectionType: values.sectionType,
           StockCode: values.stockCode,
           ProcessFront: values.processFront,
-          ProcessReverse: values.processReverse.trim() || 'None',
+          ProcessReverse: values.processReverse.trim() || 'No Print',
           SectionSizeWidth: sectionWidth,
           SectionSizeHeight: sectionHeight,
           FoldCatalog: values.foldCatalog,
@@ -87,7 +88,7 @@ export function buildPrintIqPayload(
     },
     Deliveries: [],
     TargetFreightPrice: values.targetFreightPrice,
-    CustomerCode: values.customerCode,
+    CustomerCode: defaultFormValues.customerCode,
     AcceptQuote: false,
     JobDescription: resolvedDescription,
     JobTitle: values.campaignName,

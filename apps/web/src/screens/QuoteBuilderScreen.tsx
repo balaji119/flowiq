@@ -5435,7 +5435,7 @@ export function QuoteBuilderScreen({
                   <p className="mt-1 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-[30px] font-extrabold leading-none text-transparent drop-shadow-[0_0_18px_rgba(255,255,255,0.12)]">
                     {formatCurrency(totalEstimateCost)}
                   </p>
-                  <div className="mt-5 grid grid-cols-3 gap-2">
+                  <div className="mt-5 grid grid-cols-2 gap-2">
                     <Button
                       className="h-9 rounded-xl border-white/10 bg-slate-800/65 px-2 text-xs font-semibold text-slate-100 transition hover:bg-slate-700/75"
                       disabled={exportingTemplates || sendingAdsEmail}
@@ -5446,21 +5446,13 @@ export function QuoteBuilderScreen({
                       {exportingTemplates ? 'Generating...' : 'Download Visuals'}
                     </Button>
                     <Button
-                      className="h-9 rounded-xl border border-violet-300/35 bg-gradient-to-r from-violet-600 to-violet-500 px-2 text-xs font-semibold text-white shadow-[0_10px_24px_rgba(105, 53, 228,0.26)] transition hover:brightness-105"
-                      disabled={exportingTemplates || sendingAdsEmail}
-                      onClick={() => void sendArtworkEmailToAds()}
+                      className="h-9 rounded-xl border border-violet-300/35 bg-gradient-to-r from-violet-600 to-violet-500 px-2 text-xs font-semibold text-white shadow-[0_10px_24px_rgba(105,53,228,0.26)] transition hover:brightness-105"
+                      disabled={submitting || exportingTemplates || sendingAdsEmail}
+                      onClick={() => void handleSubmitQuote()}
                       type="button"
                       variant="secondary"
                     >
-                      {sendingAdsEmail ? 'Sending...' : 'Send Email'}
-                    </Button>
-                    <Button
-                      className="h-9 rounded-xl border border-violet-300/25 bg-violet-500/25 px-2 text-xs font-semibold text-violet-100 opacity-70"
-                      disabled
-                      type="button"
-                      variant="secondary"
-                    >
-                      Submit Order
+                      {submitting ? 'Submitting...' : 'Submit Order'}
                     </Button>
                   </div>
                 </div>

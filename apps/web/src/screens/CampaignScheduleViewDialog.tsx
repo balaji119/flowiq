@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { LoaderCircle, ShoppingCart } from 'lucide-react';
 import { CampaignRecord, formatKeys, frameTotal, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketShippingRateRecord, posterTotal } from '@flowiq/shared';
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
+import { submitCampaignToPrintIQ } from '../services/campaignApi';
 import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 
 const QUOTE_AUTOMATION_RESULT_EVENT = 'flowiq:quote-automation-result';
@@ -114,6 +115,7 @@ export function CampaignScheduleViewDialog({
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<Array<{ market: string; deliveryAddress: string }>>([]);
   const [downloadingVisuals, setDownloadingVisuals] = useState(false);
   const [sendingAdsEmail, setSendingAdsEmail] = useState(false);
+  const [submittingOrder, setSubmittingOrder] = useState(false);
   const [pendingAutomation, setPendingAutomation] = useState<PendingQuoteAutomation | null>(null);
   const [automationFrameUrl, setAutomationFrameUrl] = useState('');
   const [actionError, setActionError] = useState('');
@@ -602,8 +604,19 @@ export function CampaignScheduleViewDialog({
     startQuoteAutomation('download-visuals');
   }
 
-  function sendEmailViaQuoteBuilder() {
-    startQuoteAutomation('send-email-to-ads');
+  async function handleSubmitOrder() {
+    if (!campaign || submittingOrder || downloadingVisuals || sendingAdsEmail) return;
+    setActionError('');
+    setActionSuccess('');
+    setSubmittingOrder(true);
+    try {
+      await submitCampaignToPrintIQ(campaign.id);
+      setActionSuccess('Order submitted to PrintIQ.');
+    } catch (submitError) {
+      setActionError(submitError instanceof Error ? submitError.message : 'Unable to submit order to PrintIQ.');
+    } finally {
+      setSubmittingOrder(false);
+    }
   }
 
   function normalizeToken(value: string) {
@@ -704,7 +717,7 @@ export function CampaignScheduleViewDialog({
               <Button className="h-9 rounded-md border border-white/10 bg-slate-900/50 px-4 text-xs text-slate-100 hover:bg-slate-800/70" onClick={onClose} type="button" variant="ghost">
                 Close
               </Button>
-              <Button className="h-9 px-4 btn-theme-primary" disabled={isSubmittedCampaign} onClick={onEdit} title={isSubmittedCampaign ? 'Submitted campaigns are read-only' : 'Edit schedule'} type="button">
+              <Button className="h-9 px-4 btn-theme-primary" onClick={onEdit} title="Edit schedule" type="button">
                 Edit Schedule
               </Button>
             </div>
@@ -885,7 +898,7 @@ export function CampaignScheduleViewDialog({
                 <div className="flex items-center justify-end gap-2.5">
                 <Button
                   className="h-9 rounded-md border border-white/10 bg-slate-900/50 px-4 text-xs text-slate-100 hover:bg-slate-800/70"
-                  disabled={downloadingVisuals || sendingAdsEmail}
+                  disabled={downloadingVisuals || sendingAdsEmail || submittingOrder}
                   onClick={downloadVisualsViaQuoteBuilder}
                   type="button"
                 >
@@ -893,12 +906,12 @@ export function CampaignScheduleViewDialog({
                 </Button>
                 <Button
                   className="h-9 px-4 btn-theme-primary"
-                  disabled={isSubmittedCampaign || downloadingVisuals || sendingAdsEmail}
-                  onClick={sendEmailViaQuoteBuilder}
-                  title={isSubmittedCampaign ? 'Submitted campaigns cannot be emailed again' : 'Send email'}
+                  disabled={downloadingVisuals || sendingAdsEmail || submittingOrder}
+                  onClick={() => void handleSubmitOrder()}
+                  title="Submit order to PrintIQ"
                   type="button"
                 >
-                  {sendingAdsEmail ? 'Sending...' : 'Send Email'}
+                  {submittingOrder ? 'Submitting...' : 'Submit Order'}
                 </Button>
                 </div>
               </div>
