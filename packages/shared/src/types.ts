@@ -303,6 +303,7 @@ export type CampaignListItem = {
   tenantId: string;
   status: CampaignStatus;
   createdBy: string;
+  updatedBy: string;
   campaignName: string;
   campaignStartDate: string;
   dueDate: string;

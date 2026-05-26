@@ -198,7 +198,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
   }, [campaigns, searchQuery]);
 
   return (
-    <main className="dense-main flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden">
+    <main className="dashboard-default-scale dense-main flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden">
       {showHero ? (
         <section className="relative shrink-0 overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#161231]/70 px-6 pb-3 pt-2 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:px-7 sm:pb-4 sm:pt-3 xl:px-8 xl:pb-5 xl:pt-4">
           <div className="absolute -left-24 -top-20 h-64 w-64 rounded-full bg-violet-500/16 blur-3xl" />
@@ -266,12 +266,14 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
         </Card>
       ) : (
         <section className="min-h-0 flex-1 overflow-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
-          <table className="dense-table min-w-[980px] w-full border-collapse text-[14px]">
+          <table className="dense-table min-w-[1240px] w-full border-collapse text-[14px]">
             <thead>
               <tr className="bg-slate-950/65 text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-200">
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Campaign</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Created By</th>
-                <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Updated</th>
+                <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Created At</th>
+                <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Updated By</th>
+                <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Updated At</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-center backdrop-blur">Markets</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-center backdrop-blur">Assets</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Start</th>
@@ -291,7 +293,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                 >
                   <td className="px-5 py-2.5 font-semibold text-white">
                     <button
-                      className="block w-full max-w-[320px] truncate whitespace-nowrap text-left text-white transition hover:text-violet-200"
+                      className="block w-full truncate whitespace-nowrap text-left text-white transition hover:text-violet-200"
                       onClick={() => void handleOpenCampaignView(campaign.id)}
                       title={campaignDisplayName(campaign)}
                       type="button"
@@ -300,6 +302,8 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                     </button>
                   </td>
                   <td className="px-5 py-2.5 text-slate-300">{campaign.createdBy || 'N/A'}</td>
+                  <td className="px-5 py-2.5 text-slate-300">{new Date(campaign.createdAt).toLocaleString('en-GB')}</td>
+                  <td className="px-5 py-2.5 text-slate-300">{campaign.updatedBy || 'N/A'}</td>
                   <td className="px-5 py-2.5 text-slate-300">{new Date(campaign.updatedAt).toLocaleString('en-GB')}</td>
                   <td className="px-5 py-2.5 text-center font-semibold text-white">{campaign.marketCount}</td>
                   <td className="px-5 py-2.5 text-center font-semibold text-white">{campaign.assetCount}</td>

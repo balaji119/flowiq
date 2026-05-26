@@ -154,6 +154,7 @@ type campaignListItem struct {
 	TenantID          string `json:"tenantId"`
 	Status            string `json:"status"`
 	CreatedBy         string `json:"createdBy"`
+	UpdatedBy         string `json:"updatedBy"`
 	CampaignName      string `json:"campaignName"`
 	CampaignStartDate string `json:"campaignStartDate"`
 	DueDate           string `json:"dueDate"`
@@ -282,9 +283,11 @@ func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]cam
 
 	rows, err := s.pool.Query(ctx, `
 		SELECT c.id, c.tenant_id, c.status, c.form_data, c.latest_quote_amount::text, c.updated_at, c.created_at,
-			COALESCE(NULLIF(TRIM(u.name), ''), u.email) AS created_by
+			COALESCE(NULLIF(TRIM(uc.name), ''), uc.email) AS created_by,
+			COALESCE(NULLIF(TRIM(uu.name), ''), uu.email) AS updated_by
 		FROM campaigns c
-		LEFT JOIN users u ON u.id = c.created_by_user_id
+		LEFT JOIN users uc ON uc.id = c.created_by_user_id
+		LEFT JOIN users uu ON uu.id = c.updated_by_user_id
 		WHERE c.tenant_id = $1
 		ORDER BY c.updated_at DESC, c.created_at DESC
 	`, *user.TenantID)
@@ -303,7 +306,8 @@ func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]cam
 		var updatedAt time.Time
 		var createdAt time.Time
 		var createdBy string
-		if err := rows.Scan(&id, &tenantID, &status, &formData, &latestQuoteAmount, &updatedAt, &createdAt, &createdBy); err != nil {
+		var updatedBy string
+		if err := rows.Scan(&id, &tenantID, &status, &formData, &latestQuoteAmount, &updatedAt, &createdAt, &createdBy, &updatedBy); err != nil {
 			return nil, err
 		}
 
@@ -330,6 +334,7 @@ func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]cam
 			TenantID:          tenantID,
 			Status:            status,
 			CreatedBy:         strings.TrimSpace(createdBy),
+			UpdatedBy:         strings.TrimSpace(updatedBy),
 			CampaignName:      strings.TrimSpace(values.CampaignName),
 			CampaignStartDate: strings.TrimSpace(values.CampaignStartDate),
 			DueDate:           strings.TrimSpace(values.DueDate),
