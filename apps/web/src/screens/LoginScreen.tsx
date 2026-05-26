@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LoaderCircle, ShieldCheck } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import { Button, Card, CardContent, Input, Label } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 
@@ -29,10 +29,6 @@ export function LoginScreen() {
       <Card className="relative w-full max-w-md overflow-hidden">
         <CardContent className="space-y-6 p-8">
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-violet-200">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Secure Access
-            </div>
             <div className="space-y-2">
               <h1 className="text-3xl font-black tracking-tight text-white">ADS Connect</h1>
             </div>
@@ -63,7 +59,7 @@ export function LoginScreen() {
               />
             </div>
 
-            <Button className="w-full" size="lg" disabled={submitting} type="submit">
+            <Button className="w-full" variant="default" size="lg" disabled={submitting} type="submit">
               {submitting ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : null}
               {submitting ? 'Signing in…' : 'Sign In'}
             </Button>

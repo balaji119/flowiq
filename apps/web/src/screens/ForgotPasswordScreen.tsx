@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft, LoaderCircle, Mail } from 'lucide-react';
+import { ArrowLeft, LoaderCircle } from 'lucide-react';
 import { Button, Card, CardContent, Input, Label } from '@flowiq/ui';
 import { requestPasswordReset } from '../services/authApi';
 
@@ -28,27 +28,11 @@ export function ForgotPasswordScreen() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 pb-16 pt-36">
-      <header className="absolute inset-x-0 top-0">
-        <div className="border-b border-slate-700/80 bg-slate-900/70 backdrop-blur">
-          <div className="flex min-h-[72px] items-center justify-center px-6">
-            <p className="whitespace-nowrap text-sm font-bold uppercase tracking-[0.28em] text-slate-100">ADS Connect</p>
-          </div>
-        </div>
-        <div className="border-b border-slate-700/80 bg-slate-800/85">
-          <div className="flex min-h-[56px] items-center px-6">
-            <p className="truncate text-lg font-semibold tracking-tight text-slate-100">Forgot Password</p>
-          </div>
-        </div>
-      </header>
-        <div className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_top,rgba(105, 53, 228,0.24),transparent_55%)]" />
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-16">
+      <div className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_top,rgba(105, 53, 228,0.24),transparent_55%)]" />
       <Card className="relative w-full max-w-md overflow-hidden">
         <CardContent className="space-y-6 p-8">
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-violet-200">
-              <Mail className="h-3.5 w-3.5" />
-              Password Reset
-            </div>
             <div className="space-y-2">
               <h1 className="text-3xl font-black tracking-tight text-white">Reset your password</h1>
               <p className="text-sm leading-6 text-slate-400">
@@ -70,7 +54,7 @@ export function ForgotPasswordScreen() {
               />
             </div>
 
-            <Button className="w-full" size="lg" disabled={submitting} type="submit">
+            <Button className="w-full" variant="default" size="lg" disabled={submitting} type="submit">
               {submitting ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : null}
               {submitting ? 'Sending link...' : 'Send Reset Link'}
             </Button>
