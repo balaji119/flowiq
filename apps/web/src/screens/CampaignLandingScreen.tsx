@@ -269,7 +269,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
           <table className="dense-table min-w-[1240px] w-full border-collapse text-[14px]">
             <thead>
               <tr className="bg-slate-950/65 text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-200">
-                <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Campaign</th>
+                <th className="sticky top-0 z-10 w-[24%] border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Campaign</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Created By</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Created At</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Updated By</th>
@@ -291,7 +291,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                     rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'
                   } hover:bg-[#1d2a40]`}
                 >
-                  <td className="px-5 py-2.5 font-semibold text-white">
+                  <td className="w-[24%] px-5 py-2.5 font-semibold text-white">
                     <button
                       className="block w-full truncate whitespace-nowrap text-left text-white transition hover:text-violet-200"
                       onClick={() => void handleOpenCampaignView(campaign.id)}
