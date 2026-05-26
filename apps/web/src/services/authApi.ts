@@ -58,6 +58,22 @@ export async function requestPasswordReset(email: string): Promise<PasswordReset
   return body;
 }
 
+export async function changePassword(email: string, oldPassword: string, newPassword: string): Promise<PasswordResetResponse> {
+  const response = await fetch(buildApiUrl('/api/auth/change-password'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, oldPassword, newPassword }),
+  });
+
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body?.error || 'Unable to change password');
+  }
+  return body;
+}
+
 export async function confirmPasswordReset(token: string, password: string): Promise<PasswordResetResponse> {
   const response = await fetch(buildApiUrl('/api/auth/password-reset/confirm'), {
     method: 'POST',

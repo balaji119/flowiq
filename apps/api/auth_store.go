@@ -135,6 +135,52 @@ func (s *authStore) authenticate(email, password string) (*AuthUser, error) {
 	return &user, nil
 }
 
+func (s *authStore) changePasswordWithCredentials(ctx context.Context, email, oldPassword, newPassword string) error {
+	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
+	trimmedOldPassword := strings.TrimSpace(oldPassword)
+	trimmedNewPassword := strings.TrimSpace(newPassword)
+	if normalizedEmail == "" || trimmedOldPassword == "" || trimmedNewPassword == "" {
+		return errors.New("Email, old password, and new password are required")
+	}
+
+	var userID string
+	var passwordSalt string
+	var passwordHash string
+	var active bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, password_salt, password_hash, active
+		FROM users
+		WHERE email = $1
+		LIMIT 1
+	`, normalizedEmail).Scan(&userID, &passwordSalt, &passwordHash, &active)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errors.New("Invalid email or old password")
+	}
+	if err != nil {
+		return err
+	}
+	if !active || !verifyPassword(trimmedOldPassword, passwordSalt, passwordHash) {
+		return errors.New("Invalid email or old password")
+	}
+
+	nextSalt, nextHash, err := newPasswordHash(trimmedNewPassword)
+	if err != nil {
+		return err
+	}
+
+	if _, err := s.pool.Exec(ctx, `
+		UPDATE users
+		SET password_salt = $2,
+		    password_hash = $3,
+		    updated_at = NOW()
+		WHERE id = $1
+	`, userID, nextSalt, nextHash); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *authStore) touchPresence(ctx context.Context, user AuthUser) error {
 	var tenantID any
 	if user.TenantID != nil && strings.TrimSpace(*user.TenantID) != "" {

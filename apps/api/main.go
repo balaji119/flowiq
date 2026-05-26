@@ -229,6 +229,7 @@ func (a *app) routes() http.Handler {
 
 	mux.HandleFunc("GET /api/health", a.handleHealth)
 	mux.HandleFunc("POST /api/auth/login", a.handleLogin)
+	mux.HandleFunc("POST /api/auth/change-password", a.handleChangePassword)
 	mux.HandleFunc("POST /api/auth/password-reset/request", a.handleRequestPasswordReset)
 	mux.HandleFunc("POST /api/auth/password-reset/confirm", a.handleConfirmPasswordReset)
 	mux.Handle("GET /api/auth/me", a.withAuth(http.HandlerFunc(a.handleCurrentSession)))
@@ -453,6 +454,27 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "user": user})
+}
+
+func (a *app) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Email       string `json:"email"`
+		OldPassword string `json:"oldPassword"`
+		NewPassword string `json:"newPassword"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	if len(strings.TrimSpace(payload.NewPassword)) < 8 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "New password must be at least 8 characters"})
+		return
+	}
+	if err := a.authStore.changePasswordWithCredentials(r.Context(), payload.Email, payload.OldPassword, payload.NewPassword); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Your password has been changed. You can sign in now."})
 }
 
 func (a *app) handleCurrentSession(w http.ResponseWriter, r *http.Request) {

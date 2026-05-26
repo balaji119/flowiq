@@ -65,8 +65,8 @@ export function LoginScreen() {
             </Button>
           </form>
 
-          <a className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 transition hover:text-white" href="/forgot-password">
-            Forgot your password?
+          <a className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 transition hover:text-white" href="/change-password">
+            Change password
           </a>
 
           {error ? <p className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</p> : null}
