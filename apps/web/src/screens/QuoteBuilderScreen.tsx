@@ -5675,13 +5675,13 @@ export function QuoteBuilderScreen({
             <DialogTitle>Add Market</DialogTitle>
           </DialogHeader>
           {draftMarket ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 text-[13px]">
-              <div className="space-y-3">
-                <div className="flex h-8 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3 text-[12px]">
+              <div className="space-y-2.5">
+                <div className="flex h-7 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
                   <span className="inline-flex w-28 shrink-0 items-center whitespace-nowrap border-r border-slate-600 px-2.5 text-[11px] font-semibold text-slate-300">Market</span>
                   <div className="relative flex-1">
                     <select
-                      className="h-8 w-full appearance-none border-0 bg-transparent px-2.5 pr-9 text-[13px] text-slate-50 focus:outline-none focus:ring-0"
+                      className="h-7 w-full appearance-none border-0 bg-transparent px-2.5 pr-9 text-[12px] text-slate-50 focus:outline-none focus:ring-0"
                       onChange={(event) =>
                         updateDraftMarket((current) => {
                           const value = event.target.value;
@@ -5711,11 +5711,11 @@ export function QuoteBuilderScreen({
                         </option>
                       ))}
                     </select>
-                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
                   </div>
                 </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                   <div className="rounded-md border border-slate-700/80 bg-slate-900/45">
                     <div className="overflow-visible">
                       <table className="dense-table w-full table-fixed border-collapse">
@@ -5727,12 +5727,12 @@ export function QuoteBuilderScreen({
                         </colgroup>
                         <thead>
                           <tr className="border-b border-slate-700/80 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                            <th className="px-2 py-2 text-center">
+                            <th className="px-2 py-1.5 text-center">
                               <span className="sr-only">Reorder</span>
                             </th>
-                            <th className="px-3 py-2 text-left">Asset</th>
-                            <th className="px-3 py-2 text-left">Active Weeks</th>
-                            <th className="px-2 py-2 text-center">
+                            <th className="px-3 py-1.5 text-left">Asset</th>
+                            <th className="px-3 py-1.5 text-left">Active Weeks</th>
+                            <th className="px-2 py-1.5 text-center">
                               <span className="sr-only">Actions</span>
                             </th>
                           </tr>
@@ -5773,7 +5773,7 @@ export function QuoteBuilderScreen({
                                   setDragOverDraftAssetId(null);
                                 }}
                               >
-                                <td className="px-0 py-2 text-center align-middle">
+                                <td className="px-0 py-1.5 text-center align-middle">
                                   <button
                                     aria-label={`Reorder ${asset.assetSearch || 'asset'}`}
                                     className={cn(
@@ -5795,7 +5795,7 @@ export function QuoteBuilderScreen({
                                     <GripVertical className="h-3.5 w-3.5" />
                                   </button>
                                 </td>
-                                <td className="px-1 py-2">
+                                <td className="px-1 py-1.5">
                                   <SearchableSelect
                                     emptyMessage={availableAssets.length ? 'No assets available for this row.' : 'No assets available for this market.'}
                                     items={availableAssetOptions}
@@ -5812,10 +5812,10 @@ export function QuoteBuilderScreen({
                                     placeholder={availableAssets.length ? 'Choose an asset' : 'No assets available'}
                                     selectedLabel={asset.assetSearch}
                                     selectedValue={asset.assetId}
-                                    triggerClassName="h-8 text-[11px]"
+                                    triggerClassName="h-7 text-[10px]"
                                   />
                                 </td>
-                                <td className="px-2 py-2">
+                                <td className="px-2 py-1.5">
                                   <div className="flex justify-start">
                                     <WeekSelector
                                       small
@@ -5826,7 +5826,7 @@ export function QuoteBuilderScreen({
                                     />
                                   </div>
                                 </td>
-                                <td className="px-1 py-2 text-center">
+                                <td className="px-1 py-1.5 text-center">
                                   {canRemoveAsset ? (
                                     <Button className="h-6 w-6" onClick={() => removeDraftAsset(asset.id)} size="icon" type="button" variant="ghost">
                                       <X className="h-3 w-3 text-rose-300" />
@@ -5842,7 +5842,7 @@ export function QuoteBuilderScreen({
                   </div>
 
                   <div title={canAddAssetForMarket(draftMarket) ? 'Add another asset' : addAssetDisabledReasonForMarket(draftMarket)}>
-                    <Button className="h-9 min-w-[122px] px-3.5 text-sm" disabled={!canAddAssetForMarket(draftMarket)} onClick={addDraftAsset} type="button" variant="secondary">
+                    <Button className="h-8 min-w-[110px] px-3 text-[13px]" disabled={!canAddAssetForMarket(draftMarket)} onClick={addDraftAsset} type="button" variant="secondary">
                       <Plus className="h-3.5 w-3.5" />
                       Add Asset
                     </Button>
@@ -5850,9 +5850,9 @@ export function QuoteBuilderScreen({
 
                   {draftMarketSummary ? (
                     <div className="space-y-2.5">
-                      <p className="text-[13px] font-semibold text-white">Market Totals</p>
+                      <p className="text-[12px] font-semibold text-white">Market Totals</p>
                       <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/65">
-                        <table className="dense-table w-full table-fixed border-collapse text-[13px]">
+                        <table className="dense-table w-full table-fixed border-collapse text-[12px]">
                           {(() => {
                             const visibleDraftMarketFormatKeys = visibleBreakdownKeys(draftMarketSummary.breakdown);
                             return (
@@ -5886,12 +5886,12 @@ export function QuoteBuilderScreen({
                       </div>
                     </div>
                   ) : draftMarketCalculating ? (
-                    <div className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900/65 px-2.5 py-2 text-[13px] text-slate-300">
+                    <div className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900/65 px-2.5 py-2 text-[12px] text-slate-300">
                       <LoaderCircle className="h-3.5 w-3.5 animate-spin text-violet-300" />
                       Calculating market totals...
                     </div>
                   ) : (
-                    <p className="text-[13px] leading-5 text-slate-400">Configure assets in this market to see its sheet-level mix and totals here.</p>
+                    <p className="text-[12px] leading-4 text-slate-400">Configure assets in this market to see its sheet-level mix and totals here.</p>
                   )}
                 </div>
               </div>
