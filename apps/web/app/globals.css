@@ -117,6 +117,7 @@ select {
   transform: scale(0.9);
   transform-origin: top left;
   width: 111.1111%;
+  margin-bottom: -0.75rem;
 }
 
 @media (max-width: 1023px) {
@@ -134,5 +135,6 @@ select {
   .campaign-builder-top-form-scale {
     transform: none;
     width: 100%;
+    margin-bottom: 0;
   }
 }
