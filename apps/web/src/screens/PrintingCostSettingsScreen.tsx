@@ -69,6 +69,12 @@ function megaCostValue(draft: AssetCostDraft): string {
   return firstNonEmpty ?? draft.Mega ?? '0';
 }
 
+function hasMegaFamilyQuantity(mapping: CalculatorMappingRecord): boolean {
+  return (mapping.quantities.Mega ?? 0) > 0
+    || (mapping.quantities['DOT M'] ?? 0) > 0
+    || (mapping.quantities.MP ?? 0) > 0;
+}
+
 export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSettingsScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -182,7 +188,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     return map;
   }, [selectedMarketMappings]);
   const visibleMappings = useMemo(
-    () => selectedMarketMappings.filter((mapping) => !maintenanceAssetIds.has(mapping.id) && mapping.quantities.Mega > 0),
+    () => selectedMarketMappings.filter((mapping) => !maintenanceAssetIds.has(mapping.id) && hasMegaFamilyQuantity(mapping)),
     [maintenanceAssetIds, selectedMarketMappings],
   );
   const dirtyAssetIdsByMarket = useMemo(() => {

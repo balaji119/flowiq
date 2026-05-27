@@ -30,6 +30,12 @@ function emptyAssetShippingDraft(): AssetShippingDraft {
   };
 }
 
+function hasMegaFamilyQuantity(mapping: CalculatorMappingRecord): boolean {
+  return (mapping.quantities.Mega ?? 0) > 0
+    || (mapping.quantities['DOT M'] ?? 0) > 0
+    || (mapping.quantities.MP ?? 0) > 0;
+}
+
 export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -81,7 +87,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
     return map;
   }, [mappings]);
   const visibleMappings = useMemo(
-    () => filteredMappings.filter((mapping) => !maintenanceAssetIds.has(mapping.id) && mapping.quantities.Mega > 0),
+    () => filteredMappings.filter((mapping) => !maintenanceAssetIds.has(mapping.id) && hasMegaFamilyQuantity(mapping)),
     [filteredMappings, maintenanceAssetIds],
   );
   const dirtyRowKeys = useMemo(
