@@ -4635,7 +4635,7 @@ export function QuoteBuilderScreen({
         <section>
           <div className="grid gap-4 lg:grid-cols-1 lg:items-start">
             <div className="space-y-7">
-              <div className={cn('space-y-4', TOP_FORM_THEME)}>
+              <div className={cn('campaign-builder-top-form-scale space-y-4', TOP_FORM_THEME)}>
                 <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,226px)_minmax(0,226px)_minmax(0,136px)]">
               <div className="flex h-11 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
                 <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Campaign Name</span>

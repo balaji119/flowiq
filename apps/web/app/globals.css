@@ -113,6 +113,12 @@ select {
   width: 125%;
 }
 
+.campaign-builder-top-form-scale {
+  transform: scale(0.9);
+  transform-origin: top left;
+  width: 111.1111%;
+}
+
 @media (max-width: 1023px) {
   .dashboard-default-scale {
     transform: none;
@@ -121,6 +127,11 @@ select {
   }
 
   .campaign-builder-content-scale {
+    transform: none;
+    width: 100%;
+  }
+
+  .campaign-builder-top-form-scale {
     transform: none;
     width: 100%;
   }
