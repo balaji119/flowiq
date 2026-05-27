@@ -198,9 +198,8 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
   return (
     <main className="dashboard-default-scale dense-main flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden">
       {showHero ? (
-        <section className="relative shrink-0 overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#161231]/70 px-6 pb-3 pt-2 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:px-7 sm:pb-4 sm:pt-3 xl:px-8 xl:pb-5 xl:pt-4">
-          <div className="absolute -left-24 -top-20 h-64 w-64 rounded-full bg-violet-500/16 blur-3xl" />
-          <div className="absolute -right-24 -bottom-24 h-72 w-72 rounded-full bg-violet-400/12 blur-3xl" />
+        <section className="relative shrink-0 overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-black px-6 pb-3 pt-2 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:px-7 sm:pb-4 sm:pt-3 xl:px-8 xl:pb-5 xl:pt-4">
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-[48%] bg-gradient-to-l from-violet-600/20 via-violet-500/8 to-transparent" />
           <div className="relative grid min-h-[216px] items-start gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:items-start xl:min-h-[243px] xl:gap-11">
             <div className="max-w-xl pt-2 lg:self-stretch lg:flex lg:flex-col">
               <div className="mb-5 w-fit max-w-full">
