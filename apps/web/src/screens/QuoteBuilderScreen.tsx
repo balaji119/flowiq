@@ -4874,7 +4874,7 @@ export function QuoteBuilderScreen({
                 </div>
               </div>
 
-              <div className="space-y-6">
+              <div className="campaign-builder-content-scale space-y-6">
                 {loadingMetadata ? (
                   <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-slate-300">
                     <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />

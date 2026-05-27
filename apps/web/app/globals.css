@@ -107,10 +107,21 @@ select {
   min-height: 125%;
 }
 
+.campaign-builder-content-scale {
+  transform: scale(0.8);
+  transform-origin: top left;
+  width: 125%;
+}
+
 @media (max-width: 1023px) {
   .dashboard-default-scale {
     transform: none;
     width: 100%;
     min-height: 100%;
+  }
+
+  .campaign-builder-content-scale {
+    transform: none;
+    width: 100%;
   }
 }
