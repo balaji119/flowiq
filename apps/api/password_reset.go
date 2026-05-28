@@ -171,15 +171,15 @@ func sendPasswordResetEmail(cfg smtpConfig, recipientEmail, recipientName, reset
 	htmlBody := fmt.Sprintf(
 		`<!doctype html>
 <html>
-  <body style="margin:0;padding:24px;font-family:Arial,sans-serif;color:#1f2937;line-height:1.5;">
-    <p>Hi %s,</p>
-    <p>We received a request to reset your ADS Connect password.</p>
-    <p>
+  <body style="margin:0;padding:0;font-family:Arial,sans-serif;color:#1f2937;line-height:1.5;">
+    <p style="margin:0 0 16px;">Hi %s,</p>
+    <p style="margin:0 0 16px;">We received a request to reset your ADS Connect password.</p>
+    <p style="margin:0 0 16px;">
       <a href="%s" style="display:inline-block;border-radius:6px;background:#6d28d9;color:#ffffff;padding:10px 16px;text-decoration:none;font-weight:700;">Reset password</a>
     </p>
-    <p>If the button does not work, copy and paste this link into your browser:</p>
-    <p><a href="%s">%s</a></p>
-    <p>This link expires in one hour.<br>If you did not request this, you can ignore this email.</p>
+    <p style="margin:0 0 16px;">If the button does not work, use the below link:</p>
+    <p style="margin:0 0 16px;"><a href="%s">%s</a></p>
+    <p style="margin:0;">This link expires in one hour.<br>If you did not request this, you can ignore this email.</p>
   </body>
 </html>`,
 		template.HTMLEscapeString(greetingName),
