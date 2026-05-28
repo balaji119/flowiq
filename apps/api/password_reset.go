@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"html/template"
+	"mime/multipart"
 	"net/smtp"
+	"net/textproto"
 	"os"
 	"strings"
 	"time"
@@ -158,25 +162,75 @@ func sendPasswordResetEmail(cfg smtpConfig, recipientEmail, recipientName, reset
 	}
 
 	subject := "Reset your ADS Connect password"
-	body := fmt.Sprintf(
+	greetingName := firstNonEmpty(strings.TrimSpace(recipientName), "there")
+	textBody := fmt.Sprintf(
 		"Hi %s,\r\n\r\nWe received a request to reset your ADS Connect password.\r\n\r\nUse this link to choose a new password:\r\n%s\r\n\r\nThis link expires in one hour.\r\nIf you did not request this, you can ignore this email.\r\n",
-		firstNonEmpty(strings.TrimSpace(recipientName), "there"),
+		greetingName,
 		resetURL,
 	)
+	htmlBody := fmt.Sprintf(
+		`<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;font-family:Arial,sans-serif;color:#1f2937;line-height:1.5;">
+    <p>Hi %s,</p>
+    <p>We received a request to reset your ADS Connect password.</p>
+    <p>
+      <a href="%s" style="display:inline-block;border-radius:6px;background:#6d28d9;color:#ffffff;padding:10px 16px;text-decoration:none;font-weight:700;">Reset password</a>
+    </p>
+    <p>If the button does not work, copy and paste this link into your browser:</p>
+    <p><a href="%s">%s</a></p>
+    <p>This link expires in one hour.<br>If you did not request this, you can ignore this email.</p>
+  </body>
+</html>`,
+		template.HTMLEscapeString(greetingName),
+		template.HTMLEscapeString(resetURL),
+		template.HTMLEscapeString(resetURL),
+		template.HTMLEscapeString(resetURL),
+	)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	textPart, err := writer.CreatePart(textproto.MIMEHeader{
+		"Content-Type":              {"text/plain; charset=UTF-8"},
+		"Content-Transfer-Encoding": {"7bit"},
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := textPart.Write([]byte(textBody)); err != nil {
+		return err
+	}
+
+	htmlPart, err := writer.CreatePart(textproto.MIMEHeader{
+		"Content-Type":              {"text/html; charset=UTF-8"},
+		"Content-Transfer-Encoding": {"7bit"},
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := htmlPart.Write([]byte(htmlBody)); err != nil {
+		return err
+	}
+
+	if err := writer.Close(); err != nil {
+		return err
+	}
+
 	message := strings.Join([]string{
 		fmt.Sprintf("From: %s", fromHeader),
 		fmt.Sprintf("To: %s", recipientEmail),
 		fmt.Sprintf("Subject: %s", subject),
 		"MIME-Version: 1.0",
-		"Content-Type: text/plain; charset=UTF-8",
+		fmt.Sprintf("Content-Type: multipart/alternative; boundary=%q", writer.Boundary()),
 		"",
-		body,
 	}, "\r\n")
+	messageBytes := append([]byte(message), body.Bytes()...)
 
 	address := fmt.Sprintf("%s:%s", cfg.host, cfg.port)
 	var auth smtp.Auth
 	if cfg.username != "" {
 		auth = smtp.PlainAuth("", cfg.username, cfg.password, cfg.host)
 	}
-	return smtp.SendMail(address, auth, cfg.fromEmail, []string{recipientEmail}, []byte(message))
+	return smtp.SendMail(address, auth, cfg.fromEmail, []string{recipientEmail}, messageBytes)
 }
