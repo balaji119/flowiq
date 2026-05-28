@@ -866,6 +866,8 @@ function SearchableSelect({
   triggerClassName,
   menuItemClassName,
   menuClassName,
+  pickerMode = 'dropdown',
+  dialogTitle = 'Select item',
 }: {
   label: string;
   selectedValue: string;
@@ -880,6 +882,8 @@ function SearchableSelect({
   triggerClassName?: string;
   menuItemClassName?: string;
   menuClassName?: string;
+  pickerMode?: 'dropdown' | 'dialog';
+  dialogTitle?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -897,6 +901,7 @@ function SearchableSelect({
 
   useEffect(() => {
     if (!open) return;
+    if (pickerMode === 'dialog') return;
 
     function handlePointerDown(event: MouseEvent) {
       if (!containerRef.current?.contains(event.target as Node)) {
@@ -906,20 +911,68 @@ function SearchableSelect({
 
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [open]);
+  }, [open, pickerMode]);
+
+  const trigger = (
+    <button
+      className={cn('flex h-10 w-full items-center justify-between rounded-md border border-slate-600 bg-slate-800 px-3 text-left text-sm text-slate-100 transition hover:border-slate-500', triggerClassName)}
+      onClick={() => setOpen((current) => !current)}
+      type="button"
+    >
+      <span className={cn('truncate', !selectedValue && !selectedLabel ? 'text-slate-500' : 'text-slate-50')}>{displayLabel}</span>
+      <ChevronDown className={cn('h-4 w-4 text-slate-400 transition-transform', open ? 'rotate-180' : '')} />
+    </button>
+  );
 
   return (
     <div ref={containerRef} className="relative space-y-2">
       {label ? <Label>{label}</Label> : null}
-      <button
-        className={cn('flex h-10 w-full items-center justify-between rounded-md border border-slate-600 bg-slate-800 px-3 text-left text-sm text-slate-100 transition hover:border-slate-500', triggerClassName)}
-        onClick={() => setOpen((current) => !current)}
-        type="button"
-      >
-        <span className={cn('truncate', !selectedValue && !selectedLabel ? 'text-slate-500' : 'text-slate-50')}>{displayLabel}</span>
-        <ChevronDown className={cn('h-4 w-4 text-slate-400 transition-transform', open ? 'rotate-180' : '')} />
-      </button>
-      {open ? (
+      {trigger}
+      {pickerMode === 'dialog' ? (
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent
+            className="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
+            style={{ width: 'min(calc(100vw - 2rem), 54rem)' }}
+          >
+            <DialogHeader className="shrink-0 border-b border-slate-700 px-5 py-4">
+              <DialogTitle>{dialogTitle}</DialogTitle>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <Input autoFocus className="h-9 pl-9 text-sm" placeholder={`Search ${label || 'items'}`} value={query} onChange={(event) => setQuery(event.target.value)} />
+              </div>
+              {filteredItems.length > 0 ? (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {filteredItems.map((item) => {
+                    const active = item.value === selectedValue;
+                    return (
+                      <button
+                        key={item.value}
+                        className={cn(
+                          'flex min-h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition',
+                          active ? 'border-violet-400 bg-violet-500/10 text-white' : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500',
+                          menuItemClassName,
+                        )}
+                        onClick={() => {
+                          onValueChange(item.value);
+                          setOpen(false);
+                        }}
+                        type="button"
+                      >
+                        <span className="min-w-0 truncate">{item.label}</span>
+                        {active ? <Check className="ml-2 h-4 w-4 shrink-0 text-violet-300" /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="rounded-md border border-slate-700 bg-slate-900 px-3 py-4 text-center text-sm text-slate-400">{emptyMessage}</p>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : open ? (
         <div className={cn('absolute left-0 right-0 top-full z-50 mt-2 rounded-md border border-slate-700 bg-slate-950 p-4 shadow-2xl shadow-slate-950/60', menuClassName)}>
           <div className="space-y-2.5">
             <Input autoFocus className="h-8 text-[11px]" placeholder={`Search ${label || 'items'}`} value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -5797,6 +5850,7 @@ export function QuoteBuilderScreen({
                                 </td>
                                 <td className="px-1 py-1.5">
                                   <SearchableSelect
+                                    dialogTitle="Select asset"
                                     emptyMessage={availableAssets.length ? 'No assets available for this row.' : 'No assets available for this market.'}
                                     items={availableAssetOptions}
                                     label=""
@@ -5810,6 +5864,7 @@ export function QuoteBuilderScreen({
                                       }))
                                     }
                                     placeholder={availableAssets.length ? 'Choose an asset' : 'No assets available'}
+                                    pickerMode="dialog"
                                     selectedLabel={asset.assetSearch}
                                     selectedValue={asset.assetId}
                                     triggerClassName="h-7 text-[10px]"
@@ -6559,4 +6614,3 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
-
