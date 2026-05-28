@@ -6,10 +6,12 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AdminWorkspaceShell } from './src/components/AdminWorkspaceShell';
 import { CampaignArtworkFolderScreen } from './src/screens/CampaignArtworkFolderScreen';
 import { CampaignLandingScreen } from './src/screens/CampaignLandingScreen';
+import { ForgotPasswordScreen } from './src/screens/ForgotPasswordScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { MappingAdminScreen } from './src/screens/MappingAdminScreen';
 import { PrintingCostSettingsScreen } from './src/screens/PrintingCostSettingsScreen';
 import { QuoteBuilderScreen } from './src/screens/QuoteBuilderScreen';
+import { ResetPasswordScreen } from './src/screens/ResetPasswordScreen';
 import { ShippingCostSettingsScreen } from './src/screens/ShippingCostSettingsScreen';
 import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -81,6 +83,7 @@ function readStateFromUrl(defaultTenantId: string | null): AppNavState {
 
 function AppShell() {
   const { loading, session } = useAuth();
+  const pathname = window.location.pathname;
   const [view, setView] = useState<AppView>('home');
   const [selectedAdminTenantId, setSelectedAdminTenantId] = useState<string | null>(session?.user.tenantId ?? null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
@@ -161,6 +164,12 @@ function AppShell() {
   }
 
   if (!session) {
+    if (pathname === '/forgot-password') {
+      return <ForgotPasswordScreen />;
+    }
+    if (pathname === '/reset-password') {
+      return <ResetPasswordScreen token={new URLSearchParams(window.location.search).get('token')} />;
+    }
     return <LoginScreen />;
   }
 
