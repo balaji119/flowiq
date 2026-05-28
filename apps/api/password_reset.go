@@ -217,15 +217,14 @@ func sendPasswordResetEmail(cfg smtpConfig, recipientEmail, recipientName, reset
 		return err
 	}
 
-	message := strings.Join([]string{
+	messageHeaders := strings.Join([]string{
 		fmt.Sprintf("From: %s", fromHeader),
 		fmt.Sprintf("To: %s", recipientEmail),
 		fmt.Sprintf("Subject: %s", subject),
 		"MIME-Version: 1.0",
 		fmt.Sprintf("Content-Type: multipart/alternative; boundary=%q", writer.Boundary()),
-		"",
 	}, "\r\n")
-	messageBytes := append([]byte(message), body.Bytes()...)
+	messageBytes := append([]byte(messageHeaders+"\r\n\r\n"), body.Bytes()...)
 
 	address := fmt.Sprintf("%s:%s", cfg.host, cfg.port)
 	var auth smtp.Auth
