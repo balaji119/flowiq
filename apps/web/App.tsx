@@ -83,7 +83,11 @@ function readStateFromUrl(defaultTenantId: string | null): AppNavState {
 
 function AppShell() {
   const { loading, session } = useAuth();
-  const pathname = window.location.pathname;
+  const [authRoute, setAuthRoute] = useState<{ pathname: string; resetToken: string | null; ready: boolean }>({
+    pathname: '/',
+    resetToken: null,
+    ready: false,
+  });
   const [view, setView] = useState<AppView>('home');
   const [selectedAdminTenantId, setSelectedAdminTenantId] = useState<string | null>(session?.user.tenantId ?? null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
@@ -133,6 +137,14 @@ function AppShell() {
   };
 
   useEffect(() => {
+    setAuthRoute({
+      pathname: window.location.pathname,
+      resetToken: new URLSearchParams(window.location.search).get('token'),
+      ready: true,
+    });
+  }, []);
+
+  useEffect(() => {
     if (loading || !session || hydratedHistoryRef.current) return;
     const defaultTenantId = session.user.tenantId ?? null;
 
@@ -164,11 +176,21 @@ function AppShell() {
   }
 
   if (!session) {
-    if (pathname === '/forgot-password') {
+    if (!authRoute.ready) {
+      return (
+        <div className="flex min-h-screen items-center justify-center px-6">
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-950/80 px-5 py-4 text-slate-100 shadow-2xl shadow-slate-950/40">
+            <LoaderCircle className="h-5 w-5 animate-spin text-violet-300" />
+            <span className="text-sm font-medium">Loading your workspace...</span>
+          </div>
+        </div>
+      );
+    }
+    if (authRoute.pathname === '/forgot-password') {
       return <ForgotPasswordScreen />;
     }
-    if (pathname === '/reset-password') {
-      return <ResetPasswordScreen token={new URLSearchParams(window.location.search).get('token')} />;
+    if (authRoute.pathname === '/reset-password') {
+      return <ResetPasswordScreen token={authRoute.resetToken} />;
     }
     return <LoginScreen />;
   }
