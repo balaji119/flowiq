@@ -101,10 +101,24 @@ select {
 }
 
 .dashboard-default-scale {
-  transform: scale(0.8);
-  transform-origin: top left;
-  width: 125%;
-  min-height: 125%;
+  height: 100%;
+  width: 100%;
+}
+
+.campaign-dashboard-table {
+  table-layout: fixed;
+}
+
+.campaign-dashboard-table th,
+.campaign-dashboard-table td {
+  overflow: hidden;
+  padding: 0.4rem 0.6rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaign-dashboard-table td:last-child {
+  overflow: visible;
 }
 
 .campaign-builder-content-scale {
@@ -122,9 +136,8 @@ select {
 
 @media (max-width: 1023px) {
   .dashboard-default-scale {
-    transform: none;
+    height: 100%;
     width: 100%;
-    min-height: 100%;
   }
 
   .campaign-builder-content-scale {

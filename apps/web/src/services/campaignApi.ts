@@ -8,66 +8,72 @@ import {
 } from '@flowiq/shared';
 import { apiFetchJson } from './apiClient';
 
-export async function fetchCampaigns() {
-  return apiFetchJson<{ campaigns: CampaignListItem[] }>('/api/campaigns');
+function withTenant(path: string, tenantId?: string | null) {
+  if (!tenantId) return path;
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}tenantId=${encodeURIComponent(tenantId)}`;
 }
 
-export async function createCampaign(payload: CampaignUpsertPayload) {
-  return apiFetchJson<{ campaign: CampaignRecord }>('/api/campaigns', {
+export async function fetchCampaigns(tenantId?: string | null) {
+  return apiFetchJson<{ campaigns: CampaignListItem[] }>(withTenant('/api/campaigns', tenantId));
+}
+
+export async function createCampaign(payload: CampaignUpsertPayload, tenantId?: string | null) {
+  return apiFetchJson<{ campaign: CampaignRecord }>(withTenant('/api/campaigns', tenantId), {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export async function createSubCampaign(campaignId: string) {
-  return apiFetchJson<{ campaign: CampaignRecord }>(`/api/campaigns/${encodeURIComponent(campaignId)}/sub-campaigns`, {
+export async function createSubCampaign(campaignId: string, tenantId?: string | null) {
+  return apiFetchJson<{ campaign: CampaignRecord }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/sub-campaigns`, tenantId), {
     method: 'POST',
   });
 }
 
-export async function fetchCampaign(campaignId: string) {
-  return apiFetchJson<{ campaign: CampaignRecord }>(`/api/campaigns/${encodeURIComponent(campaignId)}`);
+export async function fetchCampaign(campaignId: string, tenantId?: string | null) {
+  return apiFetchJson<{ campaign: CampaignRecord }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}`, tenantId));
 }
 
-export async function deleteCampaign(campaignId: string) {
-  return apiFetchJson<{ deleted: boolean }>(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
+export async function deleteCampaign(campaignId: string, tenantId?: string | null) {
+  return apiFetchJson<{ deleted: boolean }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}`, tenantId), {
     method: 'DELETE',
   });
 }
 
-export async function updateCampaign(campaignId: string, payload: CampaignUpsertPayload) {
-  return apiFetchJson<{ campaign: CampaignRecord }>(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
+export async function updateCampaign(campaignId: string, payload: CampaignUpsertPayload, tenantId?: string | null) {
+  return apiFetchJson<{ campaign: CampaignRecord }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}`, tenantId), {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
 }
 
-export async function calculatePersistedCampaign(campaignId: string) {
-  return apiFetchJson<CampaignCalculationResponse>(`/api/campaigns/${encodeURIComponent(campaignId)}/calculate`, {
+export async function calculatePersistedCampaign(campaignId: string, tenantId?: string | null) {
+  return apiFetchJson<CampaignCalculationResponse>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/calculate`, tenantId), {
     method: 'POST',
   });
 }
 
-export async function submitCampaignToPrintIQ(campaignId: string) {
-  return apiFetchJson<CampaignSubmitResponse>(`/api/campaigns/${encodeURIComponent(campaignId)}/submit-to-printiq`, {
+export async function submitCampaignToPrintIQ(campaignId: string, tenantId?: string | null) {
+  return apiFetchJson<CampaignSubmitResponse>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/submit-to-printiq`, tenantId), {
     method: 'POST',
   });
 }
 
-export async function markCampaignSubmitted(campaignId: string) {
-  return apiFetchJson<{ campaign: CampaignRecord }>(`/api/campaigns/${encodeURIComponent(campaignId)}/mark-submitted`, {
+export async function markCampaignSubmitted(campaignId: string, tenantId?: string | null) {
+  return apiFetchJson<{ campaign: CampaignRecord }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/mark-submitted`, tenantId), {
     method: 'POST',
   });
 }
 
-export async function acquireCampaignEditLock(campaignId: string) {
-  return apiFetchJson<{ lock: CampaignEditLockInfo }>(`/api/campaigns/${encodeURIComponent(campaignId)}/edit-lock`, {
+export async function acquireCampaignEditLock(campaignId: string, tenantId?: string | null) {
+  return apiFetchJson<{ lock: CampaignEditLockInfo }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/edit-lock`, tenantId), {
     method: 'POST',
   });
 }
 
-export async function releaseCampaignEditLock(campaignId: string) {
-  return apiFetchJson<{ released: boolean }>(`/api/campaigns/${encodeURIComponent(campaignId)}/edit-lock`, {
+export async function releaseCampaignEditLock(campaignId: string, tenantId?: string | null) {
+  return apiFetchJson<{ released: boolean }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/edit-lock`, tenantId), {
     method: 'DELETE',
   });
 }

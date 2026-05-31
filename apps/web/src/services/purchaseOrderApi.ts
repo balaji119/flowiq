@@ -9,7 +9,13 @@ export type PurchaseOrderUploadResponse = {
   uploadedAt: string;
 };
 
-export async function uploadPurchaseOrderFile(file: File, campaignId?: string): Promise<PurchaseOrderUploadResponse> {
+function withTenant(path: string, tenantId?: string | null) {
+  if (!tenantId) return path;
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}tenantId=${encodeURIComponent(tenantId)}`;
+}
+
+export async function uploadPurchaseOrderFile(file: File, campaignId?: string, tenantId?: string | null): Promise<PurchaseOrderUploadResponse> {
   const formData = new FormData();
   formData.append('file', file);
   if (campaignId) {
@@ -22,7 +28,7 @@ export async function uploadPurchaseOrderFile(file: File, campaignId?: string): 
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(buildApiUrl('/api/purchase-orders/upload'), {
+  const response = await fetch(buildApiUrl(withTenant('/api/purchase-orders/upload', tenantId)), {
     method: 'POST',
     headers,
     body: formData,

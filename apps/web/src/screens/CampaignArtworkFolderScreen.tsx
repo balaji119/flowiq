@@ -9,6 +9,7 @@ import { PDFDocument } from 'pdf-lib';
 
 type CampaignArtworkFolderScreenProps = {
   campaignId: string | null;
+  tenantId?: string | null;
   onBack: () => void;
   onOpenCampaign: (campaignId: string) => void;
 };
@@ -116,7 +117,7 @@ async function createPdfFromImagePages(
   return pdfDoc.save();
 }
 
-export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign }: CampaignArtworkFolderScreenProps) {
+export function CampaignArtworkFolderScreen({ campaignId, tenantId, onBack, onOpenCampaign }: CampaignArtworkFolderScreenProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [campaign, setCampaign] = useState<CampaignRecord | null>(null);
@@ -136,7 +137,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
       try {
         setLoading(true);
         setError('');
-        const response = await fetchCampaign(campaignId);
+        const response = await fetchCampaign(campaignId, tenantId);
         if (!active) return;
         setCampaign(response.campaign);
       } catch (loadError) {
@@ -151,7 +152,7 @@ export function CampaignArtworkFolderScreen({ campaignId, onBack, onOpenCampaign
     return () => {
       active = false;
     };
-  }, [campaignId]);
+  }, [campaignId, tenantId]);
 
   useEffect(() => {
     setTopBarCenterHost(document.getElementById('workspace-topbar-center-slot'));

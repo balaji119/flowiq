@@ -63,15 +63,20 @@ function parseVisualsExportMode(value: string | undefined): VisualsExportMode {
   return ['1', 'true', 'yes', 'on'].includes(normalized) ? 'excel' : 'pdf';
 }
 
-async function setStoredCampaignId(value: string | null) {
-  if (typeof window === 'undefined') return;
-  if (value === null) window.localStorage.removeItem(ACTIVE_CAMPAIGN_ID_KEY);
-  else window.localStorage.setItem(ACTIVE_CAMPAIGN_ID_KEY, value);
+function activeCampaignStorageKey(tenantId?: string | null) {
+  return tenantId ? `${ACTIVE_CAMPAIGN_ID_KEY}:${tenantId}` : ACTIVE_CAMPAIGN_ID_KEY;
 }
 
-async function getStoredCampaignId() {
+async function setStoredCampaignId(value: string | null, tenantId?: string | null) {
+  if (typeof window === 'undefined') return;
+  const storageKey = activeCampaignStorageKey(tenantId);
+  if (value === null) window.localStorage.removeItem(storageKey);
+  else window.localStorage.setItem(storageKey, value);
+}
+
+async function getStoredCampaignId(tenantId?: string | null) {
   if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(ACTIVE_CAMPAIGN_ID_KEY);
+  return window.localStorage.getItem(activeCampaignStorageKey(tenantId));
 }
 
 function applyCampaignToScreen(
@@ -1173,6 +1178,7 @@ const defaultValuesSerialized = stableSerialize(defaultValues);
 
 export function QuoteBuilderScreen({
   campaignId: selectedCampaignId,
+  tenantId,
   startFresh = false,
   autoDownloadVisuals = false,
   closeAfterVisualsDownload = false,
@@ -1182,6 +1188,7 @@ export function QuoteBuilderScreen({
   onOpenAdmin,
 }: {
   campaignId?: string | null;
+  tenantId?: string | null;
   startFresh?: boolean;
   autoDownloadVisuals?: boolean;
   closeAfterVisualsDownload?: boolean;
@@ -1191,6 +1198,7 @@ export function QuoteBuilderScreen({
   onOpenAdmin?: () => void;
 }) {
   const { session } = useAuth();
+  const effectiveTenantId = tenantId ?? session?.user.tenantId ?? null;
   const [values, setValues] = useState<OrderFormValues>(() => defaultValues);
   const [campaignStartDateInput, setCampaignStartDateInput] = useState('');
   const [dueDateInput, setDueDateInput] = useState('');
@@ -1335,7 +1343,7 @@ export function QuoteBuilderScreen({
     const id = targetCampaignId ?? campaignId;
     if (!id) return;
     try {
-      await releaseCampaignEditLock(id);
+      await releaseCampaignEditLock(id, effectiveTenantId);
     } catch {
       // Best-effort cleanup only; lock will also expire automatically.
     }
@@ -1346,14 +1354,14 @@ export function QuoteBuilderScreen({
 
     async function bootstrapCampaign() {
       try {
-        const storedCampaignId = startFresh ? null : selectedCampaignId || (await getStoredCampaignId());
+        const storedCampaignId = startFresh ? null : selectedCampaignId || (await getStoredCampaignId(effectiveTenantId));
         if (!active) return;
 
         if (storedCampaignId) {
           try {
-            await acquireCampaignEditLock(storedCampaignId);
+            await acquireCampaignEditLock(storedCampaignId, effectiveTenantId);
             if (!active) return;
-            const response = await fetchCampaign(storedCampaignId);
+            const response = await fetchCampaign(storedCampaignId, effectiveTenantId);
             if (!active) return;
             applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
             setTreatDefaultMarketAsPlaceholder(false);
@@ -1361,19 +1369,19 @@ export function QuoteBuilderScreen({
             setHasSavedMarketViaPopup(true);
             lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
             campaignHydratedRef.current = true;
-            await setStoredCampaignId(response.campaign.id);
+            await setStoredCampaignId(response.campaign.id, effectiveTenantId);
             return;
           } catch (loadError) {
             if (!active) return;
             const message = loadError instanceof Error ? loadError.message : 'Unable to load campaign draft';
             setError(message);
             if (selectedCampaignId) {
-              await setStoredCampaignId(null);
+              await setStoredCampaignId(null, effectiveTenantId);
               setLoadingCampaign(false);
               onBack?.();
               return;
             }
-            await setStoredCampaignId(null);
+            await setStoredCampaignId(null, effectiveTenantId);
           }
         }
         setValues(defaultValues);
@@ -1387,7 +1395,7 @@ export function QuoteBuilderScreen({
         setHasSavedMarketViaPopup(false);
         lastPersistedValuesRef.current = defaultValuesSerialized;
         campaignHydratedRef.current = true;
-        await setStoredCampaignId(null);
+        await setStoredCampaignId(null, effectiveTenantId);
       } catch {
         if (active) setError('Unable to load campaign draft');
       } finally {
@@ -1399,7 +1407,7 @@ export function QuoteBuilderScreen({
     return () => {
       active = false;
     };
-  }, [onBack, selectedCampaignId, startFresh]);
+  }, [effectiveTenantId, onBack, selectedCampaignId, startFresh]);
 
   useEffect(() => {
     if (!campaignId) return;
@@ -1407,7 +1415,7 @@ export function QuoteBuilderScreen({
     let active = true;
     const intervalId = window.setInterval(async () => {
       try {
-        await acquireCampaignEditLock(campaignId);
+        await acquireCampaignEditLock(campaignId, effectiveTenantId);
       } catch (lockError) {
         if (!active) return;
         setError(lockError instanceof Error ? lockError.message : 'Campaign lock expired');
@@ -1418,23 +1426,23 @@ export function QuoteBuilderScreen({
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [campaignId]);
+  }, [campaignId, effectiveTenantId]);
 
   useEffect(() => {
     if (!campaignId) return;
     return () => {
-      void releaseCampaignEditLock(campaignId).catch(() => {
+      void releaseCampaignEditLock(campaignId, effectiveTenantId).catch(() => {
         // Best-effort cleanup only; lock will also expire automatically.
       });
     };
-  }, [campaignId]);
+  }, [campaignId, effectiveTenantId]);
 
   useEffect(() => {
     let active = true;
 
     async function loadMetadata() {
       try {
-        const response = await fetchCalculatorMetadata();
+        const response = await fetchCalculatorMetadata(effectiveTenantId);
         if (!active) return;
         setMarkets(response.markets);
       } catch (loadError) {
@@ -1448,13 +1456,13 @@ export function QuoteBuilderScreen({
     return () => {
       active = false;
     };
-  }, []);
+  }, [effectiveTenantId]);
 
   useEffect(() => {
     let active = true;
     async function loadMarketAssetShippingCosts() {
       try {
-        const response = await fetchCampaignMarketAssetShippingCosts();
+        const response = await fetchCampaignMarketAssetShippingCosts(effectiveTenantId);
         if (!active) return;
         setMarketAssetShippingCosts(response.costs);
       } catch {
@@ -1466,13 +1474,13 @@ export function QuoteBuilderScreen({
     return () => {
       active = false;
     };
-  }, []);
+  }, [effectiveTenantId]);
 
   useEffect(() => {
     let active = true;
     async function loadMarketAddresses() {
       try {
-        const response = await fetchCampaignMarketDeliveryAddresses();
+        const response = await fetchCampaignMarketDeliveryAddresses(effectiveTenantId);
         if (!active) return;
         setMarketDeliveryAddresses(response.addresses);
       } catch {
@@ -1484,13 +1492,13 @@ export function QuoteBuilderScreen({
     return () => {
       active = false;
     };
-  }, []);
+  }, [effectiveTenantId]);
 
   useEffect(() => {
     let active = true;
     async function loadMarketShippingRates() {
       try {
-        const response = await fetchCampaignMarketShippingRates();
+        const response = await fetchCampaignMarketShippingRates(effectiveTenantId);
         if (!active) return;
         setMarketShippingRates(response.rates);
       } catch {
@@ -1502,13 +1510,13 @@ export function QuoteBuilderScreen({
     return () => {
       active = false;
     };
-  }, []);
+  }, [effectiveTenantId]);
 
   useEffect(() => {
     let active = true;
     async function loadMarketAssetPrintingCosts() {
       try {
-        const response = await fetchCampaignMarketAssetPrintingCosts();
+        const response = await fetchCampaignMarketAssetPrintingCosts(effectiveTenantId);
         if (!active) return;
         setMarketAssetPrintingCosts(response.costs);
       } catch {
@@ -1520,13 +1528,13 @@ export function QuoteBuilderScreen({
     return () => {
       active = false;
     };
-  }, []);
+  }, [effectiveTenantId]);
 
   useEffect(() => {
     let active = true;
     async function loadSheetNameOverrides() {
       try {
-        const response = await fetchCampaignSheetNameOverrides();
+        const response = await fetchCampaignSheetNameOverrides(effectiveTenantId);
         if (!active) return;
         setSheetNameOverrides(sanitizeSheetNameOverrides(response.settings.overrides));
         setMultipleArtworkFormats(response.settings.multipleArtworkFormats ?? {});
@@ -1540,7 +1548,7 @@ export function QuoteBuilderScreen({
     return () => {
       active = false;
     };
-  }, []);
+  }, [effectiveTenantId]);
 
   useEffect(() => {
     if (loadingCampaign) return;
@@ -2073,7 +2081,7 @@ export function QuoteBuilderScreen({
       try {
         setCalculating(true);
         const flatLines: CampaignLine[] = values.campaignMarkets.flatMap((market) => market.assets.map((asset) => ({ ...asset, market: market.market })));
-        const result = await calculateCampaign(flatLines);
+        const result = await calculateCampaign(flatLines, effectiveTenantId);
         if (!active) return;
         setSummary(result);
         setValues((current) => ({ ...current, quantity: String(result.grandTotal.totalUnits) }));
@@ -2089,7 +2097,7 @@ export function QuoteBuilderScreen({
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [loadingCampaign, loadingMetadata, metadataError, values.campaignMarkets]);
+  }, [effectiveTenantId, loadingCampaign, loadingMetadata, metadataError, values.campaignMarkets]);
 
   useEffect(() => {
     if (!addMarketDialogOpen || !draftMarket || loadingCampaign || loadingMetadata || metadataError) {
@@ -2105,7 +2113,7 @@ export function QuoteBuilderScreen({
           ? values.campaignMarkets.map((market) => (market.id === editingMarketId ? draftMarket : market))
           : [...values.campaignMarkets, draftMarket];
         const flatLines: CampaignLine[] = allMarkets.flatMap((market) => market.assets.map((asset) => ({ ...asset, market: market.market })));
-        const result = await calculateCampaign(flatLines);
+        const result = await calculateCampaign(flatLines, effectiveTenantId);
         if (!active) return;
         const nextSummary = result.perMarket.find((entry) => entry.market === draftMarket.market) ?? null;
         setDraftMarketSummary(nextSummary);
@@ -2120,7 +2128,7 @@ export function QuoteBuilderScreen({
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [addMarketDialogOpen, draftMarket, editingMarketId, loadingCampaign, loadingMetadata, metadataError, values.campaignMarkets]);
+  }, [addMarketDialogOpen, draftMarket, editingMarketId, effectiveTenantId, loadingCampaign, loadingMetadata, metadataError, values.campaignMarkets]);
 
   function updateField<K extends keyof OrderFormValues>(field: K, value: OrderFormValues[K]) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -2950,15 +2958,15 @@ export function QuoteBuilderScreen({
     if (!fromAutoSave) setError('');
     try {
       if (!campaignId) {
-        const response = await createCampaign({ values });
+        const response = await createCampaign({ values }, effectiveTenantId);
         applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
             lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
         lastAutoSaveFailedValuesRef.current = null;
-        await setStoredCampaignId(response.campaign.id);
+        await setStoredCampaignId(response.campaign.id, effectiveTenantId);
         return response.campaign.id;
       }
 
-      const response = await updateStoredCampaign(campaignId, { values });
+      const response = await updateStoredCampaign(campaignId, { values }, effectiveTenantId);
       setCampaignStatus(response.campaign.status);
       setParentCampaignId(response.campaign.parentCampaignId || '');
       setUploadedPurchaseOrderName(response.campaign.purchaseOrder?.originalName || '');
@@ -2986,7 +2994,7 @@ export function QuoteBuilderScreen({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [campaignId, hasUnsavedChanges, loadingCampaign, savingCampaign, values]);
+  }, [campaignId, effectiveTenantId, hasUnsavedChanges, loadingCampaign, savingCampaign, values]);
 
   async function handleBackToDashboard() {
     if (!onBack) return;
@@ -3031,7 +3039,7 @@ export function QuoteBuilderScreen({
     try {
       const savedCampaignId = await saveCampaignDraft();
       if (!savedCampaignId) return;
-      const response = await submitCampaignToPrintIQ(savedCampaignId);
+      const response = await submitCampaignToPrintIQ(savedCampaignId, effectiveTenantId);
       const amount = response.amount === null || response.amount === undefined || response.amount === '' ? 'N/A' : String(response.amount);
       applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
       lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
@@ -3055,7 +3063,7 @@ export function QuoteBuilderScreen({
     try {
       const savedCampaignId = await saveCampaignDraft();
       if (!savedCampaignId) return;
-      const response = await uploadPurchaseOrderFile(purchaseOrderFile, savedCampaignId);
+      const response = await uploadPurchaseOrderFile(purchaseOrderFile, savedCampaignId, effectiveTenantId);
       setUploadedPurchaseOrderName(response.originalName);
       setPurchaseOrderUploadSuccessMessage(`Purchase order file uploaded successfully: ${response.originalName}`);
       setPurchaseOrderUploadSuccessOpen(true);
@@ -4643,7 +4651,7 @@ export function QuoteBuilderScreen({
       await sendEmailToAds(files, values.campaignName, creativeLinks);
       if (campaignId) {
         try {
-          const response = await markCampaignSubmitted(campaignId);
+          const response = await markCampaignSubmitted(campaignId, effectiveTenantId);
           setCampaignStatus(response.campaign.status);
           setParentCampaignId(response.campaign.parentCampaignId || '');
         } catch {

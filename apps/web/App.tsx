@@ -1,6 +1,7 @@
 'use client';
 
 import { ReactNode, useEffect, useRef, useState } from 'react';
+import { TenantRecord } from '@flowiq/shared';
 import { LoaderCircle } from 'lucide-react';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AdminWorkspaceShell } from './src/components/AdminWorkspaceShell';
@@ -18,6 +19,7 @@ import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TenantManagementScreen } from './src/screens/TenantManagementScreen';
 import { UserManagementScreen } from './src/screens/UserManagementScreen';
+import { fetchTenants } from './src/services/adminApi';
 
 type AppView = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings' | 'sheet-size-settings';
 
@@ -100,6 +102,7 @@ function AppShell() {
   const [closeAfterVisualsDownload, setCloseAfterVisualsDownload] = useState(false);
   const [autoSendEmailToAds, setAutoSendEmailToAds] = useState(false);
   const [closeAfterEmailSend, setCloseAfterEmailSend] = useState(false);
+  const [adminTenantOptions, setAdminTenantOptions] = useState<TenantRecord[]>([]);
   const hydratedHistoryRef = useRef(false);
 
   function applyNavState(nextState: AppNavState) {
@@ -167,6 +170,49 @@ function AppShell() {
       window.removeEventListener('popstate', handlePopState);
     };
   }, [loading, session]);
+
+  useEffect(() => {
+    if (loading || !session) return;
+    if (session.user.role !== 'super_admin') {
+      setAdminTenantOptions([]);
+      setSelectedAdminTenantId(session.user.tenantId ?? null);
+      return;
+    }
+
+    let active = true;
+    async function loadTenantsForSuperAdmin() {
+      try {
+        const response = await fetchTenants();
+        if (!active) return;
+        const sortedTenants = [...response.tenants].sort((left, right) => left.name.localeCompare(right.name));
+        setAdminTenantOptions(sortedTenants);
+        setSelectedAdminTenantId((current) => {
+          if (current && sortedTenants.some((tenant) => tenant.id === current)) {
+            return current;
+          }
+          return sortedTenants[0]?.id ?? null;
+        });
+      } catch {
+        if (active) {
+          setAdminTenantOptions([]);
+        }
+      }
+    }
+
+    void loadTenantsForSuperAdmin();
+    return () => {
+      active = false;
+    };
+  }, [loading, session]);
+
+  function handleTenantSelection(nextTenantId: string) {
+    navigateTo(view, {
+      selectedAdminTenantId: nextTenantId,
+      selectedCampaignId: null,
+      startFreshCampaign: false,
+      ...clearAutomationFlags,
+    });
+  }
 
   if (loading) {
     return (
@@ -346,6 +392,7 @@ function AppShell() {
     return renderGlobalSidebar(
       <QuoteBuilderScreen
         campaignId={selectedCampaignId}
+        tenantId={selectedAdminTenantId}
         startFresh={startFreshCampaign}
         autoDownloadVisuals={autoDownloadVisuals}
         closeAfterVisualsDownload={closeAfterVisualsDownload}
@@ -362,6 +409,7 @@ function AppShell() {
     return renderGlobalSidebar(
       <CampaignArtworkFolderScreen
         campaignId={selectedCampaignId}
+        tenantId={selectedAdminTenantId}
         onBack={() => navigateTo('landing')}
         onOpenCampaign={(campaignId) =>
           navigateTo('quote', {
@@ -379,6 +427,10 @@ function AppShell() {
     return renderGlobalSidebar(
       <CampaignLandingScreen
         showHero
+        selectedTenantId={selectedAdminTenantId}
+        tenantOptions={canAccessSuperAdminPages ? adminTenantOptions : []}
+        requiresTenantSelection={canAccessSuperAdminPages}
+        onTenantChange={handleTenantSelection}
         onOpenCampaign={(campaignId) => {
           navigateTo('quote', {
             selectedCampaignId: campaignId,
@@ -394,6 +446,10 @@ function AppShell() {
   return renderGlobalSidebar(
     <CampaignLandingScreen
       showHero
+      selectedTenantId={selectedAdminTenantId}
+      tenantOptions={canAccessSuperAdminPages ? adminTenantOptions : []}
+      requiresTenantSelection={canAccessSuperAdminPages}
+      onTenantChange={handleTenantSelection}
       onOpenCampaign={(campaignId) => {
         navigateTo('quote', {
           selectedCampaignId: campaignId,

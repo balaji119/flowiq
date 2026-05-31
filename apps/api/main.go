@@ -530,7 +530,11 @@ func (a *app) writeCampaignLockError(w http.ResponseWriter, err error) bool {
 }
 
 func (a *app) handleAcquireCampaignEditLock(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
 	lock, err := a.campaignStore.acquireCampaignEditLock(r.Context(), *user, r.PathValue("campaignId"))
 	if err != nil {
 		if a.writeCampaignLockError(w, err) {
@@ -555,7 +559,11 @@ func (a *app) handleAcquireCampaignEditLock(w http.ResponseWriter, r *http.Reque
 }
 
 func (a *app) handleReleaseCampaignEditLock(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
 	if err := a.campaignStore.releaseCampaignEditLock(r.Context(), *user, r.PathValue("campaignId")); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -631,7 +639,11 @@ func (a *app) handleConfirmPasswordReset(w http.ResponseWriter, r *http.Request)
 }
 
 func (a *app) handleCreateCampaign(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
 	var payload struct {
 		Values orderFormValues `json:"values"`
 	}
@@ -649,7 +661,11 @@ func (a *app) handleCreateCampaign(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleCreateSubCampaign(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
 	campaign, err := a.campaignStore.createSubCampaign(r.Context(), *user, r.PathValue("campaignId"))
 	if err != nil {
 		status := http.StatusBadRequest
@@ -663,7 +679,11 @@ func (a *app) handleCreateSubCampaign(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
 	campaigns, err := a.campaignStore.listCampaigns(r.Context(), *user)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -673,7 +693,11 @@ func (a *app) handleListCampaigns(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleGetCampaign(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
 	if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, r.PathValue("campaignId")); err != nil {
 		if a.writeCampaignLockError(w, err) {
 			return
@@ -699,7 +723,11 @@ func (a *app) handleGetCampaign(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleUpdateCampaign(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
 	if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, r.PathValue("campaignId")); err != nil {
 		if a.writeCampaignLockError(w, err) {
 			return
@@ -733,7 +761,11 @@ func (a *app) handleUpdateCampaign(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleDeleteCampaign(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
 	campaign, err := a.campaignStore.getCampaign(r.Context(), *user, r.PathValue("campaignId"))
 	if err != nil {
 		status := http.StatusBadRequest
@@ -764,7 +796,11 @@ func (a *app) handleDeleteCampaign(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleCalculatePersistedCampaign(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
 	if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, r.PathValue("campaignId")); err != nil {
 		if a.writeCampaignLockError(w, err) {
 			return
@@ -790,9 +826,9 @@ func (a *app) handleCalculatePersistedCampaign(w http.ResponseWriter, r *http.Re
 }
 
 func (a *app) handleCalculatorMetadata(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
-	if user == nil || user.TenantID == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Authentication required"})
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
 		return
 	}
 
@@ -809,9 +845,9 @@ func (a *app) handleCalculatorMetadata(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleCalculateCampaign(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
-	if user == nil || user.TenantID == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Authentication required"})
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
 		return
 	}
 
@@ -942,7 +978,11 @@ func (a *app) handleQuotePrice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
 	if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, r.PathValue("campaignId")); err != nil {
 		if a.writeCampaignLockError(w, err) {
 			return
@@ -1056,7 +1096,11 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleMarkCampaignSubmitted(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
 	campaign, err := a.campaignStore.markCampaignSubmitted(r.Context(), *user, r.PathValue("campaignId"))
 	if err != nil {
 		status := http.StatusBadRequest
@@ -1070,9 +1114,9 @@ func (a *app) handleMarkCampaignSubmitted(w http.ResponseWriter, r *http.Request
 }
 
 func (a *app) handleListCampaignMarketDeliveryAddresses(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
-	if user == nil || user.TenantID == nil || strings.TrimSpace(*user.TenantID) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenantId is required"})
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
 		return
 	}
 
@@ -1085,9 +1129,9 @@ func (a *app) handleListCampaignMarketDeliveryAddresses(w http.ResponseWriter, r
 }
 
 func (a *app) handleUpsertCampaignMarketDeliveryAddress(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
-	if user == nil || user.TenantID == nil || strings.TrimSpace(*user.TenantID) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenantId is required"})
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
 		return
 	}
 
@@ -1106,9 +1150,9 @@ func (a *app) handleUpsertCampaignMarketDeliveryAddress(w http.ResponseWriter, r
 }
 
 func (a *app) handleListCampaignMarketShippingRates(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
-	if user == nil || user.TenantID == nil || strings.TrimSpace(*user.TenantID) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenantId is required"})
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
 		return
 	}
 
@@ -1121,9 +1165,9 @@ func (a *app) handleListCampaignMarketShippingRates(w http.ResponseWriter, r *ht
 }
 
 func (a *app) handleListCampaignMarketAssetPrintingCosts(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
-	if user == nil || user.TenantID == nil || strings.TrimSpace(*user.TenantID) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenantId is required"})
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
 		return
 	}
 
@@ -1136,9 +1180,9 @@ func (a *app) handleListCampaignMarketAssetPrintingCosts(w http.ResponseWriter, 
 }
 
 func (a *app) handleListCampaignMarketAssetShippingCosts(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
-	if user == nil || user.TenantID == nil || strings.TrimSpace(*user.TenantID) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenantId is required"})
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
 		return
 	}
 
@@ -1151,9 +1195,9 @@ func (a *app) handleListCampaignMarketAssetShippingCosts(w http.ResponseWriter, 
 }
 
 func (a *app) handleGetCampaignSheetNameOverrides(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
-	if user == nil || user.TenantID == nil || strings.TrimSpace(*user.TenantID) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenantId is required"})
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
 		return
 	}
 
@@ -1215,14 +1259,19 @@ func (a *app) handlePurchaseOrderUpload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if campaignID := strings.TrimSpace(r.FormValue("campaignId")); campaignID != "" && user != nil {
-		if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, campaignID); err != nil {
+		effectiveUser, resolveErr := a.userWithManagedTenant(r)
+		if resolveErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+			return
+		}
+		if err := a.campaignStore.assertCampaignEditable(r.Context(), *effectiveUser, campaignID); err != nil {
 			if a.writeCampaignLockError(w, err) {
 				return
 			}
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		if _, err := a.campaignStore.setPurchaseOrder(r.Context(), *user, campaignID, response); err != nil {
+		if _, err := a.campaignStore.setPurchaseOrder(r.Context(), *effectiveUser, campaignID, response); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
@@ -1706,6 +1755,20 @@ func (a *app) managedTenantID(r *http.Request) (*string, error) {
 		return nil, errors.New("tenantId is required")
 	}
 	return user.TenantID, nil
+}
+
+func (a *app) userWithManagedTenant(r *http.Request) (*AuthUser, error) {
+	user := currentUser(r.Context())
+	if user == nil {
+		return nil, errors.New("authentication required")
+	}
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		return nil, err
+	}
+	effectiveUser := *user
+	effectiveUser.TenantID = tenantID
+	return &effectiveUser, nil
 }
 
 func (a *app) handleListUsers(w http.ResponseWriter, r *http.Request) {

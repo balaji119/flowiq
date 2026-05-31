@@ -12,6 +12,7 @@ type CampaignScheduleViewDialogProps = {
   loading: boolean;
   error: string;
   campaign: CampaignRecord | null;
+  tenantId?: string | null;
   onOpenChange: (open: boolean) => void;
   onClose: () => void;
   onEdit: () => void;
@@ -86,6 +87,7 @@ export function CampaignScheduleViewDialog({
   loading,
   error,
   campaign,
+  tenantId,
   onOpenChange,
   onClose,
   onEdit,
@@ -182,8 +184,8 @@ export function CampaignScheduleViewDialog({
     const nextParams = new URLSearchParams();
     nextParams.set('view', 'quote');
     nextParams.set('campaignId', campaign.id);
-    const tenantId = currentParams.get('tenantId');
-    if (tenantId) nextParams.set('tenantId', tenantId);
+    const currentTenantId = tenantId ?? currentParams.get('tenantId');
+    if (currentTenantId) nextParams.set('tenantId', currentTenantId);
     if (action === 'download-visuals') {
       nextParams.set('downloadVisuals', '1');
     } else {
@@ -201,10 +203,10 @@ export function CampaignScheduleViewDialog({
     async function loadCosts() {
       try {
         const [ratesResponse, printingResponse, shippingResponse, deliveryAddressesResponse] = await Promise.all([
-          fetchCampaignMarketShippingRates(),
-          fetchCampaignMarketAssetPrintingCosts(),
-          fetchCampaignMarketAssetShippingCosts(),
-          fetchCampaignMarketDeliveryAddresses(),
+          fetchCampaignMarketShippingRates(tenantId),
+          fetchCampaignMarketAssetPrintingCosts(tenantId),
+          fetchCampaignMarketAssetShippingCosts(tenantId),
+          fetchCampaignMarketDeliveryAddresses(tenantId),
         ]);
         if (!active) return;
         setShippingRates(ratesResponse.rates);
@@ -224,7 +226,7 @@ export function CampaignScheduleViewDialog({
     return () => {
       active = false;
     };
-  }, [campaign?.id, campaign?.summary, open]);
+  }, [campaign?.id, campaign?.summary, open, tenantId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -610,7 +612,7 @@ export function CampaignScheduleViewDialog({
     setActionSuccess('');
     setSubmittingOrder(true);
     try {
-      await submitCampaignToPrintIQ(campaign.id);
+      await submitCampaignToPrintIQ(campaign.id, tenantId);
       setActionSuccess('Order submitted to PrintIQ.');
     } catch (submitError) {
       setActionError(submitError instanceof Error ? submitError.message : 'Unable to submit order to PrintIQ.');
