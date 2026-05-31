@@ -328,7 +328,7 @@ func (s *authStore) createTenant(name string) (*TenantRecord, error) {
 	return &tenant, nil
 }
 
-func (s *authStore) listUsers(tenantID *string) ([]AuthUser, error) {
+func (s *authStore) listUsers(tenantID *string, includeSuperAdmins bool) ([]AuthUser, error) {
 	baseQuery := `
 		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
 		FROM users u
@@ -336,7 +336,11 @@ func (s *authStore) listUsers(tenantID *string) ([]AuthUser, error) {
 	`
 	args := []any{}
 	if tenantID != nil && strings.TrimSpace(*tenantID) != "" {
-		baseQuery += ` WHERE u.tenant_id = $1`
+		if includeSuperAdmins {
+			baseQuery += ` WHERE u.tenant_id = $1 OR u.role = 'super_admin'`
+		} else {
+			baseQuery += ` WHERE u.tenant_id = $1`
+		}
 		args = append(args, *tenantID)
 	}
 	baseQuery += ` ORDER BY u.name ASC`

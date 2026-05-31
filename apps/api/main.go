@@ -1633,7 +1633,7 @@ func canManageUser(actor *AuthUser, target *AuthUser) bool {
 		return false
 	}
 	if actor.Role == "super_admin" {
-		return target.Role == "admin" || target.Role == "user"
+		return true
 	}
 	if actor.Role == "admin" {
 		if target.Role != "user" {
@@ -1675,7 +1675,7 @@ func (a *app) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		tenantID = user.TenantID
 	}
 
-	users, err := a.authStore.listUsers(tenantID)
+	users, err := a.authStore.listUsers(tenantID, user.Role == "super_admin")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

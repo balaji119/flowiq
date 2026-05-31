@@ -42,8 +42,13 @@ type UserFormState = {
   active: boolean;
 };
 
+const creatableRolesForSuperAdmin: AuthRole[] = [
+  "super_admin",
+  "admin",
+  "user",
+];
 const tenantScopedRolesForSuperAdmin: AuthRole[] = ["admin", "user"];
-const tenantScopedRolesForAdmin: AuthRole[] = ["user"];
+const creatableRolesForAdmin: AuthRole[] = ["user"];
 
 function emptyUserForm(): UserFormState {
   return {
@@ -97,19 +102,31 @@ export function UserManagementScreen({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [userDialogOpen, setUserDialogOpen] = useState(false);
+  const [userDialogError, setUserDialogError] = useState("");
   const [savingUser, setSavingUser] = useState(false);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [userPendingDelete, setUserPendingDelete] = useState<AuthUser | null>(
+    null,
+  );
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [userForm, setUserForm] = useState<UserFormState>(() =>
     emptyUserForm(),
   );
 
+  const editingUser = useMemo(
+    () => users.find((user) => user.id === editingUserId),
+    [editingUserId, users],
+  );
   const availableRoles = useMemo<AuthRole[]>(
-    () =>
-      session?.user.role === "super_admin"
+    () => {
+      if (session?.user.role !== "super_admin") {
+        return creatableRolesForAdmin;
+      }
+      return editingUser && editingUser.role !== "super_admin"
         ? tenantScopedRolesForSuperAdmin
-        : tenantScopedRolesForAdmin,
-    [session?.user.role],
+        : creatableRolesForSuperAdmin;
+    },
+    [editingUser, session?.user.role],
   );
   const isSuperAdmin = session?.user.role === "super_admin";
   const effectiveTenantId = isSuperAdmin ? selectedTenantId : tenantId;
@@ -209,7 +226,7 @@ export function UserManagementScreen({
 
   const canActOnUser = (user: AuthUser) => {
     if (session?.user.role === "super_admin") {
-      return user.role === "admin" || user.role === "user";
+      return true;
     }
     if (session?.user.role === "admin") {
       return user.role === "user" && user.tenantId === effectiveTenantId;
@@ -220,6 +237,7 @@ export function UserManagementScreen({
   function openCreateUserDialog() {
     setEditingUserId(null);
     setUserForm(emptyUserForm());
+    setUserDialogError("");
     setUserDialogOpen(true);
   }
 
@@ -229,9 +247,10 @@ export function UserManagementScreen({
       name: user.name,
       email: user.email,
       password: "",
-      role: user.role === "admin" ? "admin" : "user",
+      role: user.role,
       active: user.active,
     });
+    setUserDialogError("");
     setUserDialogOpen(true);
   }
 
@@ -239,12 +258,13 @@ export function UserManagementScreen({
     setUserDialogOpen(false);
     setEditingUserId(null);
     setUserForm(emptyUserForm());
+    setUserDialogError("");
   }
 
   async function handleSaveUser() {
     if (!effectiveTenantId) return;
     setSavingUser(true);
-    setError("");
+    setUserDialogError("");
     setNotice("");
 
     try {
@@ -254,7 +274,7 @@ export function UserManagementScreen({
           password: userForm.password || undefined,
           role: userForm.role,
           active: userForm.active,
-          tenantId: effectiveTenantId,
+          tenantId: userForm.role === "super_admin" ? null : effectiveTenantId,
         });
         setUsers((current) =>
           current.map((user) =>
@@ -268,14 +288,19 @@ export function UserManagementScreen({
           email: userForm.email,
           password: userForm.password,
           role: userForm.role,
-          tenantId: effectiveTenantId,
+          tenantId: userForm.role === "super_admin" ? null : effectiveTenantId,
         });
-        setUsers((current) => [...current, response.user]);
+        setUsers((current) =>
+          response.user.role === "super_admin" ||
+          response.user.tenantId === effectiveTenantId
+            ? [...current, response.user]
+            : current,
+        );
         setNotice(`User ${response.user.name} created.`);
       }
       closeUserDialog();
     } catch (saveError) {
-      setError(
+      setUserDialogError(
         saveError instanceof Error ? saveError.message : "Unable to save user",
       );
     } finally {
@@ -283,19 +308,28 @@ export function UserManagementScreen({
     }
   }
 
-  async function handleDeleteUser(user: AuthUser) {
-    const confirmed = window.confirm(`Delete ${user.name}?`);
-    if (!confirmed) return;
+  function openDeleteUserDialog(user: AuthUser) {
+    setUserPendingDelete(user);
+  }
 
-    setDeletingUserId(user.id);
+  function closeDeleteUserDialog() {
+    if (deletingUserId) return;
+    setUserPendingDelete(null);
+  }
+
+  async function handleConfirmDeleteUser() {
+    if (!userPendingDelete) return;
+
+    setDeletingUserId(userPendingDelete.id);
     setError("");
     setNotice("");
     try {
-      await deleteUser(user.id);
+      await deleteUser(userPendingDelete.id);
       setUsers((current) =>
-        current.filter((currentUser) => currentUser.id !== user.id),
+        current.filter((currentUser) => currentUser.id !== userPendingDelete.id),
       );
-      setNotice(`User ${user.name} deleted.`);
+      setNotice(`User ${userPendingDelete.name} deleted.`);
+      setUserPendingDelete(null);
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
@@ -468,7 +502,7 @@ export function UserManagementScreen({
                                   <Button
                                     className="h-9 px-3"
                                     disabled={deletingUserId === user.id}
-                                    onClick={() => void handleDeleteUser(user)}
+                                    onClick={() => openDeleteUserDialog(user)}
                                     size="sm"
                                     type="button"
                                     variant="destructive"
@@ -524,13 +558,23 @@ export function UserManagementScreen({
                 {editingUserId ? "Edit User" : "Create User"}
               </DialogTitle>
               <DialogDescription>
-                This user will belong to{" "}
-                {selectedTenantName || "the selected tenant"}.
+                {userForm.role === "super_admin"
+                  ? "This user will have platform-wide super admin access."
+                  : `This user will belong to ${selectedTenantName || "the selected tenant"}.`}
               </DialogDescription>
             </DialogHeader>
 
             {/* FORM (unchanged) */}
             <div className="space-y-4">
+              {userDialogError ? (
+                <div
+                  className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200"
+                  role="alert"
+                >
+                  {userDialogError}
+                </div>
+              ) : null}
+
               <div className="space-y-2">
                 <Label>Name</Label>
                 <Input
@@ -678,6 +722,51 @@ export function UserManagementScreen({
                       : "Create User"}
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={Boolean(userPendingDelete)}
+          onOpenChange={(open) => {
+            if (open) return;
+            closeDeleteUserDialog();
+          }}
+        >
+          <DialogContent>
+            <DialogHeader className="pb-2">
+              <DialogTitle>Delete User</DialogTitle>
+              <DialogDescription className="pt-1 leading-6">
+                {userPendingDelete
+                  ? `Delete ${userPendingDelete.name} (${userPendingDelete.email})? This will permanently remove this ${userPendingDelete.role.replace("_", " ")} account and cannot be undone.`
+                  : "Delete this user? This action cannot be undone."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-md border border-rose-400/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+              This action immediately revokes access for the selected user.
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                disabled={Boolean(deletingUserId)}
+                onClick={closeDeleteUserDialog}
+                type="button"
+                variant="ghost"
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={Boolean(deletingUserId)}
+                onClick={() => void handleConfirmDeleteUser()}
+                type="button"
+                variant="destructive"
+              >
+                {deletingUserId ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                {deletingUserId ? "Deleting..." : "Delete User"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
