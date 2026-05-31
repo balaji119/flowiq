@@ -29,7 +29,7 @@ function WorkflowIllustration() {
           Asset Plan
         </text>
         <text fill="#9CA3AF" fontFamily="Inter, Geist, sans-serif" fontSize="11" x="40" y="84">
-          Billboard nodes
+          Campaign inventory
         </text>
         <circle cx="132" cy="52" fill="var(--primary-500)" fillOpacity="0.32" r="8" />
 
@@ -38,7 +38,7 @@ function WorkflowIllustration() {
           Schedule
         </text>
         <text fill="#9CA3AF" fontFamily="Inter, Geist, sans-serif" fontSize="11" x="252" y="166">
-          Week allocations
+          Campaign timeline
         </text>
         <circle cx="342" cy="134" fill="#38BDF8" fillOpacity="0.32" r="8" />
 
