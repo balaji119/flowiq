@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Eye, FolderKanban, LoaderCircle, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { CampaignListItem, CampaignRecord } from '@flowiq/shared';
 import { Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
-import { acquireCampaignEditLock, calculatePersistedCampaign, deleteCampaign, fetchCampaign, fetchCampaigns } from '../services/campaignApi';
+import { acquireCampaignEditLock, calculatePersistedCampaign, createSubCampaign, deleteCampaign, fetchCampaign, fetchCampaigns } from '../services/campaignApi';
 import { CampaignScheduleViewDialog } from './CampaignScheduleViewDialog';
 
 type CampaignLandingScreenProps = {
@@ -80,6 +80,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
   const [campaignForView, setCampaignForView] = useState<CampaignRecord | null>(null);
   const [viewCampaignId, setViewCampaignId] = useState<string | null>(null);
   const [landingNotice, setLandingNotice] = useState('');
+  const [creatingSubCampaignId, setCreatingSubCampaignId] = useState<string | null>(null);
   const [bottomBarHost, setBottomBarHost] = useState<HTMLElement | null>(null);
 
   const loadCampaigns = useCallback(async () => {
@@ -163,6 +164,20 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
 
   function campaignDisplayName(campaign: Pick<CampaignListItem, 'campaignName' | 'id'>) {
     return campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}`;
+  }
+
+  async function handleCreateSubCampaign(campaign: CampaignListItem) {
+    setError('');
+    setCreatingSubCampaignId(campaign.id);
+    try {
+      const response = await createSubCampaign(campaign.id);
+      await acquireCampaignEditLock(response.campaign.id);
+      onOpenCampaign(response.campaign.id);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Unable to create sub campaign');
+    } finally {
+      setCreatingSubCampaignId(null);
+    }
   }
 
   function openDeleteDialog(campaign: CampaignListItem) {
@@ -285,18 +300,39 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                 <tr
                   key={`campaign-table-${campaign.id}`}
                   className={`border-t border-white/5 align-middle transition-[background-color,border-color] duration-200 ${
-                    rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'
+                    campaign.parentCampaignId
+                      ? 'border-l-2 border-l-violet-400/60 bg-[#18223d]/80'
+                      : rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'
                   } hover:bg-[#1d2a40]`}
                 >
                   <td className="w-[24%] px-5 py-2.5 font-semibold text-white">
-                    <button
-                      className="block w-full truncate whitespace-nowrap text-left text-white transition hover:text-violet-200"
-                      onClick={() => void handleOpenCampaignView(campaign.id)}
-                      title={campaignDisplayName(campaign)}
-                      type="button"
-                    >
-                      {campaignDisplayName(campaign)}
-                    </button>
+                    <div className={campaign.parentCampaignId ? 'flex min-w-0 items-center gap-2 pl-5' : 'flex min-w-0 items-center gap-2'}>
+                      {campaign.parentCampaignId ? (
+                        <span className="shrink-0 text-violet-300" title={`Child of ${campaign.parentCampaignName || 'parent campaign'}`}>↳</span>
+                      ) : null}
+                      <button
+                        className="block min-w-0 truncate whitespace-nowrap text-left text-white transition hover:text-violet-200"
+                        onClick={() => void handleOpenCampaignView(campaign.id)}
+                        title={campaignDisplayName(campaign)}
+                        type="button"
+                      >
+                        {campaignDisplayName(campaign)}
+                      </button>
+                      {campaign.parentCampaignId ? (
+                        <span className="shrink-0 rounded-full border border-violet-300/30 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-violet-200">
+                          Sub
+                        </span>
+                      ) : campaign.childCampaignCount > 0 ? (
+                        <span className="shrink-0 rounded-full border border-sky-300/30 bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-200">
+                          {campaign.childCampaignCount} Sub
+                        </span>
+                      ) : null}
+                    </div>
+                    {campaign.parentCampaignId ? (
+                      <p className="mt-1 truncate pl-10 text-[11px] font-medium text-slate-400">
+                        Child of {campaign.parentCampaignName || 'parent campaign'}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="px-5 py-2.5 text-slate-300">{campaign.createdBy || 'N/A'}</td>
                   <td className="px-5 py-2.5 text-slate-300">{new Date(campaign.createdAt).toLocaleString('en-GB')}</td>
@@ -319,9 +355,22 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                   </td>
                   <td className="px-5 py-2.5">
                     <div className="flex justify-center gap-2">
-                      <Button aria-label="View campaign" className="h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200" onClick={() => void handleOpenCampaignView(campaign.id)} type="button" variant="ghost">
+                      <Button aria-label="View campaign" className="h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200" onClick={() => void handleOpenCampaignView(campaign.id)} title="View campaign" type="button" variant="ghost">
                         <Eye className="h-4 w-4" />
                       </Button>
+                      {!campaign.parentCampaignId ? (
+                        <Button
+                          aria-label="Add Sub Campaign"
+                          className="h-8 w-8 rounded-md border border-white/10 p-0 text-emerald-200"
+                          disabled={creatingSubCampaignId === campaign.id}
+                          onClick={() => void handleCreateSubCampaign(campaign)}
+                          title="Add Sub Campaign"
+                          type="button"
+                          variant="ghost"
+                        >
+                          {creatingSubCampaignId === campaign.id ? <LoaderCircle className="h-4 w-4 animate-spin text-emerald-200" /> : <Plus className="h-4 w-4" />}
+                        </Button>
+                      ) : null}
                       <Button
                         aria-label="Edit campaign"
                         className="h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200"

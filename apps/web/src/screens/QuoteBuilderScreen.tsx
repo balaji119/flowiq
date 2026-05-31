@@ -81,12 +81,14 @@ function applyCampaignToScreen(
   setUploadedPurchaseOrderName: Dispatch<SetStateAction<string>>,
   setCampaignId: Dispatch<SetStateAction<string | null>>,
   setCampaignStatus: Dispatch<SetStateAction<CampaignRecord['status']>>,
+  setParentCampaignId: Dispatch<SetStateAction<string>>,
 ) {
   setValues(normalizeFormValues(campaign.values));
   setSummary(campaign.summary);
   setUploadedPurchaseOrderName(campaign.purchaseOrder?.originalName || '');
   setCampaignId(campaign.id);
   setCampaignStatus(campaign.status);
+  setParentCampaignId(campaign.parentCampaignId || '');
 }
 
 function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBreakdown; inverse?: boolean }) {
@@ -1193,6 +1195,7 @@ export function QuoteBuilderScreen({
   const [dueDateInput, setDueDateInput] = useState('');
   const [campaignId, setCampaignId] = useState<string | null>(selectedCampaignId ?? null);
   const [campaignStatus, setCampaignStatus] = useState<CampaignRecord['status']>('draft');
+  const [parentCampaignId, setParentCampaignId] = useState('');
   const [markets, setMarkets] = useState<MarketMetadata[]>([]);
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<MarketDeliveryAddressRecord[]>([]);
   const [marketShippingRates, setMarketShippingRates] = useState<MarketShippingRateRecord[]>([]);
@@ -1278,6 +1281,7 @@ export function QuoteBuilderScreen({
   const lastPersistedValuesRef = useRef('');
   const lastAutoSaveFailedValuesRef = useRef<string | null>(null);
   const creativeSwapFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isSubCampaign = Boolean(parentCampaignId);
 
   function reportQuoteAutomationResult(action: AutomatedQuoteAction, status: AutomatedQuoteActionStatus, message?: string) {
     if (typeof window === 'undefined') return;
@@ -1350,7 +1354,7 @@ export function QuoteBuilderScreen({
             if (!active) return;
             const response = await fetchCampaign(storedCampaignId);
             if (!active) return;
-            applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
+            applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
             setTreatDefaultMarketAsPlaceholder(false);
             setMarketPopupManagedFlow(false);
             setHasSavedMarketViaPopup(true);
@@ -1376,6 +1380,7 @@ export function QuoteBuilderScreen({
         setUploadedPurchaseOrderName('');
         setCampaignId(null);
         setCampaignStatus('draft');
+        setParentCampaignId('');
         setTreatDefaultMarketAsPlaceholder(true);
         setMarketPopupManagedFlow(true);
         setHasSavedMarketViaPopup(false);
@@ -2213,21 +2218,22 @@ export function QuoteBuilderScreen({
     setDraftMarketSummary(null);
   }
 
-  function handleDeleteEditingMarket() {
-    if (!editingMarketId) return;
-    const remainingRealMarketsCount = values.campaignMarkets.filter((market) => !isDefaultPlaceholderMarket(market) && market.id !== editingMarketId).length;
+  function handleDeleteMarket(marketId: string) {
+    const remainingRealMarketsCount = values.campaignMarkets.filter((market) => !isDefaultPlaceholderMarket(market) && market.id !== marketId).length;
     setValues((current) => ({
       ...current,
-      campaignMarkets: current.campaignMarkets.filter((market) => market.id !== editingMarketId),
+      campaignMarkets: current.campaignMarkets.filter((market) => market.id !== marketId),
     }));
-    setHiddenInlineMarketIds((current) => current.filter((id) => id !== editingMarketId));
+    setHiddenInlineMarketIds((current) => current.filter((id) => id !== marketId));
     if (remainingRealMarketsCount === 0) {
       setHasSavedMarketViaPopup(false);
     }
-    setAddMarketDialogOpen(false);
-    setEditingMarketId(null);
-    setDraftMarket(null);
-    setDraftMarketSummary(null);
+    if (editingMarketId === marketId) {
+      setAddMarketDialogOpen(false);
+      setEditingMarketId(null);
+      setDraftMarket(null);
+      setDraftMarketSummary(null);
+    }
   }
 
   function updateDraftMarket(updater: (market: CampaignMarket) => CampaignMarket) {
@@ -2621,6 +2627,10 @@ export function QuoteBuilderScreen({
   }
 
   function handleDeleteArtwork(image: CampaignPrintImage) {
+    if (isSubCampaign) {
+      setArtworkDialogError('Artwork deletion is disabled for sub campaigns because files may be referenced by the parent campaign.');
+      return;
+    }
     if (deletingArtworkIds.includes(image.id)) return;
     if (assignedArtworkIdSet.has(image.id)) {
       setArtworkDialogError('Cannot delete artwork that is assigned to an asset category.');
@@ -2637,6 +2647,11 @@ export function QuoteBuilderScreen({
   async function confirmDeleteArtwork() {
     const image = deleteArtworkCandidate;
     if (!image) return;
+    if (isSubCampaign) {
+      setArtworkDialogError('Artwork deletion is disabled for sub campaigns because files may be referenced by the parent campaign.');
+      setDeleteArtworkCandidate(null);
+      return;
+    }
 
     setConfirmingArtworkDelete(true);
     setDeletingArtworkIds((current) => [...current, image.id]);
@@ -2935,7 +2950,7 @@ export function QuoteBuilderScreen({
     try {
       if (!campaignId) {
         const response = await createCampaign({ values });
-        applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
+        applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
             lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
         lastAutoSaveFailedValuesRef.current = null;
         await setStoredCampaignId(response.campaign.id);
@@ -2944,6 +2959,7 @@ export function QuoteBuilderScreen({
 
       const response = await updateStoredCampaign(campaignId, { values });
       setCampaignStatus(response.campaign.status);
+      setParentCampaignId(response.campaign.parentCampaignId || '');
       setUploadedPurchaseOrderName(response.campaign.purchaseOrder?.originalName || '');
         lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
       lastAutoSaveFailedValuesRef.current = null;
@@ -3016,7 +3032,7 @@ export function QuoteBuilderScreen({
       if (!savedCampaignId) return;
       const response = await submitCampaignToPrintIQ(savedCampaignId);
       const amount = response.amount === null || response.amount === undefined || response.amount === '' ? 'N/A' : String(response.amount);
-      applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus);
+      applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
       lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
       setQuoteResponseMessage(`Quote created successfully. Amount: ${amount}`);
     } catch (submissionError) {
@@ -4628,6 +4644,7 @@ export function QuoteBuilderScreen({
         try {
           const response = await markCampaignSubmitted(campaignId);
           setCampaignStatus(response.campaign.status);
+          setParentCampaignId(response.campaign.parentCampaignId || '');
         } catch {
           // Email already succeeded; do not fail success flow if status sync is delayed.
         }
@@ -5138,7 +5155,7 @@ export function QuoteBuilderScreen({
                           </div>
                         </div>
                         <Button
-                          className="absolute right-11 top-2 h-7 w-7 border border-violet-300/20 bg-slate-900/80 hover:bg-violet-500/10"
+                          className="absolute right-[5.25rem] top-2 h-7 w-7 border border-violet-300/20 bg-slate-900/80 hover:bg-violet-500/10"
                           onClick={() => setExpandedMarketId(market.id)}
                           size="icon"
                           title="Expand market"
@@ -5148,7 +5165,7 @@ export function QuoteBuilderScreen({
                           <Maximize2 className="h-3.5 w-3.5" />
                         </Button>
                         <Button
-                          className="absolute right-3 top-2 h-7 w-7 border border-violet-300/20 bg-slate-900/80 hover:bg-violet-500/10"
+                          className="absolute right-11 top-2 h-7 w-7 border border-violet-300/20 bg-slate-900/80 hover:bg-violet-500/10"
                           onClick={() => openEditMarketDialog(market.id)}
                           size="icon"
                           title="Edit market"
@@ -5156,6 +5173,16 @@ export function QuoteBuilderScreen({
                           variant="ghost"
                         >
                           <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          className="absolute right-3 top-2 h-7 w-7 border border-rose-300/20 bg-slate-900/80 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+                          onClick={() => handleDeleteMarket(market.id)}
+                          size="icon"
+                          title="Delete market"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                         <div className="space-y-2 p-2 pb-0.5">
                           <div className={cn(market.assets.length > 4 ? 'max-h-[220px] overflow-y-auto' : 'overflow-visible')}>
@@ -5962,19 +5989,6 @@ export function QuoteBuilderScreen({
             </div>
           ) : null}
           <div className="shrink-0 border-t border-slate-700 bg-slate-950 px-5 py-3.5">
-            <div className="flex items-center justify-between gap-3">
-            <div>
-              {editingMarketId ? (
-                <Button
-                  className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
-                  onClick={handleDeleteEditingMarket}
-                  type="button"
-                  variant="ghost"
-                >
-                  Delete Market
-                </Button>
-              ) : null}
-            </div>
             <div className="flex justify-end gap-3">
             <Button
               onClick={() => {
@@ -5996,7 +6010,6 @@ export function QuoteBuilderScreen({
             >
               Save
             </Button>
-            </div>
             </div>
           </div>
         </DialogContent>
@@ -6344,6 +6357,11 @@ export function QuoteBuilderScreen({
                 {artworkDialogError}
               </div>
             ) : null}
+            {isSubCampaign ? (
+              <div className="rounded-md border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm font-medium text-sky-100">
+                Artwork deletion is disabled for sub campaigns because these files may also be referenced by the parent campaign.
+              </div>
+            ) : null}
             {values.printImages.length > 0 ? (
               <div className="max-h-[56vh] overflow-auto rounded-md border border-slate-700 bg-slate-900/65 p-3">
                 <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-950/70">
@@ -6431,7 +6449,7 @@ export function QuoteBuilderScreen({
                                     {mappedImage ? mappedImage.name || mappedImage.fileName : 'No artwork mapped'}
                                   </p>
                                 </button>
-                                {mappedImage ? (
+                                {mappedImage && !isSubCampaign ? (
                                   <Button
                                     className={cn(
                                       'h-7 w-7 rounded-full border p-0',

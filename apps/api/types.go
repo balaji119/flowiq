@@ -122,6 +122,7 @@ type purchaseOrderDetails struct {
 type campaignRecord struct {
 	ID                string                `json:"id"`
 	TenantID          string                `json:"tenantId"`
+	ParentCampaignID  *string               `json:"parentCampaignId,omitempty"`
 	CreatedByUserID   string                `json:"createdByUserId"`
 	UpdatedByUserID   string                `json:"updatedByUserId"`
 	Status            string                `json:"status"`

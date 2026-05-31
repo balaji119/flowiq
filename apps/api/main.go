@@ -237,6 +237,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/auth/active-users", a.withAuth(http.HandlerFunc(a.handleActiveUsersCount)))
 	mux.Handle("GET /api/campaigns", a.withAuth(http.HandlerFunc(a.handleListCampaigns)))
 	mux.Handle("POST /api/campaigns", a.withAuth(http.HandlerFunc(a.handleCreateCampaign)))
+	mux.Handle("POST /api/campaigns/{campaignId}/sub-campaigns", a.withAuth(http.HandlerFunc(a.handleCreateSubCampaign)))
 	mux.Handle("GET /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleGetCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/edit-lock", a.withAuth(http.HandlerFunc(a.handleAcquireCampaignEditLock)))
 	mux.Handle("DELETE /api/campaigns/{campaignId}/edit-lock", a.withAuth(http.HandlerFunc(a.handleReleaseCampaignEditLock)))
@@ -642,6 +643,20 @@ func (a *app) handleCreateCampaign(w http.ResponseWriter, r *http.Request) {
 	campaign, err := a.campaignStore.createCampaign(r.Context(), *user, payload.Values)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"campaign": campaign})
+}
+
+func (a *app) handleCreateSubCampaign(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	campaign, err := a.campaignStore.createSubCampaign(r.Context(), *user, r.PathValue("campaignId"))
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"campaign": campaign})

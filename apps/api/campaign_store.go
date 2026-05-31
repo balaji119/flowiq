@@ -21,6 +21,7 @@ type campaignStore struct {
 type campaignRow struct {
 	ID                string
 	TenantID          string
+	ParentCampaignID  *string
 	CreatedByUserID   string
 	UpdatedByUserID   string
 	Status            string
@@ -55,6 +56,13 @@ func parseWeeks(value string) int {
 	return weeks
 }
 
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
 func validateDateIsTodayOrFuture(rawValue, fieldLabel string) error {
 	trimmed := strings.TrimSpace(rawValue)
 	if trimmed == "" {
@@ -87,11 +95,32 @@ func validateCampaignDates(values orderFormValues) error {
 
 func cloneOrderFormValues(values orderFormValues) orderFormValues {
 	cloned := values
+	cloned.PrintImages = append([]campaignPrintImage(nil), values.PrintImages...)
+	if values.CreativeNameAssignments != nil {
+		cloned.CreativeNameAssignments = make(map[string]string, len(values.CreativeNameAssignments))
+		for key, value := range values.CreativeNameAssignments {
+			cloned.CreativeNameAssignments[key] = value
+		}
+	}
 	cloned.CampaignMarkets = append([]campaignMarket(nil), values.CampaignMarkets...)
 	for marketIndex := range cloned.CampaignMarkets {
 		cloned.CampaignMarkets[marketIndex].Assets = append([]campaignAsset(nil), values.CampaignMarkets[marketIndex].Assets...)
 		for assetIndex := range cloned.CampaignMarkets[marketIndex].Assets {
-			cloned.CampaignMarkets[marketIndex].Assets[assetIndex].SelectedWeeks = append([]int(nil), values.CampaignMarkets[marketIndex].Assets[assetIndex].SelectedWeeks...)
+			sourceAsset := values.CampaignMarkets[marketIndex].Assets[assetIndex]
+			clonedAsset := &cloned.CampaignMarkets[marketIndex].Assets[assetIndex]
+			clonedAsset.SelectedWeeks = append([]int(nil), sourceAsset.SelectedWeeks...)
+			if sourceAsset.CreativeImageIDs != nil {
+				clonedAsset.CreativeImageIDs = make(map[string]string, len(sourceAsset.CreativeImageIDs))
+				for key, value := range sourceAsset.CreativeImageIDs {
+					clonedAsset.CreativeImageIDs[key] = value
+				}
+			}
+			if sourceAsset.MultiCreativeImageIDs != nil {
+				clonedAsset.MultiCreativeImageIDs = make(map[string][]string, len(sourceAsset.MultiCreativeImageIDs))
+				for key, value := range sourceAsset.MultiCreativeImageIDs {
+					clonedAsset.MultiCreativeImageIDs[key] = append([]string(nil), value...)
+				}
+			}
 		}
 	}
 	cloned.SelectedJobOperations = append([]string(nil), values.SelectedJobOperations...)
@@ -137,6 +166,7 @@ func decodeCampaignRow(row campaignRow) (*campaignRecord, error) {
 	return &campaignRecord{
 		ID:                row.ID,
 		TenantID:          row.TenantID,
+		ParentCampaignID:  row.ParentCampaignID,
 		CreatedByUserID:   row.CreatedByUserID,
 		UpdatedByUserID:   row.UpdatedByUserID,
 		Status:            row.Status,
@@ -150,20 +180,23 @@ func decodeCampaignRow(row campaignRow) (*campaignRecord, error) {
 }
 
 type campaignListItem struct {
-	ID                string `json:"id"`
-	TenantID          string `json:"tenantId"`
-	Status            string `json:"status"`
-	CreatedBy         string `json:"createdBy"`
-	UpdatedBy         string `json:"updatedBy"`
-	CampaignName      string `json:"campaignName"`
-	CampaignStartDate string `json:"campaignStartDate"`
-	DueDate           string `json:"dueDate"`
-	NumberOfWeeks     string `json:"numberOfWeeks"`
-	MarketCount       int    `json:"marketCount"`
-	AssetCount        int    `json:"assetCount"`
-	LatestQuoteAmount any    `json:"latestQuoteAmount"`
-	UpdatedAt         string `json:"updatedAt"`
-	CreatedAt         string `json:"createdAt"`
+	ID                 string `json:"id"`
+	TenantID           string `json:"tenantId"`
+	ParentCampaignID   string `json:"parentCampaignId,omitempty"`
+	ParentCampaignName string `json:"parentCampaignName,omitempty"`
+	ChildCampaignCount int    `json:"childCampaignCount"`
+	Status             string `json:"status"`
+	CreatedBy          string `json:"createdBy"`
+	UpdatedBy          string `json:"updatedBy"`
+	CampaignName       string `json:"campaignName"`
+	CampaignStartDate  string `json:"campaignStartDate"`
+	DueDate            string `json:"dueDate"`
+	NumberOfWeeks      string `json:"numberOfWeeks"`
+	MarketCount        int    `json:"marketCount"`
+	AssetCount         int    `json:"assetCount"`
+	LatestQuoteAmount  any    `json:"latestQuoteAmount"`
+	UpdatedAt          string `json:"updatedAt"`
+	CreatedAt          string `json:"createdAt"`
 }
 
 func scanCampaignRow(scanner interface {
@@ -173,6 +206,7 @@ func scanCampaignRow(scanner interface {
 	err := scanner.Scan(
 		&row.ID,
 		&row.TenantID,
+		&row.ParentCampaignID,
 		&row.CreatedByUserID,
 		&row.UpdatedByUserID,
 		&row.Status,
@@ -276,20 +310,106 @@ func (s *campaignStore) createCampaign(ctx context.Context, user AuthUser, value
 	return s.getCampaign(ctx, user, campaignID)
 }
 
+func buildSubCampaignValues(parent *campaignRecord, sequence int) orderFormValues {
+	values := cloneOrderFormValues(parent.Values)
+	parentName := strings.TrimSpace(parent.Values.CampaignName)
+	if parentName == "" {
+		parentName = "Untitled Campaign " + parent.ID[:6]
+	}
+	values.CampaignName = fmt.Sprintf("%s - subcampaign - %d", parentName, sequence)
+	values.Quantity = ""
+	values.CreativeNameAssignments = map[string]string{}
+
+	for marketIndex := range values.CampaignMarkets {
+		values.CampaignMarkets[marketIndex].ID = uuid.NewString()
+		for assetIndex := range values.CampaignMarkets[marketIndex].Assets {
+			asset := &values.CampaignMarkets[marketIndex].Assets[assetIndex]
+			asset.ID = uuid.NewString()
+			asset.SelectedWeeks = []int{}
+			asset.CreativeImageID = ""
+			asset.CreativeImageIDs = map[string]string{}
+			asset.MultiCreativeImageIDs = map[string][]string{}
+		}
+	}
+
+	return values
+}
+
+func (s *campaignStore) createSubCampaign(ctx context.Context, user AuthUser, parentCampaignID string) (*campaignRecord, error) {
+	if user.TenantID == nil {
+		return nil, errors.New("current user is not assigned to a tenant")
+	}
+
+	parent, err := s.getCampaign(ctx, user, parentCampaignID)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var existingChildren int
+	if err := tx.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM campaigns
+		WHERE tenant_id = $1 AND parent_campaign_id = $2
+	`, *user.TenantID, parent.ID).Scan(&existingChildren); err != nil {
+		return nil, err
+	}
+
+	values := buildSubCampaignValues(parent, existingChildren+1)
+	formData, err := marshalJSON(values)
+	if err != nil {
+		return nil, err
+	}
+
+	campaignID := uuid.NewString()
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO campaigns (
+			id, tenant_id, parent_campaign_id, name, start_date, due_date, weeks, status, form_data, created_by_user_id, updated_by_user_id, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8::jsonb, $9, $9, NOW(), NOW())
+	`, campaignID, *user.TenantID, parent.ID, strings.TrimSpace(values.CampaignName), parseDateOrNil(values.CampaignStartDate), parseDateOrNil(values.DueDate), parseWeeks(values.NumberOfWeeks), string(formData), user.ID); err != nil {
+		return nil, err
+	}
+
+	if err := s.replaceCampaignLines(ctx, tx, campaignID, *user.TenantID, values); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return s.getCampaign(ctx, user, campaignID)
+}
+
 func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]campaignListItem, error) {
 	if user.TenantID == nil {
 		return nil, errors.New("current user is not assigned to a tenant")
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT c.id, c.tenant_id, c.status, c.form_data, c.latest_quote_amount::text, c.updated_at, c.created_at,
+		SELECT c.id, c.tenant_id, c.parent_campaign_id::text,
+			COALESCE(NULLIF(TRIM(parent.name), ''), NULLIF(TRIM(parent.form_data->>'campaignName'), ''), '') AS parent_campaign_name,
+			COALESCE(child_counts.child_count, 0) AS child_campaign_count,
+			c.status, c.form_data, c.latest_quote_amount::text, c.updated_at, c.created_at,
 			COALESCE(NULLIF(TRIM(uc.name), ''), uc.email) AS created_by,
 			COALESCE(NULLIF(TRIM(uu.name), ''), uu.email) AS updated_by
 		FROM campaigns c
+		LEFT JOIN campaigns parent ON parent.id = c.parent_campaign_id AND parent.tenant_id = c.tenant_id
+		LEFT JOIN (
+			SELECT parent_campaign_id, COUNT(*) AS child_count
+			FROM campaigns
+			WHERE tenant_id = $1 AND parent_campaign_id IS NOT NULL
+			GROUP BY parent_campaign_id
+		) child_counts ON child_counts.parent_campaign_id = c.id
+		LEFT JOIN campaigns sort_parent ON sort_parent.id = COALESCE(c.parent_campaign_id, c.id) AND sort_parent.tenant_id = c.tenant_id
 		LEFT JOIN users uc ON uc.id = c.created_by_user_id
 		LEFT JOIN users uu ON uu.id = c.updated_by_user_id
 		WHERE c.tenant_id = $1
-		ORDER BY c.updated_at DESC, c.created_at DESC
+		ORDER BY sort_parent.updated_at DESC, CASE WHEN c.parent_campaign_id IS NULL THEN 0 ELSE 1 END, c.created_at ASC
 	`, *user.TenantID)
 	if err != nil {
 		return nil, err
@@ -300,6 +420,9 @@ func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]cam
 	for rows.Next() {
 		var id string
 		var tenantID string
+		var parentCampaignID *string
+		var parentCampaignName string
+		var childCampaignCount int
 		var status string
 		var formData []byte
 		var latestQuoteAmount *string
@@ -307,7 +430,7 @@ func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]cam
 		var createdAt time.Time
 		var createdBy string
 		var updatedBy string
-		if err := rows.Scan(&id, &tenantID, &status, &formData, &latestQuoteAmount, &updatedAt, &createdAt, &createdBy, &updatedBy); err != nil {
+		if err := rows.Scan(&id, &tenantID, &parentCampaignID, &parentCampaignName, &childCampaignCount, &status, &formData, &latestQuoteAmount, &updatedAt, &createdAt, &createdBy, &updatedBy); err != nil {
 			return nil, err
 		}
 
@@ -330,20 +453,23 @@ func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]cam
 		}
 
 		items = append(items, campaignListItem{
-			ID:                id,
-			TenantID:          tenantID,
-			Status:            status,
-			CreatedBy:         strings.TrimSpace(createdBy),
-			UpdatedBy:         strings.TrimSpace(updatedBy),
-			CampaignName:      strings.TrimSpace(values.CampaignName),
-			CampaignStartDate: strings.TrimSpace(values.CampaignStartDate),
-			DueDate:           strings.TrimSpace(values.DueDate),
-			NumberOfWeeks:     strings.TrimSpace(values.NumberOfWeeks),
-			MarketCount:       marketCount,
-			AssetCount:        assetCount,
-			LatestQuoteAmount: quoteAmount,
-			UpdatedAt:         updatedAt.UTC().Format(time.RFC3339),
-			CreatedAt:         createdAt.UTC().Format(time.RFC3339),
+			ID:                 id,
+			TenantID:           tenantID,
+			ParentCampaignID:   stringValue(parentCampaignID),
+			ParentCampaignName: strings.TrimSpace(parentCampaignName),
+			ChildCampaignCount: childCampaignCount,
+			Status:             status,
+			CreatedBy:          strings.TrimSpace(createdBy),
+			UpdatedBy:          strings.TrimSpace(updatedBy),
+			CampaignName:       strings.TrimSpace(values.CampaignName),
+			CampaignStartDate:  strings.TrimSpace(values.CampaignStartDate),
+			DueDate:            strings.TrimSpace(values.DueDate),
+			NumberOfWeeks:      strings.TrimSpace(values.NumberOfWeeks),
+			MarketCount:        marketCount,
+			AssetCount:         assetCount,
+			LatestQuoteAmount:  quoteAmount,
+			UpdatedAt:          updatedAt.UTC().Format(time.RFC3339),
+			CreatedAt:          createdAt.UTC().Format(time.RFC3339),
 		})
 	}
 
@@ -356,7 +482,7 @@ func (s *campaignStore) getCampaign(ctx context.Context, user AuthUser, campaign
 	}
 
 	row, err := scanCampaignRow(s.pool.QueryRow(ctx, `
-		SELECT id, tenant_id, created_by_user_id, updated_by_user_id, status, form_data, calculation_summary, purchase_order, latest_quote_amount::text, created_at, updated_at
+		SELECT id, tenant_id, parent_campaign_id::text, created_by_user_id, updated_by_user_id, status, form_data, calculation_summary, purchase_order, latest_quote_amount::text, created_at, updated_at
 		FROM campaigns
 		WHERE id = $1 AND tenant_id = $2
 		LIMIT 1

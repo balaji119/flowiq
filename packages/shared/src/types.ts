@@ -301,6 +301,7 @@ export type OrderFormValues = {
 export type CampaignRecord = {
   id: string;
   tenantId: string;
+  parentCampaignId?: string;
   createdByUserId: string;
   updatedByUserId: string;
   status: CampaignStatus;
@@ -321,6 +322,9 @@ export type CampaignRecord = {
 export type CampaignListItem = {
   id: string;
   tenantId: string;
+  parentCampaignId?: string;
+  parentCampaignName?: string;
+  childCampaignCount: number;
   status: CampaignStatus;
   createdBy: string;
   updatedBy: string;

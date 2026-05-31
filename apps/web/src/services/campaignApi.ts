@@ -19,6 +19,12 @@ export async function createCampaign(payload: CampaignUpsertPayload) {
   });
 }
 
+export async function createSubCampaign(campaignId: string) {
+  return apiFetchJson<{ campaign: CampaignRecord }>(`/api/campaigns/${encodeURIComponent(campaignId)}/sub-campaigns`, {
+    method: 'POST',
+  });
+}
+
 export async function fetchCampaign(campaignId: string) {
   return apiFetchJson<{ campaign: CampaignRecord }>(`/api/campaigns/${encodeURIComponent(campaignId)}`);
 }
