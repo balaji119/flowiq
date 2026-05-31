@@ -269,6 +269,8 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(filepath.Join(".", "storage", "uploads")))))
 	mux.Handle("GET /api/admin/tenants", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListTenants), "super_admin")))
 	mux.Handle("POST /api/admin/tenants", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleCreateTenant), "super_admin")))
+	mux.Handle("PATCH /api/admin/tenants/{tenantId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpdateTenant), "super_admin")))
+	mux.Handle("DELETE /api/admin/tenants/{tenantId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleDeleteTenant), "super_admin")))
 	mux.Handle("GET /api/admin/users", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListUsers), "super_admin", "admin")))
 	mux.Handle("POST /api/admin/users", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleCreateUser), "super_admin", "admin")))
 	mux.Handle("PATCH /api/admin/users/{userId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpdateUser), "super_admin", "admin")))
@@ -1613,6 +1615,31 @@ func (a *app) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"tenant": tenant})
+}
+
+func (a *app) handleUpdateTenant(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	tenant, err := a.authStore.updateTenant(r.PathValue("tenantId"), payload.Name)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tenant": tenant})
+}
+
+func (a *app) handleDeleteTenant(w http.ResponseWriter, r *http.Request) {
+	if err := a.authStore.deleteTenant(r.PathValue("tenantId")); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 func canManageTargetTenant(user *AuthUser, targetTenantID *string) bool {

@@ -44,7 +44,7 @@ function formatSheetHeader(key: (typeof formatKeys)[number], overrides: SheetNam
   return resolveFormatName(key, overrides);
 }
 
-export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings, onOpenShippingCosts, onOpenShippingSettings, onOpenUsers, tenantId }: MappingAdminScreenProps) {
+export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings, onOpenShippingCosts, onOpenShippingSettings, onOpenTenants, onOpenUsers, tenantId }: MappingAdminScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -359,6 +359,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
       onOpenSettings={onOpenSettings}
       onOpenShippingCosts={onOpenShippingCosts}
       onOpenShippingSettings={onOpenShippingSettings}
+      onOpenTenants={onOpenTenants}
       onOpenUsers={onOpenUsers}
     >
     <main className="dense-main flex min-h-screen w-full flex-col gap-6">

@@ -1,15 +1,16 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronRight, CircleDollarSign, Database, Home, LogOut, MapPin, Settings, Truck, Users } from 'lucide-react';
+import { ArrowLeft, Building2, ChevronRight, CircleDollarSign, Database, Home, LogOut, MapPin, Settings, Truck, Users } from 'lucide-react';
 import { cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 
-export type AdminWorkspaceSection = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings';
+export type AdminWorkspaceSection = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings';
 
 export type AdminWorkspaceHandlers = {
   onBack?: () => void;
   onOpenHome?: () => void;
   onOpenLanding?: () => void;
   onOpenUsers?: () => void;
+  onOpenTenants?: () => void;
   onOpenMappings?: () => void;
   onOpenShippingSettings?: () => void;
   onOpenShippingCosts?: () => void;
@@ -49,6 +50,7 @@ export function AdminWorkspaceShell({
   onOpenHome,
   onOpenLanding,
   onOpenUsers,
+  onOpenTenants,
   onOpenMappings,
   onOpenShippingSettings,
   onOpenShippingCosts,
@@ -124,6 +126,9 @@ export function AdminWorkspaceShell({
   }
   if (canAccessManagement && onOpenUsers) {
     items.push({ id: 'users', label: 'User Management', icon: <Users className="h-[22px] w-[22px]" />, onClick: onOpenUsers });
+  }
+  if (canAccessShippingCosts && onOpenTenants) {
+    items.push({ id: 'tenants', label: 'Tenant Management', icon: <Building2 className="h-[22px] w-[22px]" />, onClick: onOpenTenants });
   }
   if (canAccessManagement && onOpenMappings) {
     items.push({ id: 'mappings', label: 'Quantity Mapping', icon: <Database className="h-[22px] w-[22px]" />, onClick: onOpenMappings });

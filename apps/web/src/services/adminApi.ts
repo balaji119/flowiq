@@ -30,6 +30,19 @@ export async function createTenant(payload: { name: string }) {
   });
 }
 
+export async function updateTenant(tenantId: string, payload: { name: string }) {
+  return apiFetchJson<{ tenant: TenantRecord }>(`/api/admin/tenants/${encodeURIComponent(tenantId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteTenant(tenantId: string) {
+  return apiFetchJson<{ deleted: boolean }>(`/api/admin/tenants/${encodeURIComponent(tenantId)}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function fetchUsers(tenantId?: string) {
   const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
   return apiFetchJson<{ users: AuthUser[] }>(`/api/admin/users${query}`);

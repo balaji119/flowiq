@@ -32,6 +32,7 @@ export function SettingsScreen({
   onOpenPrintingCosts,
   onOpenShippingCosts,
   onOpenShippingSettings,
+  onOpenTenants,
   onOpenUsers,
   tenantId,
 }: SettingsScreenProps) {
@@ -274,6 +275,7 @@ export function SettingsScreen({
       onOpenSettings={() => {}}
       onOpenShippingCosts={onOpenShippingCosts ? () => confirmDiscardChanges(onOpenShippingCosts) : undefined}
       onOpenShippingSettings={onOpenShippingSettings ? () => confirmDiscardChanges(onOpenShippingSettings) : undefined}
+      onOpenTenants={onOpenTenants ? () => confirmDiscardChanges(onOpenTenants) : undefined}
       onOpenUsers={onOpenUsers ? () => confirmDiscardChanges(onOpenUsers) : undefined}
     >
       <main className="dense-main flex min-h-0 w-full flex-col gap-6">

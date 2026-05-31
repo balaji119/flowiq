@@ -15,9 +15,10 @@ import { ResetPasswordScreen } from './src/screens/ResetPasswordScreen';
 import { ShippingCostSettingsScreen } from './src/screens/ShippingCostSettingsScreen';
 import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { TenantManagementScreen } from './src/screens/TenantManagementScreen';
 import { UserManagementScreen } from './src/screens/UserManagementScreen';
 
-type AppView = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings';
+type AppView = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings';
 
 type AppNavState = {
   view: AppView;
@@ -46,6 +47,7 @@ function buildUrlFromState(state: AppNavState) {
 
 function parseView(raw: string | null): AppView {
   if (raw === 'users') return 'users';
+  if (raw === 'tenants') return 'tenants';
   if (raw === 'mappings') return 'mappings';
   if (raw === 'shipping') return 'shipping';
   if (raw === 'shipping-costs') return 'shipping-costs';
@@ -215,6 +217,7 @@ function AppShell() {
         onOpenSettings={canAccessManagement ? () => navigateTo('settings') : undefined}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={canAccessManagement ? () => navigateTo('shipping') : undefined}
+        onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}
         onOpenUsers={canAccessManagement ? () => navigateTo('users') : undefined}
       >
         {content}
@@ -231,7 +234,22 @@ function AppShell() {
         onOpenSettings={() => navigateTo('settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={() => navigateTo('shipping')}
+        onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}
         tenantId={selectedAdminTenantId ?? session.user.tenantId ?? ''}
+      />
+    );
+  }
+
+  if (view === 'tenants') {
+    return (
+      <TenantManagementScreen
+        onBack={() => navigateTo('landing')}
+        onOpenMappings={() => navigateTo('mappings')}
+        onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenSettings={() => navigateTo('settings')}
+        onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
+        onOpenShippingSettings={() => navigateTo('shipping')}
+        onOpenUsers={() => navigateTo('users')}
       />
     );
   }
@@ -244,6 +262,7 @@ function AppShell() {
         onOpenSettings={() => navigateTo('settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={() => navigateTo('shipping')}
+        onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}
         onOpenUsers={() => navigateTo('users')}
         tenantId={selectedAdminTenantId}
       />
@@ -258,6 +277,7 @@ function AppShell() {
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={() => navigateTo('settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
+        onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}
         onOpenUsers={() => navigateTo('users')}
         tenantId={selectedAdminTenantId}
       />
@@ -281,6 +301,7 @@ function AppShell() {
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={() => navigateTo('shipping')}
+        onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}
         onOpenUsers={() => navigateTo('users')}
         tenantId={selectedAdminTenantId}
       />

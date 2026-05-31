@@ -14,9 +14,11 @@ type PrintIQStockOption struct {
 }
 
 type TenantRecord struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt string `json:"createdAt,omitempty"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	UserCount     int    `json:"userCount"`
+	CampaignCount int    `json:"campaignCount"`
+	CreatedAt     string `json:"createdAt,omitempty"`
 }
 
 type sheetNameOverrides map[string]string

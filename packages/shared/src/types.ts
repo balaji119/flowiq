@@ -43,6 +43,8 @@ export type AuthSession = {
 export type TenantRecord = {
   id: string;
   name: string;
+  userCount?: number;
+  campaignCount?: number;
   createdAt?: string;
 };
 

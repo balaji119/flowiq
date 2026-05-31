@@ -92,6 +92,7 @@ export function UserManagementScreen({
   onOpenSettings,
   onOpenShippingSettings,
   onOpenShippingCosts,
+  onOpenTenants,
   tenantId,
 }: UserManagementScreenProps) {
   const { session } = useAuth();
@@ -384,6 +385,7 @@ export function UserManagementScreen({
       onOpenSettings={onOpenSettings}
       onOpenShippingCosts={onOpenShippingCosts}
       onOpenShippingSettings={onOpenShippingSettings}
+      onOpenTenants={onOpenTenants}
       onOpenUsers={() => {}}
     >
       <main className="dense-main flex min-h-0 w-full flex-col gap-6">

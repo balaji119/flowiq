@@ -115,7 +115,7 @@ function parseDeliveryAddress(rawAddress: string): AddressFormState {
   };
 }
 
-export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingCosts, onOpenSettings, onOpenShippingCosts, onOpenUsers, tenantId }: ShippingSettingsScreenProps) {
+export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingCosts, onOpenSettings, onOpenShippingCosts, onOpenTenants, onOpenUsers, tenantId }: ShippingSettingsScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -486,6 +486,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
       onOpenSettings={onOpenSettings}
       onOpenShippingCosts={onOpenShippingCosts}
       onOpenShippingSettings={() => {}}
+      onOpenTenants={onOpenTenants}
       onOpenUsers={onOpenUsers}
     >
     <main className="dense-main flex min-h-0 w-full flex-col gap-6">

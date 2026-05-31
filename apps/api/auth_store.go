@@ -275,9 +275,17 @@ func (s *authStore) userByID(ctx context.Context, userID string) (*AuthUser, err
 
 func (s *authStore) listTenants() ([]TenantRecord, error) {
 	rows, err := s.pool.Query(context.Background(), `
-		SELECT id, name, created_at
-		FROM tenants
-		ORDER BY name ASC
+		SELECT
+			t.id,
+			t.name,
+			COUNT(DISTINCT u.id)::int AS user_count,
+			COUNT(DISTINCT c.id)::int AS campaign_count,
+			t.created_at
+		FROM tenants t
+		LEFT JOIN users u ON u.tenant_id = t.id
+		LEFT JOIN campaigns c ON c.tenant_id = t.id
+		GROUP BY t.id, t.name, t.created_at
+		ORDER BY t.name ASC
 	`)
 	if err != nil {
 		return nil, err
@@ -288,7 +296,7 @@ func (s *authStore) listTenants() ([]TenantRecord, error) {
 	for rows.Next() {
 		var tenant TenantRecord
 		var createdAt time.Time
-		if err := rows.Scan(&tenant.ID, &tenant.Name, &createdAt); err != nil {
+		if err := rows.Scan(&tenant.ID, &tenant.Name, &tenant.UserCount, &tenant.CampaignCount, &createdAt); err != nil {
 			return nil, err
 		}
 		tenant.CreatedAt = createdAt.UTC().Format(time.RFC3339)
@@ -304,9 +312,11 @@ func (s *authStore) createTenant(name string) (*TenantRecord, error) {
 	}
 
 	tenant := TenantRecord{
-		ID:        uuid.NewString(),
-		Name:      tenantName,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		ID:            uuid.NewString(),
+		Name:          tenantName,
+		UserCount:     0,
+		CampaignCount: 0,
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 	}
 	if _, err := s.pool.Exec(context.Background(), `
 		INSERT INTO tenants (id, tenant_id, name, created_at, updated_at)
@@ -326,6 +336,89 @@ func (s *authStore) createTenant(name string) (*TenantRecord, error) {
 		return nil, err
 	}
 	return &tenant, nil
+}
+
+func (s *authStore) updateTenant(tenantID, name string) (*TenantRecord, error) {
+	trimmedTenantID := strings.TrimSpace(tenantID)
+	tenantName := strings.TrimSpace(name)
+	if trimmedTenantID == "" {
+		return nil, errors.New("tenantId is required")
+	}
+	if tenantName == "" {
+		return nil, errors.New("Tenant name is required")
+	}
+
+	var tenant TenantRecord
+	var createdAt time.Time
+	if err := s.pool.QueryRow(context.Background(), `
+		WITH updated_tenant AS (
+			UPDATE tenants
+			SET name = $2,
+				updated_at = NOW()
+			WHERE id = $1
+			RETURNING id, name, created_at
+		)
+		SELECT
+			t.id,
+			t.name,
+			COUNT(DISTINCT u.id)::int AS user_count,
+			COUNT(DISTINCT c.id)::int AS campaign_count,
+			t.created_at
+		FROM updated_tenant t
+		LEFT JOIN users u ON u.tenant_id = t.id
+		LEFT JOIN campaigns c ON c.tenant_id = t.id
+		GROUP BY t.id, t.name, t.created_at
+	`, trimmedTenantID, tenantName).Scan(&tenant.ID, &tenant.Name, &tenant.UserCount, &tenant.CampaignCount, &createdAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("Tenant not found")
+		}
+		return nil, err
+	}
+	tenant.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+	return &tenant, nil
+}
+
+func (s *authStore) deleteTenant(tenantID string) error {
+	trimmedTenantID := strings.TrimSpace(tenantID)
+	if trimmedTenantID == "" {
+		return errors.New("tenantId is required")
+	}
+
+	var assignedUsers int
+	if err := s.pool.QueryRow(context.Background(), `
+		SELECT COUNT(*)
+		FROM users
+		WHERE tenant_id = $1
+	`, trimmedTenantID).Scan(&assignedUsers); err != nil {
+		return err
+	}
+	if assignedUsers > 0 {
+		return errors.New("Tenant has assigned users. Delete or move those users before deleting the tenant")
+	}
+
+	var campaigns int
+	if err := s.pool.QueryRow(context.Background(), `
+		SELECT COUNT(*)
+		FROM campaigns
+		WHERE tenant_id = $1
+	`, trimmedTenantID).Scan(&campaigns); err != nil {
+		return err
+	}
+	if campaigns > 0 {
+		return errors.New("Tenant has campaigns. Delete tenant campaigns before deleting the tenant")
+	}
+
+	commandTag, err := s.pool.Exec(context.Background(), `
+		DELETE FROM tenants
+		WHERE id = $1
+	`, trimmedTenantID)
+	if err != nil {
+		return err
+	}
+	if commandTag.RowsAffected() == 0 {
+		return errors.New("Tenant not found")
+	}
+	return nil
 }
 
 func (s *authStore) listUsers(tenantID *string, includeSuperAdmins bool) ([]AuthUser, error) {
