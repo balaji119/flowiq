@@ -5327,7 +5327,7 @@ export function QuoteBuilderScreen({
                   </div>
                 </div>
 
-                <div className={cn('min-h-0 flex-1 px-5 py-4', reviewDrawerMode === 'detailed' ? 'space-y-3 overflow-y-auto' : 'space-y-4 overflow-hidden')}>
+                <div className={cn('min-h-0 flex-1 px-5 py-4 overflow-y-auto', reviewDrawerMode === 'detailed' ? 'space-y-3' : 'space-y-4')}>
                   {reviewDrawerMode === 'high-level' ? (
                     <>
                       <div className="grid grid-cols-2 gap-2.5">
