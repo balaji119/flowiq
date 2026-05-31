@@ -1,14 +1,18 @@
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Eye, FolderKanban, LoaderCircle, Pencil, Plus, Search, Trash2 } from 'lucide-react';
-import { CampaignListItem, CampaignRecord } from '@flowiq/shared';
+import { CampaignListItem, CampaignRecord, TenantRecord } from '@flowiq/shared';
 import { Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
 import { acquireCampaignEditLock, calculatePersistedCampaign, createSubCampaign, deleteCampaign, fetchCampaign, fetchCampaigns } from '../services/campaignApi';
 import { CampaignScheduleViewDialog } from './CampaignScheduleViewDialog';
 
 type CampaignLandingScreenProps = {
   onOpenCampaign: (campaignId: string | null) => void;
+  selectedTenantId?: string | null;
   showHero?: boolean;
+  tenantOptions?: TenantRecord[];
+  requiresTenantSelection?: boolean;
+  onTenantChange?: (tenantId: string) => void;
 };
 
 const LANDING_NOTICE_KEY = 'flowiq:landing-notice';
@@ -26,7 +30,7 @@ function formatCampaignStatus(status: CampaignListItem['status']) {
 
 function WorkflowIllustration() {
   return (
-    <div className="relative h-[205px] w-full bg-transparent p-0 sm:h-[223px] lg:h-[248px] xl:h-[268px]">
+    <div className="relative h-[180px] w-full bg-transparent p-0 sm:h-[196px] lg:h-[218px] xl:h-[235px]">
       <svg className="relative h-full w-full" fill="none" viewBox="34 14 548 280" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="nodeFill" x1="0" x2="1" y1="0" y2="1">
@@ -66,7 +70,7 @@ function WorkflowIllustration() {
   );
 }
 
-export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: CampaignLandingScreenProps) {
+export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHero = false, tenantOptions = [], requiresTenantSelection = false, onTenantChange }: CampaignLandingScreenProps) {
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -84,16 +88,22 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
   const [bottomBarHost, setBottomBarHost] = useState<HTMLElement | null>(null);
 
   const loadCampaigns = useCallback(async () => {
+    if (requiresTenantSelection && !selectedTenantId) {
+      setCampaigns([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const response = await fetchCampaigns();
+      setError('');
+      const response = await fetchCampaigns(selectedTenantId);
       setCampaigns(response.campaigns);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load campaign schedules');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [requiresTenantSelection, selectedTenantId]);
 
   useEffect(() => {
     void loadCampaigns();
@@ -124,13 +134,17 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
 
   function handleCreateCampaign() {
     setError('');
+    if (requiresTenantSelection && !selectedTenantId) {
+      setError('Select a tenant before creating a campaign.');
+      return;
+    }
     onOpenCampaign(null);
   }
 
   async function handleOpenCampaign(campaignId: string) {
     setError('');
     try {
-      await acquireCampaignEditLock(campaignId);
+      await acquireCampaignEditLock(campaignId, selectedTenantId);
       onOpenCampaign(campaignId);
     } catch (lockError) {
       setError(lockError instanceof Error ? lockError.message : 'Unable to open campaign for editing');
@@ -144,8 +158,8 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
     setViewError('');
     setCampaignForView(null);
     try {
-      await calculatePersistedCampaign(campaignId);
-      const response = await fetchCampaign(campaignId);
+      await calculatePersistedCampaign(campaignId, selectedTenantId);
+      const response = await fetchCampaign(campaignId, selectedTenantId);
       setCampaignForView(response.campaign);
     } catch (loadError) {
       setViewError(loadError instanceof Error ? loadError.message : 'Unable to load campaign details');
@@ -170,8 +184,8 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
     setError('');
     setCreatingSubCampaignId(campaign.id);
     try {
-      const response = await createSubCampaign(campaign.id);
-      await acquireCampaignEditLock(response.campaign.id);
+      const response = await createSubCampaign(campaign.id, selectedTenantId);
+      await acquireCampaignEditLock(response.campaign.id, selectedTenantId);
       onOpenCampaign(response.campaign.id);
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to create sub campaign');
@@ -190,7 +204,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
     setDeletingCampaign(true);
     setError('');
     try {
-      await deleteCampaign(campaignPendingDelete.id);
+      await deleteCampaign(campaignPendingDelete.id, selectedTenantId);
       setCampaigns((current) => current.filter((item) => item.id !== campaignPendingDelete.id));
       setDeleteDialogOpen(false);
       setCampaignPendingDelete(null);
@@ -213,38 +227,57 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
   return (
     <main className="dashboard-default-scale dense-main flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden">
       {showHero ? (
-        <section className="relative shrink-0 overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-black px-6 pb-3 pt-2 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:px-7 sm:pb-4 sm:pt-3 xl:px-8 xl:pb-5 xl:pt-4">
+        <section className="relative shrink-0 overflow-hidden rounded-xl border border-[rgba(255,255,255,0.08)] bg-black px-5 pb-2.5 pt-1.5 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:px-6 sm:pb-3 sm:pt-2 xl:px-6 xl:pb-4 xl:pt-3">
           <div className="pointer-events-none absolute inset-y-0 right-0 w-[48%] bg-gradient-to-l from-violet-600/20 via-violet-500/8 to-transparent" />
-          <div className="relative grid min-h-[216px] items-start gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:items-start xl:min-h-[243px] xl:gap-11">
-            <div className="max-w-xl pt-2 lg:self-stretch lg:flex lg:flex-col">
-              <div className="mb-5 w-fit max-w-full">
+          <div className="relative grid min-h-[190px] items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:items-start xl:min-h-[213px] xl:gap-9">
+            <div className="max-w-2xl pt-1.5 lg:self-stretch lg:flex lg:flex-col">
+              <div className="mb-4 w-fit max-w-full">
                 <img
                   alt="Revolution360"
-                  className="h-auto w-[320px] max-w-full md:w-[390px] xl:w-[460px]"
+                  className="h-auto w-[282px] max-w-full md:w-[343px] xl:w-[405px]"
                   src="/images/revolution360-wordmark-white.png"
                 />
-                <p className="-mt-0.5 text-right text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">POWERED BY ADS</p>
+                <p className="-mt-0.5 text-right text-[8px] font-semibold uppercase tracking-[0.2em] text-slate-400">POWERED BY ADS</p>
               </div>
-              <h1 className="mt-3 pl-3 overflow-hidden text-ellipsis whitespace-nowrap text-[29px] font-semibold leading-tight tracking-tight text-[#F9FAFB] md:text-[33px] xl:text-[37px]">Plan Outdoor Campaigns Faster</h1>
-              <p className="mt-3 max-w-xl pl-3 text-[16px] leading-relaxed text-[#9CA3AF] xl:text-[17px]">Build schedules, review poster quantities, and generate ADS-ready orders.</p>
-              <div className="mt-10 flex flex-wrap items-center gap-3 pl-3 lg:mt-auto">
+              <h1 className="mt-2 pl-2.5 overflow-hidden text-ellipsis whitespace-nowrap text-[22px] font-semibold leading-tight tracking-tight text-[#F9FAFB] md:text-[25px] xl:text-[29px]">Plan Outdoor Campaigns Faster</h1>
+              <p className="mt-2 max-w-xl pl-2.5 text-[12px] leading-relaxed text-[#9CA3AF] xl:text-[13px]">Build schedules, review poster quantities, and generate ADS-ready orders.</p>
+              <div className="mt-10 flex flex-wrap items-center gap-2.5 pl-2.5 lg:mt-auto">
                 <Button
-                  className="h-11 px-6 text-[15px] btn-theme-primary"
+                  className="h-9 px-5 text-[11px] btn-theme-primary"
                   onClick={handleCreateCampaign}
                   type="button"
                 >
                   Create Campaign
                 </Button>
-                <div className="flex h-11 w-[250px] items-center gap-2 rounded-lg border border-white/15 bg-[#15122b]/90 px-3 text-slate-200 shadow-[0_6px_20px_rgba(2,6,23,0.25)]">
-                  <Search className="h-[18px] w-[18px] shrink-0 text-slate-400" />
+                <div className="flex h-9 w-[220px] items-center gap-2 rounded-md border border-white/15 bg-[#15122b]/90 px-3 text-slate-200 shadow-[0_6px_20px_rgba(2,6,23,0.25)]">
+                  <Search className="h-4 w-4 shrink-0 text-slate-400" />
                   <input
-                    className="w-full bg-transparent text-[15px] text-slate-100 placeholder:text-slate-500 focus:outline-none"
+                    className="w-full bg-transparent text-[11px] text-slate-100 placeholder:text-slate-500 focus:outline-none"
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Search campaign"
                     type="text"
                     value={searchQuery}
                   />
                 </div>
+                {tenantOptions.length > 0 ? (
+                  <div className="flex h-9 w-[220px] items-center overflow-hidden rounded-md border border-violet-300/25 bg-[#15122b]/90 text-slate-200 shadow-[0_6px_20px_rgba(2,6,23,0.25)]">
+                    <span className="flex h-full items-center border-r border-white/10 bg-violet-500/10 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-200">
+                      Tenant
+                    </span>
+                    <select
+                      aria-label="Select tenant"
+                      className="h-full min-w-0 flex-1 bg-transparent px-3 text-[11px] font-semibold text-slate-100 outline-none"
+                      onChange={(event) => onTenantChange?.(event.target.value)}
+                      value={selectedTenantId ?? ''}
+                    >
+                      {tenantOptions.map((tenant) => (
+                        <option key={`dashboard-tenant-${tenant.id}`} className="bg-slate-900 text-slate-100" value={tenant.id}>
+                          {tenant.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
               </div>
             </div>
             <WorkflowIllustration />
@@ -252,7 +285,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
         </section>
       ) : null}
 
-      {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
+      {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-[11px] font-medium text-rose-200">{error}</div> : null}
 
       {loading ? (
         <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-900/90 px-6 py-20">
@@ -263,14 +296,14 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
           <CardContent className="flex flex-col items-center gap-4 px-6 py-16 text-center">
             <FolderKanban className="h-12 w-12 text-violet-300" />
             <div className="space-y-2">
-              <h2 className="text-2xl font-black text-white">{campaigns.length === 0 ? 'No campaign schedules yet' : 'No matching campaigns'}</h2>
-              <p className="max-w-xl text-sm leading-6 text-slate-400">
+              <h2 className="text-xl font-black text-white">{campaigns.length === 0 ? 'No campaign schedules yet' : 'No matching campaigns'}</h2>
+              <p className="max-w-xl text-[11px] leading-6 text-slate-400">
                 {campaigns.length === 0
                   ? 'Create your first campaign to start building a schedule, calculate totals, and submit it to PrintIQ.'
                   : 'Try another campaign name in the search box.'}
               </p>
             </div>
-            <Button className="h-10 rounded-xl border border-violet-300/35 bg-violet-600 px-[18px] text-sm font-semibold text-white" onClick={handleCreateCampaign}>
+            <Button className="h-10 rounded-xl border border-violet-300/35 bg-violet-600 px-[18px] text-[11px] font-semibold text-white" onClick={handleCreateCampaign}>
               <Plus className="h-4 w-4" />
               Create Campaign
             </Button>
@@ -278,10 +311,24 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
         </Card>
       ) : (
         <section className="min-h-0 flex-1 overflow-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
-          <table className="dense-table min-w-[1240px] w-full border-collapse text-[14px]">
+          <table className="campaign-dashboard-table dense-table w-full border-collapse text-[10.5px]">
+            <colgroup>
+              <col className="w-[29%]" />
+              <col className="w-[8%]" />
+              <col className="w-[8%]" />
+              <col className="w-[8%]" />
+              <col className="w-[8%]" />
+              <col className="w-[4%]" />
+              <col className="w-[4%]" />
+              <col className="w-[5%]" />
+              <col className="w-[5%]" />
+              <col className="w-[4%]" />
+              <col className="w-[7%]" />
+              <col className="w-[10%]" />
+            </colgroup>
             <thead>
-              <tr className="bg-slate-950/65 text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-200">
-                <th className="sticky top-0 z-10 w-[24%] border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Campaign</th>
+              <tr className="bg-slate-950/65 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-slate-200">
+                <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Campaign</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Created By</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Created At</th>
                 <th className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/82 px-5 py-2.5 text-left backdrop-blur">Updated By</th>
@@ -305,7 +352,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                       : rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'
                   } hover:bg-[#1d2a40]`}
                 >
-                  <td className="w-[24%] px-5 py-2.5 font-semibold text-white">
+                  <td className="px-5 py-2.5 font-semibold text-white">
                     <div className={campaign.parentCampaignId ? 'flex min-w-0 items-center gap-2 pl-5' : 'flex min-w-0 items-center gap-2'}>
                       {campaign.parentCampaignId ? (
                         <span className="shrink-0 text-violet-300" title={`Child of ${campaign.parentCampaignName || 'parent campaign'}`}>↳</span>
@@ -319,17 +366,17 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                         {campaignDisplayName(campaign)}
                       </button>
                       {campaign.parentCampaignId ? (
-                        <span className="shrink-0 rounded-full border border-violet-300/30 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-violet-200">
+                        <span className="shrink-0 rounded-full border border-violet-300/30 bg-violet-500/15 px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em] text-violet-200">
                           Sub
                         </span>
                       ) : campaign.childCampaignCount > 0 ? (
-                        <span className="shrink-0 rounded-full border border-sky-300/30 bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-200">
+                        <span className="shrink-0 rounded-full border border-sky-300/30 bg-sky-500/15 px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em] text-sky-200">
                           {campaign.childCampaignCount} Sub
                         </span>
                       ) : null}
                     </div>
                     {campaign.parentCampaignId ? (
-                      <p className="mt-1 truncate pl-10 text-[11px] font-medium text-slate-400">
+                      <p className="mt-1 truncate pl-10 text-[9px] font-medium text-slate-400">
                         Child of {campaign.parentCampaignName || 'parent campaign'}
                       </p>
                     ) : null}
@@ -345,51 +392,51 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
                   <td className="px-5 py-2.5 text-center text-slate-300">{campaign.numberOfWeeks || '0'}</td>
                   <td className="px-5 py-2.5 text-center">
                     <span className={campaign.status === 'submitted'
-                      ? 'inline-flex rounded-full border border-emerald-300/35 bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-200'
+                      ? 'inline-flex rounded-full border border-emerald-300/35 bg-emerald-500/15 px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-emerald-200'
                       : campaign.status === 'calculated'
-                        ? 'inline-flex rounded-full border border-sky-300/35 bg-sky-500/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-sky-200'
-                        : 'inline-flex rounded-full border border-amber-300/35 bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-200'}
+                        ? 'inline-flex rounded-full border border-sky-300/35 bg-sky-500/15 px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-sky-200'
+                        : 'inline-flex rounded-full border border-amber-300/35 bg-amber-500/15 px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-amber-200'}
                     >
                       {formatCampaignStatus(campaign.status)}
                     </span>
                   </td>
                   <td className="px-5 py-2.5">
-                    <div className="flex justify-center gap-2">
-                      <Button aria-label="View campaign" className="h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200" onClick={() => void handleOpenCampaignView(campaign.id)} title="View campaign" type="button" variant="ghost">
-                        <Eye className="h-4 w-4" />
+                    <div className="flex justify-center gap-1.5">
+                      <Button aria-label="View campaign" className="h-7 w-7 rounded-md border border-white/10 p-0 text-slate-200" onClick={() => void handleOpenCampaignView(campaign.id)} title="View campaign" type="button" variant="ghost">
+                        <Eye className="h-3.5 w-3.5" />
                       </Button>
                       {!campaign.parentCampaignId ? (
                         <Button
                           aria-label="Add Sub Campaign"
-                          className="h-8 w-8 rounded-md border border-white/10 p-0 text-emerald-200"
+                          className="h-7 w-7 rounded-md border border-white/10 p-0 text-emerald-200"
                           disabled={creatingSubCampaignId === campaign.id}
                           onClick={() => void handleCreateSubCampaign(campaign)}
                           title="Add Sub Campaign"
                           type="button"
                           variant="ghost"
                         >
-                          {creatingSubCampaignId === campaign.id ? <LoaderCircle className="h-4 w-4 animate-spin text-emerald-200" /> : <Plus className="h-4 w-4" />}
+                          {creatingSubCampaignId === campaign.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-emerald-200" /> : <Plus className="h-3.5 w-3.5" />}
                         </Button>
                       ) : null}
                       <Button
                         aria-label="Edit campaign"
-                        className="h-8 w-8 rounded-md border border-white/10 p-0 text-slate-200"
+                        className="h-7 w-7 rounded-md border border-white/10 p-0 text-slate-200"
                         onClick={() => void handleOpenCampaign(campaign.id)}
                         title="Edit campaign"
                         type="button"
                         variant="ghost"
                       >
-                        <Pencil className="h-4 w-4" />
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         aria-label="Delete campaign"
-                        className="h-8 w-8 rounded-md border border-white/10 p-0 text-rose-300"
+                        className="h-7 w-7 rounded-md border border-white/10 p-0 text-rose-300"
                         onClick={() => openDeleteDialog(campaign)}
                         title="Delete campaign"
                         type="button"
                         variant="ghost"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </td>
@@ -404,6 +451,7 @@ export function CampaignLandingScreen({ onOpenCampaign, showHero = false }: Camp
         campaign={campaignForView}
         error={viewError}
         loading={viewLoading}
+        tenantId={selectedTenantId}
         onClose={() => setViewDialogOpen(false)}
         onEdit={() => void handleEditFromView()}
         onOpenChange={(open) => {
