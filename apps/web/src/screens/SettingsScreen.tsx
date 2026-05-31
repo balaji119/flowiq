@@ -30,6 +30,7 @@ export function SettingsScreen({
   onBack,
   onOpenMappings,
   onOpenPrintingCosts,
+  onOpenSheetSizeSettings,
   onOpenShippingCosts,
   onOpenShippingSettings,
   onOpenTenants,
@@ -166,7 +167,7 @@ export function SettingsScreen({
   async function handleSave() {
     if (!effectiveTenantId) {
       setError('Select a tenant before saving settings');
-      return;
+      return false;
     }
 
     const merged: SheetNameOverrides = {};
@@ -208,8 +209,10 @@ export function SettingsScreen({
       setCustomOverrides(nextCustom);
       setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}));
       setNotice('Sheet name overrides saved.');
+      return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save settings');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -256,7 +259,7 @@ export function SettingsScreen({
       canAccessManagement
       canAccessShippingCosts={session?.user.role === 'super_admin'}
       canAccessPrintingCosts={session?.user.role === 'super_admin'}
-      pageTitle="Settings"
+      pageTitle="Sheet Name"
       topBarActions={
         <Button
           className="h-9 min-w-[132px] rounded-md px-3 text-sm font-semibold btn-theme-primary"
@@ -273,6 +276,7 @@ export function SettingsScreen({
       onOpenMappings={onOpenMappings ? () => confirmDiscardChanges(onOpenMappings) : undefined}
       onOpenPrintingCosts={onOpenPrintingCosts ? () => confirmDiscardChanges(onOpenPrintingCosts) : undefined}
       onOpenSettings={() => {}}
+      onOpenSheetSizeSettings={onOpenSheetSizeSettings ? () => confirmDiscardChanges(onOpenSheetSizeSettings) : undefined}
       onOpenShippingCosts={onOpenShippingCosts ? () => confirmDiscardChanges(onOpenShippingCosts) : undefined}
       onOpenShippingSettings={onOpenShippingSettings ? () => confirmDiscardChanges(onOpenShippingSettings) : undefined}
       onOpenTenants={onOpenTenants ? () => confirmDiscardChanges(onOpenTenants) : undefined}
@@ -333,7 +337,7 @@ export function SettingsScreen({
             <>
               <div className="overflow-x-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
                 <div className="flex items-center justify-between border-b border-slate-700/70 px-4 py-3">
-                  <Label className="text-sm font-semibold text-slate-100">Sheet Size Mappings</Label>
+                  <Label className="text-sm font-semibold text-slate-100">Sheet Name Mappings</Label>
                   <Button
                     className="h-8 px-3"
                     onClick={() => setCustomOverrides((current) => [...current, createCustomRow()])}
@@ -504,7 +508,6 @@ export function SettingsScreen({
               Stay
             </Button>
             <Button
-              className="border border-rose-300/35 bg-rose-600 text-white hover:bg-rose-500"
               onClick={() => {
                 const action = pendingNavigationAction;
                 setDiscardDialogOpen(false);
@@ -512,8 +515,26 @@ export function SettingsScreen({
                 if (action) action();
               }}
               type="button"
+              variant="secondary"
             >
-              Discard & Leave
+              Discard
+            </Button>
+            <Button
+              disabled={saving || loading}
+              onClick={() => {
+                void (async () => {
+                  const action = pendingNavigationAction;
+                  const saved = await handleSave();
+                  if (!saved) return;
+                  setDiscardDialogOpen(false);
+                  setPendingNavigationAction(null);
+                  if (action) action();
+                })();
+              }}
+              type="button"
+            >
+              {saving ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : null}
+              {saving ? 'Saving...' : 'Save'}
             </Button>
           </div>
         </DialogContent>

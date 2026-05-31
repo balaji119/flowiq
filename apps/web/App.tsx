@@ -12,13 +12,14 @@ import { MappingAdminScreen } from './src/screens/MappingAdminScreen';
 import { PrintingCostSettingsScreen } from './src/screens/PrintingCostSettingsScreen';
 import { QuoteBuilderScreen } from './src/screens/QuoteBuilderScreen';
 import { ResetPasswordScreen } from './src/screens/ResetPasswordScreen';
+import { SheetSizeSettingsScreen } from './src/screens/SheetSizeSettingsScreen';
 import { ShippingCostSettingsScreen } from './src/screens/ShippingCostSettingsScreen';
 import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TenantManagementScreen } from './src/screens/TenantManagementScreen';
 import { UserManagementScreen } from './src/screens/UserManagementScreen';
 
-type AppView = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings';
+type AppView = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings' | 'sheet-size-settings';
 
 type AppNavState = {
   view: AppView;
@@ -53,6 +54,7 @@ function parseView(raw: string | null): AppView {
   if (raw === 'shipping-costs') return 'shipping-costs';
   if (raw === 'printing-costs') return 'printing-costs';
   if (raw === 'settings') return 'settings';
+  if (raw === 'sheet-size-settings') return 'sheet-size-settings';
   if (raw === 'quote') return 'quote';
   if (raw === 'artwork') return 'artwork';
   if (raw === 'admin') return 'users';
@@ -215,6 +217,7 @@ function AppShell() {
         onOpenMappings={canAccessManagement ? () => navigateTo('mappings') : undefined}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={canAccessManagement ? () => navigateTo('settings') : undefined}
+        onOpenSheetSizeSettings={canAccessManagement ? () => navigateTo('sheet-size-settings') : undefined}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={canAccessManagement ? () => navigateTo('shipping') : undefined}
         onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}
@@ -232,6 +235,7 @@ function AppShell() {
         onOpenMappings={() => navigateTo('mappings')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={() => navigateTo('settings')}
+        onOpenSheetSizeSettings={() => navigateTo('sheet-size-settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={() => navigateTo('shipping')}
         onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}
@@ -247,6 +251,7 @@ function AppShell() {
         onOpenMappings={() => navigateTo('mappings')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={() => navigateTo('settings')}
+        onOpenSheetSizeSettings={() => navigateTo('sheet-size-settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={() => navigateTo('shipping')}
         onOpenUsers={() => navigateTo('users')}
@@ -260,6 +265,7 @@ function AppShell() {
         onBack={() => navigateTo('landing')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={() => navigateTo('settings')}
+        onOpenSheetSizeSettings={() => navigateTo('sheet-size-settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={() => navigateTo('shipping')}
         onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}
@@ -276,6 +282,7 @@ function AppShell() {
         onOpenMappings={() => navigateTo('mappings')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={() => navigateTo('settings')}
+        onOpenSheetSizeSettings={() => navigateTo('sheet-size-settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}
         onOpenUsers={() => navigateTo('users')}
@@ -299,6 +306,23 @@ function AppShell() {
         onBack={() => navigateTo('landing')}
         onOpenMappings={() => navigateTo('mappings')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
+        onOpenSheetSizeSettings={() => navigateTo('sheet-size-settings')}
+        onOpenShippingSettings={() => navigateTo('shipping')}
+        onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}
+        onOpenUsers={() => navigateTo('users')}
+        tenantId={selectedAdminTenantId}
+      />
+    );
+  }
+
+  if (view === 'sheet-size-settings') {
+    return (
+      <SheetSizeSettingsScreen
+        onBack={() => navigateTo('landing')}
+        onOpenMappings={() => navigateTo('mappings')}
+        onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenSettings={() => navigateTo('settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={() => navigateTo('shipping')}
         onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}

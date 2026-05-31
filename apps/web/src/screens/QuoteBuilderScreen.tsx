@@ -6550,7 +6550,10 @@ export function QuoteBuilderScreen({
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-3">
-            <Button disabled={savingCampaign} onClick={handleDiscardAndLeave} type="button" variant="ghost">
+            <Button disabled={savingCampaign} onClick={() => setUnsavedDialogOpen(false)} type="button" variant="ghost">
+              Stay
+            </Button>
+            <Button disabled={savingCampaign} onClick={handleDiscardAndLeave} type="button" variant="secondary">
               Discard
             </Button>
             <Button disabled={savingCampaign} onClick={() => void handleSaveAndLeave()} type="button">

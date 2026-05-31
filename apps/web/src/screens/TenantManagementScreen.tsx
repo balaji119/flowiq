@@ -46,6 +46,7 @@ export function TenantManagementScreen({
   onOpenMappings,
   onOpenPrintingCosts,
   onOpenSettings,
+  onOpenSheetSizeSettings,
   onOpenShippingSettings,
   onOpenShippingCosts,
   onOpenUsers,
@@ -225,6 +226,7 @@ export function TenantManagementScreen({
       onOpenMappings={onOpenMappings}
       onOpenPrintingCosts={onOpenPrintingCosts}
       onOpenSettings={onOpenSettings}
+      onOpenSheetSizeSettings={onOpenSheetSizeSettings}
       onOpenShippingCosts={onOpenShippingCosts}
       onOpenShippingSettings={onOpenShippingSettings}
       onOpenTenants={() => {}}

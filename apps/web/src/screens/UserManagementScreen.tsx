@@ -90,6 +90,7 @@ export function UserManagementScreen({
   onOpenMappings,
   onOpenPrintingCosts,
   onOpenSettings,
+  onOpenSheetSizeSettings,
   onOpenShippingSettings,
   onOpenShippingCosts,
   onOpenTenants,
@@ -383,6 +384,7 @@ export function UserManagementScreen({
       onOpenMappings={onOpenMappings}
       onOpenPrintingCosts={onOpenPrintingCosts}
       onOpenSettings={onOpenSettings}
+      onOpenSheetSizeSettings={onOpenSheetSizeSettings}
       onOpenShippingCosts={onOpenShippingCosts}
       onOpenShippingSettings={onOpenShippingSettings}
       onOpenTenants={onOpenTenants}

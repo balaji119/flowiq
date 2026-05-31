@@ -217,6 +217,24 @@ export type MarketAssetPrintingCostRecord = MarketAssetPrintingCostInput & {
   updatedAt: string;
 };
 
+export type MarketSheetSizeInput = {
+  market: string;
+  assetId?: string | null;
+  presetKey?: string;
+  name: string;
+  widthMm: number;
+  heightMm: number;
+};
+
+export type MarketSheetSizeRecord = MarketSheetSizeInput & {
+  id: string;
+  tenantId: string;
+  asset?: string;
+  label?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CampaignLineResult = {
   id: string;
   market: string;

@@ -3,7 +3,7 @@ import { ArrowLeft, Building2, ChevronRight, CircleDollarSign, Database, Home, L
 import { cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 
-export type AdminWorkspaceSection = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings';
+export type AdminWorkspaceSection = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings' | 'sheet-size-settings';
 
 export type AdminWorkspaceHandlers = {
   onBack?: () => void;
@@ -16,6 +16,7 @@ export type AdminWorkspaceHandlers = {
   onOpenShippingCosts?: () => void;
   onOpenPrintingCosts?: () => void;
   onOpenSettings?: () => void;
+  onOpenSheetSizeSettings?: () => void;
 };
 
 type AdminWorkspaceShellProps = AdminWorkspaceHandlers & {
@@ -34,6 +35,11 @@ type NavItem = {
   label: string;
   icon: ReactNode;
   onClick: () => void;
+  menuItems?: Array<{
+    label: string;
+    active: boolean;
+    onClick: () => void;
+  }>;
 };
 
 const SIDEBAR_EXPANDED_STORAGE_KEY = 'adsconnect-sidebar-expanded';
@@ -56,13 +62,16 @@ export function AdminWorkspaceShell({
   onOpenShippingCosts,
   onOpenPrintingCosts,
   onOpenSettings,
+  onOpenSheetSizeSettings,
   children,
 }: AdminWorkspaceShellProps) {
   const { session, logout } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [collapsedSidebarHover, setCollapsedSidebarHover] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const settingsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     try {
@@ -87,6 +96,9 @@ export function AdminWorkspaceShell({
     function handlePointerDown(event: MouseEvent) {
       if (!profileMenuRef.current?.contains(event.target as Node)) {
         setProfileMenuOpen(false);
+      }
+      if (!settingsMenuRef.current?.contains(event.target as Node)) {
+        setSettingsMenuOpen(false);
       }
     }
     document.addEventListener('mousedown', handlePointerDown);
@@ -137,7 +149,24 @@ export function AdminWorkspaceShell({
     items.push({ id: 'shipping', label: 'Shipping Address', icon: <MapPin className="h-[22px] w-[22px]" />, onClick: onOpenShippingSettings });
   }
   if (canAccessManagement && onOpenSettings) {
-    items.push({ id: 'settings', label: 'Settings', icon: <Settings className="h-[22px] w-[22px]" />, onClick: onOpenSettings });
+    items.push({
+      id: 'settings',
+      label: 'Settings',
+      icon: <Settings className="h-[22px] w-[22px]" />,
+      onClick: () => {
+        if (onOpenSheetSizeSettings) {
+          setSettingsMenuOpen((current) => !current);
+          return;
+        }
+        onOpenSettings();
+      },
+      menuItems: onOpenSheetSizeSettings
+        ? [
+            { label: 'Sheet Name', active: activeSection === 'settings', onClick: onOpenSettings },
+            { label: 'Sheet Size', active: activeSection === 'sheet-size-settings', onClick: onOpenSheetSizeSettings },
+          ]
+        : undefined,
+    });
   }
   if (canAccessShippingCosts && onOpenShippingCosts) {
     items.push({ id: 'shipping-costs', label: 'Shipping Cost', icon: <Truck className="h-[22px] w-[22px]" />, onClick: onOpenShippingCosts });
@@ -211,24 +240,45 @@ export function AdminWorkspaceShell({
           {items
             .filter((item) => (item.id === 'shipping-costs' ? canAccessShippingCosts : true))
             .map((item) => {
-              const active = item.id === activeSection;
+              const active = item.id === activeSection || Boolean(item.menuItems?.some((menuItem) => menuItem.active));
               return (
-                <button
-                  key={item.id}
-                  className={cn(
-                    'flex items-center rounded-md text-[8px] font-semibold uppercase leading-none tracking-[0.02em] transition-[background-color,border-color,color,transform,box-shadow] duration-200 [&_svg]:transition-opacity [&_svg]:duration-200',
-                    expanded ? 'h-11 w-full justify-start gap-2.5 px-2.5' : 'mx-auto h-11 w-11 justify-center',
-                    active
-                      ? 'border border-violet-300/35 bg-gradient-to-r from-violet-500/20 to-transparent text-white shadow-[0_0_0_1px_rgba(119, 87, 217,0.22),0_6px_14px_rgba(15,23,42,0.28)] [&_svg]:opacity-100'
-                      : 'border border-transparent text-slate-400 [&_svg]:opacity-80 hover:-translate-y-[1px] hover:border-white/10 hover:bg-slate-800/65 hover:text-white hover:shadow-[0_6px_14px_rgba(15,23,42,0.24)] hover:[&_svg]:opacity-100',
-                  )}
-                  onClick={item.onClick}
-                  title={!expanded ? item.label : undefined}
-                  type="button"
-                >
-                  {item.icon}
-                  {expanded ? <span className="truncate text-[12px]">{item.label}</span> : null}
-                </button>
+                <div key={item.id} className="relative" ref={item.id === 'settings' ? settingsMenuRef : undefined}>
+                  <button
+                    className={cn(
+                      'flex items-center rounded-md text-[8px] font-semibold uppercase leading-none tracking-[0.02em] transition-[background-color,border-color,color,transform,box-shadow] duration-200 [&_svg]:transition-opacity [&_svg]:duration-200',
+                      expanded ? 'h-11 w-full justify-start gap-2.5 px-2.5' : 'mx-auto h-11 w-11 justify-center',
+                      active
+                        ? 'border border-violet-300/35 bg-gradient-to-r from-violet-500/20 to-transparent text-white shadow-[0_0_0_1px_rgba(119, 87, 217,0.22),0_6px_14px_rgba(15,23,42,0.28)] [&_svg]:opacity-100'
+                        : 'border border-transparent text-slate-400 [&_svg]:opacity-80 hover:-translate-y-[1px] hover:border-white/10 hover:bg-slate-800/65 hover:text-white hover:shadow-[0_6px_14px_rgba(15,23,42,0.24)] hover:[&_svg]:opacity-100',
+                    )}
+                    onClick={item.onClick}
+                    title={!expanded ? item.label : undefined}
+                    type="button"
+                  >
+                    {item.icon}
+                    {expanded ? <span className="truncate text-[12px]">{item.label}</span> : null}
+                  </button>
+                  {item.menuItems && settingsMenuOpen ? (
+                    <div className="absolute left-full top-0 z-40 ml-2 w-56 rounded-md border border-slate-300 bg-slate-100 p-1 shadow-[0_16px_40px_rgba(0,0,0,0.45)]">
+                      {item.menuItems.map((menuItem) => (
+                        <button
+                          key={menuItem.label}
+                          className={cn(
+                            'flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold transition',
+                            menuItem.active ? 'bg-violet-600 text-white' : 'text-slate-900 hover:bg-violet-100 hover:text-violet-950',
+                          )}
+                          onClick={() => {
+                            setSettingsMenuOpen(false);
+                            menuItem.onClick();
+                          }}
+                          type="button"
+                        >
+                          {menuItem.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               );
             })}
         </nav>

@@ -90,6 +90,21 @@ type marketAssetShippingCostRow struct {
 	UpdatedAt        time.Time
 }
 
+type marketSheetSizeRow struct {
+	ID        string
+	TenantID  string
+	Market    string
+	AssetID   *string
+	Asset     string
+	Label     string
+	PresetKey string
+	Name      string
+	WidthMm   float64
+	HeightMm  float64
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type sheetNameOverrideRow struct {
 	TenantID               string
 	Overrides              []byte
@@ -353,6 +368,27 @@ func scanMarketAssetShippingCostRow(scanner interface {
 	return row, err
 }
 
+func scanMarketSheetSizeRow(scanner interface {
+	Scan(dest ...any) error
+}) (marketSheetSizeRow, error) {
+	var row marketSheetSizeRow
+	err := scanner.Scan(
+		&row.ID,
+		&row.TenantID,
+		&row.Market,
+		&row.AssetID,
+		&row.Asset,
+		&row.Label,
+		&row.PresetKey,
+		&row.Name,
+		&row.WidthMm,
+		&row.HeightMm,
+		&row.CreatedAt,
+		&row.UpdatedAt,
+	)
+	return row, err
+}
+
 func decodeMarketShippingRateRow(row marketShippingRateRow) marketShippingRateRecord {
 	return marketShippingRateRecord{
 		TenantID:               row.TenantID,
@@ -417,6 +453,23 @@ func decodeMarketAssetShippingCostRow(row marketAssetShippingCostRow) marketAsse
 		MpShippingRate:   row.MpShippingRate,
 		CreatedAt:        row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func decodeMarketSheetSizeRow(row marketSheetSizeRow) marketSheetSizeRecord {
+	return marketSheetSizeRecord{
+		ID:        row.ID,
+		TenantID:  row.TenantID,
+		Market:    row.Market,
+		AssetID:   row.AssetID,
+		Asset:     row.Asset,
+		Label:     row.Label,
+		PresetKey: row.PresetKey,
+		Name:      row.Name,
+		WidthMm:   row.WidthMm,
+		HeightMm:  row.HeightMm,
+		CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -1459,6 +1512,188 @@ func (s *mappingStore) upsertMarketAssetPrintingCosts(ctx context.Context, tenan
 			return nil, err
 		}
 		records = append(records, record)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return records, nil
+}
+
+func (s *mappingStore) listMarketSheetSizes(ctx context.Context, tenantID string) ([]marketSheetSizeRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			mss.id::text,
+			mss.tenant_id::text,
+			m.name,
+			mss.asset_id::text,
+			COALESCE(ma.asset, ''),
+			COALESCE(ma.label, ''),
+			mss.preset_key,
+			mss.name,
+			mss.width_mm::float8,
+			mss.height_mm::float8,
+			mss.created_at,
+			mss.updated_at
+		FROM market_sheet_sizes mss
+		JOIN markets m ON m.id = mss.market_id
+		LEFT JOIN market_assets ma ON ma.id = mss.asset_id
+		WHERE mss.tenant_id = $1
+		ORDER BY m.name ASC, mss.preset_key ASC, ma.label ASC, ma.asset ASC
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]marketSheetSizeRecord, 0)
+	for rows.Next() {
+		row, err := scanMarketSheetSizeRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, decodeMarketSheetSizeRow(row))
+	}
+	return records, rows.Err()
+}
+
+func validateSheetSizeDimension(value float64, field string) error {
+	if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+		return fmt.Errorf("%s must be greater than or equal to 0", field)
+	}
+	return nil
+}
+
+func (s *mappingStore) upsertMarketSheetSizes(ctx context.Context, tenantID string, payload []marketSheetSizeInput) ([]marketSheetSizeRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+	if len(payload) == 0 {
+		return []marketSheetSizeRecord{}, nil
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	records := make([]marketSheetSizeRecord, 0, len(payload))
+	for _, item := range payload {
+		market, err := sanitizeMappingText(item.Market, "market")
+		if err != nil {
+			return nil, err
+		}
+		name, err := sanitizeMappingText(item.Name, "name")
+		if err != nil {
+			return nil, err
+		}
+		if err := validateSheetSizeDimension(item.WidthMm, "widthMm"); err != nil {
+			return nil, err
+		}
+		if err := validateSheetSizeDimension(item.HeightMm, "heightMm"); err != nil {
+			return nil, err
+		}
+
+		var marketID string
+		if err := tx.QueryRow(ctx, `
+			SELECT id
+			FROM markets
+			WHERE tenant_id = $1 AND name = $2
+			LIMIT 1
+		`, tenantID, market).Scan(&marketID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, errors.New("Market not found in the selected tenant")
+			}
+			return nil, err
+		}
+
+		assetID := ""
+		if item.AssetID != nil {
+			assetID = strings.TrimSpace(*item.AssetID)
+		}
+		presetKey := strings.TrimSpace(item.PresetKey)
+		var row marketSheetSizeRow
+
+		if assetID != "" {
+			var asset string
+			var label string
+			if err := tx.QueryRow(ctx, `
+				SELECT asset, label
+				FROM market_assets
+				WHERE id = $1
+				  AND market_id = $2
+				LIMIT 1
+			`, assetID, marketID).Scan(&asset, &label); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil, errors.New("Asset not found in the selected tenant market")
+				}
+				return nil, err
+			}
+
+			row, err = scanMarketSheetSizeRow(tx.QueryRow(ctx, `
+				INSERT INTO market_sheet_sizes (
+					id,
+					tenant_id,
+					market_id,
+					asset_id,
+					preset_key,
+					name,
+					width_mm,
+					height_mm,
+					created_at,
+					updated_at
+				)
+				VALUES ($1, $2, $3, $4, '', $5, $6, $7, NOW(), NOW())
+				ON CONFLICT (tenant_id, asset_id) WHERE asset_id IS NOT NULL
+				DO UPDATE SET
+					market_id = EXCLUDED.market_id,
+					name = EXCLUDED.name,
+					width_mm = EXCLUDED.width_mm,
+					height_mm = EXCLUDED.height_mm,
+					updated_at = NOW()
+				RETURNING id::text, tenant_id::text, $8::text, asset_id::text, $9::text, $10::text, preset_key, name, width_mm::float8, height_mm::float8, created_at, updated_at
+			`, uuid.NewString(), tenantID, marketID, assetID, name, item.WidthMm, item.HeightMm, market, asset, label))
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			if presetKey == "" {
+				return nil, errors.New("presetKey is required when assetId is not provided")
+			}
+			row, err = scanMarketSheetSizeRow(tx.QueryRow(ctx, `
+				INSERT INTO market_sheet_sizes (
+					id,
+					tenant_id,
+					market_id,
+					asset_id,
+					preset_key,
+					name,
+					width_mm,
+					height_mm,
+					created_at,
+					updated_at
+				)
+				VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, NOW(), NOW())
+				ON CONFLICT (tenant_id, market_id, preset_key) WHERE asset_id IS NULL
+				DO UPDATE SET
+					name = EXCLUDED.name,
+					width_mm = EXCLUDED.width_mm,
+					height_mm = EXCLUDED.height_mm,
+					updated_at = NOW()
+				RETURNING id::text, tenant_id::text, $8::text, asset_id::text, ''::text, ''::text, preset_key, name, width_mm::float8, height_mm::float8, created_at, updated_at
+			`, uuid.NewString(), tenantID, marketID, presetKey, name, item.WidthMm, item.HeightMm, market))
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		records = append(records, decodeMarketSheetSizeRow(row))
 	}
 
 	if err := tx.Commit(ctx); err != nil {

@@ -280,6 +280,30 @@ type marketAssetPrintingCostRecord struct {
 	UpdatedAt string                `json:"updatedAt"`
 }
 
+type marketSheetSizeInput struct {
+	Market    string  `json:"market"`
+	AssetID   *string `json:"assetId,omitempty"`
+	PresetKey string  `json:"presetKey,omitempty"`
+	Name      string  `json:"name"`
+	WidthMm   float64 `json:"widthMm"`
+	HeightMm  float64 `json:"heightMm"`
+}
+
+type marketSheetSizeRecord struct {
+	ID        string  `json:"id"`
+	TenantID  string  `json:"tenantId"`
+	Market    string  `json:"market"`
+	AssetID   *string `json:"assetId,omitempty"`
+	Asset     string  `json:"asset,omitempty"`
+	Label     string  `json:"label,omitempty"`
+	PresetKey string  `json:"presetKey,omitempty"`
+	Name      string  `json:"name"`
+	WidthMm   float64 `json:"widthMm"`
+	HeightMm  float64 `json:"heightMm"`
+	CreatedAt string  `json:"createdAt"`
+	UpdatedAt string  `json:"updatedAt"`
+}
+
 type marketAssetShippingCostInput struct {
 	Market           string  `json:"market"`
 	AssetID          string  `json:"assetId"`

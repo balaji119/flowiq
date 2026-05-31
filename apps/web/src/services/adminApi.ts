@@ -7,6 +7,8 @@ import {
   MarketDeliveryAddressRecord,
   MarketAssetPrintingCostInput,
   MarketAssetPrintingCostRecord,
+  MarketSheetSizeInput,
+  MarketSheetSizeRecord,
   MarketAssetShippingCostInput,
   MarketAssetShippingCostRecord,
   MarketMetadata,
@@ -177,6 +179,19 @@ export async function fetchMarketAssetPrintingCosts(tenantId?: string) {
 export async function upsertMarketAssetPrintingCosts(payload: { costs: MarketAssetPrintingCostInput[] }, tenantId?: string) {
   const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
   return apiFetchJson<{ costs: MarketAssetPrintingCostRecord[] }>(`/api/admin/market-asset-printing-costs${query}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchMarketSheetSizes(tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ sizes: MarketSheetSizeRecord[] }>(`/api/admin/market-sheet-sizes${query}`);
+}
+
+export async function upsertMarketSheetSizes(payload: { sizes: MarketSheetSizeInput[] }, tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ sizes: MarketSheetSizeRecord[] }>(`/api/admin/market-sheet-sizes${query}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
