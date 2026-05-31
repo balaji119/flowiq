@@ -896,6 +896,7 @@ function SearchableSelect({
     if (!nextQuery) return items;
     return items.filter((item) => item.label.toLowerCase().includes(nextQuery));
   }, [items, query]);
+  const useWideDialogGrid = pickerMode === 'dialog' && filteredItems.length > 20;
 
   useEffect(() => {
     if (!open) setQuery('');
@@ -933,19 +934,19 @@ function SearchableSelect({
       {pickerMode === 'dialog' ? (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent
-            className="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0"
-            style={{ width: 'min(calc(100vw - 2rem), 54rem)' }}
+            className={cn('flex flex-col gap-0 p-0', useWideDialogGrid ? 'max-h-[96vh] overflow-visible' : 'max-h-[88vh] overflow-hidden')}
+            style={{ width: useWideDialogGrid ? 'min(calc(100vw - 2rem), 76rem)' : 'min(calc(100vw - 2rem), 54rem)' }}
           >
             <DialogHeader className="shrink-0 border-b border-slate-700 px-5 py-4">
               <DialogTitle>{dialogTitle}</DialogTitle>
             </DialogHeader>
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+            <div className={cn('min-h-0 flex-1 space-y-3 px-5 py-4', useWideDialogGrid ? 'overflow-visible' : 'overflow-y-auto')}>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <Input autoFocus className="h-9 pl-9 text-sm" placeholder={`Search ${label || 'items'}`} value={query} onChange={(event) => setQuery(event.target.value)} />
               </div>
               {filteredItems.length > 0 ? (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className={cn('grid grid-cols-1 gap-2 sm:grid-cols-2', useWideDialogGrid ? 'lg:grid-cols-3' : '')}>
                   {filteredItems.map((item) => {
                     const active = item.value === selectedValue;
                     return (
@@ -5891,7 +5892,7 @@ export function QuoteBuilderScreen({
                                     items={availableAssetOptions}
                                     label=""
                                     menuClassName="p-3"
-                                    menuItemClassName="text-[11px]"
+                                    menuItemClassName="text-[10px]"
                                     onValueChange={(value) =>
                                       updateDraftAsset(asset.id, (current) => ({
                                         ...current,
