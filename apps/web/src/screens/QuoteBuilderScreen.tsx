@@ -1654,6 +1654,15 @@ export function QuoteBuilderScreen({
     () => (summary ? buildReviewRows(summary.grandTotal) : null),
     [summary],
   );
+  const reviewButtonTotals = useMemo(() => {
+    if (!grandReviewRows) return null;
+    const posterRow = grandReviewRows.find((row) => row.label === 'Posters');
+    const frameRow = grandReviewRows.find((row) => row.label === 'Frames');
+    return {
+      posters: posterRow?.total ?? 0,
+      frames: frameRow?.total ?? 0,
+    };
+  }, [grandReviewRows]);
   const detailedDrawerWidth = useMemo(() => {
     const extraColumns = Math.max(0, detailedReviewFormatKeys.length - 3);
     const calculated = 472 + (extraColumns * 74);
@@ -5543,8 +5552,8 @@ export function QuoteBuilderScreen({
           onClick={() => setReviewDrawerOpen(true)}
           type="button"
         >
-          {summary
-            ? `${summary.grandTotal.posterTotal} Posters • ${summary.grandTotal.frameTotal} Frames • ${formatCurrency(totalEstimateCost)}`
+          {reviewButtonTotals
+            ? `${reviewButtonTotals.posters} Posters • ${reviewButtonTotals.frames} Frames • ${formatCurrency(totalEstimateCost)}`
             : 'Open Review'}
         </button>
       ) : null}
@@ -6614,3 +6623,4 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
+
