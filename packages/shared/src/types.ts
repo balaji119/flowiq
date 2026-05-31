@@ -33,6 +33,7 @@ export type AuthUser = {
   tenantId: string | null;
   tenantName: string | null;
   active: boolean;
+  twoFactorEnabled: boolean;
 };
 
 export type AuthSession = {
@@ -382,7 +383,12 @@ export type PrintIqQuotePayload = {
   CustomerReference: string;
 };
 
-export type LoginResponse = AuthSession;
+export type TwoFactorLoginChallenge = {
+  requiresTwoFactor: true;
+  challengeToken: string;
+};
+
+export type LoginResponse = AuthSession | TwoFactorLoginChallenge;
 
 export type ActiveUsersResponse = {
   activeUsers: number;

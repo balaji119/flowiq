@@ -229,12 +229,17 @@ func (a *app) routes() http.Handler {
 
 	mux.HandleFunc("GET /api/health", a.handleHealth)
 	mux.HandleFunc("POST /api/auth/login", a.handleLogin)
+	mux.HandleFunc("POST /api/auth/2fa/verify-login", a.handleVerifyTwoFactorLogin)
 	mux.HandleFunc("POST /api/auth/change-password", a.handleChangePassword)
 	mux.HandleFunc("POST /api/auth/password-reset/request", a.handleRequestPasswordReset)
 	mux.HandleFunc("POST /api/auth/password-reset/confirm", a.handleConfirmPasswordReset)
 	mux.Handle("GET /api/auth/me", a.withAuth(http.HandlerFunc(a.handleCurrentSession)))
 	mux.Handle("POST /api/auth/logout", a.withAuth(http.HandlerFunc(a.handleLogout)))
 	mux.Handle("GET /api/auth/active-users", a.withAuth(http.HandlerFunc(a.handleActiveUsersCount)))
+	mux.Handle("GET /api/auth/2fa/status", a.withAuth(http.HandlerFunc(a.handleTwoFactorStatus)))
+	mux.Handle("POST /api/auth/2fa/setup", a.withAuth(http.HandlerFunc(a.handleSetupTwoFactor)))
+	mux.Handle("POST /api/auth/2fa/verify-setup", a.withAuth(http.HandlerFunc(a.handleVerifyTwoFactorSetup)))
+	mux.Handle("POST /api/auth/2fa/disable", a.withAuth(http.HandlerFunc(a.handleDisableTwoFactor)))
 	mux.Handle("GET /api/campaigns", a.withAuth(http.HandlerFunc(a.handleListCampaigns)))
 	mux.Handle("POST /api/campaigns", a.withAuth(http.HandlerFunc(a.handleCreateCampaign)))
 	mux.Handle("GET /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleGetCampaign)))
@@ -446,6 +451,18 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if user == nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid email or password"})
+		return
+	}
+	if user.TwoFactorEnabled {
+		challengeToken, err := a.authStore.createTwoFactorLoginChallenge(r.Context(), user.ID, twoFactorChallengeTTL)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"requiresTwoFactor": true,
+			"challengeToken":    challengeToken,
+		})
 		return
 	}
 

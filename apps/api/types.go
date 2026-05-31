@@ -32,13 +32,14 @@ type sheetNameOverrideRecord struct {
 }
 
 type AuthUser struct {
-	ID         string  `json:"id"`
-	Email      string  `json:"email"`
-	Name       string  `json:"name"`
-	Role       string  `json:"role"`
-	TenantID   *string `json:"tenantId"`
-	TenantName *string `json:"tenantName"`
-	Active     bool    `json:"active"`
+	ID               string  `json:"id"`
+	Email            string  `json:"email"`
+	Name             string  `json:"name"`
+	Role             string  `json:"role"`
+	TenantID         *string `json:"tenantId"`
+	TenantName       *string `json:"tenantName"`
+	Active           bool    `json:"active"`
+	TwoFactorEnabled bool    `json:"twoFactorEnabled"`
 }
 
 type contactDetails struct {

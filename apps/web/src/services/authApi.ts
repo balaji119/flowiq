@@ -1,4 +1,4 @@
-import { ActiveUsersResponse, LoginResponse } from '@flowiq/shared';
+import { ActiveUsersResponse, AuthSession, LoginResponse } from '@flowiq/shared';
 import { apiFetchJson, setApiAuthToken } from './apiClient';
 import { buildApiUrl } from './apiBase';
 
@@ -25,7 +25,25 @@ export async function login(email: string, password: string): Promise<LoginRespo
 }
 
 export async function fetchCurrentSession() {
-  return apiFetchJson<LoginResponse['user']>('/api/auth/me');
+  return apiFetchJson<AuthSession['user']>('/api/auth/me');
+}
+
+export async function verifyTwoFactorLogin(challengeToken: string, code: string): Promise<AuthSession> {
+  const response = await fetch(buildApiUrl('/api/auth/2fa/verify-login'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ challengeToken, code }),
+  });
+
+  const body = await response.json();
+
+  if (!response.ok) {
+    throw new Error(body?.error || 'Unable to verify authentication code');
+  }
+
+  return body;
 }
 
 export async function logout() {
@@ -36,6 +54,40 @@ export async function logout() {
 
 export async function fetchActiveUsersCount() {
   return apiFetchJson<ActiveUsersResponse>('/api/auth/active-users');
+}
+
+export type TwoFactorStatusResponse = {
+  enabled: boolean;
+};
+
+export type TwoFactorSetupResponse = {
+  secret: string;
+  otpAuthUrl: string;
+  qrCodeDataUrl: string;
+};
+
+export async function fetchTwoFactorStatus() {
+  return apiFetchJson<TwoFactorStatusResponse>('/api/auth/2fa/status');
+}
+
+export async function setupTwoFactor() {
+  return apiFetchJson<TwoFactorSetupResponse>('/api/auth/2fa/setup', {
+    method: 'POST',
+  });
+}
+
+export async function verifyTwoFactorSetup(code: string) {
+  return apiFetchJson<TwoFactorStatusResponse>('/api/auth/2fa/verify-setup', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
+export async function disableTwoFactor(code: string) {
+  return apiFetchJson<TwoFactorStatusResponse>('/api/auth/2fa/disable', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
 }
 
 export function applyAuthToken(token: string | null) {

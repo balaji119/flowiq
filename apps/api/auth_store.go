@@ -73,24 +73,26 @@ func verifyPassword(password, salt, expectedHash string) bool {
 
 func sanitizeUser(row dbUserRow) AuthUser {
 	return AuthUser{
-		ID:         row.ID,
-		Email:      row.Email,
-		Name:       row.Name,
-		Role:       row.Role,
-		TenantID:   row.TenantID,
-		TenantName: row.TenantName,
-		Active:     row.Active,
+		ID:               row.ID,
+		Email:            row.Email,
+		Name:             row.Name,
+		Role:             row.Role,
+		TenantID:         row.TenantID,
+		TenantName:       row.TenantName,
+		Active:           row.Active,
+		TwoFactorEnabled: row.TwoFactorEnabled,
 	}
 }
 
 type dbUserRow struct {
-	ID         string
-	TenantID   *string
-	TenantName *string
-	Email      string
-	Name       string
-	Role       string
-	Active     bool
+	ID               string
+	TenantID         *string
+	TenantName       *string
+	Email            string
+	Name             string
+	Role             string
+	Active           bool
+	TwoFactorEnabled bool
 }
 
 func scanUserRow(scanner interface {
@@ -109,6 +111,7 @@ func scanUserRow(scanner interface {
 		&passwordSalt,
 		&passwordHash,
 		&row.Active,
+		&row.TwoFactorEnabled,
 	)
 	return row, passwordSalt, passwordHash, err
 }
@@ -116,7 +119,7 @@ func scanUserRow(scanner interface {
 func (s *authStore) authenticate(email, password string) (*AuthUser, error) {
 	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
 	row, passwordSalt, passwordHash, err := scanUserRow(s.pool.QueryRow(context.Background(), `
-		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
+		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active, u.two_factor_enabled
 		FROM users u
 		LEFT JOIN tenants t ON t.id = u.tenant_id
 		WHERE u.email = $1
@@ -238,7 +241,7 @@ func (s *authStore) countRecentlyActiveUsers(ctx context.Context, tenantID *stri
 func (s *authStore) userByEmail(ctx context.Context, email string) (*AuthUser, error) {
 	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
 	row, _, _, err := scanUserRow(s.pool.QueryRow(ctx, `
-		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
+		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active, u.two_factor_enabled
 		FROM users u
 		LEFT JOIN tenants t ON t.id = u.tenant_id
 		WHERE u.email = $1
@@ -257,7 +260,7 @@ func (s *authStore) userByEmail(ctx context.Context, email string) (*AuthUser, e
 
 func (s *authStore) userByID(ctx context.Context, userID string) (*AuthUser, error) {
 	row, _, _, err := scanUserRow(s.pool.QueryRow(ctx, `
-		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
+		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active, u.two_factor_enabled
 		FROM users u
 		LEFT JOIN tenants t ON t.id = u.tenant_id
 		WHERE u.id = $1
@@ -423,7 +426,7 @@ func (s *authStore) deleteTenant(tenantID string) error {
 
 func (s *authStore) listUsers(tenantID *string, includeSuperAdmins bool) ([]AuthUser, error) {
 	baseQuery := `
-		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
+		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active, u.two_factor_enabled
 		FROM users u
 		LEFT JOIN tenants t ON t.id = u.tenant_id
 	`
@@ -498,7 +501,7 @@ func (s *authStore) createUser(name, email, password, role string, tenantID *str
 func (s *authStore) updateUser(userID string, updates map[string]any) (*AuthUser, error) {
 	ctx := context.Background()
 	row, salt, hash, err := scanUserRow(s.pool.QueryRow(ctx, `
-		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active
+		SELECT u.id, u.tenant_id, t.name, u.email, u.name, u.role, u.password_salt, u.password_hash, u.active, u.two_factor_enabled
 		FROM users u
 		LEFT JOIN tenants t ON t.id = u.tenant_id
 		WHERE u.id = $1

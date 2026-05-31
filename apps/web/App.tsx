@@ -214,7 +214,7 @@ function AppShell() {
         onOpenLanding={() => navigateTo('landing')}
         onOpenMappings={canAccessManagement ? () => navigateTo('mappings') : undefined}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
-        onOpenSettings={canAccessManagement ? () => navigateTo('settings') : undefined}
+        onOpenSettings={() => navigateTo('settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={canAccessManagement ? () => navigateTo('shipping') : undefined}
         onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}

@@ -3,6 +3,7 @@ import { LoaderCircle, Plus, Save, Shield, Trash2 } from 'lucide-react';
 import { SheetNameOverrides, TenantRecord } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
+import { TwoFactorSettingsCard } from '../components/TwoFactorSettingsCard';
 import { useAuth } from '../context/AuthContext';
 import { fetchAdminSheetNameOverrides, fetchTenants, upsertAdminSheetNameOverrides } from '../services/adminApi';
 import { defaultSheetNamePresetOverrides, sanitizeSheetNameOverrides, sheetNamePresetEntries, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
@@ -215,21 +216,6 @@ export function SettingsScreen({
     }
   }
 
-  if (session?.user.role === 'user') {
-    return (
-      <main className="dense-main mx-auto flex min-h-0 w-full max-w-3xl items-center px-6 py-8">
-        <Card className="w-full">
-          <CardContent className="space-y-4 p-8 text-center">
-            <Shield className="mx-auto h-8 w-8 text-violet-300" />
-            <CardTitle>Access restricted</CardTitle>
-            <CardDescription>Only admin and super admin users can manage sheet name settings.</CardDescription>
-            <Button onClick={onBack} variant="secondary">Back</Button>
-          </CardContent>
-        </Card>
-      </main>
-    );
-  }
-
   useEffect(() => {
     function handleBeforeUnload(event: BeforeUnloadEvent) {
       if (!hasUnsavedChanges) return;
@@ -240,6 +226,32 @@ export function SettingsScreen({
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
+
+  if (session?.user.role === 'user') {
+    return (
+      <AdminWorkspaceShell
+        activeSection="settings"
+        canAccessManagement={false}
+        canAccessShippingCosts={false}
+        canAccessPrintingCosts={false}
+        pageTitle="Security Settings"
+        onBack={onBack}
+        onOpenLanding={onBack}
+        onOpenSettings={() => {}}
+      >
+        <main className="dense-main mx-auto flex min-h-0 w-full max-w-3xl flex-col gap-6 px-6 py-8">
+          <TwoFactorSettingsCard />
+          <Card className="w-full">
+            <CardContent className="space-y-4 p-8 text-center">
+              <Shield className="mx-auto h-8 w-8 text-violet-300" />
+              <CardTitle>Admin settings restricted</CardTitle>
+              <CardDescription>Only admin and super admin users can manage sheet name settings.</CardDescription>
+            </CardContent>
+          </Card>
+        </main>
+      </AdminWorkspaceShell>
+    );
+  }
 
   function confirmDiscardChanges(action: () => void) {
     if (!hasUnsavedChanges) {
@@ -281,6 +293,10 @@ export function SettingsScreen({
       <main className="dense-main flex min-h-0 w-full flex-col gap-6">
         {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
         {notice ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
+
+        <section className="max-w-5xl">
+          <TwoFactorSettingsCard />
+        </section>
 
         {canSwitchTenant ? (
           <Card>

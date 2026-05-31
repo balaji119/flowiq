@@ -1,11 +1,13 @@
 import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useState } from 'react';
-import { AuthSession } from '@flowiq/shared';
-import { applyAuthToken, fetchCurrentSession, login as loginRequest, logout as logoutRequest } from '../services/authApi';
+import { AuthSession, TwoFactorLoginChallenge } from '@flowiq/shared';
+import { applyAuthToken, fetchCurrentSession, login as loginRequest, logout as logoutRequest, verifyTwoFactorLogin as verifyTwoFactorLoginRequest } from '../services/authApi';
 
 type AuthContextValue = {
   session: AuthSession | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<TwoFactorLoginChallenge | null>;
+  verifyTwoFactorLogin: (challengeToken: string, code: string) => Promise<void>;
+  refreshSession: () => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -82,7 +84,24 @@ export function AuthProvider({ children }: PropsWithChildren) {
       loading,
       login: async (email: string, password: string) => {
         const nextSession = await loginRequest(email, password);
+        if ('requiresTwoFactor' in nextSession) {
+          return nextSession;
+        }
         applyAuthToken(nextSession.token);
+        setSession(nextSession);
+        await setStoredValue(JSON.stringify(nextSession));
+        return null;
+      },
+      verifyTwoFactorLogin: async (challengeToken: string, code: string) => {
+        const nextSession = await verifyTwoFactorLoginRequest(challengeToken, code);
+        applyAuthToken(nextSession.token);
+        setSession(nextSession);
+        await setStoredValue(JSON.stringify(nextSession));
+      },
+      refreshSession: async () => {
+        if (!session) return;
+        const user = await fetchCurrentSession();
+        const nextSession = { ...session, user };
         setSession(nextSession);
         await setStoredValue(JSON.stringify(nextSession));
       },

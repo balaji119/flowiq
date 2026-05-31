@@ -136,7 +136,7 @@ export function AdminWorkspaceShell({
   if (canAccessManagement && onOpenShippingSettings) {
     items.push({ id: 'shipping', label: 'Shipping Address', icon: <MapPin className="h-[22px] w-[22px]" />, onClick: onOpenShippingSettings });
   }
-  if (canAccessManagement && onOpenSettings) {
+  if (onOpenSettings) {
     items.push({ id: 'settings', label: 'Settings', icon: <Settings className="h-[22px] w-[22px]" />, onClick: onOpenSettings });
   }
   if (canAccessShippingCosts && onOpenShippingCosts) {

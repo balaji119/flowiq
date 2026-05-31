@@ -4,9 +4,11 @@ import { Button, Card, CardContent, Input, Label } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 
 export function LoginScreen() {
-  const { login } = useAuth();
+  const { login, verifyTwoFactorLogin } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -16,12 +18,27 @@ export function LoginScreen() {
     setError('');
 
     try {
-      await login(email.trim(), password);
+      if (challengeToken) {
+        await verifyTwoFactorLogin(challengeToken, twoFactorCode);
+        return;
+      }
+
+      const challenge = await login(email.trim(), password);
+      if (challenge?.requiresTwoFactor) {
+        setChallengeToken(challenge.challengeToken);
+        setTwoFactorCode('');
+      }
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Unable to sign in');
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function resetPasswordStep() {
+    setChallengeToken(null);
+    setTwoFactorCode('');
+    setError('');
   }
 
   return (
@@ -31,43 +48,69 @@ export function LoginScreen() {
           <div className="space-y-3">
             <div className="space-y-2">
               <h1 className="text-3xl font-black tracking-tight text-white">ADS Connect</h1>
+              <p className="text-sm leading-6 text-slate-400">
+                {challengeToken ? 'Enter the 6-digit code from Google Authenticator.' : 'Sign in to your workspace.'}
+              </p>
             </div>
           </div>
 
           <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="text"
-                autoComplete="username"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@company.com"
-              />
-            </div>
+            {!challengeToken ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="text"
+                    autoComplete="username"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="you@company.com"
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Password"
-              />
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Password"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="two-factor-code">Authentication code</Label>
+                <Input
+                  id="two-factor-code"
+                  type="text"
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  value={twoFactorCode}
+                  onChange={(event) => setTwoFactorCode(event.target.value)}
+                  placeholder="123456"
+                />
+              </div>
+            )}
 
             <Button className="w-full" variant="default" size="lg" disabled={submitting} type="submit">
               {submitting ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : null}
-              {submitting ? 'Signing in…' : 'Sign In'}
+              {submitting ? 'Signing in...' : challengeToken ? 'Verify Code' : 'Sign In'}
             </Button>
           </form>
 
-          <a className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 transition hover:text-white" href="/forgot-password">
-            Forgot your password?
-          </a>
+          {challengeToken ? (
+            <button className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 transition hover:text-white" onClick={resetPasswordStep} type="button">
+              Use a different account
+            </button>
+          ) : (
+            <a className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 transition hover:text-white" href="/forgot-password">
+              Forgot your password?
+            </a>
+          )}
 
           {error ? <p className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</p> : null}
         </CardContent>
