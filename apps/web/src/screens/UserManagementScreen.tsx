@@ -105,6 +105,7 @@ export function UserManagementScreen({
   const [notice, setNotice] = useState("");
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [userDialogError, setUserDialogError] = useState("");
+  const [deleteUserDialogError, setDeleteUserDialogError] = useState("");
   const [savingUser, setSavingUser] = useState(false);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [userPendingDelete, setUserPendingDelete] = useState<AuthUser | null>(
@@ -312,18 +313,20 @@ export function UserManagementScreen({
 
   function openDeleteUserDialog(user: AuthUser) {
     setUserPendingDelete(user);
+    setDeleteUserDialogError("");
   }
 
   function closeDeleteUserDialog() {
     if (deletingUserId) return;
     setUserPendingDelete(null);
+    setDeleteUserDialogError("");
   }
 
   async function handleConfirmDeleteUser() {
     if (!userPendingDelete) return;
 
     setDeletingUserId(userPendingDelete.id);
-    setError("");
+    setDeleteUserDialogError("");
     setNotice("");
     try {
       await deleteUser(userPendingDelete.id);
@@ -333,7 +336,7 @@ export function UserManagementScreen({
       setNotice(`User ${userPendingDelete.name} deleted.`);
       setUserPendingDelete(null);
     } catch (deleteError) {
-      setError(
+      setDeleteUserDialogError(
         deleteError instanceof Error
           ? deleteError.message
           : "Unable to delete user",
@@ -749,6 +752,14 @@ export function UserManagementScreen({
             <div className="rounded-md border border-rose-400/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
               This action immediately revokes access for the selected user.
             </div>
+            {deleteUserDialogError ? (
+              <div
+                className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200"
+                role="alert"
+              >
+                {deleteUserDialogError}
+              </div>
+            ) : null}
             <div className="flex justify-end gap-3 pt-2">
               <Button
                 disabled={Boolean(deletingUserId)}

@@ -12,9 +12,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/scrypt"
 )
+
+const userDeletionBlockedMessage = "This user is linked to existing campaigns, quotes, or jobs and cannot be deleted. Deactivate the user instead to remove their access."
 
 type authStore struct {
 	pool *pgxpool.Pool
@@ -585,11 +588,28 @@ func (s *authStore) updateUser(userID string, updates map[string]any) (*AuthUser
 }
 
 func (s *authStore) deleteUser(userID string) error {
+	var linkedRecordCount int64
+	if err := s.pool.QueryRow(context.Background(), `
+		SELECT
+			(SELECT COUNT(*) FROM campaigns WHERE created_by_user_id = $1 OR updated_by_user_id = $1) +
+			(SELECT COUNT(*) FROM quotes WHERE created_by_user_id = $1) +
+			(SELECT COUNT(*) FROM jobs WHERE created_by_user_id = $1)
+	`, userID).Scan(&linkedRecordCount); err != nil {
+		return err
+	}
+	if linkedRecordCount > 0 {
+		return errors.New(userDeletionBlockedMessage)
+	}
+
 	commandTag, err := s.pool.Exec(context.Background(), `
 		DELETE FROM users
 		WHERE id = $1
 	`, userID)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return errors.New(userDeletionBlockedMessage)
+		}
 		return err
 	}
 	if commandTag.RowsAffected() == 0 {
