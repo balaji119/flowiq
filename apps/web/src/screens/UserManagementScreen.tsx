@@ -48,7 +48,7 @@ const creatableRolesForSuperAdmin: AuthRole[] = [
   "user",
 ];
 const tenantScopedRolesForSuperAdmin: AuthRole[] = ["admin", "user"];
-const creatableRolesForAdmin: AuthRole[] = ["user"];
+const creatableRolesForAdmin: AuthRole[] = ["admin", "user"];
 
 function emptyUserForm(): UserFormState {
   return {
@@ -133,6 +133,13 @@ export function UserManagementScreen({
   );
   const isSuperAdmin = session?.user.role === "super_admin";
   const effectiveTenantId = isSuperAdmin ? selectedTenantId : tenantId;
+  const visibleUsers = useMemo(
+    () =>
+      isSuperAdmin
+        ? users
+        : users.filter((user) => user.role === "admin" || user.role === "user"),
+    [isSuperAdmin, users],
+  );
   const tenantOptions = useMemo(
     () =>
       isSuperAdmin
@@ -462,8 +469,8 @@ export function UserManagementScreen({
                   </tr>
                 </thead>
                 <tbody>
-                  {users.length > 0 ? (
-                    users.map((user, rowIndex) => {
+                  {visibleUsers.length > 0 ? (
+                    visibleUsers.map((user, rowIndex) => {
                       const canManage = canActOnUser(user);
                       return (
                         <tr

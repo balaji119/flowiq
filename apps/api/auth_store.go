@@ -435,7 +435,7 @@ func (s *authStore) listUsers(tenantID *string, includeSuperAdmins bool) ([]Auth
 		if includeSuperAdmins {
 			baseQuery += ` WHERE u.tenant_id = $1 OR u.role = 'super_admin'`
 		} else {
-			baseQuery += ` WHERE u.tenant_id = $1`
+			baseQuery += ` WHERE u.tenant_id = $1 AND u.role <> 'super_admin'`
 		}
 		args = append(args, *tenantID)
 	}
