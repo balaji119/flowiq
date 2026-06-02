@@ -1,7 +1,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { FileJson, LoaderCircle, Pencil, Plus, Shield, Trash2, Upload } from 'lucide-react';
 import { CalculatorMappingInput, CalculatorMappingRecord, MarketMetadata, SheetNameOverrides, TenantRecord, createEmptyBreakdown, formatKeys } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -52,7 +52,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
-  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(session?.user.tenantId ?? null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(tenantId ?? session?.user.tenantId ?? null);
   const [mappings, setMappings] = useState<CalculatorMappingRecord[]>([]);
   const [sheetNameOverrides, setSheetNameOverrides] = useState<SheetNameOverrides>({});
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -61,9 +61,19 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
   const [selectedMarketFilter, setSelectedMarketFilter] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const canSwitchTenant = session?.user.role === 'super_admin' && !tenantId;
-  const effectiveTenantId = tenantId ?? (canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined);
+  const canSwitchTenant = session?.user.role === 'super_admin';
+  const effectiveTenantId = canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined;
   const selectedTenant = useMemo(() => tenants.find((tenant) => tenant.id === selectedTenantId) ?? null, [selectedTenantId, tenants]);
+
+  useEffect(() => {
+    if (session?.user.role !== 'super_admin') {
+      setSelectedTenantId(session?.user.tenantId ?? null);
+      return;
+    }
+    if (tenantId) {
+      setSelectedTenantId(tenantId);
+    }
+  }, [session?.user.role, session?.user.tenantId, tenantId]);
 
   useEffect(() => {
     let active = true;
@@ -77,9 +87,12 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
           const tenantResponse = await fetchTenants();
           if (!active) return;
           setTenants(tenantResponse.tenants);
-          if (!selectedTenantId && tenantResponse.tenants[0]) {
-            setSelectedTenantId(tenantResponse.tenants[0].id);
-          }
+          setSelectedTenantId((current) => {
+            if (current && tenantResponse.tenants.some((tenant) => tenant.id === current)) {
+              return current;
+            }
+            return tenantResponse.tenants[0]?.id ?? null;
+          });
         }
       } catch (loadError) {
         if (active) {
@@ -96,7 +109,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
     return () => {
       active = false;
     };
-  }, [canSwitchTenant, selectedTenantId]);
+  }, [canSwitchTenant]);
 
   useEffect(() => {
     let active = true;
@@ -367,51 +380,28 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
       {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
       {notice ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
-      {canSwitchTenant ? (
-        <Card>
-          <CardHeader className="p-5 pb-0">
-            <CardTitle>Tenant scope</CardTitle>
-            <CardDescription>Super admins must choose a tenant before they can add or import quantity mappings.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border border-slate-700 bg-slate-800/70 p-4">
-              <p className="text-sm font-semibold text-white">
-                {selectedTenant ? `Managing mappings for ${selectedTenant.name}` : 'No tenant selected'}
-              </p>
-              <p className="mt-1 text-sm text-slate-400">
-                {selectedTenant ? selectedTenant.id : 'Select a tenant below. Mapping records are always owned by a tenant and cannot be global.'}
-              </p>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {tenants.map((tenant) => {
-                const active = selectedTenantId === tenant.id;
-                return (
-                  <button
-                    key={tenant.id}
-                    className={active
-                      ? 'rounded-md border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(105, 53, 228,0.85)] transition'
-                      : 'rounded-md border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
-                    onClick={() => setSelectedTenantId(tenant.id)}
-                    type="button"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-base font-bold text-white">{tenant.name}</p>
-                        <p className="mt-2 break-all text-xs text-slate-400">{tenant.id}</p>
-                      </div>
-                      {active ? <Badge>Selected</Badge> : null}
-                    </div>
-                    {tenant.createdAt ? <p className="mt-3 text-xs text-slate-500">Created {new Date(tenant.createdAt).toLocaleString('en-GB')}</p> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
       <section className="space-y-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            {canSwitchTenant ? (
+              <div className="w-full sm:w-[320px]">
+                <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                  <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Tenant</span>
+                  <select
+                    id="mapping-tenant-filter"
+                    className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+                    onChange={(event) => setSelectedTenantId(event.target.value || null)}
+                    value={selectedTenantId ?? ''}
+                  >
+                    {tenants.length === 0 ? <option value="">No tenants available</option> : null}
+                    {tenants.map((tenant) => (
+                      <option key={`mapping-tenant-${tenant.id}`} value={tenant.id}>
+                        {tenant.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : null}
             <div className="w-full sm:w-[320px]">
               <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
                 <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>

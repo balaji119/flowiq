@@ -121,7 +121,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
-  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(session?.user.tenantId ?? null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(tenantId ?? session?.user.tenantId ?? null);
   const [marketOptions, setMarketOptions] = useState<string[]>([]);
   const [selectedMarketFilter, setSelectedMarketFilter] = useState('');
   const [marketAddresses, setMarketAddresses] = useState<MarketDeliveryAddressRecord[]>([]);
@@ -137,10 +137,9 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
   const [postersPerBoxDraft, setPostersPerBoxDraft] = useState('60');
   const [savingShippingRate, setSavingShippingRate] = useState(false);
 
-  const canSwitchTenant = session?.user.role === 'super_admin' && !tenantId;
+  const canSwitchTenant = session?.user.role === 'super_admin';
   const canEditShippingRate = false;
-  const effectiveTenantId = tenantId ?? (canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined);
-  const selectedTenant = useMemo(() => tenants.find((tenant) => tenant.id === selectedTenantId) ?? null, [selectedTenantId, tenants]);
+  const effectiveTenantId = canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined;
   const selectedMarketAddresses = useMemo(
     () => marketAddresses.filter((address) => address.market === selectedMarketFilter),
     [marketAddresses, selectedMarketFilter],
@@ -149,6 +148,16 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
     () => marketShippingRates.find((rate) => rate.market === selectedMarketFilter),
     [marketShippingRates, selectedMarketFilter],
   );
+
+  useEffect(() => {
+    if (session?.user.role !== 'super_admin') {
+      setSelectedTenantId(session?.user.tenantId ?? null);
+      return;
+    }
+    if (tenantId) {
+      setSelectedTenantId(tenantId);
+    }
+  }, [session?.user.role, session?.user.tenantId, tenantId]);
 
   useEffect(() => {
     let active = true;
@@ -162,9 +171,12 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
           const tenantResponse = await fetchTenants();
           if (!active) return;
           setTenants(tenantResponse.tenants);
-          if (!selectedTenantId && tenantResponse.tenants[0]) {
-            setSelectedTenantId(tenantResponse.tenants[0].id);
-          }
+          setSelectedTenantId((current) => {
+            if (current && tenantResponse.tenants.some((tenant) => tenant.id === current)) {
+              return current;
+            }
+            return tenantResponse.tenants[0]?.id ?? null;
+          });
         }
       } catch (loadError) {
         if (active) {
@@ -181,7 +193,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
     return () => {
       active = false;
     };
-  }, [canSwitchTenant, selectedTenantId]);
+  }, [canSwitchTenant]);
 
   useEffect(() => {
     let active = true;
@@ -494,51 +506,28 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenPrintingC
       {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
       {notice ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
-      {canSwitchTenant ? (
-        <Card>
-          <CardHeader className="p-5 pb-0">
-            <CardTitle>Tenant scope</CardTitle>
-            <CardDescription>Super admins must choose a tenant before they can manage shipping data.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border border-slate-700 bg-slate-800/70 p-4">
-              <p className="text-sm font-semibold text-white">
-                {selectedTenant ? `Managing shipping settings for ${selectedTenant.name}` : 'No tenant selected'}
-              </p>
-              <p className="mt-1 text-sm text-slate-400">
-                {selectedTenant ? selectedTenant.id : 'Select a tenant below. Shipping settings are always owned by a tenant.'}
-              </p>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {tenants.map((tenant) => {
-                const active = selectedTenantId === tenant.id;
-                return (
-                  <button
-                    key={tenant.id}
-                    className={active
-                      ? 'rounded-md border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(105, 53, 228,0.85)] transition'
-                      : 'rounded-md border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
-                    onClick={() => setSelectedTenantId(tenant.id)}
-                    type="button"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-base font-bold text-white">{tenant.name}</p>
-                        <p className="mt-2 break-all text-xs text-slate-400">{tenant.id}</p>
-                      </div>
-                      {active ? <Badge>Selected</Badge> : null}
-                    </div>
-                    {tenant.createdAt ? <p className="mt-3 text-xs text-slate-500">Created {new Date(tenant.createdAt).toLocaleString('en-GB')}</p> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
 	      <section className="space-y-5">
 		        <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+              {canSwitchTenant ? (
+                <div className="w-full xl:w-[320px]">
+                  <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                    <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Tenant</span>
+                    <select
+                      id="shipping-tenant-filter"
+                      className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+                      onChange={(event) => setSelectedTenantId(event.target.value || null)}
+                      value={selectedTenantId ?? ''}
+                    >
+                      {tenants.length === 0 ? <option value="">No tenants available</option> : null}
+                      {tenants.map((tenant) => (
+                        <option key={`shipping-tenant-${tenant.id}`} value={tenant.id}>
+                          {tenant.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ) : null}
 		          <div className="w-full xl:w-[320px]">
 		            <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
 		              <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
