@@ -381,7 +381,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
       {notice ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
       <section className="space-y-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             {canSwitchTenant ? (
               <div className="w-full sm:w-[320px]">
                 <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
