@@ -64,7 +64,18 @@ select {
 }
 
 ::selection {
-  background: rgb(var(--primary-500-rgb) / 0.35);
+  background: #facc15;
+  color: #111827;
+}
+
+::-moz-selection {
+  background: #facc15;
+  color: #111827;
+}
+
+select option:checked {
+  background: var(--primary-500);
+  color: var(--white);
 }
 
 .btn-theme-primary {
