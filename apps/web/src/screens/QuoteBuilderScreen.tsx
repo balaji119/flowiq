@@ -1153,6 +1153,8 @@ function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: n
 }
 
 const defaultValues = createDefaultFormValues();
+const MAX_CAMPAIGN_WEEKS = 52;
+
 function toStableValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => toStableValue(item));
@@ -1595,7 +1597,7 @@ export function QuoteBuilderScreen({
     return normalized;
   }, [multipleArtworkFormats]);
   const canAddAddressInFinalize = session?.user.role === 'admin' || session?.user.role === 'super_admin';
-  const numberOfWeeks = Math.max(1, Math.min(20, Math.floor(Number(values.numberOfWeeks) || 1)));
+  const numberOfWeeks = Math.max(1, Math.min(MAX_CAMPAIGN_WEEKS, Math.floor(Number(values.numberOfWeeks) || 1)));
   const marketNames = useMemo(() => markets.map((market) => market.name), [markets]);
   const isDefaultPlaceholderMarket = useMemo(
     () => (market: CampaignMarket) => {
@@ -2135,7 +2137,7 @@ export function QuoteBuilderScreen({
   }
 
   function updateWeekCount(nextValue: number) {
-    const normalized = Math.max(1, Math.min(20, Math.floor(nextValue)));
+    const normalized = Math.max(1, Math.min(MAX_CAMPAIGN_WEEKS, Math.floor(nextValue)));
     updateField('numberOfWeeks', String(normalized));
   }
 
@@ -4849,6 +4851,7 @@ export function QuoteBuilderScreen({
                   className="h-11 w-10 flex-none rounded-none border-0 bg-transparent px-0 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   id="week-count"
                   inputMode="numeric"
+                  max={MAX_CAMPAIGN_WEEKS}
                   min={1}
                   onChange={(event) => {
                     const rawValue = event.target.value.trim();
