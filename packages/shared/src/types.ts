@@ -351,57 +351,8 @@ export type CampaignCalculationResponse = {
 export type CampaignSubmitResponse = {
   campaign: CampaignRecord;
   amount: number | string | null;
-};
-
-export type PrintIqQuotePayload = {
-  CustomProduct: {
-    ProductCategory: string | null;
-    FinishSizeWidth: number;
-    FinishSizeHeight: number;
-    Sections: Array<{
-      SectionType: string;
-      StockCode: string;
-      ProcessFront: string;
-      ProcessReverse: string | null;
-      SectionSizeWidth: number;
-      SectionSizeHeight: number;
-      FoldCatalog: string;
-      Pages: number;
-      SectionOperations: Array<{ OperationName: string }>;
-      SideOperations: Array<{ OperationName: string }>;
-    }>;
-    JobOperations: Array<{ OperationName: string }>;
-  };
-  SelectedQuantity: {
-    Quantity: number;
-    Kinds: number;
-    TargetRetailPrice: number;
-    TargetWholesalePrice: number;
-    AdvancedKinds: {
-      KindsArePacks: boolean;
-      Kinds: Array<{
-        Name: string;
-        Quantity: number;
-        Sections: Array<{ SectionNumber: number }>;
-      }>;
-    };
-  };
-  QuoteContact: {
-    Title: string;
-    FirstName: string;
-    Surname: string;
-    Email: string;
-  };
-  Deliveries: unknown[];
-  TargetFreightPrice: string;
-  CustomerCode: string;
-  AcceptQuote: boolean;
-  JobDescription: string;
-  JobTitle: string;
-  Notes: string | null;
-  CustomerExpectedDate: string | null;
-  JobDueDate: string | null;
-  CustomerReference: string;
+  quoteNo?: string;
+  jobNo?: string;
 };
 
 export type LoginResponse = AuthSession;

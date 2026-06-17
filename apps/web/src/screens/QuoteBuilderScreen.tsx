@@ -16,7 +16,6 @@ import {
   OrderFormValues,
   QuantityBreakdown,
   SheetNameOverrides,
-  buildPrintIqPayload,
   createCampaignAsset,
   createCampaignMarket,
   createDefaultFormValues,
@@ -1582,7 +1581,6 @@ export function QuoteBuilderScreen({
     };
   }, [loadingCampaign]);
 
-  const payload = useMemo(() => buildPrintIqPayload(values, summary), [summary, values]);
   const normalizedSheetNameOverrides = useMemo(
     () => sanitizeSheetNameOverrides(sheetNameOverrides),
     [sheetNameOverrides],
@@ -3040,10 +3038,10 @@ export function QuoteBuilderScreen({
       const savedCampaignId = await saveCampaignDraft();
       if (!savedCampaignId) return;
       const response = await submitCampaignToPrintIQ(savedCampaignId, effectiveTenantId);
-      const amount = response.amount === null || response.amount === undefined || response.amount === '' ? 'N/A' : String(response.amount);
+      const printIQNumbers = [response.quoteNo ? `Quote: ${response.quoteNo}` : '', response.jobNo ? `Job: ${response.jobNo}` : ''].filter(Boolean).join(', ');
       applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
       lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
-      setQuoteResponseMessage(`Quote created successfully. Amount: ${amount}`);
+      setQuoteResponseMessage(printIQNumbers ? `Quote created successfully. ${printIQNumbers}` : 'Quote created successfully.');
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Unable to create quote');
     } finally {

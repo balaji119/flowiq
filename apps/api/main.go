@@ -258,7 +258,6 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/printiq/options/stocks", a.withAuth(http.HandlerFunc(a.handleSearchStocks)))
 	mux.Handle("GET /api/printiq/options/processes", a.withAuth(http.HandlerFunc(a.handleSearchProcesses)))
 	mux.Handle("GET /api/printiq/token", a.withAuth(http.HandlerFunc(a.handlePrintIQToken)))
-	mux.Handle("POST /api/quotes/price", a.withAuth(http.HandlerFunc(a.handleQuotePrice)))
 	mux.Handle("POST /api/purchase-orders/upload", a.withAuth(http.HandlerFunc(a.handlePurchaseOrderUpload)))
 	mux.Handle("POST /api/finalize/send-email-to-ads", a.withAuth(http.HandlerFunc(a.handleSendEmailToADS)))
 	mux.Handle("POST /api/campaign-images/upload", a.withAuth(http.HandlerFunc(a.handleCampaignImageUpload)))
@@ -897,84 +896,101 @@ func (a *app) handlePrintIQToken(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"token": token})
 }
 
-func (a *app) handleQuotePrice(w http.ResponseWriter, r *http.Request) {
-	user := currentUser(r.Context())
-	requestID := createRequestID()
-
-	var payload any
-	if err := decodeJSONBody(r, &payload); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
-		return
+func printIQResponseError(parsed any) (bool, string) {
+	payloadMap, ok := parsed.(map[string]any)
+	if !ok {
+		return false, ""
 	}
+	isError, ok := payloadMap["IsError"].(bool)
+	if !ok || !isError {
+		return false, ""
+	}
+	message := "PrintIQ returned an error"
+	if rawMessage, ok := payloadMap["ErrorMessage"].(string); ok && strings.TrimSpace(rawMessage) != "" {
+		message = strings.TrimSpace(rawMessage)
+	}
+	return true, message
+}
 
+func (a *app) runPrintIQSubmissionStep(
+	w http.ResponseWriter,
+	requestID string,
+	campaign *campaignRecord,
+	user AuthUser,
+	step string,
+	payload any,
+	call func(any) (any, int, error),
+) (any, bool) {
 	a.appendPrintIQLog(map[string]any{
-		"requestId": requestID,
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
-		"type":      "request",
-		"tenantId":  user.TenantID,
-		"userId":    user.ID,
-		"payload":   payload,
+		"requestId":  requestID,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"type":       "request",
+		"step":       step,
+		"tenantId":   campaign.TenantID,
+		"userId":     user.ID,
+		"campaignId": campaign.ID,
+		"payload":    payload,
 	})
 
-	parsed, status, err := a.optionService.requestQuotePrice(payload)
+	parsed, status, err := call(payload)
 	if err != nil {
 		a.appendPrintIQLog(map[string]any{
-			"requestId": requestID,
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
-			"type":      "error",
-			"tenantId":  user.TenantID,
-			"userId":    user.ID,
-			"response":  err.Error(),
-			"status":    500,
+			"requestId":  requestID,
+			"timestamp":  time.Now().UTC().Format(time.RFC3339),
+			"type":       "error",
+			"step":       step,
+			"tenantId":   campaign.TenantID,
+			"userId":     user.ID,
+			"campaignId": campaign.ID,
+			"response":   err.Error(),
+			"status":     500,
 		})
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+		return nil, false
 	}
-
 	if status < 200 || status >= 300 {
 		a.appendPrintIQLog(map[string]any{
-			"requestId": requestID,
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
-			"type":      "error",
-			"tenantId":  user.TenantID,
-			"userId":    user.ID,
-			"response":  parsed,
-			"status":    status,
+			"requestId":  requestID,
+			"timestamp":  time.Now().UTC().Format(time.RFC3339),
+			"type":       "error",
+			"step":       step,
+			"tenantId":   campaign.TenantID,
+			"userId":     user.ID,
+			"campaignId": campaign.ID,
+			"response":   parsed,
+			"status":     status,
 		})
-		writeJSON(w, status, map[string]any{"error": "PrintIQ quote request failed", "details": parsed})
-		return
+		writeJSON(w, status, map[string]any{"error": "PrintIQ " + step + " request failed", "details": parsed})
+		return nil, false
 	}
-
-	if payloadMap, ok := parsed.(map[string]any); ok {
-		if isError, ok := payloadMap["IsError"].(bool); ok && isError {
-			message := "PrintIQ returned an error"
-			if rawMessage, ok := payloadMap["ErrorMessage"].(string); ok && strings.TrimSpace(rawMessage) != "" {
-				message = strings.TrimSpace(rawMessage)
-			}
-			a.appendPrintIQLog(map[string]any{
-				"requestId": requestID,
-				"timestamp": time.Now().UTC().Format(time.RFC3339),
-				"type":      "error",
-				"tenantId":  user.TenantID,
-				"userId":    user.ID,
-				"response":  parsed,
-				"status":    status,
-			})
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": message})
-			return
-		}
+	if isError, message := printIQResponseError(parsed); isError {
+		a.appendPrintIQLog(map[string]any{
+			"requestId":  requestID,
+			"timestamp":  time.Now().UTC().Format(time.RFC3339),
+			"type":       "error",
+			"step":       step,
+			"tenantId":   campaign.TenantID,
+			"userId":     user.ID,
+			"campaignId": campaign.ID,
+			"response":   parsed,
+			"status":     status,
+		})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": message})
+		return nil, false
 	}
 
 	a.appendPrintIQLog(map[string]any{
-		"requestId": requestID,
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
-		"type":      "response",
-		"tenantId":  user.TenantID,
-		"userId":    user.ID,
-		"response":  parsed,
-		"status":    status,
+		"requestId":  requestID,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"type":       "response",
+		"step":       step,
+		"tenantId":   campaign.TenantID,
+		"userId":     user.ID,
+		"campaignId": campaign.ID,
+		"response":   parsed,
+		"status":     status,
 	})
-	writeJSON(w, http.StatusOK, map[string]any{"amount": extractQuoteAmount(parsed)})
+	return parsed, true
 }
 
 func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
@@ -1012,87 +1028,79 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	payload := buildPrintIQPayload(campaign.Values, campaign.Summary)
 	requestID := createRequestID()
-	a.appendPrintIQLog(map[string]any{
-		"requestId":  requestID,
-		"timestamp":  time.Now().UTC().Format(time.RFC3339),
-		"type":       "request",
-		"tenantId":   campaign.TenantID,
-		"userId":     user.ID,
-		"campaignId": campaign.ID,
-		"payload":    payload,
-	})
 
-	parsed, status, err := a.optionService.requestQuotePrice(payload)
+	createQuotePayload := buildPrintIQCreateQuotePayload(campaign.Values, campaign.Summary)
+	createQuoteResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "CreateQuoteWithDelivery", createQuotePayload, a.optionService.createQuoteWithDelivery)
+	if !ok {
+		return
+	}
+
+	quoteNo := extractQuoteNo(createQuoteResponse)
+	if quoteNo == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "PrintIQ create quote response did not include QuoteNo", "details": createQuoteResponse})
+		return
+	}
+
+	acceptQuotePayload := map[string]any{"QuoteNo": quoteNo}
+	acceptQuoteResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "AcceptQuote", acceptQuotePayload, a.optionService.acceptQuote)
+	if !ok {
+		return
+	}
+
+	jobNo := extractJobNo(acceptQuoteResponse)
+	if jobNo == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "PrintIQ accept quote response did not include JobNo", "details": acceptQuoteResponse})
+		return
+	}
+
+	qstKey := extractQSTKey(acceptQuoteResponse)
+	if qstKey == nil {
+		qstKey = extractQSTKey(createQuoteResponse)
+	}
+
+	artworkUploads, err := a.extractCampaignArtworkUploads(r.Context(), campaign.Values)
 	if err != nil {
-		a.appendPrintIQLog(map[string]any{
-			"requestId":  requestID,
-			"timestamp":  time.Now().UTC().Format(time.RFC3339),
-			"type":       "error",
-			"tenantId":   campaign.TenantID,
-			"userId":     user.ID,
-			"campaignId": campaign.ID,
-			"response":   err.Error(),
-			"status":     500,
-		})
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	if status < 200 || status >= 300 {
-		a.appendPrintIQLog(map[string]any{
-			"requestId":  requestID,
-			"timestamp":  time.Now().UTC().Format(time.RFC3339),
-			"type":       "error",
-			"tenantId":   campaign.TenantID,
-			"userId":     user.ID,
-			"campaignId": campaign.ID,
-			"response":   parsed,
-			"status":     status,
-		})
-		writeJSON(w, status, map[string]any{"error": "PrintIQ quote request failed", "details": parsed})
+	uploadArtworkPayloads := make([]any, 0, len(artworkUploads))
+	uploadArtworkResponses := make([]any, 0, len(artworkUploads))
+	if len(artworkUploads) > 0 && qstKey == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "PrintIQ response did not include QSTKey for artwork upload", "details": acceptQuoteResponse})
 		return
 	}
-	if payloadMap, ok := parsed.(map[string]any); ok {
-		if isError, ok := payloadMap["IsError"].(bool); ok && isError {
-			message := "PrintIQ returned an error"
-			if rawMessage, ok := payloadMap["ErrorMessage"].(string); ok && strings.TrimSpace(rawMessage) != "" {
-				message = strings.TrimSpace(rawMessage)
-			}
-			a.appendPrintIQLog(map[string]any{
-				"requestId":  requestID,
-				"timestamp":  time.Now().UTC().Format(time.RFC3339),
-				"type":       "error",
-				"tenantId":   campaign.TenantID,
-				"userId":     user.ID,
-				"campaignId": campaign.ID,
-				"response":   parsed,
-				"status":     status,
-			})
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": message})
+	for index, artwork := range artworkUploads {
+		uploadPayload := buildPrintIQUploadArtworkPayload(jobNo, qstKey, artwork, index, len(artworkUploads))
+		uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
+		uploadResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
+		if !ok {
 			return
 		}
+		uploadArtworkResponses = append(uploadArtworkResponses, uploadResponse)
 	}
 
-	a.appendPrintIQLog(map[string]any{
-		"requestId":  requestID,
-		"timestamp":  time.Now().UTC().Format(time.RFC3339),
-		"type":       "response",
-		"tenantId":   campaign.TenantID,
-		"userId":     user.ID,
-		"campaignId": campaign.ID,
-		"response":   parsed,
-		"status":     status,
-	})
+	requestPayload := map[string]any{
+		"createQuoteWithDelivery": createQuotePayload,
+		"acceptQuote":             acceptQuotePayload,
+		"uploadArtworkURL":        uploadArtworkPayloads,
+	}
+	responsePayload := map[string]any{
+		"createQuoteWithDelivery": createQuoteResponse,
+		"acceptQuote":             acceptQuoteResponse,
+		"uploadArtworkURL":        uploadArtworkResponses,
+		"quoteNo":                 quoteNo,
+		"jobNo":                   jobNo,
+		"qstKey":                  qstKey,
+	}
 
-	amount := extractQuoteAmount(parsed)
-	updatedCampaign, err := a.campaignStore.recordSubmission(r.Context(), *user, campaign.ID, payload, parsed, amount)
+	updatedCampaign, err := a.campaignStore.recordSubmission(r.Context(), *user, campaign.ID, requestPayload, responsePayload, nil, jobNo)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"campaign": updatedCampaign, "amount": amount})
+	writeJSON(w, http.StatusOK, map[string]any{"campaign": updatedCampaign, "amount": nil, "quoteNo": quoteNo, "jobNo": jobNo})
 }
 
 func (a *app) handleMarkCampaignSubmitted(w http.ResponseWriter, r *http.Request) {

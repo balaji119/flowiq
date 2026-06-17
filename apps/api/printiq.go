@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -452,12 +453,12 @@ func (o *optionService) refreshOptionsCache() (cacheRefreshBucket, cacheRefreshB
 	return cacheRefreshBucket{Count: len(stocks), UpdatedAt: status.Stocks.UpdatedAt}, cacheRefreshBucket{Count: len(processes), UpdatedAt: status.Processes.UpdatedAt}, nil
 }
 
-func (o *optionService) requestQuotePrice(payload any) (any, int, error) {
+func (o *optionService) postQuoteProcess(endpoint string, payload any) (any, int, error) {
 	token, err := o.getLoginToken()
 	if err != nil {
 		return nil, 500, err
 	}
-	requestURL := appendLoginToken(o.baseURL+"/api/QuoteProcess/GetPrice", url.QueryEscape(token))
+	requestURL := appendLoginToken(o.baseURL+"/api/QuoteProcess/"+strings.TrimLeft(endpoint, "/"), url.QueryEscape(token))
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, 500, err
@@ -485,35 +486,124 @@ func (o *optionService) requestQuotePrice(payload any) (any, int, error) {
 	return parsed, response.StatusCode, nil
 }
 
-func extractQuoteAmount(result any) any {
-	root, ok := result.(map[string]any)
-	if !ok {
-		return nil
+func (o *optionService) createQuoteWithDelivery(payload any) (any, int, error) {
+	return o.postQuoteProcess("CreateQuoteWithDelivery", payload)
+}
+
+func (o *optionService) acceptQuote(payload any) (any, int, error) {
+	return o.postQuoteProcess("AcceptQuote", payload)
+}
+
+func (o *optionService) uploadArtworkURL(payload any) (any, int, error) {
+	return o.postQuoteProcess("UploadArtworkURL", payload)
+}
+
+func valueAtPath(result any, path ...string) any {
+	current := result
+	for _, key := range path {
+		object, ok := current.(map[string]any)
+		if !ok {
+			return nil
+		}
+		current = object[key]
 	}
-	quoteDetails, ok := root["QuoteDetails"].(map[string]any)
-	if !ok {
-		return nil
+	return current
+}
+
+func printIQStringValue(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case float64:
+		if typed == float64(int64(typed)) {
+			return fmt.Sprintf("%d", int64(typed))
+		}
+		return strings.TrimSpace(fmt.Sprintf("%v", typed))
+	case int:
+		return strconv.Itoa(typed)
+	case json.Number:
+		return typed.String()
+	default:
+		return ""
 	}
-	products, ok := quoteDetails["Products"].([]any)
-	if !ok || len(products) == 0 {
-		return nil
+}
+
+func extractQuoteNo(result any) string {
+	if quoteNo := printIQStringValue(valueAtPath(result, "QuoteDetails", "QuoteNo")); quoteNo != "" {
+		return quoteNo
 	}
-	product, ok := products[0].(map[string]any)
-	if !ok {
-		return nil
+	return printIQStringValue(valueAtPath(result, "QuoteNo"))
+}
+
+func extractJobNo(result any) string {
+	if jobNo := findStringField(result, "JobNo"); jobNo != "" {
+		return jobNo
 	}
-	quantities, ok := product["Quantities"].([]any)
-	if !ok || len(quantities) == 0 {
-		return nil
+	return findStringField(result, "JobNumber")
+}
+
+func extractQSTKey(result any) any {
+	if qstKey := findNonZeroField(result, "QSTKey"); qstKey != nil {
+		return qstKey
 	}
-	quantity, ok := quantities[0].(map[string]any)
-	if !ok {
-		return nil
+	return nil
+}
+
+func findStringField(value any, fieldName string) string {
+	switch typed := value.(type) {
+	case map[string]any:
+		if result := printIQStringValue(typed[fieldName]); result != "" {
+			return result
+		}
+		for _, nested := range typed {
+			if result := findStringField(nested, fieldName); result != "" {
+				return result
+			}
+		}
+	case []any:
+		for _, nested := range typed {
+			if result := findStringField(nested, fieldName); result != "" {
+				return result
+			}
+		}
 	}
-	for _, key := range []string{"Price", "RetailPrice", "WholesalePrice"} {
-		if value, exists := quantity[key]; exists {
-			return value
+	return ""
+}
+
+func findNonZeroField(value any, fieldName string) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		if raw, exists := typed[fieldName]; exists && !isZeroValue(raw) {
+			return raw
+		}
+		for _, nested := range typed {
+			if result := findNonZeroField(nested, fieldName); result != nil {
+				return result
+			}
+		}
+	case []any:
+		for _, nested := range typed {
+			if result := findNonZeroField(nested, fieldName); result != nil {
+				return result
+			}
 		}
 	}
 	return nil
+}
+
+func isZeroValue(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return true
+	case string:
+		return strings.TrimSpace(typed) == "" || strings.TrimSpace(typed) == "0"
+	case float64:
+		return typed == 0
+	case int:
+		return typed == 0
+	case json.Number:
+		return typed.String() == "0" || strings.TrimSpace(typed.String()) == ""
+	default:
+		return false
+	}
 }
