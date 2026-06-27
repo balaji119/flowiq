@@ -306,6 +306,17 @@ function parseDateOnly(value: string) {
   return parsed;
 }
 
+function previousWednesday(value: string) {
+  const startDate = parseDateOnly(value);
+  if (!startDate) return '';
+  const daysSinceWednesday = (startDate.getDay() - 3 + 7) % 7;
+  startDate.setDate(startDate.getDate() - (daysSinceWednesday || 7));
+  const year = String(startDate.getFullYear());
+  const month = String(startDate.getMonth() + 1).padStart(2, '0');
+  const day = String(startDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function getTodayDateInputValue() {
   const now = new Date();
   const year = String(now.getFullYear());
@@ -2184,6 +2195,15 @@ export function QuoteBuilderScreen({
 
   function updateField<K extends keyof OrderFormValues>(field: K, value: OrderFormValues[K]) {
     setValues((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateCampaignStartDate(value: string) {
+    const automaticDueDate = previousWednesday(value);
+    setValues((current) => ({
+      ...current,
+      campaignStartDate: value,
+      ...(automaticDueDate ? { dueDate: automaticDueDate } : {}),
+    }));
   }
 
   function updateWeekCount(nextValue: number) {
@@ -4818,13 +4838,13 @@ export function QuoteBuilderScreen({
                     value={campaignStartDateInput}
                     onBlur={() => {
                       if (!campaignStartDateInput.trim()) {
-                        updateField('campaignStartDate', '');
+                        updateCampaignStartDate('');
                         setCampaignStartDateInput('');
                         return;
                       }
                       const parsed = parseDisplayDateToIso(campaignStartDateInput);
                       if (parsed) {
-                        updateField('campaignStartDate', parsed);
+                        updateCampaignStartDate(parsed);
                         setCampaignStartDateInput(formatDateInputDisplay(parsed));
                         return;
                       }
@@ -4834,7 +4854,7 @@ export function QuoteBuilderScreen({
                       const nextValue = event.target.value;
                       setCampaignStartDateInput(nextValue);
                       const parsed = parseDisplayDateToIso(nextValue);
-                      if (parsed) updateField('campaignStartDate', parsed);
+                      if (parsed) updateCampaignStartDate(parsed);
                     }}
                   />
                   <input
@@ -4843,7 +4863,7 @@ export function QuoteBuilderScreen({
                     min={minSelectableDate}
                     onChange={(event) => {
                       const nextValue = event.target.value;
-                      updateField('campaignStartDate', nextValue);
+                      updateCampaignStartDate(nextValue);
                       setCampaignStartDateInput(formatDateInputDisplay(nextValue));
                     }}
                     tabIndex={-1}
