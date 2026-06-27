@@ -104,6 +104,12 @@ func cloneOrderFormValues(values orderFormValues) orderFormValues {
 	}
 	cloned.CampaignMarkets = append([]campaignMarket(nil), values.CampaignMarkets...)
 	for marketIndex := range cloned.CampaignMarkets {
+		if sourceOverrides := values.CampaignMarkets[marketIndex].QuantityOverrides; sourceOverrides != nil {
+			cloned.CampaignMarkets[marketIndex].QuantityOverrides = &campaignQuantityOverrides{
+				Posters: cloneQuantityBreakdown(sourceOverrides.Posters),
+				Frames:  cloneQuantityBreakdown(sourceOverrides.Frames),
+			}
+		}
 		cloned.CampaignMarkets[marketIndex].Assets = append([]campaignAsset(nil), values.CampaignMarkets[marketIndex].Assets...)
 		for assetIndex := range cloned.CampaignMarkets[marketIndex].Assets {
 			sourceAsset := values.CampaignMarkets[marketIndex].Assets[assetIndex]
@@ -225,11 +231,12 @@ func normalizeCampaignLines(values orderFormValues) []campaignLine {
 	for _, market := range values.CampaignMarkets {
 		for _, asset := range market.Assets {
 			lines = append(lines, campaignLine{
-				ID:            asset.ID,
-				AssetID:       asset.AssetID,
-				AssetSearch:   asset.AssetSearch,
-				SelectedWeeks: append([]int(nil), asset.SelectedWeeks...),
-				Market:        market.Market,
+				ID:                      asset.ID,
+				AssetID:                 asset.AssetID,
+				AssetSearch:             asset.AssetSearch,
+				SelectedWeeks:           append([]int(nil), asset.SelectedWeeks...),
+				Market:                  market.Market,
+				MarketQuantityOverrides: market.QuantityOverrides,
 			})
 		}
 	}

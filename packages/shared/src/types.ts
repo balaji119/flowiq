@@ -91,6 +91,10 @@ export type CampaignMarket = {
   id: string;
   market: string;
   assets: CampaignAsset[];
+  quantityOverrides?: {
+    posters?: Record<string, number>;
+    frames?: Record<string, number>;
+  };
 };
 
 export type CampaignPrintImage = {
@@ -108,7 +112,10 @@ export type CampaignPrintImage = {
   sourcePdfUrl?: string;
 };
 
-export type CampaignLine = CampaignAsset & { market: string };
+export type CampaignLine = CampaignAsset & {
+  market: string;
+  marketQuantityOverrides?: CampaignMarket['quantityOverrides'];
+};
 
 export type MarketAssetOption = {
   id: string;
@@ -248,6 +255,7 @@ export type CampaignLineResult = {
 export type CampaignTotals = {
   market: string;
   breakdown: QuantityBreakdown;
+  frameBreakdown?: QuantityBreakdown;
   posterTotal: number;
   frameTotal: number;
   specialFormatTotal: number;

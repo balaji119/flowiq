@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"sort"
+	"strings"
 )
 
 var formatKeys = []string{"8-sheet", "6-sheet", "4-sheet", "2-sheet", "QA0", "Mega", "DOT M", "MP", "FF"}
@@ -31,6 +32,44 @@ func createEmptyBreakdown() quantityBreakdown {
 		breakdown[key] = 0
 	}
 	return breakdown
+}
+
+func cloneQuantityBreakdown(source quantityBreakdown) quantityBreakdown {
+	cloned := quantityBreakdown{}
+	for key, value := range source {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func calculateFrameBreakdown(breakdown quantityBreakdown) quantityBreakdown {
+	frames := cloneQuantityBreakdown(breakdown)
+	frames["8-sheet"] = (breakdown["8-sheet"] + 3) / 4
+	frames["6-sheet"] = (breakdown["6-sheet"] + 2) / 3
+	frames["4-sheet"] = (breakdown["4-sheet"] + 1) / 2
+	frames["2-sheet"] = breakdown["2-sheet"]
+	frames["QA0"] = (breakdown["QA0"] + 3) / 4
+	return frames
+}
+
+func applyBreakdownOverrides(target quantityBreakdown, overrides quantityBreakdown) {
+	for key, value := range overrides {
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		if value < 0 {
+			value = 0
+		}
+		target[key] = value
+	}
+}
+
+func sumBreakdown(breakdown quantityBreakdown) int {
+	total := 0
+	for _, value := range breakdown {
+		total += value
+	}
+	return total
 }
 
 func addBreakdown(target, source quantityBreakdown, multiplier int) {
@@ -68,6 +107,7 @@ func (c *calculatorService) calculateCampaign(tenantID string, lines []campaignL
 	lineResults := make([]campaignLineResult, 0)
 	perMarketMap := make(map[string]*campaignTotals, len(markets))
 	assetLookup := createAssetLookup(markets)
+	marketOverrides := make(map[string]*campaignQuantityOverrides)
 
 	for _, market := range markets {
 		perMarketMap[market.Name] = &campaignTotals{
@@ -77,6 +117,9 @@ func (c *calculatorService) calculateCampaign(tenantID string, lines []campaignL
 	}
 
 	for _, line := range lines {
+		if line.MarketQuantityOverrides != nil {
+			marketOverrides[line.Market] = line.MarketQuantityOverrides
+		}
 		asset, ok := assetLookup[line.AssetID]
 		if !ok {
 			continue
@@ -125,16 +168,25 @@ func (c *calculatorService) calculateCampaign(tenantID string, lines []campaignL
 
 	perMarket := make([]campaignTotals, 0, len(markets))
 	grandBreakdown := createEmptyBreakdown()
+	grandFrameBreakdown := createEmptyBreakdown()
 	totalAssets := 0
 	totalRuns := 0
 
 	for _, market := range markets {
 		entry := perMarketMap[market.Name]
+		if overrides := marketOverrides[market.Name]; overrides != nil {
+			applyBreakdownOverrides(entry.Breakdown, overrides.Posters)
+		}
+		entry.FrameBreakdown = calculateFrameBreakdown(entry.Breakdown)
+		if overrides := marketOverrides[market.Name]; overrides != nil {
+			applyBreakdownOverrides(entry.FrameBreakdown, overrides.Frames)
+		}
 		entry.PosterTotal = posterTotal(entry.Breakdown)
-		entry.FrameTotal = frameTotal(entry.Breakdown)
+		entry.FrameTotal = sumBreakdown(entry.FrameBreakdown)
 		entry.SpecialFormatTotal = specialFormatTotal(entry.Breakdown)
 		entry.TotalUnits = totalUnits(entry.Breakdown)
 		addBreakdown(grandBreakdown, entry.Breakdown, 1)
+		addBreakdown(grandFrameBreakdown, entry.FrameBreakdown, 1)
 		totalAssets += entry.ActiveAssets
 		totalRuns += entry.ActiveRuns
 		perMarket = append(perMarket, *entry)
@@ -146,8 +198,9 @@ func (c *calculatorService) calculateCampaign(tenantID string, lines []campaignL
 		GrandTotal: campaignTotals{
 			Market:             "All Markets",
 			Breakdown:          grandBreakdown,
+			FrameBreakdown:     grandFrameBreakdown,
 			PosterTotal:        posterTotal(grandBreakdown),
-			FrameTotal:         frameTotal(grandBreakdown),
+			FrameTotal:         sumBreakdown(grandFrameBreakdown),
 			SpecialFormatTotal: specialFormatTotal(grandBreakdown),
 			TotalUnits:         totalUnits(grandBreakdown),
 			ActiveAssets:       totalAssets,

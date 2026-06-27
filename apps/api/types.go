@@ -106,9 +106,15 @@ type campaignAsset struct {
 }
 
 type campaignMarket struct {
-	ID     string          `json:"id"`
-	Market string          `json:"market"`
-	Assets []campaignAsset `json:"assets"`
+	ID                string                     `json:"id"`
+	Market            string                     `json:"market"`
+	Assets            []campaignAsset            `json:"assets"`
+	QuantityOverrides *campaignQuantityOverrides `json:"quantityOverrides,omitempty"`
+}
+
+type campaignQuantityOverrides struct {
+	Posters quantityBreakdown `json:"posters,omitempty"`
+	Frames  quantityBreakdown `json:"frames,omitempty"`
 }
 
 type purchaseOrderDetails struct {
@@ -327,11 +333,12 @@ type marketAssetShippingCostRecord struct {
 }
 
 type campaignLine struct {
-	ID            string `json:"id"`
-	AssetID       string `json:"assetId"`
-	AssetSearch   string `json:"assetSearch,omitempty"`
-	SelectedWeeks []int  `json:"selectedWeeks"`
-	Market        string `json:"market,omitempty"`
+	ID                      string                     `json:"id"`
+	AssetID                 string                     `json:"assetId"`
+	AssetSearch             string                     `json:"assetSearch,omitempty"`
+	SelectedWeeks           []int                      `json:"selectedWeeks"`
+	Market                  string                     `json:"market,omitempty"`
+	MarketQuantityOverrides *campaignQuantityOverrides `json:"marketQuantityOverrides,omitempty"`
 }
 
 type campaignLineResult struct {
@@ -347,6 +354,7 @@ type campaignLineResult struct {
 type campaignTotals struct {
 	Market             string            `json:"market"`
 	Breakdown          quantityBreakdown `json:"breakdown"`
+	FrameBreakdown     quantityBreakdown `json:"frameBreakdown,omitempty"`
 	PosterTotal        int               `json:"posterTotal"`
 	FrameTotal         int               `json:"frameTotal"`
 	SpecialFormatTotal int               `json:"specialFormatTotal"`

@@ -118,13 +118,17 @@ function BreakdownTable({ breakdown, inverse = false }: { breakdown: QuantityBre
 function buildReviewRows(totals: CampaignTotals) {
   const breakdownRecord = totals.breakdown as Record<string, number>;
   const computedPosterTotal = Object.values(breakdownRecord).reduce((sum, value) => sum + (value ?? 0), 0);
-  const frameBreakdown: QuantityBreakdown = { ...(totals.breakdown as Record<string, number>) } as QuantityBreakdown;
+  const frameBreakdown: QuantityBreakdown = {
+    ...(totals.frameBreakdown ?? totals.breakdown as Record<string, number>),
+  } as QuantityBreakdown;
   const dynamicFrameBreakdown = frameBreakdown as Record<string, number>;
-  dynamicFrameBreakdown['8-sheet'] = Math.ceil(breakdownValueForKey(totals.breakdown, '8-sheet') / 4);
-  dynamicFrameBreakdown['6-sheet'] = Math.ceil(breakdownValueForKey(totals.breakdown, '6-sheet') / 3);
-  dynamicFrameBreakdown['4-sheet'] = Math.ceil(breakdownValueForKey(totals.breakdown, '4-sheet') / 2);
-  dynamicFrameBreakdown['2-sheet'] = breakdownValueForKey(totals.breakdown, '2-sheet');
-  dynamicFrameBreakdown.QA0 = Math.ceil(breakdownValueForKey(totals.breakdown, 'QA0') / 4);
+  if (!totals.frameBreakdown) {
+    dynamicFrameBreakdown['8-sheet'] = Math.ceil(breakdownValueForKey(totals.breakdown, '8-sheet') / 4);
+    dynamicFrameBreakdown['6-sheet'] = Math.ceil(breakdownValueForKey(totals.breakdown, '6-sheet') / 3);
+    dynamicFrameBreakdown['4-sheet'] = Math.ceil(breakdownValueForKey(totals.breakdown, '4-sheet') / 2);
+    dynamicFrameBreakdown['2-sheet'] = breakdownValueForKey(totals.breakdown, '2-sheet');
+    dynamicFrameBreakdown.QA0 = Math.ceil(breakdownValueForKey(totals.breakdown, 'QA0') / 4);
+  }
   const computedFrameTotal = Object.values(dynamicFrameBreakdown).reduce((sum, value) => sum + (value ?? 0), 0);
 
   return [
@@ -2110,7 +2114,11 @@ export function QuoteBuilderScreen({
     const timeoutId = setTimeout(async () => {
       try {
         setCalculating(true);
-        const flatLines: CampaignLine[] = values.campaignMarkets.flatMap((market) => market.assets.map((asset) => ({ ...asset, market: market.market })));
+        const flatLines: CampaignLine[] = values.campaignMarkets.flatMap((market) => market.assets.map((asset) => ({
+          ...asset,
+          market: market.market,
+          marketQuantityOverrides: market.quantityOverrides,
+        })));
         const result = await calculateCampaign(flatLines, effectiveTenantId);
         if (!active) return;
         setSummary(result);
@@ -2142,7 +2150,11 @@ export function QuoteBuilderScreen({
         const allMarkets = editingMarketId
           ? values.campaignMarkets.map((market) => (market.id === editingMarketId ? draftMarket : market))
           : [...values.campaignMarkets, draftMarket];
-        const flatLines: CampaignLine[] = allMarkets.flatMap((market) => market.assets.map((asset) => ({ ...asset, market: market.market })));
+        const flatLines: CampaignLine[] = allMarkets.flatMap((market) => market.assets.map((asset) => ({
+          ...asset,
+          market: market.market,
+          marketQuantityOverrides: market.quantityOverrides,
+        })));
         const result = await calculateCampaign(flatLines, effectiveTenantId);
         if (!active) return;
         const nextSummary = result.perMarket.find((entry) => entry.market === draftMarket.market) ?? null;
@@ -2286,6 +2298,21 @@ export function QuoteBuilderScreen({
 
   function updateDraftMarket(updater: (market: CampaignMarket) => CampaignMarket) {
     setDraftMarket((current) => (current ? updater(current) : current));
+  }
+
+  function updateDraftMarketQuantityOverride(type: 'posters' | 'frames', key: string, rawValue: string) {
+    const parsedValue = Number.parseInt(rawValue || '0', 10);
+    const value = Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
+    updateDraftMarket((market) => ({
+      ...market,
+      quantityOverrides: {
+        ...market.quantityOverrides,
+        [type]: {
+          ...(market.quantityOverrides?.[type] ?? {}),
+          [key]: value,
+        },
+      },
+    }));
   }
 
   function updateDraftAsset(assetId: string, updater: (asset: CampaignAsset) => CampaignAsset) {
@@ -3046,6 +3073,52 @@ export function QuoteBuilderScreen({
     }
   }
 
+  function costLinesForMarket(marketName: string) {
+    const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
+    const targetBreakdown = marketSummaryByName.get(marketName)?.breakdown;
+    if (!targetBreakdown || marketLines.length === 0) return marketLines;
+
+    const keys = new Set<string>([
+      ...Object.keys(targetBreakdown as Record<string, number>),
+      ...marketLines.flatMap((line) => Object.keys(line.breakdown as Record<string, number>)),
+    ]);
+    const allocatedByLine = marketLines.map(() => ({} as Record<string, number>));
+
+    keys.forEach((key) => {
+      const target = Math.max(0, Math.floor(breakdownValueForKey(targetBreakdown, key)));
+      const originalValues = marketLines.map((line) => Math.max(0, breakdownValueForKey(line.breakdown, key)));
+      const originalTotal = originalValues.reduce((total, value) => total + value, 0);
+      if (target === 0) {
+        allocatedByLine.forEach((breakdown) => { breakdown[key] = 0; });
+        return;
+      }
+      if (originalTotal === 0) {
+        allocatedByLine.forEach((breakdown, index) => { breakdown[key] = index === 0 ? target : 0; });
+        return;
+      }
+
+      const allocations = originalValues.map((value, index) => {
+        const exact = (target * value) / originalTotal;
+        return { index, value: Math.floor(exact), remainder: exact - Math.floor(exact) };
+      });
+      let remaining = target - allocations.reduce((total, allocation) => total + allocation.value, 0);
+      allocations
+        .slice()
+        .sort((left, right) => right.remainder - left.remainder || left.index - right.index)
+        .forEach((allocation) => {
+          if (remaining <= 0) return;
+          allocations[allocation.index].value += 1;
+          remaining -= 1;
+        });
+      allocations.forEach((allocation) => { allocatedByLine[allocation.index][key] = allocation.value; });
+    });
+
+    return marketLines.map((line, index) => ({
+      ...line,
+      breakdown: allocatedByLine[index] as QuantityBreakdown,
+    }));
+  }
+
   function calculateMarketShippingCost(marketName: string) {
     const twoSheeterPrice = twoSheeterPriceByMarket.get(marketName) ?? 0;
     const fourSheeterPrice = fourSheeterPriceByMarket.get(marketName) ?? 0;
@@ -3056,7 +3129,7 @@ export function QuoteBuilderScreen({
     const sixSheeterSetsPerBox = sixSheeterSetsPerBoxByMarket.get(marketName) ?? 15;
     const eightSheeterSetsPerBox = eightSheeterSetsPerBoxByMarket.get(marketName) ?? 15;
     const megasPerBox = megasPerBoxByMarket.get(marketName) ?? 1;
-    const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
+    const marketLines = costLinesForMarket(marketName);
     const useFlatRateSheeters = useFlatRateSheetersByMarket.get(marketName) ?? false;
     const useFlatRateMegas = useFlatRateMegasByMarket.get(marketName) ?? false;
 
@@ -3130,7 +3203,7 @@ export function QuoteBuilderScreen({
   }
 
   function calculateMarketPrintingCost(marketName: string) {
-    const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
+    const marketLines = costLinesForMarket(marketName);
     return marketLines.reduce((total, line) => total + calculateLinePrintingCost(line), 0);
   }
 
@@ -5940,17 +6013,33 @@ export function QuoteBuilderScreen({
                             </tr>
                           </thead>
                           <tbody>
-                            {buildReviewRows(draftMarketSummary).map((row) => (
-                              <tr key={`draft-market-row-${row.label}`} className="bg-slate-800/70 border-t border-slate-700/70">
-                                <th className="border border-slate-700 px-3 py-2 text-left font-semibold text-slate-100">{row.label}</th>
-                                {visibleDraftMarketFormatKeys.map((key) => (
-                                  <td key={`draft-market-cell-${row.label}-${key}`} className="border border-slate-700 px-3 py-2 text-center font-semibold text-white">
-                                    {breakdownValueForKey(row.breakdown, key)}
-                                  </td>
-                                ))}
-                                <td className="border border-slate-700 px-3 py-2 text-center font-black text-white">{row.total}</td>
-                              </tr>
-                            ))}
+                            {buildReviewRows(draftMarketSummary).map((row) => {
+                              const overrideType = row.label === 'Posters' ? 'posters' : 'frames';
+                              const overrides = draftMarket.quantityOverrides?.[overrideType] ?? {};
+                              const displayedValues = visibleDraftMarketFormatKeys.map((key) => (
+                                overrides[key] ?? breakdownValueForKey(row.breakdown, key)
+                              ));
+                              const displayedTotal = displayedValues.reduce((total, value) => total + value, 0);
+                              return (
+                                <tr key={`draft-market-row-${row.label}`} className="bg-slate-800/70 border-t border-slate-700/70">
+                                  <th className="border border-slate-700 px-3 py-2 text-left font-semibold text-slate-100">{row.label}</th>
+                                  {visibleDraftMarketFormatKeys.map((key, index) => (
+                                    <td key={`draft-market-cell-${row.label}-${key}`} className="border border-slate-700 px-2 py-1.5 text-center font-semibold text-white">
+                                      <Input
+                                        aria-label={`${row.label} ${formatBreakdownKeyLabel(key, normalizedSheetNameOverrides)}`}
+                                        className="mx-auto h-7 min-w-0 rounded border-slate-600 bg-slate-950/70 px-1 text-center text-[12px] font-semibold text-white [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                        min={0}
+                                        onChange={(event) => updateDraftMarketQuantityOverride(overrideType, key, event.target.value)}
+                                        onFocus={(event) => event.currentTarget.select()}
+                                        type="number"
+                                        value={displayedValues[index]}
+                                      />
+                                    </td>
+                                  ))}
+                                  <td className="border border-slate-700 px-3 py-2 text-center font-black text-white">{displayedTotal}</td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                               </>
                             );
