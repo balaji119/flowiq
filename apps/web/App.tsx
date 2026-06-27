@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useRef, useState } from 'react';
 import { TenantRecord } from '@flowiq/shared';
 import { LoaderCircle } from 'lucide-react';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { ArtworkUploadProvider } from './src/context/ArtworkUploadContext';
 import { AdminWorkspaceShell } from './src/components/AdminWorkspaceShell';
 import { CampaignArtworkFolderScreen } from './src/screens/CampaignArtworkFolderScreen';
 import { CampaignLandingScreen } from './src/screens/CampaignLandingScreen';
@@ -465,7 +466,9 @@ function AppShell() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppShell />
+      <ArtworkUploadProvider>
+        <AppShell />
+      </ArtworkUploadProvider>
     </AuthProvider>
   );
 }

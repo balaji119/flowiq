@@ -545,6 +545,77 @@ func (s *campaignStore) updateCampaign(ctx context.Context, user AuthUser, campa
 	return s.getCampaign(ctx, user, campaignID)
 }
 
+func (s *campaignStore) appendCampaignPrintImages(ctx context.Context, user AuthUser, campaignID string, images []campaignPrintImage) (*campaignRecord, error) {
+	if user.TenantID == nil {
+		return nil, errors.New("current user is not assigned to a tenant")
+	}
+	for _, image := range images {
+		if strings.TrimSpace(image.ID) == "" {
+			return nil, errors.New("Artwork image id is required")
+		}
+		if strings.TrimSpace(image.StoredName) == "" {
+			return nil, errors.New("Artwork stored name is required")
+		}
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var formData []byte
+	err = tx.QueryRow(ctx, `
+		SELECT form_data
+		FROM campaigns
+		WHERE id = $1 AND tenant_id = $2
+		FOR UPDATE
+	`, campaignID, *user.TenantID).Scan(&formData)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errors.New("Campaign not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	values := orderFormValues{}
+	if len(formData) > 0 {
+		if err := json.Unmarshal(formData, &values); err != nil {
+			return nil, err
+		}
+	}
+	imageIndexByID := make(map[string]int, len(values.PrintImages)+len(images))
+	for index, image := range values.PrintImages {
+		imageIndexByID[image.ID] = index
+	}
+	for _, image := range images {
+		if index, exists := imageIndexByID[image.ID]; exists {
+			values.PrintImages[index] = image
+			continue
+		}
+		imageIndexByID[image.ID] = len(values.PrintImages)
+		values.PrintImages = append(values.PrintImages, image)
+	}
+
+	nextFormData, err := marshalJSON(values)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE campaigns
+		SET form_data = $3::jsonb,
+			updated_by_user_id = $4,
+			updated_at = NOW()
+		WHERE id = $1 AND tenant_id = $2
+	`, campaignID, *user.TenantID, string(nextFormData), user.ID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return s.getCampaign(ctx, user, campaignID)
+}
+
 func (s *campaignStore) setPurchaseOrder(ctx context.Context, user AuthUser, campaignID string, upload uploadResponse) (*campaignRecord, error) {
 	if user.TenantID == nil {
 		return nil, errors.New("current user is not assigned to a tenant")

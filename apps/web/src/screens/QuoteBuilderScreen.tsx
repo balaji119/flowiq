@@ -25,9 +25,10 @@ import {
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, Textarea, cn } from '@flowiq/ui';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
+import { useArtworkUploads } from '../context/ArtworkUploadContext';
 import { buildApiUrl } from '../services/apiBase';
 import { acquireCampaignEditLock, createCampaign, fetchCampaign, markCampaignSubmitted, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
-import { deleteCampaignImage, uploadCampaignImage } from '../services/campaignImageApi';
+import { deleteCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
 import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
@@ -819,83 +820,6 @@ function canvasToBlob(canvas: HTMLCanvasElement, mimeType = 'image/png', quality
   });
 }
 
-function buildArtworkPageFileName(fileName: string, pageNumber: number, totalPages: number) {
-  const baseName = toFileBaseName(fileName);
-  if (totalPages <= 1) {
-    return `${baseName}.png`;
-  }
-  const digits = Math.max(2, String(totalPages).length);
-  return `${baseName}-page-${String(pageNumber).padStart(digits, '0')}.png`;
-}
-
-function buildArtworkThumbnailFileName(fileName: string, pageNumber: number, totalPages: number) {
-  const baseName = toFileBaseName(fileName);
-  if (totalPages <= 1) {
-    return `${baseName}.thumb.webp`;
-  }
-  const digits = Math.max(2, String(totalPages).length);
-  return `${baseName}-page-${String(pageNumber).padStart(digits, '0')}.thumb.webp`;
-}
-
-async function convertPdfToArtworkPages(
-  pdfFile: File,
-  uploadMaxWidth = 2400,
-  thumbnailMaxWidth = 320,
-): Promise<Array<{ file: File; thumbnailFile: File; pageNumber: number; totalPages: number }>> {
-  const pdfjs = await loadPdfJsRuntime();
-  const objectUrl = URL.createObjectURL(pdfFile);
-  try {
-    const loadingTask = pdfjs.getDocument({ url: objectUrl });
-    const pdf = await loadingTask.promise;
-    const totalPages = Number(pdf.numPages ?? 0);
-    const pages: Array<{ file: File; thumbnailFile: File; pageNumber: number; totalPages: number }> = [];
-
-    for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
-      const page = await pdf.getPage(pageNumber);
-      const baseViewport = page.getViewport({ scale: 1 });
-
-      const uploadScale = Math.min(1, uploadMaxWidth / Math.max(baseViewport.width, 1));
-      const uploadViewport = page.getViewport({ scale: uploadScale });
-      const uploadCanvas = document.createElement('canvas');
-      uploadCanvas.width = Math.max(1, Math.ceil(uploadViewport.width));
-      uploadCanvas.height = Math.max(1, Math.ceil(uploadViewport.height));
-      const uploadContext = uploadCanvas.getContext('2d');
-      if (!uploadContext) {
-        throw new Error('Unable to prepare artwork upload');
-      }
-      await page.render({ canvasContext: uploadContext, viewport: uploadViewport }).promise;
-      const uploadBlob = await canvasToBlob(uploadCanvas);
-      const uploadFile = new File([uploadBlob], buildArtworkPageFileName(pdfFile.name, pageNumber, totalPages), { type: 'image/png' });
-
-      const thumbnailScale = Math.min(1, thumbnailMaxWidth / Math.max(uploadCanvas.width, 1));
-      const thumbnailCanvas = document.createElement('canvas');
-      thumbnailCanvas.width = Math.max(1, Math.ceil(uploadCanvas.width * thumbnailScale));
-      thumbnailCanvas.height = Math.max(1, Math.ceil(uploadCanvas.height * thumbnailScale));
-      const thumbnailContext = thumbnailCanvas.getContext('2d');
-      if (!thumbnailContext) {
-        throw new Error('Unable to prepare artwork thumbnail');
-      }
-      thumbnailContext.drawImage(uploadCanvas, 0, 0, thumbnailCanvas.width, thumbnailCanvas.height);
-      const thumbnailBlob = await canvasToBlob(thumbnailCanvas, 'image/webp', 0.7);
-      const thumbnailFile = new File(
-        [thumbnailBlob],
-        buildArtworkThumbnailFileName(pdfFile.name, pageNumber, totalPages),
-        { type: 'image/webp' },
-      );
-
-      pages.push({
-        file: uploadFile,
-        thumbnailFile,
-        pageNumber,
-        totalPages,
-      });
-    }
-    return pages;
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
 function TextField({
   id,
   label,
@@ -1260,6 +1184,7 @@ export function QuoteBuilderScreen({
   onOpenAdmin?: () => void;
 }) {
   const { session } = useAuth();
+  const { dismissUploadJobs, enqueueArtworkFiles, jobs: artworkUploadJobs, removeQueuedUpload } = useArtworkUploads();
   const effectiveTenantId = tenantId ?? session?.user.tenantId ?? null;
   const [values, setValues] = useState<OrderFormValues>(() => defaultValues);
   const [campaignStartDateInput, setCampaignStartDateInput] = useState('');
@@ -1300,9 +1225,6 @@ export function QuoteBuilderScreen({
   const [previewArtworkDialogOpen, setPreviewArtworkDialogOpen] = useState(false);
   const [previewArtworkTarget, setPreviewArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey } | null>(null);
   const [previewArtworkFullLoaded, setPreviewArtworkFullLoaded] = useState(false);
-  const [uploadingArtworkPages, setUploadingArtworkPages] = useState(false);
-  const [pendingArtworkUploadCount, setPendingArtworkUploadCount] = useState(0);
-  const [queuedArtworkFileNames, setQueuedArtworkFileNames] = useState<string[]>([]);
   const [uploadManagerOpen, setUploadManagerOpen] = useState(false);
   const [isDraggingArtworkFiles, setIsDraggingArtworkFiles] = useState(false);
   const [hasChosenArtworkInSession, setHasChosenArtworkInSession] = useState(false);
@@ -1345,8 +1267,8 @@ export function QuoteBuilderScreen({
   const campaignStartPickerRef = useRef<HTMLInputElement | null>(null);
   const dueDatePickerRef = useRef<HTMLInputElement | null>(null);
   const artworkPdfInputRef = useRef<HTMLInputElement | null>(null);
-  const artworkUploadQueueRef = useRef<File[]>([]);
-  const artworkUploadWorkerActiveRef = useRef(false);
+  const artworkEnqueuePromiseRef = useRef<Promise<void> | null>(null);
+  const campaignIdRef = useRef<string | null>(campaignId);
   const campaignHydratedRef = useRef(false);
   const autoDownloadTriggeredRef = useRef(false);
   const autoSendEmailTriggeredRef = useRef(false);
@@ -1354,6 +1276,14 @@ export function QuoteBuilderScreen({
   const lastAutoSaveFailedValuesRef = useRef<string | null>(null);
   const creativeSwapFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSubCampaign = Boolean(parentCampaignId);
+  const campaignArtworkUploadJobs = useMemo(
+    () => (campaignId ? artworkUploadJobs.filter((job) => job.campaignId === campaignId) : []),
+    [artworkUploadJobs, campaignId],
+  );
+  const queuedArtworkUploadJobs = campaignArtworkUploadJobs.filter((job) => job.status === 'queued');
+  const queuedArtworkFileNames = queuedArtworkUploadJobs.map((job) => job.fileName);
+  const pendingArtworkUploadCount = queuedArtworkUploadJobs.length;
+  const uploadingArtworkPages = campaignArtworkUploadJobs.some((job) => job.status === 'queued' || job.status === 'uploading');
 
   function reportQuoteAutomationResult(action: AutomatedQuoteAction, status: AutomatedQuoteActionStatus, message?: string) {
     if (typeof window === 'undefined') return;
@@ -1399,11 +1329,48 @@ export function QuoteBuilderScreen({
   }, [values.campaignStartDate]);
 
   useEffect(() => {
+    campaignIdRef.current = campaignId;
+  }, [campaignId]);
+
+  useEffect(() => {
     setDueDateInput(formatDateInputDisplay(values.dueDate));
   }, [values.dueDate]);
 
+  useEffect(() => {
+    const terminalJobs = campaignArtworkUploadJobs.filter((job) => job.status === 'completed' || job.status === 'error');
+    if (terminalJobs.length === 0) return;
+
+    const completedJobs = terminalJobs.filter((job) => job.status === 'completed');
+    const uploadedImages = completedJobs.flatMap((job) => job.images);
+    if (uploadedImages.length > 0) {
+      const mergeImages = (currentImages: CampaignPrintImage[]) => {
+        const byId = new Map(currentImages.map((image) => [image.id, image]));
+        uploadedImages.forEach((image) => byId.set(image.id, image));
+        return Array.from(byId.values());
+      };
+      setValues((current) => ({ ...current, printImages: mergeImages(current.printImages) }));
+      if (lastPersistedValuesRef.current) {
+        try {
+          const persistedValues = JSON.parse(lastPersistedValuesRef.current) as OrderFormValues;
+          persistedValues.printImages = mergeImages(persistedValues.printImages ?? []);
+          lastPersistedValuesRef.current = stableSerialize(persistedValues);
+        } catch {
+          // The next autosave will reconcile the local values if the snapshot cannot be parsed.
+        }
+      }
+      const uploadedPdfCount = completedJobs.length;
+      setArtworkUploadSuccessMessage(
+        `${uploadedPdfCount} PDF file${uploadedPdfCount === 1 ? '' : 's'} uploaded successfully (${uploadedImages.length} artwork page${uploadedImages.length === 1 ? '' : 's'} generated).`,
+      );
+      setArtworkUploadSuccessOpen(true);
+    }
+    const failedJob = terminalJobs.find((job) => job.status === 'error');
+    if (failedJob?.error) setArtworkDialogError(`${failedJob.fileName}: ${failedJob.error}`);
+    dismissUploadJobs(terminalJobs.map((job) => job.id));
+  }, [campaignArtworkUploadJobs, dismissUploadJobs]);
+
   async function releaseActiveCampaignLock(targetCampaignId?: string | null) {
-    const id = targetCampaignId ?? campaignId;
+    const id = targetCampaignId ?? campaignIdRef.current;
     if (!id) return;
     try {
       await releaseCampaignEditLock(id, effectiveTenantId);
@@ -2777,112 +2744,7 @@ export function QuoteBuilderScreen({
     }
   }
 
-  async function uploadArtworkPdfFiles(files: File[]): Promise<number> {
-    if (!files.length) return 0;
-    const nonPdfFile = files.find((file) => !isPdfFile(file));
-    if (nonPdfFile) {
-      setArtworkDialogError('Only PDF files are allowed.');
-      return 0;
-    }
-
-    try {
-      const savedCampaignId = await saveCampaignDraft();
-      if (!savedCampaignId) {
-        setArtworkDialogError('Save the campaign before uploading artwork.');
-        return 0;
-      }
-
-      const uploadedImages: CampaignPrintImage[] = [];
-      for (const pdfFile of files) {
-        const sourcePdfUpload = await uploadCampaignImage(pdfFile);
-        const pageImages = await convertPdfToArtworkPages(pdfFile);
-        for (const pageImage of pageImages) {
-          const [uploadResponse, thumbnailUploadResponse] = await Promise.all([
-            uploadCampaignImage(pageImage.file),
-            uploadCampaignImage(pageImage.thumbnailFile),
-          ]);
-          const baseName = toFileBaseName(pdfFile.name) || 'Artwork';
-          const imageName = pageImage.totalPages > 1
-            ? `${baseName} (Page ${pageImage.pageNumber})`
-            : baseName;
-          uploadedImages.push({
-            id: uploadResponse.storedName,
-            name: imageName,
-            fileName: uploadResponse.originalName || pageImage.file.name,
-            mimeType: uploadResponse.mimeType || pageImage.file.type || 'image/png',
-            storedName: uploadResponse.storedName,
-            imageUrl: uploadResponse.url || `/api/campaign-images/${uploadResponse.storedName}`,
-            thumbnailFileName: thumbnailUploadResponse.originalName || pageImage.thumbnailFile.name,
-            thumbnailStoredName: thumbnailUploadResponse.storedName,
-            thumbnailUrl: thumbnailUploadResponse.url || `/api/campaign-images/${thumbnailUploadResponse.storedName}`,
-            sourcePdfFileName: sourcePdfUpload.originalName || pdfFile.name,
-            sourcePdfStoredName: sourcePdfUpload.storedName,
-            sourcePdfUrl: sourcePdfUpload.url || `/api/campaign-images/${sourcePdfUpload.storedName}`,
-          });
-        }
-      }
-
-      if (uploadedImages.length > 0) {
-        setValues((current) => {
-          const byId = new Map<string, CampaignPrintImage>();
-          current.printImages.forEach((image) => byId.set(image.id, image));
-          uploadedImages.forEach((image) => byId.set(image.id, image));
-          return {
-            ...current,
-            printImages: Array.from(byId.values()),
-          };
-        });
-      }
-      return uploadedImages.length;
-    } catch (uploadError) {
-      const message = uploadError instanceof Error ? uploadError.message : 'Unable to upload artwork PDFs';
-      setArtworkDialogError(message);
-      setError(message);
-      return 0;
-    }
-  }
-
-  async function processArtworkUploadQueue() {
-    if (artworkUploadWorkerActiveRef.current) return;
-    artworkUploadWorkerActiveRef.current = true;
-    setUploadingArtworkPages(true);
-    setArtworkDialogError('');
-    setArtworkUploadSuccessOpen(false);
-    setArtworkUploadSuccessMessage('');
-    let totalUploadedPages = 0;
-    let uploadedPdfCount = 0;
-
-    try {
-      while (artworkUploadQueueRef.current.length > 0) {
-        const nextFile = artworkUploadQueueRef.current.shift();
-        setPendingArtworkUploadCount(artworkUploadQueueRef.current.length);
-        setQueuedArtworkFileNames(artworkUploadQueueRef.current.map((file) => file.name));
-        if (!nextFile) continue;
-        const uploadedFromPdf = await uploadArtworkPdfFiles([nextFile]);
-        totalUploadedPages += uploadedFromPdf;
-        if (uploadedFromPdf > 0) {
-          uploadedPdfCount += 1;
-        }
-      }
-
-      if (uploadedPdfCount > 0) {
-        setArtworkUploadSuccessMessage(
-          `${uploadedPdfCount} PDF file${uploadedPdfCount === 1 ? '' : 's'} uploaded successfully (${totalUploadedPages} artwork page${totalUploadedPages === 1 ? '' : 's'} generated).`,
-        );
-        setArtworkUploadSuccessOpen(true);
-      }
-    } finally {
-      artworkUploadWorkerActiveRef.current = false;
-      setUploadingArtworkPages(false);
-      setPendingArtworkUploadCount(0);
-      setQueuedArtworkFileNames([]);
-      if (artworkPdfInputRef.current) {
-        artworkPdfInputRef.current.value = '';
-      }
-    }
-  }
-
-  function handleArtworkPickerFiles(fileList: FileList | null) {
+  async function handleArtworkPickerFiles(fileList: FileList | null) {
     const nextFiles = Array.from(fileList ?? []);
     if (!nextFiles.length) return;
     const validFiles = nextFiles.filter((file) => isPdfFile(file));
@@ -2893,11 +2755,25 @@ export function QuoteBuilderScreen({
     }
     if (!validFiles.length) return;
     setHasChosenArtworkInSession(true);
-    artworkUploadQueueRef.current.push(...validFiles);
-    setPendingArtworkUploadCount(artworkUploadQueueRef.current.length);
-    setQueuedArtworkFileNames(artworkUploadQueueRef.current.map((file) => file.name));
     setUploadManagerOpen(true);
-    void processArtworkUploadQueue();
+    setArtworkUploadSuccessOpen(false);
+    setArtworkUploadSuccessMessage('');
+
+    const enqueuePromise = (async () => {
+      const savedCampaignId = await saveCampaignDraft();
+      if (!savedCampaignId) {
+        setArtworkDialogError('Save the campaign before uploading artwork.');
+        return;
+      }
+      enqueueArtworkFiles(savedCampaignId, effectiveTenantId, validFiles);
+    })();
+    artworkEnqueuePromiseRef.current = enqueuePromise;
+    try {
+      await enqueuePromise;
+    } finally {
+      if (artworkEnqueuePromiseRef.current === enqueuePromise) artworkEnqueuePromiseRef.current = null;
+      if (artworkPdfInputRef.current) artworkPdfInputRef.current.value = '';
+    }
   }
 
   function handleArtworkDragOver(event: DragEvent<HTMLButtonElement>) {
@@ -2914,14 +2790,12 @@ export function QuoteBuilderScreen({
   function handleArtworkDrop(event: DragEvent<HTMLButtonElement>) {
     event.preventDefault();
     setIsDraggingArtworkFiles(false);
-    handleArtworkPickerFiles(event.dataTransfer.files);
+    void handleArtworkPickerFiles(event.dataTransfer.files);
   }
 
   function removeQueuedArtworkFileAt(indexToRemove: number) {
-    if (indexToRemove < 0 || indexToRemove >= artworkUploadQueueRef.current.length) return;
-    artworkUploadQueueRef.current = artworkUploadQueueRef.current.filter((_, index) => index !== indexToRemove);
-    setPendingArtworkUploadCount(artworkUploadQueueRef.current.length);
-    setQueuedArtworkFileNames(artworkUploadQueueRef.current.map((file) => file.name));
+    const job = queuedArtworkUploadJobs[indexToRemove];
+    if (job) removeQueuedUpload(job.id);
   }
 
   function openUploadManagerDialog() {
@@ -3051,6 +2925,7 @@ export function QuoteBuilderScreen({
       if (!campaignId) {
         const response = await createCampaign({ values }, effectiveTenantId);
         applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
+        campaignIdRef.current = response.campaign.id;
             lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
         lastAutoSaveFailedValuesRef.current = null;
         await setStoredCampaignId(response.campaign.id, effectiveTenantId);
@@ -3089,6 +2964,12 @@ export function QuoteBuilderScreen({
 
   async function handleBackToDashboard() {
     if (!onBack) return;
+    if (artworkEnqueuePromiseRef.current) {
+      await artworkEnqueuePromiseRef.current;
+      await releaseActiveCampaignLock();
+      onBack();
+      return;
+    }
     if (isCampaignStartDatePast || isDeliveryDueDatePast) {
       await releaseActiveCampaignLock();
       onBack();
@@ -5046,7 +4927,7 @@ export function QuoteBuilderScreen({
                     className="hidden"
                     multiple
                     onChange={(event) => {
-                      handleArtworkPickerFiles(event.target.files);
+                      void handleArtworkPickerFiles(event.target.files);
                       event.target.value = '';
                     }}
                     type="file"

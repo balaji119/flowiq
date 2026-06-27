@@ -242,6 +242,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("POST /api/campaigns/{campaignId}/edit-lock", a.withAuth(http.HandlerFunc(a.handleAcquireCampaignEditLock)))
 	mux.Handle("DELETE /api/campaigns/{campaignId}/edit-lock", a.withAuth(http.HandlerFunc(a.handleReleaseCampaignEditLock)))
 	mux.Handle("PUT /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleUpdateCampaign)))
+	mux.Handle("POST /api/campaigns/{campaignId}/print-images", a.withAuth(http.HandlerFunc(a.handleAppendCampaignPrintImages)))
 	mux.Handle("DELETE /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleDeleteCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/calculate", a.withAuth(http.HandlerFunc(a.handleCalculatePersistedCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/submit-to-printiq", a.withAuth(http.HandlerFunc(a.handleSubmitCampaign)))
@@ -749,6 +750,37 @@ func (a *app) handleUpdateCampaign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	campaign, err := a.campaignStore.updateCampaign(r.Context(), *user, r.PathValue("campaignId"), payload.Values)
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"campaign": campaign})
+}
+
+func (a *app) handleAppendCampaignPrintImages(w http.ResponseWriter, r *http.Request) {
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
+
+	var payload struct {
+		Images []campaignPrintImage `json:"images"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	if len(payload.Images) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "images is required"})
+		return
+	}
+
+	campaign, err := a.campaignStore.appendCampaignPrintImages(r.Context(), *user, r.PathValue("campaignId"), payload.Images)
 	if err != nil {
 		status := http.StatusBadRequest
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {

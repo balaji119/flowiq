@@ -2,6 +2,7 @@ import {
   CampaignCalculationResponse,
   CampaignEditLockInfo,
   CampaignListItem,
+  CampaignPrintImage,
   CampaignRecord,
   CampaignSubmitResponse,
   CampaignUpsertPayload,
@@ -45,6 +46,13 @@ export async function updateCampaign(campaignId: string, payload: CampaignUpsert
   return apiFetchJson<{ campaign: CampaignRecord }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}`, tenantId), {
     method: 'PUT',
     body: JSON.stringify(payload),
+  });
+}
+
+export async function appendCampaignPrintImages(campaignId: string, images: CampaignPrintImage[], tenantId?: string | null) {
+  return apiFetchJson<{ campaign: CampaignRecord }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/print-images`, tenantId), {
+    method: 'POST',
+    body: JSON.stringify({ images }),
   });
 }
 
