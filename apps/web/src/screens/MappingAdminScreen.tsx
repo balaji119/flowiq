@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { FileJson, LoaderCircle, Pencil, Plus, Shield, Trash2, Upload } from 'lucide-react';
+import { Download, FileSpreadsheet, LoaderCircle, Pencil, Plus, Shield, Trash2, Upload } from 'lucide-react';
 import { CalculatorMappingInput, CalculatorMappingRecord, MarketMetadata, SheetNameOverrides, TenantRecord, createEmptyBreakdown, formatKeys } from '@flowiq/shared';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
@@ -13,7 +13,7 @@ import {
   importCalculatorMappings,
   updateCalculatorMapping,
 } from '../services/adminApi';
-import { resolveFormatName, sanitizeSheetNameOverrides } from '../services/sheetNameOverrides';
+import { resolveFormatName, resolveSheetName, sanitizeSheetNameOverrides, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 
 const BUILT_IN_OVERRIDE_KEYS = new Set(['8-sheet', '8-sheet-a0', '6-sheet', '4-sheet', '2-sheet', 'mega', 'dot-m', 'mega-portrait', 'ff']);
 
@@ -33,11 +33,61 @@ function emptyForm(): CalculatorMappingInput {
   };
 }
 
-function parseImportedMarkets(raw: unknown): MarketMetadata[] {
-  if (!Array.isArray(raw)) {
-    throw new Error('The JSON file must contain an array of markets');
+function escapeCsvCell(value: string | number) {
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function parseCsvRows(text: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  const input = text.replace(/^\uFEFF/, '');
+
+  for (let index = 0; index < input.length; index += 1) {
+    const character = input[index];
+    if (inQuotes) {
+      if (character === '"' && input[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else if (character === '"') {
+        inQuotes = false;
+      } else {
+        field += character;
+      }
+      continue;
+    }
+    if (character === '"') {
+      inQuotes = true;
+    } else if (character === ',') {
+      row.push(field);
+      field = '';
+    } else if (character === '\n' || character === '\r') {
+      if (character === '\r' && input[index + 1] === '\n') index += 1;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else {
+      field += character;
+    }
   }
-  return raw as MarketMetadata[];
+
+  if (inQuotes) throw new Error('The CSV contains an unclosed quoted value.');
+  if (field || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows.filter((cells) => cells.some((cell) => cell.trim() !== ''));
+}
+
+function normalizeCsvHeader(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function mappingLookupKey(market: string, asset: string) {
+  return `${market.trim().toLowerCase()}\u0000${asset.trim().toLowerCase()}`;
 }
 
 function formatSheetHeader(key: (typeof formatKeys)[number], overrides: SheetNameOverrides) {
@@ -58,6 +108,9 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<CalculatorMappingInput>(emptyForm);
   const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importError, setImportError] = useState('');
   const [selectedMarketFilter, setSelectedMarketFilter] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -169,10 +222,16 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
 
   const marketOptions = useMemo(() => [...new Set(mappings.map((mapping) => mapping.market))].sort((left, right) => left.localeCompare(right)), [mappings]);
   const customQuantityKeys = useMemo(() => {
-    return Object.keys(sheetNameOverrides)
+    const storedQuantityKeys = Array.from(new Set(mappings.flatMap((mapping) => Object.keys(mapping.quantities as Record<string, number>))))
+      .filter((key) => !BUILT_IN_OVERRIDE_KEYS.has(toCanonicalSheetNameKey(key)));
+    const storedCanonicalKeys = new Set(storedQuantityKeys.map(toCanonicalSheetNameKey));
+    const overrideKeys = Object.keys(sheetNameOverrides)
       .filter((key) => !BUILT_IN_OVERRIDE_KEYS.has(key))
+      .filter((key) => !storedCanonicalKeys.has(toCanonicalSheetNameKey(key)));
+    return Array.from(new Set([...overrideKeys, ...storedQuantityKeys]))
+      .filter((key) => !formatKeys.some((formatKey) => normalizeCsvHeader(formatKey) === normalizeCsvHeader(key)))
       .sort((left, right) => left.localeCompare(right));
-  }, [sheetNameOverrides]);
+  }, [mappings, sheetNameOverrides]);
   const allQuantityKeys = useMemo(() => [...formatKeys, ...customQuantityKeys], [customQuantityKeys]);
   const mappingById = useMemo(() => new Map(mappings.map((mapping) => [mapping.id, mapping])), [mappings]);
   const maintenanceCandidates = useMemo(() => {
@@ -277,27 +336,156 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
     }
   }
 
-  async function handleImport(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  function downloadImportTemplate() {
+    const headers = ['Market', 'Asset', 'Label', 'State', 'Maintenance Asset', ...allQuantityKeys];
+    const sortedMappings = [...mappings].sort(
+      (left, right) => left.market.localeCompare(right.market) || left.asset.localeCompare(right.asset) || left.label.localeCompare(right.label),
+    );
+    const rows = sortedMappings.map((mapping) => [
+      mapping.market,
+      mapping.asset,
+      mapping.label,
+      mapping.state,
+      mapping.maintenanceAssetId ? (mappingById.get(mapping.maintenanceAssetId)?.asset ?? '') : '',
+      ...allQuantityKeys.map((key) => quantityValue(mapping.quantities, key)),
+    ]);
+    const csv = `\uFEFF${[headers, ...rows].map((row) => row.map(escapeCsvCell).join(',')).join('\r\n')}\r\n`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const tenantName = (selectedTenant?.name || effectiveTenantId || 'tenant').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+    anchor.href = url;
+    anchor.download = `quantity-mappings-${tenantName || 'tenant'}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function parseImportedMappingsCsv(text: string): MarketMetadata[] {
+    const csvRows = parseCsvRows(text);
+    if (csvRows.length < 2) throw new Error('The CSV must include the header row and at least one mapping record.');
+
+    const headers = csvRows[0].map(normalizeCsvHeader);
+    const duplicateHeader = headers.find((header, index) => headers.indexOf(header) !== index);
+    if (duplicateHeader) throw new Error(`The CSV contains a duplicate column: ${csvRows[0][headers.indexOf(duplicateHeader)]}.`);
+
+    const baseHeaders = ['Market', 'Asset', 'Label', 'State', 'Maintenance Asset'];
+    const requiredHeaders = [...baseHeaders, ...allQuantityKeys];
+    const requiredHeaderKeys = requiredHeaders.map(normalizeCsvHeader);
+    const missingHeader = requiredHeaderKeys.find((header) => !headers.includes(header));
+    if (missingHeader) {
+      const displayName = requiredHeaders[requiredHeaderKeys.indexOf(missingHeader)];
+      throw new Error(`The CSV is missing the required column: ${displayName}. Download a fresh template and try again.`);
+    }
+    const emptyHeaderIndex = headers.findIndex((header) => !header);
+    if (emptyHeaderIndex >= 0) throw new Error(`Column ${emptyHeaderIndex + 1} needs a name.`);
+
+    const baseHeaderKeys = baseHeaders.map(normalizeCsvHeader);
+    const existingQuantityKeyByHeader = new Map(allQuantityKeys.map((key) => [normalizeCsvHeader(key), key]));
+    const importedQuantityKeys = csvRows[0]
+      .map((header) => header.trim())
+      .filter((header) => !baseHeaderKeys.includes(normalizeCsvHeader(header)))
+      .map((header) => existingQuantityKeyByHeader.get(normalizeCsvHeader(header)) ?? header);
+
+    const columnIndex = new Map(headers.map((header, index) => [header, index]));
+    const valueAt = (row: string[], header: string) => (row[columnIndex.get(normalizeCsvHeader(header)) ?? -1] ?? '').trim();
+    const existingIdByKey = new Map(mappings.map((mapping) => [mappingLookupKey(mapping.market, mapping.asset), mapping.id]));
+    const importedRows = csvRows.slice(1).map((row, index) => {
+      const rowNumber = index + 2;
+      const market = valueAt(row, 'Market');
+      const asset = valueAt(row, 'Asset');
+      if (!market) throw new Error(`Row ${rowNumber}: Market is required.`);
+      if (!asset) throw new Error(`Row ${rowNumber}: Asset is required.`);
+
+      const quantities = importedQuantityKeys.reduce<Record<string, number>>((result, key) => {
+        const rawValue = valueAt(row, key);
+        const value = rawValue === '' ? 0 : Number(rawValue);
+        if (!Number.isInteger(value) || value < 0) {
+          throw new Error(`Row ${rowNumber}: ${key} must be a whole number greater than or equal to zero.`);
+        }
+        result[key] = value;
+        return result;
+      }, {});
+
+      return {
+        asset,
+        id: existingIdByKey.get(mappingLookupKey(market, asset)) || crypto.randomUUID(),
+        label: valueAt(row, 'Label') || asset,
+        maintenanceAsset: valueAt(row, 'Maintenance Asset'),
+        market,
+        quantities,
+        rowNumber,
+        state: valueAt(row, 'State'),
+      };
+    });
+
+    const importedIdByKey = new Map(existingIdByKey);
+    const seenImportedKeys = new Set<string>();
+    importedRows.forEach((row) => {
+      const key = mappingLookupKey(row.market, row.asset);
+      if (seenImportedKeys.has(key)) throw new Error(`Row ${row.rowNumber}: ${row.market} / ${row.asset} is duplicated in the CSV.`);
+      seenImportedKeys.add(key);
+      importedIdByKey.set(key, row.id);
+    });
+
+    const marketsByName = new Map<string, MarketMetadata>();
+    importedRows.forEach((row) => {
+      const maintenanceAssetId = row.maintenanceAsset
+        ? importedIdByKey.get(mappingLookupKey(row.market, row.maintenanceAsset))
+        : '';
+      if (row.maintenanceAsset && !maintenanceAssetId) {
+        throw new Error(`Row ${row.rowNumber}: Maintenance Asset "${row.maintenanceAsset}" was not found in market "${row.market}".`);
+      }
+      if (maintenanceAssetId === row.id) {
+        throw new Error(`Row ${row.rowNumber}: An asset cannot be its own maintenance asset.`);
+      }
+
+      const market = marketsByName.get(row.market) ?? { name: row.market, assets: [] };
+      market.assets.push({
+        id: row.id,
+        market: row.market,
+        asset: row.asset,
+        label: row.label,
+        state: row.state,
+        maintenanceAssetId,
+        quantities: row.quantities as CalculatorMappingInput['quantities'],
+      });
+      marketsByName.set(row.market, market);
+    });
+    return Array.from(marketsByName.values());
+  }
+
+  function handleImportFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
     event.target.value = '';
-    if (!file || !effectiveTenantId) {
+    setImportError('');
+    if (file && !file.name.toLowerCase().endsWith('.csv')) {
+      setImportFile(null);
+      setImportError('Choose a CSV file downloaded from this import window.');
       return;
     }
+    setImportFile(file);
+  }
+
+  async function handleImport() {
+    if (!importFile || !effectiveTenantId) return;
 
     setImporting(true);
-    setError('');
+    setImportError('');
     setNotice('');
 
     try {
-      const parsed = JSON.parse(await file.text()) as unknown;
-      const markets = parseImportedMarkets(parsed);
+      const markets = parseImportedMappingsCsv(await importFile.text());
       const response = await importCalculatorMappings(markets, effectiveTenantId);
       const nextMappings = await fetchCalculatorMappings(effectiveTenantId);
       setMappings(nextMappings.mappings);
       resetForm();
       setNotice(response.message);
+      setImportDialogOpen(false);
+      setImportFile(null);
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : 'Unable to import mapping JSON');
+      setImportError(importError instanceof Error ? importError.message : 'Unable to import quantity mappings CSV');
     } finally {
       setImporting(false);
     }
@@ -349,9 +537,19 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
       pageTitle="Quantity Mappings"
       topBarActions={
         <>
-          <Button className="h-10 min-w-[128px] rounded-md px-4 text-sm font-semibold" disabled={importing || !effectiveTenantId} onClick={() => fileInputRef.current?.click()} type="button" variant="outline">
+          <Button
+            className="h-10 min-w-[128px] rounded-md px-4 text-sm font-semibold"
+            disabled={importing || !effectiveTenantId}
+            onClick={() => {
+              setImportError('');
+              setImportFile(null);
+              setImportDialogOpen(true);
+            }}
+            type="button"
+            variant="outline"
+          >
             {importing ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Upload className="h-4 w-4" />}
-            {importing ? 'Importing...' : 'Import JSON'}
+            {importing ? 'Importing...' : 'Import'}
           </Button>
           <Button
             className="h-10 min-w-[130px] rounded-md px-4 text-sm font-semibold btn-theme-primary"
@@ -362,7 +560,6 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
             <Plus className="h-4 w-4" />
             Add Mapping
           </Button>
-          <input ref={fileInputRef} accept="application/json" className="hidden" onChange={handleImport} type="file" />
         </>
       }
       onBack={onBack}
@@ -428,9 +625,9 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
             </div>
           ) : marketOptions.length === 0 ? (
             <div className="rounded-md border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
-              <FileJson className="mx-auto h-8 w-8 text-slate-400" />
+              <FileSpreadsheet className="mx-auto h-8 w-8 text-slate-400" />
               <p className="mt-4 text-base font-semibold text-white">No mapping data yet</p>
-              <p className="mt-2 text-sm text-slate-400">Import the checked-in JSON template or add records one by one.</p>
+              <p className="mt-2 text-sm text-slate-400">Import a CSV template or add records one by one.</p>
             </div>
           ) : filteredMappings.length === 0 ? (
             <div className="rounded-md border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center">
@@ -448,7 +645,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
                     <th className="border border-slate-700 px-4 py-3 text-left">Maintenance Asset</th>
                     {allQuantityKeys.map((key) => (
                       <th key={`mapping-head-${key}`} className="border border-slate-700 px-4 py-3 text-center">
-                        {formatKeys.includes(key as (typeof formatKeys)[number]) ? formatSheetHeader(key as (typeof formatKeys)[number], sheetNameOverrides) : (sheetNameOverrides[key] || key)}
+                        {formatKeys.includes(key as (typeof formatKeys)[number]) ? formatSheetHeader(key as (typeof formatKeys)[number], sheetNameOverrides) : resolveSheetName(key, sheetNameOverrides)}
                       </th>
                     ))}
                     <th className="sticky right-0 z-20 border border-slate-700 bg-slate-950 px-4 py-3 text-center">Actions</th>
@@ -500,6 +697,69 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
             </div>
           )}
       </section>
+
+      <Dialog
+        open={importDialogOpen}
+        onOpenChange={(open) => {
+          if (importing) return;
+          setImportDialogOpen(open);
+          if (!open) {
+            setImportFile(null);
+            setImportError('');
+          }
+        }}
+      >
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 36rem)' }}>
+          <DialogHeader>
+            <DialogTitle>Import Quantity Mappings</DialogTitle>
+            <DialogDescription>
+              Download the CSV containing the current mappings, update existing rows, add records or add custom quantity columns, then upload it here. Matching Market and Asset values are updated; omitted rows are not deleted.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 p-4">
+              <p className="text-sm font-semibold text-slate-100">1. Download current mappings</p>
+              <p className="mt-1 text-xs text-slate-400">The CSV includes all mappings for the selected tenant and can be edited in Excel or another spreadsheet app.</p>
+              <Button className="mt-3" disabled={!effectiveTenantId} onClick={downloadImportTemplate} type="button" variant="secondary">
+                <Download className="h-4 w-4" />
+                Download Template
+              </Button>
+            </div>
+
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 p-4">
+              <p className="text-sm font-semibold text-slate-100">2. Upload updated CSV</p>
+              <p className="mt-1 text-xs text-slate-400">Keep the five descriptive columns unchanged. Any additional column is imported as a custom quantity field, and its values must be whole numbers greater than or equal to zero.</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Button disabled={importing} onClick={() => fileInputRef.current?.click()} type="button" variant="outline">
+                  <Upload className="h-4 w-4" />
+                  Choose CSV
+                </Button>
+                <span className="min-w-0 flex-1 truncate text-sm text-slate-300" title={importFile?.name}>
+                  {importFile?.name || 'No file selected'}
+                </span>
+                <input ref={fileInputRef} accept=".csv,text/csv" className="hidden" onChange={handleImportFileChange} type="file" />
+              </div>
+            </div>
+
+            {importError ? (
+              <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200">
+                {importError}
+              </div>
+            ) : null}
+
+            <div className="flex justify-end gap-3">
+              <Button disabled={importing} onClick={() => setImportDialogOpen(false)} type="button" variant="ghost">
+                Cancel
+              </Button>
+              <Button className="btn-theme-primary" disabled={importing || !importFile || !effectiveTenantId} onClick={() => void handleImport()} type="button">
+                {importing ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Upload className="h-4 w-4" />}
+                {importing ? 'Importing...' : 'Import CSV'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={mappingDialogOpen}
@@ -565,7 +825,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
               {allQuantityKeys.map((key) => (
                 <div key={key} className="space-y-2">
                   <Label htmlFor={`qty-${key}`}>
-                    {formatKeys.includes(key as (typeof formatKeys)[number]) ? formatSheetHeader(key as (typeof formatKeys)[number], sheetNameOverrides) : (sheetNameOverrides[key] || key)}
+                    {formatKeys.includes(key as (typeof formatKeys)[number]) ? formatSheetHeader(key as (typeof formatKeys)[number], sheetNameOverrides) : resolveSheetName(key, sheetNameOverrides)}
                   </Label>
                   <Input
                     id={`qty-${key}`}

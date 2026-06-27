@@ -4,7 +4,7 @@ import { SheetNameOverrides, TenantRecord } from '@flowiq/shared';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
 import { useAuth } from '../context/AuthContext';
-import { fetchAdminSheetNameOverrides, fetchTenants, upsertAdminSheetNameOverrides } from '../services/adminApi';
+import { fetchAdminSheetNameOverrides, fetchCalculatorMappings, fetchTenants, upsertAdminSheetNameOverrides } from '../services/adminApi';
 import { defaultSheetNamePresetOverrides, sanitizeSheetNameOverrides, sheetNamePresetEntries, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 
 type SettingsScreenProps = {
@@ -130,9 +130,35 @@ export function SettingsScreen({
       try {
         setLoading(true);
         setError('');
-        const response = await fetchAdminSheetNameOverrides(effectiveTenantId);
+        const [response, mappingsResponse] = await Promise.all([
+          fetchAdminSheetNameOverrides(effectiveTenantId),
+          fetchCalculatorMappings(effectiveTenantId),
+        ]);
         if (!active) return;
-        const normalized = sanitizeSheetNameOverrides(response.settings.overrides);
+        let normalized = sanitizeSheetNameOverrides(response.settings.overrides);
+        const presetKeys = new Set(sheetNamePresetEntries.map((entry) => entry.key));
+        const importedCustomColumns = Array.from(
+          new Set(
+            mappingsResponse.mappings.flatMap((mapping) => Object.keys(mapping.quantities as Record<string, number>)),
+          ),
+        ).reduce<SheetNameOverrides>((result, quantityKey) => {
+          const canonicalKey = toCanonicalSheetNameKey(quantityKey);
+          if (!canonicalKey || presetKeys.has(canonicalKey) || normalized[canonicalKey] || result[canonicalKey]) return result;
+          result[canonicalKey] = quantityKey;
+          return result;
+        }, {});
+        if (Object.keys(importedCustomColumns).length > 0) {
+          const synchronized = await upsertAdminSheetNameOverrides(
+            {
+              overrides: { ...normalized, ...importedCustomColumns },
+              multipleArtworkFormats: response.settings.multipleArtworkFormats ?? {},
+            },
+            effectiveTenantId,
+          );
+          if (!active) return;
+          normalized = sanitizeSheetNameOverrides(synchronized.settings.overrides);
+          response.settings.multipleArtworkFormats = synchronized.settings.multipleArtworkFormats;
+        }
         const nextPreset: Record<string, string> = {};
         sheetNamePresetEntries.forEach((entry) => {
           nextPreset[entry.key] = normalized[entry.key] || defaultSheetNamePresetOverrides[entry.key] || '';
@@ -140,7 +166,6 @@ export function SettingsScreen({
         setPresetOverrides(nextPreset);
         setMultipleArtworkFormats(response.settings.multipleArtworkFormats ?? {});
 
-        const presetKeys = new Set(sheetNamePresetEntries.map((entry) => entry.key));
         const nextCustom = Object.entries(normalized)
           .filter(([key]) => !presetKeys.has(key))
           .map(([key, value]) => createCustomRow(key, value))

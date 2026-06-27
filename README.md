@@ -33,7 +33,7 @@ flowiq/
 
 - Quantity mappings are now stored in PostgreSQL per tenant.
 - The schedule calculator reads market and asset quantity mappings from the database at runtime.
-- Admin and `super_admin` users can manage mappings in the app and can import a JSON file to load the initial dataset.
+- Admin and `super_admin` users can manage mappings in the app and can download, edit, and re-import the current mappings as CSV, including new records and custom quantity columns.
 - PrintIQ product setup fields are still configurable in the app because the mapping dataset only covers schedule quantity logic.
 
 ## Setup
@@ -130,7 +130,7 @@ After updating tokens, restart `npm run web` (or refresh the running app) to ver
 - `npm run db:seed` always creates the default tenant plus the `super_admin` account from `SUPER_ADMIN_*`.
 - If `DEFAULT_ADMIN_EMAIL` and `DEFAULT_ADMIN_PASSWORD` are set, it also seeds a tenant `admin`.
 - If `DEFAULT_USER_EMAIL` and `DEFAULT_USER_PASSWORD` are set, it also seeds a tenant `user`.
-- Calculator mappings are not seeded. Use the admin mapping import flow to load your starting JSON data.
+- Calculator mappings are not seeded. Use the admin mapping import flow to download the CSV template and load your starting data.
 
 ## Contributing
 
