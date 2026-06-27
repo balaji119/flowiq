@@ -1,6 +1,6 @@
 import { CampaignPrintImage, CampaignRecord } from '@flowiq/shared';
 import { appendCampaignPrintImages } from './campaignApi';
-import { uploadCampaignImage } from './campaignImageApi';
+import { uploadCampaignImage, uploadCampaignImageResumable } from './campaignImageApi';
 
 function toFileBaseName(fileName: string) {
   return fileName.replace(/\.[^.]+$/, '');
@@ -39,7 +39,12 @@ function buildArtworkThumbnailFileName(fileName: string, pageNumber: number, tot
   return `${baseName}-page-${String(pageNumber).padStart(digits, '0')}.thumb.webp`;
 }
 
-async function convertPdfToArtworkPages(pdfFile: File, uploadMaxWidth = 2400, thumbnailMaxWidth = 320) {
+async function convertPdfToArtworkPages(
+  pdfFile: File,
+  uploadMaxWidth = 2400,
+  thumbnailMaxWidth = 320,
+  onPageProcessed?: (pageNumber: number, totalPages: number) => void,
+) {
   const pdfjs = await loadPdfJsRuntime();
   const objectUrl = URL.createObjectURL(pdfFile);
   try {
@@ -77,6 +82,7 @@ async function convertPdfToArtworkPages(pdfFile: File, uploadMaxWidth = 2400, th
       );
 
       pages.push({ file: uploadFile, thumbnailFile, pageNumber, totalPages });
+      onPageProcessed?.(pageNumber, totalPages);
     }
     return pages;
   } finally {
@@ -88,12 +94,36 @@ export async function processArtworkPdf(
   campaignId: string,
   tenantId: string | null | undefined,
   pdfFile: File,
+  onProgress?: (progress: {
+    phase: 'uploading-source' | 'finalizing-source' | 'processing-pdf' | 'uploading-pages' | 'saving';
+    uploadedBytes?: number;
+    totalBytes?: number;
+    current?: number;
+    total?: number;
+  }) => void,
 ): Promise<{ campaign: CampaignRecord; images: CampaignPrintImage[] }> {
-  const sourcePdfUpload = await uploadCampaignImage(pdfFile);
-  const pageImages = await convertPdfToArtworkPages(pdfFile);
+  onProgress?.({ phase: 'uploading-source', uploadedBytes: 0, totalBytes: pdfFile.size });
+  const sourcePdfUpload = pdfFile.size > 20 * 1024 * 1024
+    ? await uploadCampaignImageResumable(
+        pdfFile,
+        (uploadedBytes, totalBytes) => onProgress?.({ phase: 'uploading-source', uploadedBytes, totalBytes }),
+        (phase) => {
+          if (phase === 'finalizing') onProgress?.({ phase: 'finalizing-source' });
+        },
+      )
+    : await uploadCampaignImage(pdfFile);
+  onProgress?.({ phase: 'processing-pdf', current: 0, total: 0 });
+  const pageImages = await convertPdfToArtworkPages(
+    pdfFile,
+    2400,
+    320,
+    (current, total) => onProgress?.({ phase: 'processing-pdf', current, total }),
+  );
   const uploadedImages: CampaignPrintImage[] = [];
 
-  for (const pageImage of pageImages) {
+  for (let pageIndex = 0; pageIndex < pageImages.length; pageIndex += 1) {
+    const pageImage = pageImages[pageIndex];
+    onProgress?.({ phase: 'uploading-pages', current: pageIndex, total: pageImages.length });
     const [uploadResponse, thumbnailUploadResponse] = await Promise.all([
       uploadCampaignImage(pageImage.file),
       uploadCampaignImage(pageImage.thumbnailFile),
@@ -114,9 +144,11 @@ export async function processArtworkPdf(
       sourcePdfStoredName: sourcePdfUpload.storedName,
       sourcePdfUrl: sourcePdfUpload.url || `/api/campaign-images/${sourcePdfUpload.storedName}`,
     });
+    onProgress?.({ phase: 'uploading-pages', current: pageIndex + 1, total: pageImages.length });
   }
 
   if (uploadedImages.length === 0) throw new Error('The PDF did not contain any uploadable pages.');
+  onProgress?.({ phase: 'saving' });
   const response = await appendCampaignPrintImages(campaignId, uploadedImages, tenantId);
   return { campaign: response.campaign, images: uploadedImages };
 }

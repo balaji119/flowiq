@@ -13,6 +13,11 @@ export type ArtworkUploadJob = {
   status: 'queued' | 'uploading' | 'completed' | 'error';
   images: CampaignPrintImage[];
   error?: string;
+  uploadedBytes?: number;
+  totalBytes?: number;
+  phase?: 'uploading-source' | 'finalizing-source' | 'processing-pdf' | 'uploading-pages' | 'saving';
+  phaseCurrent?: number;
+  phaseTotal?: number;
 };
 
 type QueuedArtworkUpload = {
@@ -53,7 +58,20 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
         if (!next) continue;
         setJobs((current) => current.map((job) => (job.id === next.jobId ? { ...job, status: 'uploading' } : job)));
         try {
-          const result = await processArtworkPdf(next.campaignId, next.tenantId, next.file);
+          const result = await processArtworkPdf(next.campaignId, next.tenantId, next.file, (progress) => {
+            setJobs((current) => current.map((job) => (
+              job.id === next.jobId
+                ? {
+                    ...job,
+                    phase: progress.phase,
+                    uploadedBytes: progress.uploadedBytes,
+                    totalBytes: progress.totalBytes,
+                    phaseCurrent: progress.current,
+                    phaseTotal: progress.total,
+                  }
+                : job
+            )));
+          });
           setJobs((current) => current.map((job) => (
             job.id === next.jobId ? { ...job, status: 'completed', images: result.images } : job
           )));
@@ -107,6 +125,27 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
     [jobs],
   );
   const activeJobs = jobs.filter((job) => job.status === 'queued' || job.status === 'uploading');
+  const activeJob = activeJobs[0];
+  const activeProgress = activeJob?.phase === 'uploading-source' && activeJob.totalBytes
+    ? Math.min(100, Math.round(((activeJob.uploadedBytes ?? 0) / activeJob.totalBytes) * 100))
+    : (activeJob?.phase === 'processing-pdf' || activeJob?.phase === 'uploading-pages') && activeJob.phaseTotal
+      ? Math.min(100, Math.round(((activeJob.phaseCurrent ?? 0) / activeJob.phaseTotal) * 100))
+      : null;
+  const activePhaseLabel = (() => {
+    if (!activeJob || activeJob.status === 'queued') return 'Waiting to start';
+    if (activeJob.phase === 'uploading-source') return `${activeProgress ?? 0}% — Uploading original PDF`;
+    if (activeJob.phase === 'finalizing-source') return 'Finalizing uploaded PDF';
+    if (activeJob.phase === 'processing-pdf') {
+      return activeJob.phaseTotal
+        ? `Processing PDF page ${activeJob.phaseCurrent ?? 0} of ${activeJob.phaseTotal}`
+        : 'Reading PDF and preparing pages';
+    }
+    if (activeJob.phase === 'uploading-pages') {
+      return `Uploading artwork page ${activeJob.phaseCurrent ?? 0} of ${activeJob.phaseTotal ?? 0}`;
+    }
+    if (activeJob.phase === 'saving') return 'Saving artwork to campaign';
+    return 'Preparing artwork upload';
+  })();
 
   return (
     <ArtworkUploadContext.Provider value={value}>
@@ -119,8 +158,16 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
               <div className="min-w-0">
                 <p className="text-sm font-semibold">Uploading artwork</p>
                 <p className="mt-1 truncate text-xs text-slate-400">
-                  {activeJobs[0].fileName}{activeJobs.length > 1 ? ` and ${activeJobs.length - 1} more` : ''}
+                  {activeJob?.fileName}{activeJobs.length > 1 ? ` and ${activeJobs.length - 1} more` : ''}
                 </p>
+                {activeProgress !== null ? (
+                  <div className="mt-2">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+                      <div className="h-full rounded-full bg-violet-400 transition-[width]" style={{ width: `${activeProgress}%` }} />
+                    </div>
+                  </div>
+                ) : null}
+                <p className="mt-2 text-xs font-medium text-slate-300">{activePhaseLabel}</p>
                 <p className="mt-1 text-xs text-slate-500">Upload continues while you use the dashboard.</p>
               </div>
             </div>

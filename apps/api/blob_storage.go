@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -73,13 +74,18 @@ func (a *app) initCampaignObjectStorage(ctx context.Context) error {
 }
 
 func (a *app) storeCampaignImage(ctx context.Context, storedName, contentType string, content []byte) error {
+	return a.storeCampaignImageReader(ctx, storedName, contentType, bytes.NewReader(content), int64(len(content)))
+}
+
+func (a *app) storeCampaignImageReader(ctx context.Context, storedName, contentType string, content io.Reader, contentLength int64) error {
 	if a.objectStorage != nil {
 		ctype := contentType
 		_, err := a.objectStorage.client.PutObject(ctx, &s3.PutObjectInput{
-			Bucket:      aws.String(a.objectStorage.bucket),
-			Key:         aws.String(storedName),
-			Body:        bytes.NewReader(content),
-			ContentType: aws.String(ctype),
+			Bucket:        aws.String(a.objectStorage.bucket),
+			Key:           aws.String(storedName),
+			Body:          content,
+			ContentLength: aws.Int64(contentLength),
+			ContentType:   aws.String(ctype),
 		})
 		if err != nil {
 			return fmt.Errorf("upload image to DigitalOcean Spaces: %w", err)
@@ -88,7 +94,12 @@ func (a *app) storeCampaignImage(ctx context.Context, storedName, contentType st
 	}
 
 	targetPath := filepath.Join(a.campaignImageDir, storedName)
-	if err := os.WriteFile(targetPath, content, 0o644); err != nil {
+	target, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("write image to local storage: %w", err)
+	}
+	defer target.Close()
+	if _, err := io.Copy(target, content); err != nil {
 		return fmt.Errorf("write image to local storage: %w", err)
 	}
 	return nil
