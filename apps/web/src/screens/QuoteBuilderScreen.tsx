@@ -350,6 +350,55 @@ function isPdfFile(file: File) {
   return file.type === 'application/pdf' || lowerName.endsWith('.pdf');
 }
 
+function ArtworkThumbnailWithHoverPreview({
+  alt,
+  previewSrc,
+  thumbnailSrc,
+}: {
+  alt: string;
+  previewSrc: string;
+  thumbnailSrc: string;
+}) {
+  const [previewPosition, setPreviewPosition] = useState<{ left: number; top: number } | null>(null);
+
+  function updatePreviewPosition(clientX: number, clientY: number) {
+    const previewWidth = Math.min(320, window.innerWidth - 32);
+    const previewHeightEstimate = Math.min(420, window.innerHeight - 32);
+    const left = clientX + 18 + previewWidth <= window.innerWidth
+      ? clientX + 18
+      : Math.max(16, clientX - previewWidth - 18);
+    const top = Math.min(
+      Math.max(16, clientY - previewHeightEstimate / 2),
+      Math.max(16, window.innerHeight - previewHeightEstimate - 16),
+    );
+    setPreviewPosition({ left, top });
+  }
+
+  return (
+    <span
+      className="block h-full w-full"
+      onMouseEnter={(event) => updatePreviewPosition(event.clientX, event.clientY)}
+      onMouseLeave={() => setPreviewPosition(null)}
+      onMouseMove={(event) => updatePreviewPosition(event.clientX, event.clientY)}
+    >
+      <img alt={alt} className="h-full w-full object-cover" loading="lazy" src={thumbnailSrc} />
+      {previewPosition && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              aria-hidden="true"
+              className="pointer-events-none fixed w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-violet-400/60 bg-slate-950 p-2 shadow-2xl shadow-black/70"
+              style={{ left: previewPosition.left, top: previewPosition.top, zIndex: 2147483647 }}
+            >
+              <img alt="" className="max-h-[60vh] w-full rounded object-contain" src={previewSrc} />
+              <p className="mt-2 truncate px-1 text-xs font-medium text-slate-200">{alt}</p>
+            </div>,
+            document.body,
+          )
+        : null}
+    </span>
+  );
+}
+
 function normalizeCreativeNameAssignments(input?: Record<string, string>) {
   const normalized: Record<string, string> = {};
   Object.entries(input ?? {}).forEach(([creativeName, imageId]) => {
@@ -6259,7 +6308,11 @@ export function QuoteBuilderScreen({
                           <td className="border border-slate-700 px-3 py-2">
                             <div className="mx-auto h-14 w-14 overflow-hidden rounded border border-slate-700 bg-slate-900">
                               {thumbnailSrc ? (
-                                <img alt={`Slot ${index + 1} thumbnail`} className="h-full w-full object-cover" loading="lazy" src={thumbnailSrc} />
+                                <ArtworkThumbnailWithHoverPreview
+                                  alt={slotImage?.name || slotImage?.fileName || `Slot ${index + 1} artwork`}
+                                  previewSrc={buildApiUrl(slotImage?.imageUrl || slotImage?.thumbnailUrl || '')}
+                                  thumbnailSrc={thumbnailSrc}
+                                />
                               ) : null}
                             </div>
                           </td>
@@ -6467,11 +6520,10 @@ export function QuoteBuilderScreen({
                                 >
                                   <div className="h-12 w-12 shrink-0 overflow-hidden rounded border border-slate-700 bg-slate-900">
                                     {mappedImage?.thumbnailUrl || mappedImage?.imageUrl ? (
-                                      <img
+                                      <ArtworkThumbnailWithHoverPreview
                                         alt={mappedImage.name || mappedImage.fileName}
-                                        className="h-full w-full object-cover"
-                                        loading="lazy"
-                                        src={buildApiUrl(mappedImage.thumbnailUrl || mappedImage.imageUrl || '')}
+                                        previewSrc={buildApiUrl(mappedImage.imageUrl || mappedImage.thumbnailUrl || '')}
+                                        thumbnailSrc={buildApiUrl(mappedImage.thumbnailUrl || mappedImage.imageUrl || '')}
                                       />
                                     ) : (
                                       <div className="flex h-full items-center justify-center px-1 text-center text-[10px] text-slate-400">N/A</div>
