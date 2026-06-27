@@ -1,4 +1,4 @@
-import { Fragment, type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type Dispatch, type DragEvent, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, CircleAlert, Eye, GripVertical, LayoutGrid, LoaderCircle, Maximize2, Pencil, Plus, Search, Table2, Trash2, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
@@ -1244,6 +1244,7 @@ export function QuoteBuilderScreen({
   const [pendingArtworkUploadCount, setPendingArtworkUploadCount] = useState(0);
   const [queuedArtworkFileNames, setQueuedArtworkFileNames] = useState<string[]>([]);
   const [uploadManagerOpen, setUploadManagerOpen] = useState(false);
+  const [isDraggingArtworkFiles, setIsDraggingArtworkFiles] = useState(false);
   const [hasChosenArtworkInSession, setHasChosenArtworkInSession] = useState(false);
   const [draggingDraftAssetId, setDraggingDraftAssetId] = useState<string | null>(null);
   const [dragOverDraftAssetId, setDragOverDraftAssetId] = useState<string | null>(null);
@@ -2818,6 +2819,8 @@ export function QuoteBuilderScreen({
     const validFiles = nextFiles.filter((file) => isPdfFile(file));
     if (validFiles.length !== nextFiles.length) {
       setArtworkDialogError('Only PDF files are allowed.');
+    } else {
+      setArtworkDialogError('');
     }
     if (!validFiles.length) return;
     setHasChosenArtworkInSession(true);
@@ -2826,6 +2829,23 @@ export function QuoteBuilderScreen({
     setQueuedArtworkFileNames(artworkUploadQueueRef.current.map((file) => file.name));
     setUploadManagerOpen(true);
     void processArtworkUploadQueue();
+  }
+
+  function handleArtworkDragOver(event: DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setIsDraggingArtworkFiles(true);
+  }
+
+  function handleArtworkDragLeave(event: DragEvent<HTMLButtonElement>) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setIsDraggingArtworkFiles(false);
+  }
+
+  function handleArtworkDrop(event: DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    setIsDraggingArtworkFiles(false);
+    handleArtworkPickerFiles(event.dataTransfer.files);
   }
 
   function removeQueuedArtworkFileAt(indexToRemove: number) {
@@ -6498,7 +6518,13 @@ export function QuoteBuilderScreen({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={uploadManagerOpen} onOpenChange={setUploadManagerOpen}>
+      <Dialog
+        open={uploadManagerOpen}
+        onOpenChange={(open) => {
+          setUploadManagerOpen(open);
+          if (!open) setIsDraggingArtworkFiles(false);
+        }}
+      >
         <DialogContent style={{ width: 'min(calc(100vw - 2rem), 44rem)', maxHeight: '90vh' }}>
           <DialogHeader>
             <DialogTitle>Upload Manager</DialogTitle>
@@ -6517,6 +6543,33 @@ export function QuoteBuilderScreen({
                 {uploadingArtworkPages || hasChosenArtworkInSession ? 'Choose More PDFs' : 'Choose PDFs'}
               </Button>
             </div>
+
+            <button
+              className={cn(
+                'flex w-full flex-col items-center justify-center rounded-md border-2 border-dashed px-4 py-7 text-center transition',
+                isDraggingArtworkFiles
+                  ? 'border-violet-400 bg-violet-500/15 text-violet-100'
+                  : 'border-slate-600 bg-slate-900/70 text-slate-300 hover:border-violet-400/70 hover:bg-slate-800/80',
+              )}
+              onClick={openArtworkPdfPicker}
+              onDragEnter={handleArtworkDragOver}
+              onDragLeave={handleArtworkDragLeave}
+              onDragOver={handleArtworkDragOver}
+              onDrop={handleArtworkDrop}
+              type="button"
+            >
+              <Upload className={cn('mb-2 h-7 w-7', isDraggingArtworkFiles ? 'text-violet-300' : 'text-slate-400')} />
+              <span className="text-sm font-semibold">
+                {isDraggingArtworkFiles ? 'Drop PDFs to upload' : 'Drag and drop PDFs here'}
+              </span>
+              <span className="mt-1 text-xs text-slate-400">or click to choose multiple files</span>
+            </button>
+
+            {artworkDialogError ? (
+              <p className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+                {artworkDialogError}
+              </p>
+            ) : null}
 
             {queuedArtworkFileNames.length > 0 ? (
               <div className="rounded-md border border-slate-700 bg-slate-950/70 px-3 py-2">
@@ -6656,4 +6709,3 @@ export function QuoteBuilderScreen({
     </main>
   );
 }
-
