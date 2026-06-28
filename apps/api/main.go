@@ -19,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 )
 
@@ -41,6 +42,7 @@ type app struct {
 	printIQBaseURL   string
 	objectStorage    *campaignObjectStorage
 	oneDriveImports  *oneDriveImportStore
+	oneDriveWorkerID string
 }
 
 type authClaims struct {
@@ -72,22 +74,21 @@ func main() {
 
 	baseDir := "."
 	mappingStore := newMappingStore(pool)
+	jwtSecret := []byte(envOrDefault("JWT_SECRET", "flowiq-dev-secret"))
 	api := &app{
 		authStore:        newAuthStore(pool),
 		campaignStore:    newCampaignStore(pool),
 		mappingStore:     mappingStore,
 		calculator:       newCalculatorService(mappingStore),
 		optionService:    newOptionService(envOrDefault("PRINTIQ_BASE_URL", "https://adsaust.printiq.com"), filepath.Join(baseDir, "storage", "data")),
-		jwtSecret:        []byte(envOrDefault("JWT_SECRET", "flowiq-dev-secret")),
+		jwtSecret:        jwtSecret,
 		jwtExpiry:        parseDurationOrDefault(envOrDefault("JWT_EXPIRES_IN", "8h"), 8*time.Hour),
 		logPath:          filepath.Join(baseDir, "storage", "logs", "printiq-payloads.log"),
 		uploadDir:        filepath.Join(baseDir, "storage", "uploads", "purchase-orders"),
 		campaignImageDir: filepath.Join(baseDir, "storage", "uploads", "campaign-images"),
 		printIQBaseURL:   envOrDefault("PRINTIQ_BASE_URL", "https://adsaust.printiq.com"),
 		oneDriveImports:  newOneDriveImportStore(pool),
-	}
-	if err := api.oneDriveImports.failInterrupted(ctx); err != nil {
-		log.Printf("unable to mark interrupted OneDrive imports: %v", err)
+		oneDriveWorkerID: uuid.NewString(),
 	}
 
 	if err := os.MkdirAll(filepath.Dir(api.logPath), 0o755); err != nil {
@@ -102,6 +103,7 @@ func main() {
 	if err := api.initCampaignObjectStorage(ctx); err != nil {
 		log.Fatalf("failed to initialize campaign object storage: %v", err)
 	}
+	go api.runOneDriveImportWorker(ctx)
 
 	address := fmt.Sprintf(":%s", envOrDefault("PORT", "4000"))
 	log.Printf("FlowIQ API listening on http://localhost%s", address)
@@ -274,6 +276,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("PUT /api/campaign-image-uploads/{uploadId}/chunks/{chunkIndex}", a.withAuth(http.HandlerFunc(a.handleResumableCampaignImageChunk)))
 	mux.Handle("POST /api/campaign-image-uploads/{uploadId}/complete", a.withAuth(http.HandlerFunc(a.handleResumableCampaignImageComplete)))
 	mux.Handle("POST /api/onedrive-artwork-imports", a.withAuth(http.HandlerFunc(a.handleCreateOneDriveArtworkImport)))
+	mux.Handle("GET /api/onedrive-artwork-imports", a.withAuth(http.HandlerFunc(a.handleListOneDriveArtworkImports)))
 	mux.Handle("GET /api/onedrive-artwork-imports/{importId}", a.withAuth(http.HandlerFunc(a.handleGetOneDriveArtworkImport)))
 	mux.Handle("GET /api/onedrive/config", a.withAuth(http.HandlerFunc(a.handleOneDriveConfig)))
 	mux.Handle("DELETE /api/campaign-images/{storedName}", a.withAuth(http.HandlerFunc(a.handleCampaignImageDelete)))

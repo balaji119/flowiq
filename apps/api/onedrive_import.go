@@ -3,10 +3,16 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,6 +29,8 @@ import (
 )
 
 const maxOneDriveImportPages = 1000
+
+const oneDriveWorkerLease = 90 * time.Second
 
 var pdfInfoPagesPattern = regexp.MustCompile(`(?m)^Pages:\s+(\d+)\s*$`)
 
@@ -56,19 +64,22 @@ type oneDriveItemMetadata struct {
 	} `json:"file"`
 }
 
-func newOneDriveImportStore(pool *pgxpool.Pool) *oneDriveImportStore {
-	return &oneDriveImportStore{pool: pool}
+type oneDriveImportWork struct {
+	JobID                 string
+	UserID                string
+	TenantID              string
+	CampaignID            string
+	DriveID               string
+	ItemID                string
+	FileName              string
+	ETag                  string
+	TotalBytes            int64
+	DownloadURL           string
+	AccessTokenCiphertext string
 }
 
-func (s *oneDriveImportStore) failInterrupted(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, `
-		UPDATE onedrive_artwork_imports
-		SET status = 'error',
-			error_message = 'The API restarted while this import was running. Please start the import again.',
-			updated_at = NOW()
-		WHERE status IN ('queued', 'downloading', 'processing', 'saving')
-	`)
-	return err
+func newOneDriveImportStore(pool *pgxpool.Pool) *oneDriveImportStore {
+	return &oneDriveImportStore{pool: pool}
 }
 
 func scanOneDriveImportJob(row pgx.Row) (*oneDriveImportJob, error) {
@@ -112,6 +123,31 @@ func (s *oneDriveImportStore) get(ctx context.Context, importID, userID string) 
 	`, importID, userID))
 }
 
+func (s *oneDriveImportStore) list(ctx context.Context, userID string) ([]oneDriveImportJob, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, campaign_id, file_name, status, downloaded_bytes, total_bytes,
+			processed_pages, total_pages, images, error_message, created_at, updated_at
+		FROM onedrive_artwork_imports
+		WHERE user_id = $1
+		  AND (status IN ('queued', 'downloading', 'processing', 'saving') OR updated_at >= NOW() - INTERVAL '24 hours')
+		ORDER BY created_at DESC
+		LIMIT 50
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	jobs := make([]oneDriveImportJob, 0)
+	for rows.Next() {
+		job, err := scanOneDriveImportJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, *job)
+	}
+	return jobs, rows.Err()
+}
+
 func (s *oneDriveImportStore) insert(
 	ctx context.Context,
 	jobID string,
@@ -119,6 +155,7 @@ func (s *oneDriveImportStore) insert(
 	campaignID string,
 	item oneDriveItemMetadata,
 	driveID string,
+	accessTokenCiphertext string,
 ) (*oneDriveImportJob, error) {
 	if user.TenantID == nil {
 		return nil, errors.New("current user is not assigned to a tenant")
@@ -126,13 +163,59 @@ func (s *oneDriveImportStore) insert(
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO onedrive_artwork_imports (
 			id, user_id, tenant_id, campaign_id, drive_id, item_id, item_etag,
-			file_name, status, total_bytes
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'queued', $9)
-	`, jobID, user.ID, *user.TenantID, campaignID, driveID, item.ID, item.ETag, item.Name, item.Size)
+			file_name, status, total_bytes, download_url, access_token_ciphertext
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'queued', $9, $10, $11)
+	`, jobID, user.ID, *user.TenantID, campaignID, driveID, item.ID, item.ETag, item.Name, item.Size, item.DownloadURL, accessTokenCiphertext)
 	if err != nil {
 		return nil, err
 	}
 	return s.get(ctx, jobID, user.ID)
+}
+
+func (s *oneDriveImportStore) claim(ctx context.Context, workerID string) (*oneDriveImportWork, error) {
+	var work oneDriveImportWork
+	err := s.pool.QueryRow(ctx, `
+		WITH candidate AS (
+			SELECT id
+			FROM onedrive_artwork_imports
+			WHERE status IN ('queued', 'downloading', 'processing', 'saving')
+			  AND (locked_until IS NULL OR locked_until < NOW())
+			ORDER BY created_at
+			FOR UPDATE SKIP LOCKED
+			LIMIT 1
+		)
+		UPDATE onedrive_artwork_imports AS job
+		SET locked_by = $1,
+			locked_until = NOW() + INTERVAL '90 seconds',
+			attempt_count = attempt_count + 1,
+			error_message = '',
+			updated_at = NOW()
+		FROM candidate
+		WHERE job.id = candidate.id
+		RETURNING job.id, job.user_id, job.tenant_id, job.campaign_id, job.drive_id, job.item_id,
+			job.file_name, job.item_etag, job.total_bytes, job.download_url,
+			job.access_token_ciphertext
+	`, workerID).Scan(
+		&work.JobID, &work.UserID, &work.TenantID, &work.CampaignID, &work.DriveID, &work.ItemID,
+		&work.FileName, &work.ETag, &work.TotalBytes, &work.DownloadURL,
+		&work.AccessTokenCiphertext,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &work, nil
+}
+
+func (s *oneDriveImportStore) renewLease(ctx context.Context, jobID, workerID string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE onedrive_artwork_imports
+		SET locked_until = NOW() + INTERVAL '90 seconds'
+		WHERE id = $1 AND locked_by = $2
+	`, jobID, workerID)
+	return err
 }
 
 func (s *oneDriveImportStore) updateProgress(
@@ -162,7 +245,8 @@ func (s *oneDriveImportStore) complete(ctx context.Context, jobID string, images
 		UPDATE onedrive_artwork_imports
 		SET status = 'completed', images = $2::jsonb, error_message = '',
 			processed_pages = total_pages, downloaded_bytes = total_bytes,
-			updated_at = NOW(), completed_at = NOW()
+			updated_at = NOW(), completed_at = NOW(), locked_by = NULL, locked_until = NULL,
+			access_token_ciphertext = '', download_url = ''
 		WHERE id = $1
 	`, jobID, string(encoded))
 	return err
@@ -175,7 +259,8 @@ func (s *oneDriveImportStore) fail(ctx context.Context, jobID string, importErr 
 	}
 	_, _ = s.pool.Exec(ctx, `
 		UPDATE onedrive_artwork_imports
-		SET status = 'error', error_message = $2, updated_at = NOW()
+		SET status = 'error', error_message = $2, updated_at = NOW(),
+			locked_by = NULL, locked_until = NULL, access_token_ciphertext = '', download_url = ''
 		WHERE id = $1
 	`, jobID, message)
 }
@@ -219,6 +304,56 @@ func fetchOneDriveItem(ctx context.Context, accessToken, driveID, itemID string)
 	return item, nil
 }
 
+func (a *app) oneDriveCredentialKey() [32]byte {
+	secret := strings.TrimSpace(os.Getenv("ONEDRIVE_JOB_ENCRYPTION_KEY"))
+	if secret == "" {
+		secret = string(a.jwtSecret)
+	}
+	return sha256.Sum256([]byte(secret))
+}
+
+func (a *app) encryptOneDriveCredential(value string) (string, error) {
+	key := a.oneDriveCredentialKey()
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	sealed := gcm.Seal(nonce, nonce, []byte(value), nil)
+	return base64.RawURLEncoding.EncodeToString(sealed), nil
+}
+
+func (a *app) decryptOneDriveCredential(encoded string) (string, error) {
+	sealed, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", errors.New("decode saved OneDrive authorization")
+	}
+	key := a.oneDriveCredentialKey()
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	if len(sealed) < gcm.NonceSize() {
+		return "", errors.New("saved OneDrive authorization is invalid")
+	}
+	plain, err := gcm.Open(nil, sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():], nil)
+	if err != nil {
+		return "", errors.New("decrypt saved OneDrive authorization")
+	}
+	return string(plain), nil
+}
+
 func (a *app) handleCreateOneDriveArtworkImport(w http.ResponseWriter, r *http.Request) {
 	user, resolveErr := a.userWithManagedTenant(r)
 	if resolveErr != nil {
@@ -255,12 +390,16 @@ func (a *app) handleCreateOneDriveArtworkImport(w http.ResponseWriter, r *http.R
 		return
 	}
 	jobID := uuid.NewString()
-	job, err := a.oneDriveImports.insert(r.Context(), jobID, *user, payload.CampaignID, item, payload.DriveID)
+	encryptedToken, err := a.encryptOneDriveCredential(payload.AccessToken)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to protect OneDrive authorization"})
+		return
+	}
+	job, err := a.oneDriveImports.insert(r.Context(), jobID, *user, payload.CampaignID, item, payload.DriveID, encryptedToken)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to create OneDrive import"})
 		return
 	}
-	go a.runOneDriveArtworkImport(jobID, *user, payload.CampaignID, payload.DriveID, payload.ItemID, payload.AccessToken, item)
 	writeJSON(w, http.StatusAccepted, map[string]any{"import": job})
 }
 
@@ -289,6 +428,20 @@ func (a *app) handleGetOneDriveArtworkImport(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"import": job})
+}
+
+func (a *app) handleListOneDriveArtworkImports(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	if user == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Authentication required"})
+		return
+	}
+	jobs, err := a.oneDriveImports.list(r.Context(), user.ID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to load OneDrive imports"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"imports": jobs})
 }
 
 type progressWriter struct {
@@ -467,15 +620,68 @@ func renderPDFPage(ctx context.Context, pdfPath, outputPrefix string, page, widt
 	return renderedPath, nil
 }
 
-func storedArtworkName(base string, page int, suffix string) string {
-	safeBase := strings.TrimSpace(unsafeFilenamePattern.ReplaceAllString(base, "_"))
-	if safeBase == "" {
-		safeBase = "onedrive-artwork"
+func (a *app) runOneDriveImportWorker(ctx context.Context) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		work, err := a.oneDriveImports.claim(ctx, a.oneDriveWorkerID)
+		if err != nil {
+			log.Printf("claim OneDrive import: %v", err)
+		} else if work != nil {
+			a.processOneDriveImportWork(ctx, *work)
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(2 * time.Second):
+		}
 	}
-	if len(safeBase) > 64 {
-		safeBase = safeBase[:64]
+}
+
+func (a *app) processOneDriveImportWork(parent context.Context, work oneDriveImportWork) {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(oneDriveWorkerLease / 3)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := a.oneDriveImports.renewLease(context.Background(), work.JobID, a.oneDriveWorkerID); err != nil {
+					log.Printf("renew OneDrive import lease %s: %v", work.JobID, err)
+				}
+			}
+		}
+	}()
+
+	accessToken, err := a.decryptOneDriveCredential(work.AccessTokenCiphertext)
+	if err != nil {
+		a.oneDriveImports.fail(context.Background(), work.JobID, errors.New("Saved OneDrive authorization is unavailable; please start the import again"))
+		cancel()
+		<-done
+		return
 	}
-	return fmt.Sprintf("%d-%s-page-%04d-%s.jpg", time.Now().UnixMilli(), safeBase, page, suffix)
+	user, err := a.authStore.userByID(ctx, work.UserID)
+	if err != nil || user == nil || !user.Active {
+		a.oneDriveImports.fail(context.Background(), work.JobID, errors.New("The user who started this import is no longer available"))
+		cancel()
+		<-done
+		return
+	}
+	user.TenantID = &work.TenantID
+	item := oneDriveItemMetadata{
+		ID: work.ItemID, Name: work.FileName, Size: work.TotalBytes,
+		ETag: work.ETag, DownloadURL: work.DownloadURL,
+	}
+	a.runOneDriveArtworkImport(work.JobID, *user, work.CampaignID, work.DriveID, work.ItemID, accessToken, item)
+	cancel()
+	<-done
 }
 
 func (a *app) runOneDriveArtworkImport(
@@ -544,7 +750,7 @@ func (a *app) runOneDriveArtworkImport(
 	if len(safeBase) > 64 {
 		safeBase = safeBase[:64]
 	}
-	sourceStoredName := fmt.Sprintf("%d-%s.pdf", time.Now().UnixMilli(), safeBase)
+	sourceStoredName := fmt.Sprintf("%s-%s.pdf", jobID, safeBase)
 	sourceFile, err := os.Open(pdfPath)
 	if err != nil {
 		a.oneDriveImports.fail(ctx, jobID, err)
@@ -577,8 +783,8 @@ func (a *app) runOneDriveArtworkImport(
 			a.oneDriveImports.fail(ctx, jobID, err)
 			return
 		}
-		fullStoredName := storedArtworkName(baseName, page, "full")
-		thumbStoredName := storedArtworkName(baseName, page, "thumb")
+		fullStoredName := fmt.Sprintf("%s-%s-page-%04d-full.jpg", jobID, safeBase, page)
+		thumbStoredName := fmt.Sprintf("%s-%s-page-%04d-thumb.jpg", jobID, safeBase, page)
 		if err := a.storeFileAsCampaignImage(ctx, fullStoredName, "image/jpeg", fullPath); err != nil {
 			a.oneDriveImports.fail(ctx, jobID, err)
 			return

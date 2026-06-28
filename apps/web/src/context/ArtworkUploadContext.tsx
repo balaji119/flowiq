@@ -1,10 +1,11 @@
 'use client';
 
-import { PropsWithChildren, createContext, useContext, useMemo, useRef, useState } from 'react';
+import { PropsWithChildren, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { CampaignPrintImage } from '@flowiq/shared';
 import { Check, LoaderCircle, TriangleAlert, X } from 'lucide-react';
 import { processArtworkPdf } from '../services/artworkUploadProcessor';
-import { OneDriveImportJob, OneDriveSelection, createOneDriveArtworkImport, fetchOneDriveArtworkImport } from '../services/oneDriveApi';
+import { OneDriveImportJob, OneDriveSelection, createOneDriveArtworkImport, fetchOneDriveArtworkImport, listOneDriveArtworkImports } from '../services/oneDriveApi';
+import { useAuth } from './AuthContext';
 
 export type ArtworkUploadJob = {
   id: string;
@@ -19,6 +20,7 @@ export type ArtworkUploadJob = {
   phase?: 'uploading-source' | 'finalizing-source' | 'processing-pdf' | 'uploading-pages' | 'onedrive-downloading' | 'onedrive-processing' | 'saving';
   phaseCurrent?: number;
   phaseTotal?: number;
+  origin?: 'local' | 'onedrive';
 };
 
 type QueuedArtworkUpload = {
@@ -39,17 +41,96 @@ type ArtworkUploadContextValue = {
 const ArtworkUploadContext = createContext<ArtworkUploadContextValue | null>(null);
 
 export function ArtworkUploadProvider({ children }: PropsWithChildren) {
+  const { session } = useAuth();
   const [jobs, setJobs] = useState<ArtworkUploadJob[]>([]);
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const queueRef = useRef<QueuedArtworkUpload[]>([]);
   const workerActiveRef = useRef(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const monitoredOneDriveRef = useRef(new Set<string>());
 
   function showNotice(kind: 'success' | 'error', message: string) {
     setNotice({ kind, message });
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = setTimeout(() => setNotice(null), kind === 'success' ? 6000 : 12000);
   }
+
+  function toArtworkJob(remoteJob: OneDriveImportJob): ArtworkUploadJob {
+    return {
+      id: remoteJob.id,
+      campaignId: remoteJob.campaignId,
+      fileName: remoteJob.fileName,
+      status: remoteJob.status === 'completed' ? 'completed' : remoteJob.status === 'error' ? 'error' : 'uploading',
+      images: remoteJob.images,
+      error: remoteJob.error,
+      uploadedBytes: remoteJob.downloadedBytes,
+      totalBytes: remoteJob.totalBytes,
+      phase: remoteJob.status === 'queued' || remoteJob.status === 'downloading'
+        ? 'onedrive-downloading'
+        : remoteJob.status === 'processing'
+          ? 'onedrive-processing'
+          : 'saving',
+      phaseCurrent: remoteJob.processedPages,
+      phaseTotal: remoteJob.totalPages,
+      origin: 'onedrive',
+    };
+  }
+
+  function monitorOneDriveJob(initialJob: OneDriveImportJob) {
+    if (monitoredOneDriveRef.current.has(initialJob.id)) return;
+    monitoredOneDriveRef.current.add(initialJob.id);
+    void (async () => {
+      let remoteJob = initialJob;
+      try {
+        while (monitoredOneDriveRef.current.has(remoteJob.id) && remoteJob.status !== 'completed' && remoteJob.status !== 'error') {
+          setJobs((current) => current.map((job) => job.id === remoteJob.id ? { ...job, ...toArtworkJob(remoteJob) } : job));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          try {
+            remoteJob = (await fetchOneDriveArtworkImport(remoteJob.id)).import;
+          } catch {
+            // Polling is only a view of the server job. A temporary browser/network
+            // failure must never cancel or fail the durable import.
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+          }
+        }
+        if (!monitoredOneDriveRef.current.has(remoteJob.id)) return;
+        setJobs((current) => current.map((job) => job.id === remoteJob.id ? { ...job, ...toArtworkJob(remoteJob) } : job));
+        if (remoteJob.status === 'error') {
+          showNotice('error', `${remoteJob.fileName}: ${remoteJob.error || 'Unable to import artwork from OneDrive'}`);
+        } else if (remoteJob.status === 'completed') {
+          showNotice('success', `${remoteJob.fileName} imported from OneDrive (${remoteJob.images.length} artwork page${remoteJob.images.length === 1 ? '' : 's'}).`);
+        }
+      } finally {
+        monitoredOneDriveRef.current.delete(remoteJob.id);
+      }
+    })();
+  }
+
+  useEffect(() => {
+    monitoredOneDriveRef.current.clear();
+    setJobs((current) => current.filter((job) => job.origin !== 'onedrive'));
+    if (!session) return;
+    let active = true;
+    void listOneDriveArtworkImports()
+      .then(({ imports }) => {
+        if (!active) return;
+        setJobs((current) => {
+          const localJobs = current.filter((job) => job.origin !== 'onedrive');
+          return [...localJobs, ...imports.map(toArtworkJob)];
+        });
+        imports
+          .filter((job) => job.status !== 'completed' && job.status !== 'error')
+          .forEach(monitorOneDriveJob);
+      })
+      .catch(() => {
+        // Authentication bootstrap or a temporary network outage may race this
+        // request. Newly opened screens can still start imports normally.
+      });
+    return () => {
+      active = false;
+      monitoredOneDriveRef.current.clear();
+    };
+  }, [session?.user.id]);
 
   async function processQueue() {
     if (workerActiveRef.current) return;
@@ -106,6 +187,7 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
         fileName: item.file.name,
         status: 'queued',
         images: [],
+        origin: 'local',
       })),
     ]);
     void processQueue();
@@ -131,6 +213,7 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
         phase: 'onedrive-downloading',
         uploadedBytes: 0,
         totalBytes: selection.size,
+        origin: 'onedrive',
       },
     ]);
     let remoteJob: OneDriveImportJob;
@@ -142,43 +225,9 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
       showNotice('error', `${selection.name}: ${message}`);
       throw error;
     }
-    void (async () => {
-      try {
-        while (remoteJob.status !== 'completed' && remoteJob.status !== 'error') {
-          setJobs((current) => current.map((job) => job.id === localJobId ? {
-            ...job,
-            phase: remoteJob.status === 'downloading' || remoteJob.status === 'queued'
-              ? 'onedrive-downloading'
-              : remoteJob.status === 'processing'
-                ? 'onedrive-processing'
-                : 'saving',
-            uploadedBytes: remoteJob.downloadedBytes,
-            totalBytes: remoteJob.totalBytes || selection.size,
-            phaseCurrent: remoteJob.processedPages,
-            phaseTotal: remoteJob.totalPages,
-          } : job));
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          remoteJob = (await fetchOneDriveArtworkImport(remoteJob.id)).import;
-        }
-        if (remoteJob.status === 'error') throw new Error(remoteJob.error || 'Unable to import artwork from OneDrive');
-        setJobs((current) => current.map((job) => job.id === localJobId ? {
-          ...job,
-          status: 'completed',
-          phase: 'saving',
-          images: remoteJob.images,
-          uploadedBytes: remoteJob.totalBytes,
-          totalBytes: remoteJob.totalBytes,
-          phaseCurrent: remoteJob.totalPages,
-          phaseTotal: remoteJob.totalPages,
-        } : job));
-        showNotice('success', `${selection.name} imported from OneDrive (${remoteJob.images.length} artwork page${remoteJob.images.length === 1 ? '' : 's'}).`);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unable to import artwork from OneDrive';
-        setJobs((current) => current.map((job) => job.id === localJobId ? { ...job, status: 'error', error: message } : job));
-        showNotice('error', `${selection.name}: ${message}`);
-      }
-    })();
-    return localJobId;
+    setJobs((current) => current.map((job) => job.id === localJobId ? toArtworkJob(remoteJob) : job));
+    monitorOneDriveJob(remoteJob);
+    return remoteJob.id;
   }
 
   async function enqueueOneDriveFiles(

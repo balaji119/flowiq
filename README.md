@@ -59,8 +59,9 @@ The artwork upload manager supports both the existing local PDF upload/drag-and-
 2. Add the FlowIQ MSAL bridge URL (for example `http://localhost:3000/redirect`) as a SPA redirect URI. Production uses the same `/redirect` path on the public HTTPS origin.
 3. Add the delegated Microsoft Graph `Files.Read` permission.
 4. Set `ONEDRIVE_CLIENT_ID` in the API environment. Set `ONEDRIVE_TENANT_ID` to the tenant ID for a single-tenant app, or leave the default `organizations` for a multi-tenant work/school app.
+5. Set `ONEDRIVE_JOB_ENCRYPTION_KEY` to a stable, high-entropy secret shared by every API instance. It encrypts the short-lived OneDrive authorization stored for restart recovery. When omitted, `JWT_SECRET` is used.
 
-OneDrive imports are tracked as database jobs. The API downloads the selected PDF directly, resumes interrupted HTTP transfers where the source supports ranges, and renders artwork pages on the server. If the API itself restarts, an active job is marked failed so the user can start it again cleanly. The production API image includes Poppler (`pdfinfo` and `pdftoppm`) for this processing. Local API development requires those commands to be installed and available on `PATH` before a OneDrive import can be processed.
+OneDrive imports are tracked as durable database jobs. A leased API worker downloads the selected PDF directly, resumes interrupted HTTP transfers where the source supports ranges, and renders artwork pages on the server. Closing the browser does not stop the import. After an API restart, another worker reclaims the job and resumes from the partial server-side file when the upload volume is persistent. Reopening FlowIQ restores recent and active jobs from the API. The production API image includes Poppler (`pdfinfo` and `pdftoppm`) for this processing. Local API development requires those commands to be installed and available on `PATH` before a OneDrive import can be processed.
 
 ## Commands
 

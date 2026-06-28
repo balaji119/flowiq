@@ -153,3 +153,7 @@ export async function createOneDriveArtworkImport(
 export async function fetchOneDriveArtworkImport(importId: string) {
   return apiFetchJson<{ import: OneDriveImportJob }>(`/api/onedrive-artwork-imports/${encodeURIComponent(importId)}`);
 }
+
+export async function listOneDriveArtworkImports() {
+  return apiFetchJson<{ imports: OneDriveImportJob[] }>('/api/onedrive-artwork-imports');
+}

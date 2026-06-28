@@ -50,3 +50,22 @@ func TestVerifyPDFFileRejectsNonPDF(t *testing.T) {
 		t.Fatal("verifyPDFFile accepted non-PDF content")
 	}
 }
+
+func TestOneDriveCredentialEncryptionRoundTrip(t *testing.T) {
+	t.Setenv("ONEDRIVE_JOB_ENCRYPTION_KEY", "test-only-stable-worker-key")
+	api := &app{jwtSecret: []byte("unused-fallback")}
+	encrypted, err := api.encryptOneDriveCredential("short-lived-access-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if encrypted == "short-lived-access-token" {
+		t.Fatal("credential was stored as plaintext")
+	}
+	decrypted, err := api.decryptOneDriveCredential(encrypted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decrypted != "short-lived-access-token" {
+		t.Fatalf("decrypted credential = %q", decrypted)
+	}
+}
