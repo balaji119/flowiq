@@ -51,6 +51,17 @@ The default local URLs are:
 - web: `http://localhost:3000`
 - API: `http://localhost:4000`
 
+## OneDrive artwork imports
+
+The artwork upload manager supports both the existing local PDF upload/drag-and-drop flow and a server-side OneDrive import flow. To enable OneDrive imports:
+
+1. Register a Single-page application in Microsoft Entra ID.
+2. Add the FlowIQ MSAL bridge URL (for example `http://localhost:3000/redirect`) as a SPA redirect URI. Production uses the same `/redirect` path on the public HTTPS origin.
+3. Add the delegated Microsoft Graph `Files.Read` permission.
+4. Set `ONEDRIVE_CLIENT_ID` in the API environment. Set `ONEDRIVE_TENANT_ID` to the tenant ID for a single-tenant app, or leave the default `organizations` for a multi-tenant work/school app.
+
+OneDrive imports are tracked as database jobs. The API downloads the selected PDF directly, resumes interrupted HTTP transfers where the source supports ranges, and renders artwork pages on the server. If the API itself restarts, an active job is marked failed so the user can start it again cleanly. The production API image includes Poppler (`pdfinfo` and `pdftoppm`) for this processing. Local API development requires those commands to be installed and available on `PATH` before a OneDrive import can be processed.
+
 ## Commands
 
 - `npm run dev`

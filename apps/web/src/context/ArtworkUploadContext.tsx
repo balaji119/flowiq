@@ -4,6 +4,7 @@ import { PropsWithChildren, createContext, useContext, useMemo, useRef, useState
 import { CampaignPrintImage } from '@flowiq/shared';
 import { Check, LoaderCircle, TriangleAlert, X } from 'lucide-react';
 import { processArtworkPdf } from '../services/artworkUploadProcessor';
+import { OneDriveImportJob, OneDriveSelection, createOneDriveArtworkImport, fetchOneDriveArtworkImport } from '../services/oneDriveApi';
 
 export type ArtworkUploadJob = {
   id: string;
@@ -15,7 +16,7 @@ export type ArtworkUploadJob = {
   error?: string;
   uploadedBytes?: number;
   totalBytes?: number;
-  phase?: 'uploading-source' | 'finalizing-source' | 'processing-pdf' | 'uploading-pages' | 'saving';
+  phase?: 'uploading-source' | 'finalizing-source' | 'processing-pdf' | 'uploading-pages' | 'onedrive-downloading' | 'onedrive-processing' | 'saving';
   phaseCurrent?: number;
   phaseTotal?: number;
 };
@@ -30,6 +31,7 @@ type QueuedArtworkUpload = {
 type ArtworkUploadContextValue = {
   jobs: ArtworkUploadJob[];
   enqueueArtworkFiles: (campaignId: string, tenantId: string | null | undefined, files: File[]) => string[];
+  enqueueOneDriveFiles: (campaignId: string, tenantId: string | null | undefined, selections: OneDriveSelection[], accessToken: string) => Promise<string[]>;
   removeQueuedUpload: (jobId: string) => void;
   dismissUploadJobs: (jobIds: string[]) => void;
 };
@@ -110,6 +112,90 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
     return queued.map((item) => item.jobId);
   }
 
+  async function enqueueOneDriveFile(
+    campaignId: string,
+    tenantId: string | null | undefined,
+    selection: OneDriveSelection,
+    accessToken: string,
+  ) {
+    const localJobId = crypto.randomUUID();
+    setJobs((current) => [
+      ...current,
+      {
+        id: localJobId,
+        campaignId,
+        tenantId,
+        fileName: selection.name,
+        status: 'uploading',
+        images: [],
+        phase: 'onedrive-downloading',
+        uploadedBytes: 0,
+        totalBytes: selection.size,
+      },
+    ]);
+    let remoteJob: OneDriveImportJob;
+    try {
+      remoteJob = (await createOneDriveArtworkImport(campaignId, tenantId, selection, accessToken)).import;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to import artwork from OneDrive';
+      setJobs((current) => current.map((job) => job.id === localJobId ? { ...job, status: 'error', error: message } : job));
+      showNotice('error', `${selection.name}: ${message}`);
+      throw error;
+    }
+    void (async () => {
+      try {
+        while (remoteJob.status !== 'completed' && remoteJob.status !== 'error') {
+          setJobs((current) => current.map((job) => job.id === localJobId ? {
+            ...job,
+            phase: remoteJob.status === 'downloading' || remoteJob.status === 'queued'
+              ? 'onedrive-downloading'
+              : remoteJob.status === 'processing'
+                ? 'onedrive-processing'
+                : 'saving',
+            uploadedBytes: remoteJob.downloadedBytes,
+            totalBytes: remoteJob.totalBytes || selection.size,
+            phaseCurrent: remoteJob.processedPages,
+            phaseTotal: remoteJob.totalPages,
+          } : job));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          remoteJob = (await fetchOneDriveArtworkImport(remoteJob.id)).import;
+        }
+        if (remoteJob.status === 'error') throw new Error(remoteJob.error || 'Unable to import artwork from OneDrive');
+        setJobs((current) => current.map((job) => job.id === localJobId ? {
+          ...job,
+          status: 'completed',
+          phase: 'saving',
+          images: remoteJob.images,
+          uploadedBytes: remoteJob.totalBytes,
+          totalBytes: remoteJob.totalBytes,
+          phaseCurrent: remoteJob.totalPages,
+          phaseTotal: remoteJob.totalPages,
+        } : job));
+        showNotice('success', `${selection.name} imported from OneDrive (${remoteJob.images.length} artwork page${remoteJob.images.length === 1 ? '' : 's'}).`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to import artwork from OneDrive';
+        setJobs((current) => current.map((job) => job.id === localJobId ? { ...job, status: 'error', error: message } : job));
+        showNotice('error', `${selection.name}: ${message}`);
+      }
+    })();
+    return localJobId;
+  }
+
+  async function enqueueOneDriveFiles(
+    campaignId: string,
+    tenantId: string | null | undefined,
+    selections: OneDriveSelection[],
+    accessToken: string,
+  ) {
+    const jobIds: string[] = [];
+    for (const selection of selections) {
+      // Keep each OneDrive PDF independent so a single failure doesn't block the rest.
+      // The underlying server-side processing already runs one import job per file.
+      jobIds.push(await enqueueOneDriveFile(campaignId, tenantId, selection, accessToken));
+    }
+    return jobIds;
+  }
+
   function removeQueuedUpload(jobId: string) {
     queueRef.current = queueRef.current.filter((item) => item.jobId !== jobId);
     setJobs((current) => current.filter((job) => job.id !== jobId || job.status !== 'queued'));
@@ -121,20 +207,26 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
   }
 
   const value = useMemo<ArtworkUploadContextValue>(
-    () => ({ jobs, enqueueArtworkFiles, removeQueuedUpload, dismissUploadJobs }),
+    () => ({ jobs, enqueueArtworkFiles, enqueueOneDriveFiles, removeQueuedUpload, dismissUploadJobs }),
     [jobs],
   );
   const activeJobs = jobs.filter((job) => job.status === 'queued' || job.status === 'uploading');
   const activeJob = activeJobs[0];
-  const activeProgress = activeJob?.phase === 'uploading-source' && activeJob.totalBytes
+  const activeProgress = (activeJob?.phase === 'uploading-source' || activeJob?.phase === 'onedrive-downloading') && activeJob.totalBytes
     ? Math.min(100, Math.round(((activeJob.uploadedBytes ?? 0) / activeJob.totalBytes) * 100))
-    : (activeJob?.phase === 'processing-pdf' || activeJob?.phase === 'uploading-pages') && activeJob.phaseTotal
+    : (activeJob?.phase === 'processing-pdf' || activeJob?.phase === 'uploading-pages' || activeJob?.phase === 'onedrive-processing') && activeJob.phaseTotal
       ? Math.min(100, Math.round(((activeJob.phaseCurrent ?? 0) / activeJob.phaseTotal) * 100))
       : null;
   const activePhaseLabel = (() => {
     if (!activeJob || activeJob.status === 'queued') return 'Waiting to start';
     if (activeJob.phase === 'uploading-source') return `${activeProgress ?? 0}% — Uploading original PDF`;
     if (activeJob.phase === 'finalizing-source') return 'Finalizing uploaded PDF';
+    if (activeJob.phase === 'onedrive-downloading') return `${activeProgress ?? 0}% — Importing original PDF from OneDrive`;
+    if (activeJob.phase === 'onedrive-processing') {
+      return activeJob.phaseTotal
+        ? `Processing imported PDF page ${activeJob.phaseCurrent ?? 0} of ${activeJob.phaseTotal}`
+        : 'Reading imported PDF and preparing pages';
+    }
     if (activeJob.phase === 'processing-pdf') {
       return activeJob.phaseTotal
         ? `Processing PDF page ${activeJob.phaseCurrent ?? 0} of ${activeJob.phaseTotal}`

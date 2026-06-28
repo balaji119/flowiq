@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.15.0",
     "@flowiq/shared": "file:../../packages/shared",
     "@flowiq/ui": "file:../../packages/ui",
     "@radix-ui/react-dialog": "^1.1.15",

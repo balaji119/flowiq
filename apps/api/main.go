@@ -40,6 +40,7 @@ type app struct {
 	campaignImageDir string
 	printIQBaseURL   string
 	objectStorage    *campaignObjectStorage
+	oneDriveImports  *oneDriveImportStore
 }
 
 type authClaims struct {
@@ -83,6 +84,10 @@ func main() {
 		uploadDir:        filepath.Join(baseDir, "storage", "uploads", "purchase-orders"),
 		campaignImageDir: filepath.Join(baseDir, "storage", "uploads", "campaign-images"),
 		printIQBaseURL:   envOrDefault("PRINTIQ_BASE_URL", "https://adsaust.printiq.com"),
+		oneDriveImports:  newOneDriveImportStore(pool),
+	}
+	if err := api.oneDriveImports.failInterrupted(ctx); err != nil {
+		log.Printf("unable to mark interrupted OneDrive imports: %v", err)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(api.logPath), 0o755); err != nil {
@@ -268,6 +273,9 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/campaign-image-uploads/{uploadId}", a.withAuth(http.HandlerFunc(a.handleResumableCampaignImageStatus)))
 	mux.Handle("PUT /api/campaign-image-uploads/{uploadId}/chunks/{chunkIndex}", a.withAuth(http.HandlerFunc(a.handleResumableCampaignImageChunk)))
 	mux.Handle("POST /api/campaign-image-uploads/{uploadId}/complete", a.withAuth(http.HandlerFunc(a.handleResumableCampaignImageComplete)))
+	mux.Handle("POST /api/onedrive-artwork-imports", a.withAuth(http.HandlerFunc(a.handleCreateOneDriveArtworkImport)))
+	mux.Handle("GET /api/onedrive-artwork-imports/{importId}", a.withAuth(http.HandlerFunc(a.handleGetOneDriveArtworkImport)))
+	mux.Handle("GET /api/onedrive/config", a.withAuth(http.HandlerFunc(a.handleOneDriveConfig)))
 	mux.Handle("DELETE /api/campaign-images/{storedName}", a.withAuth(http.HandlerFunc(a.handleCampaignImageDelete)))
 	mux.Handle("GET /api/campaign-images/{storedName}", http.HandlerFunc(a.handleCampaignImageGet))
 	mux.Handle("GET /api/campaign-images/{storedName}/download", http.HandlerFunc(a.handleCampaignImageDownload))

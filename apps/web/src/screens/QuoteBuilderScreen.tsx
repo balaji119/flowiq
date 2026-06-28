@@ -27,6 +27,8 @@ import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dial
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { useArtworkUploads } from '../context/ArtworkUploadContext';
+import { OneDriveArtworkImportDialog } from '../components/OneDriveArtworkImportDialog';
+import { OneDriveSelection } from '../services/oneDriveApi';
 import { buildApiUrl } from '../services/apiBase';
 import { acquireCampaignEditLock, createCampaign, fetchCampaign, markCampaignSubmitted, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { deleteCampaignImage } from '../services/campaignImageApi';
@@ -1189,7 +1191,7 @@ export function QuoteBuilderScreen({
   onOpenAdmin?: () => void;
 }) {
   const { session } = useAuth();
-  const { dismissUploadJobs, enqueueArtworkFiles, jobs: artworkUploadJobs, removeQueuedUpload } = useArtworkUploads();
+  const { dismissUploadJobs, enqueueArtworkFiles, enqueueOneDriveFiles, jobs: artworkUploadJobs, removeQueuedUpload } = useArtworkUploads();
   const effectiveTenantId = tenantId ?? session?.user.tenantId ?? null;
   const [values, setValues] = useState<OrderFormValues>(() => defaultValues);
   const [campaignStartDateInput, setCampaignStartDateInput] = useState('');
@@ -1233,6 +1235,7 @@ export function QuoteBuilderScreen({
   const [previewArtworkTarget, setPreviewArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey } | null>(null);
   const [previewArtworkFullLoaded, setPreviewArtworkFullLoaded] = useState(false);
   const [uploadManagerOpen, setUploadManagerOpen] = useState(false);
+  const [oneDriveImportOpen, setOneDriveImportOpen] = useState(false);
   const [isDraggingArtworkFiles, setIsDraggingArtworkFiles] = useState(false);
   const [hasChosenArtworkInSession, setHasChosenArtworkInSession] = useState(false);
   const [draggingDraftAssetId, setDraggingDraftAssetId] = useState<string | null>(null);
@@ -2859,6 +2862,19 @@ export function QuoteBuilderScreen({
     setArtworkDialogError(message);
     setError(message);
     return false;
+  }
+
+  async function openOneDriveImportDialog() {
+    const canUploadArtwork = await ensureCampaignReadyForArtworkUpload();
+    if (!canUploadArtwork) return;
+    setOneDriveImportOpen(true);
+  }
+
+  async function handleOneDriveImport(selections: OneDriveSelection[], accessToken: string) {
+    const savedCampaignId = campaignId || await saveCampaignDraft();
+    if (!savedCampaignId) throw new Error('Save the campaign before importing artwork.');
+    setHasChosenArtworkInSession(true);
+    await enqueueOneDriveFiles(savedCampaignId, effectiveTenantId, selections, accessToken);
   }
 
   async function handleArtworkActionButtonClick() {
@@ -6635,10 +6651,15 @@ export function QuoteBuilderScreen({
                     : 'Uploading in progress'
                   : 'No active uploads'}
               </div>
-              <Button onClick={openArtworkPdfPicker} type="button" variant="secondary">
-                {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Upload className="h-4 w-4" />}
-                {uploadingArtworkPages || hasChosenArtworkInSession ? 'Choose More PDFs' : 'Choose PDFs'}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => void openOneDriveImportDialog()} type="button" variant="secondary">
+                  Import from OneDrive
+                </Button>
+                <Button onClick={openArtworkPdfPicker} type="button" variant="secondary">
+                  {uploadingArtworkPages ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Upload className="h-4 w-4" />}
+                  {uploadingArtworkPages || hasChosenArtworkInSession ? 'Choose More PDFs' : 'Choose PDFs'}
+                </Button>
+              </div>
             </div>
 
             <button
@@ -6711,6 +6732,12 @@ export function QuoteBuilderScreen({
           </div>
         </DialogContent>
       </Dialog>
+
+      <OneDriveArtworkImportDialog
+        onImport={handleOneDriveImport}
+        onOpenChange={setOneDriveImportOpen}
+        open={oneDriveImportOpen}
+      />
 
       <Dialog
         open={unsavedDialogOpen}
