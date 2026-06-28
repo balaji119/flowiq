@@ -11,6 +11,7 @@ import { CampaignLandingScreen } from './src/screens/CampaignLandingScreen';
 import { ForgotPasswordScreen } from './src/screens/ForgotPasswordScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { MappingAdminScreen } from './src/screens/MappingAdminScreen';
+import { MaterialsSettingsScreen } from './src/screens/MaterialsSettingsScreen';
 import { PrintingCostSettingsScreen } from './src/screens/PrintingCostSettingsScreen';
 import { QuoteBuilderScreen } from './src/screens/QuoteBuilderScreen';
 import { ResetPasswordScreen } from './src/screens/ResetPasswordScreen';
@@ -22,7 +23,7 @@ import { TenantManagementScreen } from './src/screens/TenantManagementScreen';
 import { UserManagementScreen } from './src/screens/UserManagementScreen';
 import { fetchTenants } from './src/services/adminApi';
 
-type AppView = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings' | 'sheet-size-settings';
+type AppView = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings' | 'sheet-size-settings' | 'materials';
 
 type AppNavState = {
   view: AppView;
@@ -58,6 +59,7 @@ function parseView(raw: string | null): AppView {
   if (raw === 'printing-costs') return 'printing-costs';
   if (raw === 'settings') return 'settings';
   if (raw === 'sheet-size-settings') return 'sheet-size-settings';
+  if (raw === 'materials') return 'materials';
   if (raw === 'quote') return 'quote';
   if (raw === 'artwork') return 'artwork';
   if (raw === 'admin') return 'users';
@@ -262,6 +264,7 @@ function AppShell() {
         onOpenHome={() => navigateTo('home')}
         onOpenLanding={() => navigateTo('landing')}
         onOpenMappings={canAccessManagement ? () => navigateTo('mappings') : undefined}
+        onOpenMaterials={canAccessManagement ? () => navigateTo('materials') : undefined}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={canAccessManagement ? () => navigateTo('settings') : undefined}
         onOpenSheetSizeSettings={canAccessManagement ? () => navigateTo('sheet-size-settings') : undefined}
@@ -280,6 +283,7 @@ function AppShell() {
       <UserManagementScreen
         onBack={() => navigateTo('landing')}
         onOpenMappings={() => navigateTo('mappings')}
+        onOpenMaterials={() => navigateTo('materials')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={() => navigateTo('settings')}
         onOpenSheetSizeSettings={() => navigateTo('sheet-size-settings')}
@@ -296,6 +300,7 @@ function AppShell() {
       <TenantManagementScreen
         onBack={() => navigateTo('landing')}
         onOpenMappings={() => navigateTo('mappings')}
+        onOpenMaterials={() => navigateTo('materials')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={() => navigateTo('settings')}
         onOpenSheetSizeSettings={() => navigateTo('sheet-size-settings')}
@@ -311,6 +316,7 @@ function AppShell() {
       <MappingAdminScreen
         onBack={() => navigateTo('landing')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenMaterials={() => navigateTo('materials')}
         onOpenSettings={() => navigateTo('settings')}
         onOpenSheetSizeSettings={() => navigateTo('sheet-size-settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
@@ -327,6 +333,7 @@ function AppShell() {
       <ShippingSettingsScreen
         onBack={() => navigateTo('landing')}
         onOpenMappings={() => navigateTo('mappings')}
+        onOpenMaterials={() => navigateTo('materials')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={() => navigateTo('settings')}
         onOpenSheetSizeSettings={() => navigateTo('sheet-size-settings')}
@@ -352,6 +359,7 @@ function AppShell() {
       <SettingsScreen
         onBack={() => navigateTo('landing')}
         onOpenMappings={() => navigateTo('mappings')}
+        onOpenMaterials={() => navigateTo('materials')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenSheetSizeSettings={() => navigateTo('sheet-size-settings')}
@@ -368,8 +376,26 @@ function AppShell() {
       <SheetSizeSettingsScreen
         onBack={() => navigateTo('landing')}
         onOpenMappings={() => navigateTo('mappings')}
+        onOpenMaterials={() => navigateTo('materials')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={() => navigateTo('settings')}
+        onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
+        onOpenShippingSettings={() => navigateTo('shipping')}
+        onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}
+        onOpenUsers={() => navigateTo('users')}
+        tenantId={selectedAdminTenantId}
+      />
+    );
+  }
+
+  if (view === 'materials') {
+    return (
+      <MaterialsSettingsScreen
+        onBack={() => navigateTo('landing')}
+        onOpenMappings={() => navigateTo('mappings')}
+        onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
+        onOpenSettings={() => navigateTo('settings')}
+        onOpenSheetSizeSettings={() => navigateTo('sheet-size-settings')}
         onOpenShippingCosts={canAccessSuperAdminPages ? () => navigateTo('shipping-costs') : undefined}
         onOpenShippingSettings={() => navigateTo('shipping')}
         onOpenTenants={canAccessSuperAdminPages ? () => navigateTo('tenants') : undefined}

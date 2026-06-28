@@ -59,6 +59,19 @@ export type SheetNameOverrideRecord = {
   updatedAt: string;
 };
 
+export type MaterialInput = {
+  id?: string;
+  name: string;
+};
+
+export type MaterialRecord = {
+  id: string;
+  tenantId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CustomPrintCostInput = {
   sheetKey: string;
   onePageCost: number;

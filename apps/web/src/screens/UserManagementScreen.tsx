@@ -88,6 +88,7 @@ function PickerChip({
 export function UserManagementScreen({
   onBack,
   onOpenMappings,
+  onOpenMaterials,
   onOpenPrintingCosts,
   onOpenSettings,
   onOpenSheetSizeSettings,
@@ -392,6 +393,7 @@ export function UserManagementScreen({
       onBack={onBack}
       onOpenLanding={onBack}
       onOpenMappings={onOpenMappings}
+      onOpenMaterials={onOpenMaterials}
       onOpenPrintingCosts={onOpenPrintingCosts}
       onOpenSettings={onOpenSettings}
       onOpenSheetSizeSettings={onOpenSheetSizeSettings}

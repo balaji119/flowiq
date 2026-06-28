@@ -12,6 +12,8 @@ import {
   MarketAssetShippingCostInput,
   MarketAssetShippingCostRecord,
   MarketMetadata,
+  MaterialInput,
+  MaterialRecord,
   MarketShippingRateInput,
   MarketShippingRateRecord,
   PrintIqOptionsCacheStatus,
@@ -233,6 +235,19 @@ export async function fetchAdminSheetNameOverrides(tenantId?: string) {
 export async function upsertAdminSheetNameOverrides(payload: { overrides: SheetNameOverrides; multipleArtworkFormats?: Record<string, boolean>; customPrintCostFormats?: Record<string, boolean> }, tenantId?: string) {
   const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
   return apiFetchJson<{ settings: SheetNameOverrideRecord }>(`/api/admin/sheet-name-overrides${query}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchMaterials(tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ materials: MaterialRecord[] }>(`/api/admin/materials${query}`);
+}
+
+export async function replaceMaterials(payload: { materials: MaterialInput[] }, tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ materials: MaterialRecord[] }>(`/api/admin/materials${query}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });

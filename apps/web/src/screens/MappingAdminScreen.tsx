@@ -94,7 +94,7 @@ function formatSheetHeader(key: (typeof formatKeys)[number], overrides: SheetNam
   return resolveFormatName(key, overrides);
 }
 
-export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings, onOpenSheetSizeSettings, onOpenShippingCosts, onOpenShippingSettings, onOpenTenants, onOpenUsers, tenantId }: MappingAdminScreenProps) {
+export function MappingAdminScreen({ onBack, onOpenMaterials, onOpenPrintingCosts, onOpenSettings, onOpenSheetSizeSettings, onOpenShippingCosts, onOpenShippingSettings, onOpenTenants, onOpenUsers, tenantId }: MappingAdminScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -565,6 +565,7 @@ export function MappingAdminScreen({ onBack, onOpenPrintingCosts, onOpenSettings
       onBack={onBack}
       onOpenLanding={onBack}
       onOpenMappings={() => {}}
+      onOpenMaterials={onOpenMaterials}
       onOpenPrintingCosts={onOpenPrintingCosts}
       onOpenSettings={onOpenSettings}
       onOpenSheetSizeSettings={onOpenSheetSizeSettings}

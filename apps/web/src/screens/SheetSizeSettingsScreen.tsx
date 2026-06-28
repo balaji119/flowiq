@@ -86,6 +86,7 @@ function buildDraftSnapshot(draftValues: Record<string, SheetSizeDraft>) {
 export function SheetSizeSettingsScreen({
   onBack,
   onOpenMappings,
+  onOpenMaterials,
   onOpenPrintingCosts,
   onOpenSettings,
   onOpenShippingCosts,
@@ -350,6 +351,7 @@ export function SheetSizeSettingsScreen({
       onBack={() => confirmDiscardChanges(onBack)}
       onOpenLanding={() => confirmDiscardChanges(onBack)}
       onOpenMappings={onOpenMappings ? () => confirmDiscardChanges(onOpenMappings) : undefined}
+      onOpenMaterials={onOpenMaterials ? () => confirmDiscardChanges(onOpenMaterials) : undefined}
       onOpenPrintingCosts={onOpenPrintingCosts ? () => confirmDiscardChanges(onOpenPrintingCosts) : undefined}
       onOpenSettings={onOpenSettings ? () => confirmDiscardChanges(onOpenSettings) : undefined}
       onOpenSheetSizeSettings={() => {}}

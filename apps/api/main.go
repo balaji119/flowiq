@@ -313,6 +313,8 @@ func (a *app) routes() http.Handler {
 	mux.Handle("PUT /api/admin/market-sheet-sizes", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMarketSheetSizes), "super_admin", "admin")))
 	mux.Handle("GET /api/admin/sheet-name-overrides", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleGetSheetNameOverrides), "super_admin", "admin")))
 	mux.Handle("PUT /api/admin/sheet-name-overrides", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertSheetNameOverrides), "super_admin", "admin")))
+	mux.Handle("GET /api/admin/materials", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListMaterials), "super_admin", "admin")))
+	mux.Handle("PUT /api/admin/materials", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleReplaceMaterials), "super_admin", "admin")))
 	mux.Handle("GET /api/admin/printiq-options/status", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleOptionsStatus), "super_admin")))
 	mux.Handle("POST /api/admin/printiq-options/refresh", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleRefreshOptions), "super_admin")))
 
@@ -2325,6 +2327,44 @@ func (a *app) handleUpsertMarketAssetShippingCosts(w http.ResponseWriter, r *htt
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"costs": records})
+}
+
+func (a *app) handleListMaterials(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	records, err := a.mappingStore.listMaterials(r.Context(), *tenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"materials": records})
+}
+
+func (a *app) handleReplaceMaterials(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	var payload struct {
+		Materials []materialInput `json:"materials"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	if payload.Materials == nil {
+		payload.Materials = []materialInput{}
+	}
+	records, err := a.mappingStore.replaceMaterials(r.Context(), *tenantID, payload.Materials)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"materials": records})
 }
 
 func (a *app) handleGetSheetNameOverrides(w http.ResponseWriter, r *http.Request) {

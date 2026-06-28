@@ -3,7 +3,7 @@ import { ArrowLeft, Building2, ChevronRight, CircleDollarSign, Database, Home, L
 import { cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 
-export type AdminWorkspaceSection = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings' | 'sheet-size-settings';
+export type AdminWorkspaceSection = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings' | 'sheet-size-settings' | 'materials';
 
 export type AdminWorkspaceHandlers = {
   onBack?: () => void;
@@ -17,6 +17,7 @@ export type AdminWorkspaceHandlers = {
   onOpenPrintingCosts?: () => void;
   onOpenSettings?: () => void;
   onOpenSheetSizeSettings?: () => void;
+  onOpenMaterials?: () => void;
 };
 
 type AdminWorkspaceShellProps = AdminWorkspaceHandlers & {
@@ -63,6 +64,7 @@ export function AdminWorkspaceShell({
   onOpenPrintingCosts,
   onOpenSettings,
   onOpenSheetSizeSettings,
+  onOpenMaterials,
   children,
 }: AdminWorkspaceShellProps) {
   const { session, logout } = useAuth();
@@ -154,16 +156,17 @@ export function AdminWorkspaceShell({
       label: 'Settings',
       icon: <Settings className="h-[22px] w-[22px]" />,
       onClick: () => {
-        if (onOpenSheetSizeSettings) {
+        if (onOpenSheetSizeSettings || onOpenMaterials) {
           setSettingsMenuOpen((current) => !current);
           return;
         }
         onOpenSettings();
       },
-      menuItems: onOpenSheetSizeSettings
+      menuItems: onOpenSheetSizeSettings || onOpenMaterials
         ? [
             { label: 'Sheet Name', active: activeSection === 'settings', onClick: onOpenSettings },
-            { label: 'Sheet Size', active: activeSection === 'sheet-size-settings', onClick: onOpenSheetSizeSettings },
+            ...(onOpenSheetSizeSettings ? [{ label: 'Sheet Size', active: activeSection === 'sheet-size-settings', onClick: onOpenSheetSizeSettings }] : []),
+            ...(onOpenMaterials ? [{ label: 'Materials', active: activeSection === 'materials', onClick: onOpenMaterials }] : []),
           ]
         : undefined,
     });

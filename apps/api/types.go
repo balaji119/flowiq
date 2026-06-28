@@ -32,6 +32,19 @@ type sheetNameOverrideRecord struct {
 	UpdatedAt              string             `json:"updatedAt"`
 }
 
+type materialInput struct {
+	ID   string `json:"id,omitempty"`
+	Name string `json:"name"`
+}
+
+type materialRecord struct {
+	ID        string `json:"id"`
+	TenantID  string `json:"tenantId"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+}
+
 type customPrintCostInput struct {
 	SheetKey        string  `json:"sheetKey"`
 	OnePageCost     float64 `json:"onePageCost"`
