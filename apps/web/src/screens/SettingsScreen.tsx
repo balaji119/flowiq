@@ -302,17 +302,6 @@ export function SettingsScreen({
       canAccessShippingCosts={session?.user.role === 'super_admin'}
       canAccessPrintingCosts={session?.user.role === 'super_admin'}
       pageTitle="Sheet Name"
-      topBarActions={
-        <Button
-          className="h-9 min-w-[132px] rounded-md px-3 text-sm font-semibold btn-theme-primary"
-          disabled={!effectiveTenantId || saving || loading}
-          onClick={() => void handleSave()}
-          type="button"
-        >
-          {saving ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Save className="h-4 w-4" />}
-          {saving ? 'Saving...' : 'Save Changes'}
-        </Button>
-      }
       onBack={() => confirmDiscardChanges(onBack)}
       onOpenLanding={() => confirmDiscardChanges(onBack)}
       onOpenMappings={onOpenMappings ? () => confirmDiscardChanges(onOpenMappings) : undefined}
@@ -351,7 +340,7 @@ export function SettingsScreen({
           </section>
         ) : null}
 
-        <section className="max-w-5xl space-y-5">
+        <section className="w-full max-w-7xl space-y-5">
           {loading ? (
             <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
               <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
@@ -540,6 +529,19 @@ export function SettingsScreen({
               </div>
             </>
           )}
+          {!loading ? (
+            <div className="flex justify-end">
+              <Button
+                className="h-9 min-w-[132px] rounded-md px-3 text-sm font-semibold btn-theme-primary"
+                disabled={!effectiveTenantId || saving}
+                onClick={() => void handleSave()}
+                type="button"
+              >
+                {saving ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Save className="h-4 w-4" />}
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          ) : null}
         </section>
       </main>
       <Dialog

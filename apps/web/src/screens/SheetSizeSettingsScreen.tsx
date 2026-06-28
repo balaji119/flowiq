@@ -347,17 +347,6 @@ export function SheetSizeSettingsScreen({
       canAccessShippingCosts={session?.user.role === 'super_admin'}
       canAccessPrintingCosts={session?.user.role === 'super_admin'}
       pageTitle="Sheet Size"
-      topBarActions={
-        <Button
-          className="h-9 min-w-[132px] rounded-md px-3 text-sm font-semibold btn-theme-primary"
-          disabled={!effectiveTenantId || !selectedMarketFilter || saving || loading}
-          onClick={() => void handleSave()}
-          type="button"
-        >
-          {saving ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Save className="h-4 w-4" />}
-          {saving ? 'Saving...' : 'Save Changes'}
-        </Button>
-      }
       onBack={() => confirmDiscardChanges(onBack)}
       onOpenLanding={() => confirmDiscardChanges(onBack)}
       onOpenMappings={onOpenMappings ? () => confirmDiscardChanges(onOpenMappings) : undefined}
@@ -415,7 +404,7 @@ export function SheetSizeSettingsScreen({
           </div>
         </section>
 
-        <section className="space-y-5">
+        <section className="w-full max-w-3xl space-y-5">
           {loading ? (
             <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
               <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
@@ -431,8 +420,8 @@ export function SheetSizeSettingsScreen({
               <p className="mt-2 text-sm text-slate-400">Assets appear here when Mega, Dot Mega, or Mega Portrait has a quantity.</p>
             </div>
           ) : (
-            <div className="w-fit max-w-full overflow-x-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
-              <table className="dense-table w-auto table-auto border-collapse text-sm">
+            <div className="w-full overflow-x-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
+              <table className="dense-table w-full table-fixed border-collapse text-sm">
                 <colgroup>
                   <col />
                   <col className="w-[140px]" />
@@ -493,6 +482,19 @@ export function SheetSizeSettingsScreen({
               </table>
             </div>
           )}
+          {!loading && marketOptions.length > 0 && selectedMarketRows.length > 0 ? (
+            <div className="flex justify-end">
+              <Button
+                className="h-9 min-w-[132px] rounded-md px-3 text-sm font-semibold btn-theme-primary"
+                disabled={!effectiveTenantId || !selectedMarketFilter || saving}
+                onClick={() => void handleSave()}
+                type="button"
+              >
+                {saving ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Save className="h-4 w-4" />}
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          ) : null}
         </section>
       </main>
       <Dialog
