@@ -3155,13 +3155,20 @@ export function QuoteBuilderScreen({
     const marketLines = costLinesForMarket(marketName);
     const useFlatRateSheeters = useFlatRateSheetersByMarket.get(marketName) ?? false;
     const useFlatRateMegas = useFlatRateMegasByMarket.get(marketName) ?? false;
+    const customSheetTotal = marketLines.reduce((total, line) => (
+      total + Object.entries(line.breakdown as Record<string, number>).reduce((lineTotal, [rawKey, rawQuantity]) => {
+        if ((formatKeys as readonly string[]).includes(rawKey)) return lineTotal;
+        return lineTotal + Math.max(0, Number(rawQuantity) || 0);
+      }, 0)
+    ), 0);
 
     const posterShipping = useFlatRateSheeters
       ? (() => {
       const hasTwoSheet = marketLines.some((line) => (line.breakdown['2-sheet'] ?? 0) > 0);
       const hasFourSheet = marketLines.some((line) => (line.breakdown['4-sheet'] ?? 0) > 0);
       const hasSixSheet = marketLines.some((line) => (line.breakdown['6-sheet'] ?? 0) > 0);
-      const hasEightSheet = marketLines.some((line) => ((line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0)) > 0);
+      const hasEightSheet = customSheetTotal > 0
+        || marketLines.some((line) => ((line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0)) > 0);
 
       return (hasTwoSheet ? twoSheeterPrice : 0)
         + (hasFourSheet ? fourSheeterPrice : 0)
@@ -3172,7 +3179,8 @@ export function QuoteBuilderScreen({
         const totalTwoSheet = marketLines.reduce((total, line) => total + (line.breakdown['2-sheet'] ?? 0), 0);
         const totalFourSheet = marketLines.reduce((total, line) => total + (line.breakdown['4-sheet'] ?? 0), 0);
         const totalSixSheet = marketLines.reduce((total, line) => total + (line.breakdown['6-sheet'] ?? 0), 0);
-        const totalEightAndQa0 = marketLines.reduce((total, line) => total + (line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0), 0);
+        const totalEightAndQa0 = customSheetTotal
+          + marketLines.reduce((total, line) => total + (line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0), 0);
         return calculatePosterShippingForSheeter(totalEightAndQa0, eightSheeterPrice, 4, eightSheeterSetsPerBox)
           + calculatePosterShippingForSheeter(totalSixSheet, sixSheeterPrice, 3, sixSheeterSetsPerBox)
           + calculatePosterShippingForSheeter(totalFourSheet, fourSheeterPrice, 2, fourSheeterSetsPerBox)
@@ -3213,25 +3221,32 @@ export function QuoteBuilderScreen({
   }
 
   function calculateLinePrintingCost(line: CampaignCalculationSummary['lines'][number]) {
+    const selectedAsset = selectedAssetByLineId.get(line.id);
+    const costs = selectedAsset
+      ? printingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`)
+      : undefined;
+    const posterRate = costs?.['8-sheet'] ?? 0;
     const customCost = Object.entries(line.breakdown as Record<string, number>).reduce((total, [rawKey, rawPages]) => {
       const sheetKey = toCanonicalSheetNameKey(rawKey);
-      if (!customPrintCostFormats[sheetKey]) return total;
+      const usesCustomCost = Boolean(customPrintCostFormats[sheetKey]);
+      const isStandardFormat = (formatKeys as readonly string[]).includes(rawKey);
+      if (!usesCustomCost && isStandardFormat) return total;
       const pages = Math.max(0, Number(rawPages) || 0);
       if (pages === 0) return total;
-      const rates = customPrintCostBySheetKey.get(sheetKey);
-      if (!rates) return total;
-      const rate = pages >= 10
-        ? rates.tenPlusPageCost
-        : pages >= 5
-          ? rates.fivePageCost
-          : pages >= 2
-            ? rates.twoPageCost
-            : rates.onePageCost;
+      const rates = usesCustomCost ? customPrintCostBySheetKey.get(sheetKey) : undefined;
+      const customRate = rates
+        ? pages >= 10
+          ? rates.tenPlusPageCost
+          : pages >= 5
+            ? rates.fivePageCost
+            : pages >= 2
+              ? rates.twoPageCost
+              : rates.onePageCost
+        : 0;
+      const rate = customRate > 0 ? customRate : posterRate;
       return total + pages * rate;
     }, 0);
-    const selectedAsset = selectedAssetByLineId.get(line.id);
     if (!selectedAsset) return customCost;
-    const costs = printingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`);
     if (!costs) return customCost;
     const qa0Units = line.breakdown.QA0 ?? 0;
     const eightSheetRate = costs['8-sheet'] ?? 0;

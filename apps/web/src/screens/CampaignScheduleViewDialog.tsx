@@ -514,20 +514,25 @@ export function CampaignScheduleViewDialog({
         ? printingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`)
           ?? findPrintingCostsForAsset(selectedAsset.market, [selectedAsset.assetId, selectedAsset.assetSearch, selectedAsset.id, line.assetLabel, line.id])
         : findPrintingCostsForAsset(line.market, [line.id, line.assetLabel]);
+      const posterRate = toNumber(costs?.['8-sheet']);
       const customCost = Object.entries(line.breakdown as Record<string, number>).reduce((sum, [rawKey, rawPages]) => {
         const sheetKey = toCanonicalSheetNameKey(rawKey);
-        if (!customPrintCostFormats[sheetKey]) return sum;
+        const usesCustomCost = Boolean(customPrintCostFormats[sheetKey]);
+        const isStandardFormat = (formatKeys as readonly string[]).includes(rawKey);
+        if (!usesCustomCost && isStandardFormat) return sum;
         const pages = Math.max(0, toNumber(rawPages));
         if (pages === 0) return sum;
-        const rates = customPrintCostBySheetKey.get(sheetKey);
-        if (!rates) return sum;
-        const rate = pages >= 10
-          ? rates.tenPlusPageCost
-          : pages >= 5
-            ? rates.fivePageCost
-            : pages >= 2
-              ? rates.twoPageCost
-              : rates.onePageCost;
+        const rates = usesCustomCost ? customPrintCostBySheetKey.get(sheetKey) : undefined;
+        const customRate = rates
+          ? pages >= 10
+            ? rates.tenPlusPageCost
+            : pages >= 5
+              ? rates.fivePageCost
+              : pages >= 2
+                ? rates.twoPageCost
+                : rates.onePageCost
+          : 0;
+        const rate = customRate > 0 ? customRate : posterRate;
         return sum + pages * rate;
       }, 0);
       if (!costs) return total + customCost;
@@ -561,20 +566,28 @@ export function CampaignScheduleViewDialog({
       const megasPerBox = marketRate.megasPerBox ?? 1;
       const useFlatRateSheeters = marketRate.useFlatRateSheeters ?? marketRate.useFlatRate ?? false;
       const useFlatRateMegas = marketRate.useFlatRateMegas ?? marketRate.useFlatRate ?? false;
+      const customSheetTotal = marketLines.reduce((total, line) => (
+        total + Object.entries(line.breakdown as Record<string, number>).reduce((lineTotal, [rawKey, rawQuantity]) => {
+          if ((formatKeys as readonly string[]).includes(rawKey)) return lineTotal;
+          return lineTotal + Math.max(0, toNumber(rawQuantity));
+        }, 0)
+      ), 0);
 
       const posterShipping = useFlatRateSheeters
         ? (() => {
             const hasTwo = marketLines.some((line) => (line.breakdown['2-sheet'] ?? 0) > 0);
             const hasFour = marketLines.some((line) => (line.breakdown['4-sheet'] ?? 0) > 0);
             const hasSix = marketLines.some((line) => (line.breakdown['6-sheet'] ?? 0) > 0);
-            const hasEight = marketLines.some((line) => ((line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0)) > 0);
+            const hasEight = customSheetTotal > 0
+              || marketLines.some((line) => ((line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0)) > 0);
             return (hasTwo ? twoPrice : 0) + (hasFour ? fourPrice : 0) + (hasSix ? sixPrice : 0) + (hasEight ? eightPrice : 0);
           })()
         : (() => {
             const totalTwo = marketLines.reduce((sum, line) => sum + (line.breakdown['2-sheet'] ?? 0), 0);
             const totalFour = marketLines.reduce((sum, line) => sum + (line.breakdown['4-sheet'] ?? 0), 0);
             const totalSix = marketLines.reduce((sum, line) => sum + (line.breakdown['6-sheet'] ?? 0), 0);
-            const totalEightAndQa0 = marketLines.reduce((sum, line) => sum + (line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0), 0);
+            const totalEightAndQa0 = customSheetTotal
+              + marketLines.reduce((sum, line) => sum + (line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0), 0);
             return calculatePosterShippingForSheeter(totalEightAndQa0, eightPrice, 4, eightSets)
               + calculatePosterShippingForSheeter(totalSix, sixPrice, 3, sixSets)
               + calculatePosterShippingForSheeter(totalFour, fourPrice, 2, fourSets)
