@@ -135,6 +135,8 @@ type campaignAsset struct {
 	CreativeImageID       string              `json:"creativeImageId"`
 	CreativeImageIDs      map[string]string   `json:"creativeImageIds,omitempty"`
 	MultiCreativeImageIDs map[string][]string `json:"multiCreativeImageIds,omitempty"`
+	MaterialIDs           map[string]string   `json:"materialIds,omitempty"`
+	MultiMaterialIDs      map[string][]string `json:"multiMaterialIds,omitempty"`
 	DeliveryAddress       string              `json:"deliveryAddress"`
 }
 

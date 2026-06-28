@@ -18,6 +18,8 @@ export function createCampaignAsset(id: string, weekCount = 1): CampaignAsset {
     creativeImageId: '',
     creativeImageIds: {},
     multiCreativeImageIds: {},
+    materialIds: {},
+    multiMaterialIds: {},
     deliveryAddress: '',
   };
 }

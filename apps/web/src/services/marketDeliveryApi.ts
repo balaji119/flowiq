@@ -1,4 +1,4 @@
-import { CustomPrintCostRecord, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketDeliveryAddressInput, MarketDeliveryAddressRecord, MarketShippingRateRecord } from '@flowiq/shared';
+import { CustomPrintCostRecord, MaterialRecord, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketDeliveryAddressInput, MarketDeliveryAddressRecord, MarketShippingRateRecord } from '@flowiq/shared';
 import { apiFetchJson } from './apiClient';
 
 function withTenant(path: string, tenantId?: string | null) {
@@ -21,6 +21,10 @@ export async function fetchCampaignMarketAssetPrintingCosts(tenantId?: string | 
 
 export async function fetchCampaignCustomPrintCosts(tenantId?: string | null) {
   return apiFetchJson<{ costs: CustomPrintCostRecord[] }>(withTenant('/api/custom-print-costs', tenantId));
+}
+
+export async function fetchCampaignMaterials(tenantId?: string | null) {
+  return apiFetchJson<{ materials: MaterialRecord[] }>(withTenant('/api/materials', tenantId));
 }
 
 export async function fetchCampaignMarketAssetShippingCosts(tenantId?: string | null) {

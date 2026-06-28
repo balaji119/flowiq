@@ -127,6 +127,18 @@ func cloneOrderFormValues(values orderFormValues) orderFormValues {
 					clonedAsset.MultiCreativeImageIDs[key] = append([]string(nil), value...)
 				}
 			}
+			if sourceAsset.MaterialIDs != nil {
+				clonedAsset.MaterialIDs = make(map[string]string, len(sourceAsset.MaterialIDs))
+				for key, value := range sourceAsset.MaterialIDs {
+					clonedAsset.MaterialIDs[key] = value
+				}
+			}
+			if sourceAsset.MultiMaterialIDs != nil {
+				clonedAsset.MultiMaterialIDs = make(map[string][]string, len(sourceAsset.MultiMaterialIDs))
+				for key, value := range sourceAsset.MultiMaterialIDs {
+					clonedAsset.MultiMaterialIDs[key] = append([]string(nil), value...)
+				}
+			}
 		}
 	}
 	cloned.SelectedJobOperations = append([]string(nil), values.SelectedJobOperations...)
@@ -336,6 +348,8 @@ func buildSubCampaignValues(parent *campaignRecord, sequence int) orderFormValue
 			asset.CreativeImageID = ""
 			asset.CreativeImageIDs = map[string]string{}
 			asset.MultiCreativeImageIDs = map[string][]string{}
+			asset.MaterialIDs = map[string]string{}
+			asset.MultiMaterialIDs = map[string][]string{}
 		}
 	}
 

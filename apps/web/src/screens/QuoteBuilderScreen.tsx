@@ -13,6 +13,7 @@ import {
   CampaignTotals,
   MarketMetadata,
   MarketDeliveryAddressRecord,
+  MaterialRecord,
   MarketShippingRateRecord,
   OrderFormValues,
   QuantityBreakdown,
@@ -34,7 +35,7 @@ import { acquireCampaignEditLock, createCampaign, fetchCampaign, markCampaignSub
 import { deleteCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
-import { fetchCampaignCustomPrintCosts, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
+import { fetchCampaignCustomPrintCosts, fetchCampaignMaterials, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
@@ -211,6 +212,7 @@ function frameCountForFormat(breakdown: QuantityBreakdown | null | undefined, fo
 
 type MultiCreativeImageMap = Partial<Record<CreativeFormatKey, string[]>>;
 type MultiArtworkRecord = { id: string; imageId: string; frameCount: number };
+type MultiMaterialRecord = { id: string; materialId: string; frameCount: number };
 const MARKET_PLANNING_THEMES = [
   {
     card: 'border-white/10 bg-slate-900/70',
@@ -276,6 +278,24 @@ function normalizeMultiCreativeImageIds(asset: CampaignAsset): MultiCreativeImag
     if (values.length > 0) {
       normalized[key] = values;
     }
+  });
+  return normalized;
+}
+
+function normalizeMaterialIds(asset: CampaignAsset) {
+  const normalized: Partial<Record<CreativeFormatKey, string>> = {};
+  creativeFormatKeys.forEach((key) => {
+    const materialId = (asset.materialIds?.[key] || '').trim();
+    if (materialId) normalized[key] = materialId;
+  });
+  return normalized;
+}
+
+function normalizeMultiMaterialIds(asset: CampaignAsset) {
+  const normalized: Partial<Record<CreativeFormatKey, string[]>> = {};
+  creativeFormatKeys.forEach((key) => {
+    const materialIds = (asset.multiMaterialIds?.[key] ?? []).map((id) => (id || '').trim()).filter(Boolean);
+    if (materialIds.length > 0) normalized[key] = materialIds;
   });
   return normalized;
 }
@@ -446,6 +466,8 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
           ...asset,
           creativeImageIds,
           multiCreativeImageIds,
+          materialIds: normalizeMaterialIds(asset),
+          multiMaterialIds: normalizeMultiMaterialIds(asset),
           creativeImageId: getCreativeImageIdForFormat({ ...asset, creativeImageIds }, '8-sheet') || asset.creativeImageId || '',
         };
       }),
@@ -1204,6 +1226,7 @@ export function QuoteBuilderScreen({
   const [marketShippingRates, setMarketShippingRates] = useState<MarketShippingRateRecord[]>([]);
   const [marketAssetPrintingCosts, setMarketAssetPrintingCosts] = useState<MarketAssetPrintingCostRecord[]>([]);
   const [customPrintCosts, setCustomPrintCosts] = useState<CustomPrintCostRecord[]>([]);
+  const [materials, setMaterials] = useState<MaterialRecord[]>([]);
   const [sheetNameOverrides, setSheetNameOverrides] = useState<SheetNameOverrides>({});
   const [multipleArtworkFormats, setMultipleArtworkFormats] = useState<Record<string, boolean>>({});
   const [customPrintCostFormats, setCustomPrintCostFormats] = useState<Record<string, boolean>>({});
@@ -1234,6 +1257,12 @@ export function QuoteBuilderScreen({
   const [previewArtworkDialogOpen, setPreviewArtworkDialogOpen] = useState(false);
   const [previewArtworkTarget, setPreviewArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey } | null>(null);
   const [previewArtworkFullLoaded, setPreviewArtworkFullLoaded] = useState(false);
+  const [materialDialogOpen, setMaterialDialogOpen] = useState(false);
+  const [materialDialogMode, setMaterialDialogMode] = useState<'manage' | 'select'>('manage');
+  const [materialTarget, setMaterialTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey; totalFrames: number } | null>(null);
+  const [multiMaterialRecords, setMultiMaterialRecords] = useState<MultiMaterialRecord[]>([]);
+  const [materialSelectionRecordIndex, setMaterialSelectionRecordIndex] = useState<number | null>(null);
+  const [materialSearchQuery, setMaterialSearchQuery] = useState('');
   const [uploadManagerOpen, setUploadManagerOpen] = useState(false);
   const [oneDriveImportOpen, setOneDriveImportOpen] = useState(false);
   const [isDraggingArtworkFiles, setIsDraggingArtworkFiles] = useState(false);
@@ -1509,6 +1538,20 @@ export function QuoteBuilderScreen({
       }
     }
     void loadCustomPrintCosts();
+    return () => { active = false; };
+  }, [effectiveTenantId]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadMaterials() {
+      try {
+        const response = await fetchCampaignMaterials(effectiveTenantId);
+        if (active) setMaterials(response.materials);
+      } catch {
+        if (active) setMaterials([]);
+      }
+    }
+    void loadMaterials();
     return () => { active = false; };
   }, [effectiveTenantId]);
 
@@ -2454,6 +2497,102 @@ export function QuoteBuilderScreen({
     setAssignArtworkTarget({ marketId, assetId, formatKey, slotIndex });
     setArtworkDialogError('');
     setAssignArtworkDialogOpen(true);
+  }
+
+  function openMaterialDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey, totalFrames: number) {
+    const safeTotalFrames = Math.max(1, totalFrames);
+    const targetAsset = values.campaignMarkets.find((market) => market.id === marketId)?.assets.find((asset) => asset.id === assetId);
+    const assignedIds = (targetAsset?.multiMaterialIds?.[formatKey] ?? []).map((id) => (id || '').trim()).filter(Boolean);
+    const legacyMaterialId = (targetAsset?.materialIds?.[formatKey] || '').trim();
+    const countsByMaterialId = new Map<string, number>();
+    const orderedMaterialIds: string[] = [];
+    assignedIds.forEach((materialId) => {
+      if (!countsByMaterialId.has(materialId)) orderedMaterialIds.push(materialId);
+      countsByMaterialId.set(materialId, (countsByMaterialId.get(materialId) ?? 0) + 1);
+    });
+    if (orderedMaterialIds.length === 0 && legacyMaterialId) {
+      orderedMaterialIds.push(legacyMaterialId);
+      countsByMaterialId.set(legacyMaterialId, safeTotalFrames);
+    }
+    const records = orderedMaterialIds.map((materialId, index) => ({
+      id: `multi-material-record-${Date.now()}-${index}`,
+      materialId,
+      frameCount: countsByMaterialId.get(materialId) ?? 0,
+    }));
+    setMultiMaterialRecords(records.length > 0 ? records : [{ id: `multi-material-record-${Date.now()}-0`, materialId: '', frameCount: safeTotalFrames }]);
+    setMaterialTarget({ marketId, assetId, formatKey, totalFrames: safeTotalFrames });
+    setMaterialDialogMode('manage');
+    setMaterialSelectionRecordIndex(null);
+    setMaterialSearchQuery('');
+    setMaterialDialogOpen(true);
+  }
+
+  function closeMaterialDialog() {
+    setMaterialDialogOpen(false);
+    setMaterialTarget(null);
+    setMultiMaterialRecords([]);
+    setMaterialSelectionRecordIndex(null);
+    setMaterialDialogMode('manage');
+    setMaterialSearchQuery('');
+  }
+
+  function syncMultiMaterialRecordsToAsset(records: MultiMaterialRecord[]) {
+    if (!materialTarget) return;
+    const expandedIds = records.flatMap((record) => {
+      const materialId = (record.materialId || '').trim();
+      const count = Math.max(0, Math.floor(record.frameCount || 0));
+      return materialId && count > 0 ? Array.from({ length: count }, () => materialId) : [];
+    });
+    updateCampaignAsset(materialTarget.marketId, materialTarget.assetId, (current) => {
+      const nextMultiMaterialIds = { ...normalizeMultiMaterialIds(current), [materialTarget.formatKey]: expandedIds };
+      const nextMaterialIds = { ...normalizeMaterialIds(current) };
+      delete nextMaterialIds[materialTarget.formatKey];
+      return { ...current, materialIds: nextMaterialIds, multiMaterialIds: nextMultiMaterialIds };
+    });
+  }
+
+  function updateMultiMaterialRecord(recordIndex: number, updates: Partial<Pick<MultiMaterialRecord, 'materialId' | 'frameCount'>>) {
+    setMultiMaterialRecords((current) => {
+      if (!materialTarget || recordIndex < 0 || recordIndex >= current.length) return current;
+      const usedByOthers = current.reduce((sum, record, index) => sum + (index === recordIndex ? 0 : Math.max(0, Math.floor(record.frameCount || 0))), 0);
+      const maxForRow = Math.max(0, materialTarget.totalFrames - usedByOthers);
+      const next = current.map((record, index) => index === recordIndex
+        ? { ...record, ...updates, frameCount: updates.frameCount === undefined ? record.frameCount : Math.min(maxForRow, Math.max(0, Math.floor(updates.frameCount))) }
+        : record);
+      syncMultiMaterialRecordsToAsset(next);
+      return next;
+    });
+  }
+
+  function selectMaterialForRecord(materialId: string) {
+    if (materialSelectionRecordIndex === null) return;
+    updateMultiMaterialRecord(materialSelectionRecordIndex, { materialId });
+    setMaterialDialogMode('manage');
+    setMaterialSelectionRecordIndex(null);
+    setMaterialSearchQuery('');
+  }
+
+  function addMultiMaterialRecord() {
+    setMultiMaterialRecords((current) => {
+      const used = current.reduce((sum, record) => sum + Math.max(0, Math.floor(record.frameCount || 0)), 0);
+      const remaining = Math.max(0, (materialTarget?.totalFrames ?? 0) - used);
+      const next = [...current, { id: `multi-material-record-${Date.now()}-${current.length}`, materialId: '', frameCount: remaining }];
+      syncMultiMaterialRecordsToAsset(next);
+      return next;
+    });
+  }
+
+  function removeMultiMaterialRecord(recordIndex: number) {
+    setMultiMaterialRecords((current) => {
+      if (current.length <= 1) {
+        const next = current.map((record) => ({ ...record, materialId: '' }));
+        syncMultiMaterialRecordsToAsset(next);
+        return next;
+      }
+      const next = current.filter((_, index) => index !== recordIndex);
+      syncMultiMaterialRecordsToAsset(next);
+      return next;
+    });
   }
 
   function openMultiArtworkDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey, totalFrames: number) {
@@ -5314,16 +5453,18 @@ export function QuoteBuilderScreen({
                           <div className={cn(market.assets.length > 4 ? 'max-h-[220px] overflow-y-auto' : 'overflow-visible')}>
                               <table className="dense-table w-full border-collapse table-fixed text-sm">
                               <colgroup>
-                                <col className="w-[28%]" />
+                                <col className="w-[24%]" />
                                 <col className="w-[16%]" />
-                                <col className="w-[14%]" />
-                                <col className="w-[42%]" />
+                                <col className="w-[12%]" />
+                                <col className="w-[12%]" />
+                                <col className="w-[36%]" />
                               </colgroup>
                               <thead>
                                 <tr className={cn('border-b border-white/10 text-[11px] font-semibold uppercase tracking-[0.15em]', marketTheme.header)}>
                                   <th className="px-4 py-1.5 text-left">Asset</th>
                                   <th className="px-4 py-1.5 text-left">Category</th>
                                   <th className="px-4 py-1.5 text-left">Creative</th>
+                                  <th className="px-4 py-1.5 text-left">Material</th>
                                   <th className="px-4 py-1.5 text-left">Delivery Address</th>
                               </tr>
                             </thead>
@@ -5338,6 +5479,9 @@ export function QuoteBuilderScreen({
                                   <Fragment key={`finalize-map-group-${asset.id}`}>
                                     {displayFormats.map((formatKey, index) => {
                                       const selectedCreativeId = formatKey ? getCreativeImageIdForFormat(asset, formatKey) : '';
+                                      const hasAssignedMaterial = formatKey
+                                        ? Boolean((asset.materialIds?.[formatKey] || '').trim() || (asset.multiMaterialIds?.[formatKey] ?? []).some((id) => Boolean((id || '').trim())))
+                                        : false;
                                       const multiArtworkSlotCount = formatKey && normalizedMultipleArtworkFormats[canonicalKeyForFormat(formatKey)] ? Math.max(1, metadataAsset?.quantities?.[formatKey] ?? 1) : 0;
                                       const multiArtworkFrameCount = formatKey ? frameCountForFormat(line?.breakdown, formatKey) : 0;
                                       const slotArtworkIds = formatKey ? (asset.multiCreativeImageIds?.[formatKey] ?? []) : [];
@@ -5393,6 +5537,18 @@ export function QuoteBuilderScreen({
                                             ) : (
                                               <p className="text-sm text-slate-500">-</p>
                                             )}
+                                          </td>
+                                          <td className="px-4 py-1.5">
+                                            {formatKey ? (
+                                              <Button
+                                                className="h-8 w-20 px-2 text-[11px] font-semibold"
+                                                onClick={() => openMaterialDialog(market.id, asset.id, formatKey, multiArtworkFrameCount)}
+                                                type="button"
+                                                variant={hasAssignedMaterial ? 'outline' : 'secondary'}
+                                              >
+                                                {hasAssignedMaterial ? <><Eye className="h-3.5 w-3.5" />Show</> : '+ Assign'}
+                                              </Button>
+                                            ) : <p className="text-sm text-slate-500">-</p>}
                                           </td>
                                           {index === 0 ? (
                                             <td className="px-4 py-1.5" rowSpan={rowSpan}>
@@ -5754,16 +5910,18 @@ export function QuoteBuilderScreen({
                 <div className="overflow-auto rounded-md border border-slate-700 bg-slate-900/70">
                   <table className="dense-table w-full border-collapse table-fixed text-sm">
                     <colgroup>
-                      <col className="w-[28%]" />
+                      <col className="w-[24%]" />
                       <col className="w-[16%]" />
-                      <col className="w-[14%]" />
-                      <col className="w-[42%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[36%]" />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-white/10 bg-slate-950 text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-300">
                         <th className="px-4 py-3.5 text-left">Asset</th>
                         <th className="px-4 py-3.5 text-left">Category</th>
                         <th className="px-4 py-3.5 text-left">Creative</th>
+                        <th className="px-4 py-3.5 text-left">Material</th>
                         <th className="px-4 py-3.5 text-left">Delivery Address</th>
                       </tr>
                     </thead>
@@ -5778,6 +5936,9 @@ export function QuoteBuilderScreen({
                           <Fragment key={`expanded-market-group-${asset.id}`}>
                             {displayFormats.map((formatKey, index) => {
                               const selectedCreativeId = formatKey ? getCreativeImageIdForFormat(asset, formatKey) : '';
+                              const hasAssignedMaterial = formatKey
+                                ? Boolean((asset.materialIds?.[formatKey] || '').trim() || (asset.multiMaterialIds?.[formatKey] ?? []).some((id) => Boolean((id || '').trim())))
+                                : false;
                               const multiArtworkSlotCount = formatKey && normalizedMultipleArtworkFormats[canonicalKeyForFormat(formatKey)] ? Math.max(1, metadataAsset?.quantities?.[formatKey] ?? 1) : 0;
                               const multiArtworkFrameCount = formatKey ? frameCountForFormat(line?.breakdown, formatKey) : 0;
                               const slotArtworkIds = formatKey ? (asset.multiCreativeImageIds?.[formatKey] ?? []) : [];
@@ -5833,6 +5994,18 @@ export function QuoteBuilderScreen({
                                     ) : (
                                       <p className="text-sm text-slate-500">-</p>
                                     )}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {formatKey ? (
+                                      <Button
+                                        className="h-9 w-24 px-3 text-xs font-semibold"
+                                        onClick={() => openMaterialDialog(expandedMarket.id, asset.id, formatKey, multiArtworkFrameCount)}
+                                        type="button"
+                                        variant={hasAssignedMaterial ? 'outline' : 'secondary'}
+                                      >
+                                        {hasAssignedMaterial ? <><Eye className="h-3.5 w-3.5" />Show</> : '+ Assign'}
+                                      </Button>
+                                    ) : <p className="text-sm text-slate-500">-</p>}
                                   </td>
                                   {index === 0 ? (
                                     <td className="px-4 py-3" rowSpan={rowSpan}>
@@ -6315,6 +6488,78 @@ export function QuoteBuilderScreen({
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={materialDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) closeMaterialDialog();
+        }}
+      >
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 54rem)', maxHeight: '90vh' }}>
+          <DialogHeader>
+            <DialogTitle>Material</DialogTitle>
+          </DialogHeader>
+          {(() => {
+            const normalizedQuery = materialSearchQuery.trim().toLowerCase();
+            const filteredMaterials = materials.filter((material) => !normalizedQuery || material.name.toLowerCase().includes(normalizedQuery));
+
+            if (materialDialogMode === 'select') {
+              return (
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input className="h-9 border-slate-600 bg-slate-900 pl-9 text-slate-100" onChange={(event) => setMaterialSearchQuery(event.target.value)} placeholder="Search by material name" value={materialSearchQuery} />
+                  </div>
+                  {filteredMaterials.length > 0 ? (
+                    <div className="max-h-[56vh] overflow-auto rounded-md border border-slate-700 bg-slate-900/65">
+                      {filteredMaterials.map((material) => (
+                        <button className="block w-full border-b border-slate-800 px-4 py-3 text-left font-medium text-slate-100 last:border-b-0 hover:bg-violet-500/10" key={material.id} onClick={() => selectMaterialForRecord(material.id)} type="button">{material.name}</button>
+                      ))}
+                    </div>
+                  ) : <div className="rounded-md border border-slate-700 bg-slate-900 px-4 py-6 text-center text-sm text-slate-400">{materials.length === 0 ? 'No materials have been added on the Materials page yet.' : 'No matching materials found.'}</div>}
+                  <div className="flex justify-end"><Button onClick={() => { setMaterialDialogMode('manage'); setMaterialSelectionRecordIndex(null); setMaterialSearchQuery(''); }} type="button" variant="ghost">Back</Button></div>
+                </div>
+              );
+            }
+
+            if (!materialTarget) return null;
+            const usedFrames = multiMaterialRecords.reduce((sum, record) => sum + Math.max(0, Math.floor(record.frameCount || 0)), 0);
+            const remainingFrames = Math.max(0, materialTarget.totalFrames - usedFrames);
+            return (
+              <div className="space-y-3">
+                <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/70">
+                  <table className="w-full table-fixed border-collapse text-sm">
+                    <colgroup><col /><col className="w-[150px]" /><col className="w-[150px]" /></colgroup>
+                    <thead><tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300"><th className="border border-slate-700 px-3 py-2 text-left">Name</th><th className="border border-slate-700 px-3 py-2 text-center">Frame Count</th><th className="border border-slate-700 px-3 py-2 text-center">Action</th></tr></thead>
+                    <tbody>
+                      {multiMaterialRecords.map((record, index) => {
+                        const material = materials.find((entry) => entry.id === record.materialId) ?? null;
+                        const usedByOthers = multiMaterialRecords.reduce((sum, entry, entryIndex) => sum + (entryIndex === index ? 0 : Math.max(0, Math.floor(entry.frameCount || 0))), 0);
+                        const maxForRow = Math.max(0, materialTarget.totalFrames - usedByOthers);
+                        return (
+                          <tr className="border-t border-slate-700/70 bg-slate-800/65" key={record.id}>
+                            <td className="border border-slate-700 px-3 py-2 text-slate-100">{material?.name || 'No material assigned'}</td>
+                            <td className="border border-slate-700 px-3 py-2"><Input className="h-8 border-slate-600 bg-slate-900 text-center text-slate-100" max={maxForRow} min={0} onChange={(event) => updateMultiMaterialRecord(index, { frameCount: Number.parseInt(event.target.value || '0', 10) || 0 })} type="number" value={record.frameCount} /></td>
+                            <td className="border border-slate-700 px-3 py-2"><div className="flex items-center justify-center gap-2">
+                              <Button aria-label={`Edit material for record ${index + 1}`} className="h-8 w-8 p-0" onClick={() => { setMaterialSelectionRecordIndex(index); setMaterialDialogMode('select'); }} type="button" variant={record.materialId ? 'outline' : 'secondary'}>{record.materialId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}</Button>
+                              {record.materialId ? <Button aria-label={`Remove material from record ${index + 1}`} className="h-8 w-8 p-0" onClick={() => updateMultiMaterialRecord(index, { materialId: '' })} type="button" variant="destructive"><Trash2 className="h-4 w-4" /></Button> : null}
+                              {multiMaterialRecords.length > 1 ? <Button aria-label={`Delete material record ${index + 1}`} className="h-8 w-8 p-0" onClick={() => removeMultiMaterialRecord(index)} type="button" variant="ghost"><X className="h-4 w-4" /></Button> : null}
+                            </div></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
+                  <div className="space-y-1"><p>Total Frames: <span className="font-semibold text-white">{materialTarget.totalFrames}</span></p><p>Remaining Frames: <span className="font-semibold text-white">{remainingFrames}</span></p></div>
+                  <Button className="btn-theme-primary" disabled={remainingFrames === 0} onClick={addMultiMaterialRecord} type="button"><Plus className="h-4 w-4" />Add Record</Button>
+                  </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
