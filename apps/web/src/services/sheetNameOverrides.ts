@@ -99,6 +99,12 @@ export function resolveSheetName(rawName: string, overrides: SheetNameOverrides,
   return rawName;
 }
 
+export function resolveCanonicalSheetName(key: string, overrides: SheetNameOverrides) {
+  const canonicalKey = toCanonicalSheetNameKey(key);
+  const presetLabel = sheetNamePresetEntries.find((entry) => entry.key === canonicalKey)?.label;
+  return resolveSheetName(presetLabel || key, overrides, canonicalKey);
+}
+
 export function resolveFormatName(key: FormatKey, overrides: SheetNameOverrides) {
   return resolveSheetName(defaultFormatDisplayName(key), overrides, canonicalKeyForFormat(key));
 }

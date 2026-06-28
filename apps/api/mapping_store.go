@@ -109,6 +109,7 @@ type sheetNameOverrideRow struct {
 	TenantID               string
 	Overrides              []byte
 	MultipleArtworkFormats []byte
+	CustomPrintCostFormats []byte
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 }
@@ -481,6 +482,7 @@ func scanSheetNameOverrideRow(scanner interface {
 		&row.TenantID,
 		&row.Overrides,
 		&row.MultipleArtworkFormats,
+		&row.CustomPrintCostFormats,
 		&row.CreatedAt,
 		&row.UpdatedAt,
 	)
@@ -517,6 +519,7 @@ func normalizeMultipleArtworkFormats(input map[string]bool) map[string]bool {
 func decodeSheetNameOverrideRow(row sheetNameOverrideRow) (sheetNameOverrideRecord, error) {
 	overrides := sheetNameOverrides{}
 	multipleArtworkFormats := map[string]bool{}
+	customPrintCostFormats := map[string]bool{}
 	if len(row.Overrides) > 0 {
 		if err := json.Unmarshal(row.Overrides, &overrides); err != nil {
 			return sheetNameOverrideRecord{}, err
@@ -527,10 +530,16 @@ func decodeSheetNameOverrideRow(row sheetNameOverrideRow) (sheetNameOverrideReco
 			return sheetNameOverrideRecord{}, err
 		}
 	}
+	if len(row.CustomPrintCostFormats) > 0 {
+		if err := json.Unmarshal(row.CustomPrintCostFormats, &customPrintCostFormats); err != nil {
+			return sheetNameOverrideRecord{}, err
+		}
+	}
 	return sheetNameOverrideRecord{
 		TenantID:               row.TenantID,
 		Overrides:              normalizeSheetNameOverrides(overrides),
 		MultipleArtworkFormats: normalizeMultipleArtworkFormats(multipleArtworkFormats),
+		CustomPrintCostFormats: normalizeMultipleArtworkFormats(customPrintCostFormats),
 		CreatedAt:              row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:              row.UpdatedAt.UTC().Format(time.RFC3339),
 	}, nil
@@ -542,12 +551,12 @@ func (s *mappingStore) listSheetNameOverrides(ctx context.Context, tenantID stri
 	}
 
 	row, err := scanSheetNameOverrideRow(s.pool.QueryRow(ctx, `
-		SELECT tenant_id, overrides, multiple_artwork_formats, created_at, updated_at
+		SELECT tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, created_at, updated_at
 		FROM sheet_name_overrides
 		WHERE tenant_id = $1
 	`, tenantID))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return s.upsertSheetNameOverrides(ctx, tenantID, defaultSheetNameOverrides(), map[string]bool{})
+		return s.upsertSheetNameOverrides(ctx, tenantID, defaultSheetNameOverrides(), map[string]bool{}, map[string]bool{})
 	}
 	if err != nil {
 		return nil, err
@@ -560,13 +569,14 @@ func (s *mappingStore) listSheetNameOverrides(ctx context.Context, tenantID stri
 	return &record, nil
 }
 
-func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID string, overrides sheetNameOverrides, multipleArtworkFormats map[string]bool) (*sheetNameOverrideRecord, error) {
+func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID string, overrides sheetNameOverrides, multipleArtworkFormats, customPrintCostFormats map[string]bool) (*sheetNameOverrideRecord, error) {
 	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
 		return nil, err
 	}
 
 	normalized := normalizeSheetNameOverrides(overrides)
 	normalizedMultipleArtworkFormats := normalizeMultipleArtworkFormats(multipleArtworkFormats)
+	normalizedCustomPrintCostFormats := normalizeMultipleArtworkFormats(customPrintCostFormats)
 	overridesJSON, err := json.Marshal(normalized)
 	if err != nil {
 		return nil, err
@@ -575,17 +585,22 @@ func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID st
 	if err != nil {
 		return nil, err
 	}
+	customPrintCostFormatsJSON, err := json.Marshal(normalizedCustomPrintCostFormats)
+	if err != nil {
+		return nil, err
+	}
 
 	row, err := scanSheetNameOverrideRow(s.pool.QueryRow(ctx, `
-		INSERT INTO sheet_name_overrides (tenant_id, overrides, multiple_artwork_formats, created_at, updated_at)
-		VALUES ($1, $2::jsonb, $3::jsonb, NOW(), NOW())
+		INSERT INTO sheet_name_overrides (tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, created_at, updated_at)
+		VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb, NOW(), NOW())
 		ON CONFLICT (tenant_id)
 		DO UPDATE SET
 			overrides = EXCLUDED.overrides,
 			multiple_artwork_formats = EXCLUDED.multiple_artwork_formats,
+			custom_print_cost_formats = EXCLUDED.custom_print_cost_formats,
 			updated_at = NOW()
-		RETURNING tenant_id, overrides, multiple_artwork_formats, created_at, updated_at
-	`, tenantID, string(overridesJSON), string(multipleArtworkFormatsJSON)))
+		RETURNING tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, created_at, updated_at
+	`, tenantID, string(overridesJSON), string(multipleArtworkFormatsJSON), string(customPrintCostFormatsJSON)))
 	if err != nil {
 		return nil, err
 	}
@@ -1519,6 +1534,94 @@ func (s *mappingStore) upsertMarketAssetPrintingCosts(ctx context.Context, tenan
 	}
 
 	return records, nil
+}
+
+func (s *mappingStore) listCustomPrintCosts(ctx context.Context, tenantID string) ([]customPrintCostRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT tenant_id::text, sheet_key, one_page_cost::float8, two_page_cost::float8,
+			five_page_cost::float8, ten_plus_page_cost::float8, created_at, updated_at
+		FROM custom_print_costs
+		WHERE tenant_id = $1
+		ORDER BY sheet_key ASC
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]customPrintCostRecord, 0)
+	for rows.Next() {
+		var record customPrintCostRecord
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(
+			&record.TenantID, &record.SheetKey, &record.OnePageCost, &record.TwoPageCost,
+			&record.FivePageCost, &record.TenPlusPageCost, &createdAt, &updatedAt,
+		); err != nil {
+			return nil, err
+		}
+		record.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+		record.UpdatedAt = updatedAt.UTC().Format(time.RFC3339)
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+func normalizeCustomPrintCost(item customPrintCostInput) (customPrintCostInput, error) {
+	item.SheetKey = strings.TrimSpace(item.SheetKey)
+	if item.SheetKey == "" {
+		return customPrintCostInput{}, errors.New("sheetKey is required")
+	}
+	values := []float64{item.OnePageCost, item.TwoPageCost, item.FivePageCost, item.TenPlusPageCost}
+	for _, value := range values {
+		if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+			return customPrintCostInput{}, errors.New("Custom print costs must be greater than or equal to 0")
+		}
+	}
+	return item, nil
+}
+
+func (s *mappingStore) upsertCustomPrintCosts(ctx context.Context, tenantID string, payload []customPrintCostInput) ([]customPrintCostRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+	if len(payload) == 0 {
+		return s.listCustomPrintCosts(ctx, tenantID)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, rawItem := range payload {
+		item, err := normalizeCustomPrintCost(rawItem)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO custom_print_costs (
+				tenant_id, sheet_key, one_page_cost, two_page_cost, five_page_cost, ten_plus_page_cost, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+			ON CONFLICT (tenant_id, sheet_key)
+			DO UPDATE SET
+				one_page_cost = EXCLUDED.one_page_cost,
+				two_page_cost = EXCLUDED.two_page_cost,
+				five_page_cost = EXCLUDED.five_page_cost,
+				ten_plus_page_cost = EXCLUDED.ten_plus_page_cost,
+				updated_at = NOW()
+		`, tenantID, item.SheetKey, item.OnePageCost, item.TwoPageCost, item.FivePageCost, item.TenPlusPageCost); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return s.listCustomPrintCosts(ctx, tenantID)
 }
 
 func (s *mappingStore) listMarketSheetSizes(ctx context.Context, tenantID string) ([]marketSheetSizeRecord, error) {

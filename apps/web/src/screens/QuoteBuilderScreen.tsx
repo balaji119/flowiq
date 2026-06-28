@@ -5,6 +5,7 @@ import {
   CampaignPrintImage,
   CampaignRecord,
   CampaignCalculationSummary,
+  CustomPrintCostRecord,
   CampaignLine,
   CampaignMarket,
   MarketAssetPrintingCostRecord,
@@ -31,11 +32,11 @@ import { acquireCampaignEditLock, createCampaign, fetchCampaign, markCampaignSub
 import { deleteCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
-import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
+import { fetchCampaignCustomPrintCosts, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
-import { canonicalKeyForFormat, resolveFormatName, resolveSheetName, sanitizeSheetNameOverrides } from '../services/sheetNameOverrides';
+import { canonicalKeyForFormat, resolveFormatName, resolveSheetName, sanitizeSheetNameOverrides, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 import ExcelJS from 'exceljs';
 import { Document as WordDocument, ExternalHyperlink, ImageRun, LineRuleType, Packer, Paragraph, TextRun, UnderlineType } from 'docx';
 import { PDFArray, PDFDocument, PDFName, PDFString, StandardFonts, rgb } from 'pdf-lib';
@@ -1200,8 +1201,10 @@ export function QuoteBuilderScreen({
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<MarketDeliveryAddressRecord[]>([]);
   const [marketShippingRates, setMarketShippingRates] = useState<MarketShippingRateRecord[]>([]);
   const [marketAssetPrintingCosts, setMarketAssetPrintingCosts] = useState<MarketAssetPrintingCostRecord[]>([]);
+  const [customPrintCosts, setCustomPrintCosts] = useState<CustomPrintCostRecord[]>([]);
   const [sheetNameOverrides, setSheetNameOverrides] = useState<SheetNameOverrides>({});
   const [multipleArtworkFormats, setMultipleArtworkFormats] = useState<Record<string, boolean>>({});
+  const [customPrintCostFormats, setCustomPrintCostFormats] = useState<Record<string, boolean>>({});
   const [marketAssetShippingCosts, setMarketAssetShippingCosts] = useState<MarketAssetShippingCostRecord[]>([]);
   const [metadataError, setMetadataError] = useState('');
   const [loadingMetadata, setLoadingMetadata] = useState(true);
@@ -1494,6 +1497,20 @@ export function QuoteBuilderScreen({
 
   useEffect(() => {
     let active = true;
+    async function loadCustomPrintCosts() {
+      try {
+        const response = await fetchCampaignCustomPrintCosts(effectiveTenantId);
+        if (active) setCustomPrintCosts(response.costs);
+      } catch {
+        if (active) setCustomPrintCosts([]);
+      }
+    }
+    void loadCustomPrintCosts();
+    return () => { active = false; };
+  }, [effectiveTenantId]);
+
+  useEffect(() => {
+    let active = true;
     async function loadMarketAssetShippingCosts() {
       try {
         const response = await fetchCampaignMarketAssetShippingCosts(effectiveTenantId);
@@ -1572,10 +1589,12 @@ export function QuoteBuilderScreen({
         if (!active) return;
         setSheetNameOverrides(sanitizeSheetNameOverrides(response.settings.overrides));
         setMultipleArtworkFormats(response.settings.multipleArtworkFormats ?? {});
+        setCustomPrintCostFormats(response.settings.customPrintCostFormats ?? {});
       } catch {
         if (!active) return;
         setSheetNameOverrides({});
         setMultipleArtworkFormats({});
+        setCustomPrintCostFormats({});
       }
     }
     void loadSheetNameOverrides();
@@ -1759,6 +1778,10 @@ export function QuoteBuilderScreen({
   const printingCostByMarketAsset = useMemo(
     () => new Map(marketAssetPrintingCosts.map((entry) => [`${entry.market}\x00${entry.assetId}`, entry.costs])),
     [marketAssetPrintingCosts],
+  );
+  const customPrintCostBySheetKey = useMemo(
+    () => new Map(customPrintCosts.map((entry) => [toCanonicalSheetNameKey(entry.sheetKey), entry])),
+    [customPrintCosts],
   );
   const selectedAssetByLineId = useMemo(() => {
     const byLineId = new Map<string, { market: string; assetId: string }>();
@@ -3190,16 +3213,33 @@ export function QuoteBuilderScreen({
   }
 
   function calculateLinePrintingCost(line: CampaignCalculationSummary['lines'][number]) {
+    const customCost = Object.entries(line.breakdown as Record<string, number>).reduce((total, [rawKey, rawPages]) => {
+      const sheetKey = toCanonicalSheetNameKey(rawKey);
+      if (!customPrintCostFormats[sheetKey]) return total;
+      const pages = Math.max(0, Number(rawPages) || 0);
+      if (pages === 0) return total;
+      const rates = customPrintCostBySheetKey.get(sheetKey);
+      if (!rates) return total;
+      const rate = pages >= 10
+        ? rates.tenPlusPageCost
+        : pages >= 5
+          ? rates.fivePageCost
+          : pages >= 2
+            ? rates.twoPageCost
+            : rates.onePageCost;
+      return total + pages * rate;
+    }, 0);
     const selectedAsset = selectedAssetByLineId.get(line.id);
-    if (!selectedAsset) return 0;
+    if (!selectedAsset) return customCost;
     const costs = printingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`);
-    if (!costs) return 0;
+    if (!costs) return customCost;
     const qa0Units = line.breakdown.QA0 ?? 0;
     const eightSheetRate = costs['8-sheet'] ?? 0;
-    return formatKeys.reduce((total, key) => {
-      if (key === 'QA0') return total;
+    const standardCost = formatKeys.reduce((total, key) => {
+      if (customPrintCostFormats[toCanonicalSheetNameKey(key)] || key === 'QA0') return total;
       return total + (line.breakdown[key] ?? 0) * (costs[key] ?? 0);
-    }, 0) + qa0Units * eightSheetRate;
+    }, 0) + (customPrintCostFormats[toCanonicalSheetNameKey('QA0')] ? 0 : qa0Units * eightSheetRate);
+    return standardCost + customCost;
   }
 
   function calculateMarketPrintingCost(marketName: string) {
@@ -3209,7 +3249,7 @@ export function QuoteBuilderScreen({
 
   const totalPrintingCost = useMemo(
     () => visibleReviewMarkets.reduce((total, marketSummary) => total + calculateMarketPrintingCost(marketSummary.market), 0),
-    [visibleReviewMarkets],
+    [customPrintCostBySheetKey, customPrintCostFormats, printingCostByMarketAsset, selectedAssetByLineId, visibleReviewMarkets],
   );
   const totalShippingCost = useMemo(
     () => visibleReviewMarkets.reduce((total, marketSummary) => total + calculateMarketShippingCost(marketSummary.market), 0),

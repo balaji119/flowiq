@@ -252,6 +252,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/market-shipping-rates", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketShippingRates)))
 	mux.Handle("GET /api/market-asset-shipping-costs", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketAssetShippingCosts)))
 	mux.Handle("GET /api/market-asset-printing-costs", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketAssetPrintingCosts)))
+	mux.Handle("GET /api/custom-print-costs", a.withAuth(http.HandlerFunc(a.handleListCampaignCustomPrintCosts)))
 	mux.Handle("GET /api/sheet-name-overrides", a.withAuth(http.HandlerFunc(a.handleGetCampaignSheetNameOverrides)))
 	mux.Handle("GET /api/calculator/metadata", a.withAuth(http.HandlerFunc(a.handleCalculatorMetadata)))
 	mux.Handle("POST /api/calculator/calculate", a.withAuth(http.HandlerFunc(a.handleCalculateCampaign)))
@@ -295,6 +296,8 @@ func (a *app) routes() http.Handler {
 	mux.Handle("PUT /api/admin/market-asset-shipping-costs", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMarketAssetShippingCosts), "super_admin")))
 	mux.Handle("GET /api/admin/market-asset-printing-costs", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListMarketAssetPrintingCosts), "super_admin")))
 	mux.Handle("PUT /api/admin/market-asset-printing-costs", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMarketAssetPrintingCosts), "super_admin")))
+	mux.Handle("GET /api/admin/custom-print-costs", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListCustomPrintCosts), "super_admin")))
+	mux.Handle("PUT /api/admin/custom-print-costs", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertCustomPrintCosts), "super_admin")))
 	mux.Handle("GET /api/admin/market-sheet-sizes", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListMarketSheetSizes), "super_admin", "admin")))
 	mux.Handle("PUT /api/admin/market-sheet-sizes", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMarketSheetSizes), "super_admin", "admin")))
 	mux.Handle("GET /api/admin/sheet-name-overrides", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleGetSheetNameOverrides), "super_admin", "admin")))
@@ -1208,6 +1211,20 @@ func (a *app) handleListCampaignMarketAssetPrintingCosts(w http.ResponseWriter, 
 	}
 
 	records, err := a.mappingStore.listMarketAssetPrintingCosts(r.Context(), *user.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"costs": records})
+}
+
+func (a *app) handleListCampaignCustomPrintCosts(w http.ResponseWriter, r *http.Request) {
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
+	records, err := a.mappingStore.listCustomPrintCosts(r.Context(), *user.TenantID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -2188,6 +2205,41 @@ func (a *app) handleUpsertMarketAssetPrintingCosts(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, map[string]any{"costs": records})
 }
 
+func (a *app) handleListCustomPrintCosts(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	records, err := a.mappingStore.listCustomPrintCosts(r.Context(), *tenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"costs": records})
+}
+
+func (a *app) handleUpsertCustomPrintCosts(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	var payload struct {
+		Costs []customPrintCostInput `json:"costs"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	records, err := a.mappingStore.upsertCustomPrintCosts(r.Context(), *tenantID, payload.Costs)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"costs": records})
+}
+
 func (a *app) handleListMarketSheetSizes(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := a.managedTenantID(r)
 	if err != nil {
@@ -2289,6 +2341,7 @@ func (a *app) handleUpsertSheetNameOverrides(w http.ResponseWriter, r *http.Requ
 	var payload struct {
 		Overrides              sheetNameOverrides `json:"overrides"`
 		MultipleArtworkFormats map[string]bool    `json:"multipleArtworkFormats"`
+		CustomPrintCostFormats map[string]bool    `json:"customPrintCostFormats"`
 	}
 	if err := decodeJSONBody(r, &payload); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
@@ -2300,8 +2353,19 @@ func (a *app) handleUpsertSheetNameOverrides(w http.ResponseWriter, r *http.Requ
 	if payload.MultipleArtworkFormats == nil {
 		payload.MultipleArtworkFormats = map[string]bool{}
 	}
+	if payload.CustomPrintCostFormats == nil {
+		payload.CustomPrintCostFormats = map[string]bool{}
+	}
+	if user := currentUser(r.Context()); user == nil || user.Role != "super_admin" {
+		existing, loadErr := a.mappingStore.listSheetNameOverrides(r.Context(), *tenantID)
+		if loadErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": loadErr.Error()})
+			return
+		}
+		payload.CustomPrintCostFormats = existing.CustomPrintCostFormats
+	}
 
-	record, err := a.mappingStore.upsertSheetNameOverrides(r.Context(), *tenantID, payload.Overrides, payload.MultipleArtworkFormats)
+	record, err := a.mappingStore.upsertSheetNameOverrides(r.Context(), *tenantID, payload.Overrides, payload.MultipleArtworkFormats, payload.CustomPrintCostFormats)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return

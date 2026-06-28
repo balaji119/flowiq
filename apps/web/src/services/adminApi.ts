@@ -17,6 +17,8 @@ import {
   PrintIqOptionsCacheStatus,
   SheetNameOverrideRecord,
   SheetNameOverrides,
+  CustomPrintCostInput,
+  CustomPrintCostRecord,
   TenantRecord,
 } from '@flowiq/shared';
 import { apiFetchJson } from './apiClient';
@@ -184,6 +186,19 @@ export async function upsertMarketAssetPrintingCosts(payload: { costs: MarketAss
   });
 }
 
+export async function fetchCustomPrintCosts(tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ costs: CustomPrintCostRecord[] }>(`/api/admin/custom-print-costs${query}`);
+}
+
+export async function upsertCustomPrintCosts(payload: { costs: CustomPrintCostInput[] }, tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ costs: CustomPrintCostRecord[] }>(`/api/admin/custom-print-costs${query}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchMarketSheetSizes(tenantId?: string) {
   const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
   return apiFetchJson<{ sizes: MarketSheetSizeRecord[] }>(`/api/admin/market-sheet-sizes${query}`);
@@ -215,7 +230,7 @@ export async function fetchAdminSheetNameOverrides(tenantId?: string) {
   return apiFetchJson<{ settings: SheetNameOverrideRecord }>(`/api/admin/sheet-name-overrides${query}`);
 }
 
-export async function upsertAdminSheetNameOverrides(payload: { overrides: SheetNameOverrides; multipleArtworkFormats?: Record<string, boolean> }, tenantId?: string) {
+export async function upsertAdminSheetNameOverrides(payload: { overrides: SheetNameOverrides; multipleArtworkFormats?: Record<string, boolean>; customPrintCostFormats?: Record<string, boolean> }, tenantId?: string) {
   const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
   return apiFetchJson<{ settings: SheetNameOverrideRecord }>(`/api/admin/sheet-name-overrides${query}`, {
     method: 'PUT',

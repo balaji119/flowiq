@@ -27,8 +27,28 @@ type sheetNameOverrideRecord struct {
 	TenantID               string             `json:"tenantId"`
 	Overrides              sheetNameOverrides `json:"overrides"`
 	MultipleArtworkFormats map[string]bool    `json:"multipleArtworkFormats,omitempty"`
+	CustomPrintCostFormats map[string]bool    `json:"customPrintCostFormats,omitempty"`
 	CreatedAt              string             `json:"createdAt"`
 	UpdatedAt              string             `json:"updatedAt"`
+}
+
+type customPrintCostInput struct {
+	SheetKey        string  `json:"sheetKey"`
+	OnePageCost     float64 `json:"onePageCost"`
+	TwoPageCost     float64 `json:"twoPageCost"`
+	FivePageCost    float64 `json:"fivePageCost"`
+	TenPlusPageCost float64 `json:"tenPlusPageCost"`
+}
+
+type customPrintCostRecord struct {
+	TenantID        string  `json:"tenantId"`
+	SheetKey        string  `json:"sheetKey"`
+	OnePageCost     float64 `json:"onePageCost"`
+	TwoPageCost     float64 `json:"twoPageCost"`
+	FivePageCost    float64 `json:"fivePageCost"`
+	TenPlusPageCost float64 `json:"tenPlusPageCost"`
+	CreatedAt       string  `json:"createdAt"`
+	UpdatedAt       string  `json:"updatedAt"`
 }
 
 type AuthUser struct {

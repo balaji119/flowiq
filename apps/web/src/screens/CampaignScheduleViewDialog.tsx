@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LoaderCircle, ShoppingCart } from 'lucide-react';
-import { CampaignRecord, formatKeys, frameTotal, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketShippingRateRecord, posterTotal } from '@flowiq/shared';
+import { CampaignRecord, CustomPrintCostRecord, formatKeys, frameTotal, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketShippingRateRecord, posterTotal } from '@flowiq/shared';
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
 import { submitCampaignToPrintIQ } from '../services/campaignApi';
-import { fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
+import { fetchCampaignCustomPrintCosts, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
+import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
+import { toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 
 const QUOTE_AUTOMATION_RESULT_EVENT = 'flowiq:quote-automation-result';
 
@@ -113,6 +115,8 @@ export function CampaignScheduleViewDialog({
   } | null>(null);
   const [shippingRates, setShippingRates] = useState<MarketShippingRateRecord[]>([]);
   const [assetPrintingCosts, setAssetPrintingCosts] = useState<MarketAssetPrintingCostRecord[]>([]);
+  const [customPrintCosts, setCustomPrintCosts] = useState<CustomPrintCostRecord[]>([]);
+  const [customPrintCostFormats, setCustomPrintCostFormats] = useState<Record<string, boolean>>({});
   const [assetShippingCosts, setAssetShippingCosts] = useState<MarketAssetShippingCostRecord[]>([]);
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<Array<{ market: string; deliveryAddress: string }>>([]);
   const [downloadingVisuals, setDownloadingVisuals] = useState(false);
@@ -202,23 +206,29 @@ export function CampaignScheduleViewDialog({
 
     async function loadCosts() {
       try {
-        const [ratesResponse, printingResponse, shippingResponse, deliveryAddressesResponse] = await Promise.all([
+        const [ratesResponse, printingResponse, shippingResponse, deliveryAddressesResponse, customCostResponse, sheetResponse] = await Promise.all([
           fetchCampaignMarketShippingRates(tenantId),
           fetchCampaignMarketAssetPrintingCosts(tenantId),
           fetchCampaignMarketAssetShippingCosts(tenantId),
           fetchCampaignMarketDeliveryAddresses(tenantId),
+          fetchCampaignCustomPrintCosts(tenantId),
+          fetchCampaignSheetNameOverrides(tenantId),
         ]);
         if (!active) return;
         setShippingRates(ratesResponse.rates);
         setAssetPrintingCosts(printingResponse.costs);
         setAssetShippingCosts(shippingResponse.costs);
         setMarketDeliveryAddresses(deliveryAddressesResponse.addresses);
+        setCustomPrintCosts(customCostResponse.costs);
+        setCustomPrintCostFormats(sheetResponse.settings.customPrintCostFormats ?? {});
       } catch {
         if (!active) return;
         setShippingRates([]);
         setAssetPrintingCosts([]);
         setAssetShippingCosts([]);
         setMarketDeliveryAddresses([]);
+        setCustomPrintCosts([]);
+        setCustomPrintCostFormats({});
       }
     }
 
@@ -329,6 +339,10 @@ export function CampaignScheduleViewDialog({
   const printingCostByMarketAsset = useMemo(
     () => new Map(assetPrintingCosts.map((entry) => [`${entry.market}\x00${entry.assetId}`, entry.costs])),
     [assetPrintingCosts],
+  );
+  const customPrintCostBySheetKey = useMemo(
+    () => new Map(customPrintCosts.map((entry) => [toCanonicalSheetNameKey(entry.sheetKey), entry])),
+    [customPrintCosts],
   );
   const shippingCostByMarketAsset = useMemo(
     () => new Map(assetShippingCosts.map((entry) => [`${entry.market}\x00${entry.assetId}`, entry])),
@@ -500,17 +514,33 @@ export function CampaignScheduleViewDialog({
         ? printingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`)
           ?? findPrintingCostsForAsset(selectedAsset.market, [selectedAsset.assetId, selectedAsset.assetSearch, selectedAsset.id, line.assetLabel, line.id])
         : findPrintingCostsForAsset(line.market, [line.id, line.assetLabel]);
-      if (!costs) return total;
+      const customCost = Object.entries(line.breakdown as Record<string, number>).reduce((sum, [rawKey, rawPages]) => {
+        const sheetKey = toCanonicalSheetNameKey(rawKey);
+        if (!customPrintCostFormats[sheetKey]) return sum;
+        const pages = Math.max(0, toNumber(rawPages));
+        if (pages === 0) return sum;
+        const rates = customPrintCostBySheetKey.get(sheetKey);
+        if (!rates) return sum;
+        const rate = pages >= 10
+          ? rates.tenPlusPageCost
+          : pages >= 5
+            ? rates.fivePageCost
+            : pages >= 2
+              ? rates.twoPageCost
+              : rates.onePageCost;
+        return sum + pages * rate;
+      }, 0);
+      if (!costs) return total + customCost;
       const qa0Units = toNumber(line.breakdown.QA0);
       const eightSheetRate = toNumber(costs['8-sheet']);
       const lineCost =
         formatKeys.reduce((sum, key) => {
-          if (key === 'QA0') return sum;
+          if (customPrintCostFormats[toCanonicalSheetNameKey(key)] || key === 'QA0') return sum;
           return sum + toNumber(line.breakdown[key]) * toNumber(costs[key]);
-        }, 0) + qa0Units * eightSheetRate;
-      return total + lineCost;
+        }, 0) + (customPrintCostFormats[toCanonicalSheetNameKey('QA0')] ? 0 : qa0Units * eightSheetRate);
+      return total + lineCost + customCost;
     }, 0);
-  }, [campaign, findPrintingCostsForAsset, printingCostByMarketAsset, selectedAssetByLineId]);
+  }, [campaign, customPrintCostBySheetKey, customPrintCostFormats, findPrintingCostsForAsset, printingCostByMarketAsset, selectedAssetByLineId]);
 
   const totalShippingCost = useMemo(() => {
     if (!campaign?.summary) return 0;

@@ -54,6 +54,21 @@ export type SheetNameOverrideRecord = {
   tenantId: string;
   overrides: SheetNameOverrides;
   multipleArtworkFormats?: Record<string, boolean>;
+  customPrintCostFormats?: Record<string, boolean>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CustomPrintCostInput = {
+  sheetKey: string;
+  onePageCost: number;
+  twoPageCost: number;
+  fivePageCost: number;
+  tenPlusPageCost: number;
+};
+
+export type CustomPrintCostRecord = CustomPrintCostInput & {
+  tenantId: string;
   createdAt: string;
   updatedAt: string;
 };
