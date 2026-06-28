@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, Save, Shield } from 'lucide-react';
 import { CalculatorMappingRecord, MarketSheetSizeRecord, TenantRecord } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input } from '@flowiq/ui';
+import { Button, Card, CardContent, CardDescription, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input } from '@flowiq/ui';
 import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
 import { useAuth } from '../context/AuthContext';
 import { fetchCalculatorMappings, fetchMarketSheetSizes, fetchTenants, upsertMarketSheetSizes } from '../services/adminApi';
@@ -110,9 +110,8 @@ export function SheetSizeSettingsScreen({
   const [pendingNavigationAction, setPendingNavigationAction] = useState<(() => void) | null>(null);
 
   const canAccessManagement = session?.user.role !== 'user';
-  const canSwitchTenant = session?.user.role === 'super_admin' && !tenantId;
-  const effectiveTenantId = tenantId ?? (canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined);
-  const selectedTenant = useMemo(() => tenants.find((tenant) => tenant.id === selectedTenantId) ?? null, [selectedTenantId, tenants]);
+  const canSwitchTenant = session?.user.role === 'super_admin';
+  const effectiveTenantId = canSwitchTenant ? selectedTenantId ?? tenantId ?? undefined : tenantId ?? session?.user.tenantId ?? undefined;
   const hasUnsavedChanges = useMemo(
     () => buildDraftSnapshot(drafts) !== buildDraftSnapshot(savedDrafts),
     [drafts, savedDrafts],
@@ -129,9 +128,11 @@ export function SheetSizeSettingsScreen({
           const response = await fetchTenants();
           if (!active) return;
           setTenants(response.tenants);
-          if (!selectedTenantId && response.tenants[0]) {
-            setSelectedTenantId(response.tenants[0].id);
-          }
+          setSelectedTenantId((current) => (
+            current && response.tenants.some((tenant) => tenant.id === current)
+              ? current
+              : response.tenants[0]?.id ?? null
+          ));
         }
       } catch (loadError) {
         if (active) {
@@ -372,70 +373,49 @@ export function SheetSizeSettingsScreen({
         {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
         {notice ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
-        {canSwitchTenant ? (
-          <Card>
-            <CardHeader className="p-5 pb-0">
-              <CardTitle>Tenant scope</CardTitle>
-              <CardDescription>Super admins can maintain sheet sizes for any tenant.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-md border border-slate-700 bg-slate-800/70 p-4">
-                <p className="text-sm font-semibold text-white">
-                  {selectedTenant ? `Managing sheet sizes for ${selectedTenant.name}` : 'No tenant selected'}
-                </p>
-                <p className="mt-1 text-sm text-slate-400">
-                  {selectedTenant ? selectedTenant.id : 'Select a tenant below. Sheet sizes are tenant-specific.'}
-                </p>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {tenants.map((tenant) => {
-                  const active = selectedTenantId === tenant.id;
-                  return (
-                    <button
-                      key={tenant.id}
-                      className={active
-                        ? 'rounded-md border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(105, 53, 228,0.85)] transition'
-                        : 'rounded-md border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
-                      onClick={() => setSelectedTenantId(tenant.id)}
-                      type="button"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-base font-bold text-white">{tenant.name}</p>
-                          <p className="mt-2 break-all text-xs text-slate-400">{tenant.id}</p>
-                        </div>
-                        {active ? <Badge>Selected</Badge> : null}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <section className="space-y-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <section className="flex flex-wrap gap-4">
+          {canSwitchTenant ? (
             <div className="w-full sm:w-[320px]">
               <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
-                <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
+                <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Tenant</span>
                 <select
-                  id="sheet-size-market-filter"
+                  id="sheet-size-tenant"
                   className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
-                  onChange={(event) => setSelectedMarketFilter(event.target.value)}
-                  value={selectedMarketFilter}
+                  value={selectedTenantId ?? ''}
+                  onChange={(event) => {
+                    const nextTenantId = event.target.value || null;
+                    confirmDiscardChanges(() => setSelectedTenantId(nextTenantId));
+                  }}
                 >
-                  {marketOptions.length === 0 ? <option value="">No markets available</option> : null}
-                  {marketOptions.map((market) => (
-                    <option key={`sheet-size-market-${market}`} value={market}>
-                      {market}
-                    </option>
+                  {tenants.map((tenant) => (
+                    <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
                   ))}
                 </select>
               </div>
             </div>
-          </div>
+          ) : null}
 
+          <div className="w-full sm:w-[320px]">
+            <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+              <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Market</span>
+              <select
+                id="sheet-size-market-filter"
+                className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+                onChange={(event) => setSelectedMarketFilter(event.target.value)}
+                value={selectedMarketFilter}
+              >
+                {marketOptions.length === 0 ? <option value="">No markets available</option> : null}
+                {marketOptions.map((market) => (
+                  <option key={`sheet-size-market-${market}`} value={market}>
+                    {market}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-5">
           {loading ? (
             <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
               <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />

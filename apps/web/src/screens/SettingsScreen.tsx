@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, Plus, Save, Shield, Trash2 } from 'lucide-react';
 import { SheetNameOverrides, TenantRecord } from '@flowiq/shared';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
+import { Button, Card, CardContent, CardDescription, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label } from '@flowiq/ui';
 import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
 import { useAuth } from '../context/AuthContext';
 import { fetchAdminSheetNameOverrides, fetchCalculatorMappings, fetchTenants, upsertAdminSheetNameOverrides } from '../services/adminApi';
@@ -43,7 +43,7 @@ export function SettingsScreen({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
-  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(session?.user.tenantId ?? null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(tenantId ?? session?.user.tenantId ?? null);
   const [presetOverrides, setPresetOverrides] = useState<Record<string, string>>({});
   const [multipleArtworkFormats, setMultipleArtworkFormats] = useState<Record<string, boolean>>({});
   const [customOverrides, setCustomOverrides] = useState<CustomOverrideRow[]>([]);
@@ -51,9 +51,8 @@ export function SettingsScreen({
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [pendingNavigationAction, setPendingNavigationAction] = useState<(() => void) | null>(null);
 
-  const canSwitchTenant = session?.user.role === 'super_admin' && !tenantId;
-  const effectiveTenantId = tenantId ?? (canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined);
-  const selectedTenant = useMemo(() => tenants.find((tenant) => tenant.id === selectedTenantId) ?? null, [selectedTenantId, tenants]);
+  const canSwitchTenant = session?.user.role === 'super_admin';
+  const effectiveTenantId = canSwitchTenant ? selectedTenantId ?? tenantId ?? undefined : tenantId ?? session?.user.tenantId ?? undefined;
 
   function buildSettingsSnapshot(
     presetValues: Record<string, string>,
@@ -96,9 +95,11 @@ export function SettingsScreen({
           const tenantResponse = await fetchTenants();
           if (!active) return;
           setTenants(tenantResponse.tenants);
-          if (!selectedTenantId && tenantResponse.tenants[0]) {
-            setSelectedTenantId(tenantResponse.tenants[0].id);
-          }
+          setSelectedTenantId((current) => (
+            current && tenantResponse.tenants.some((tenant) => tenant.id === current)
+              ? current
+              : tenantResponse.tenants[0]?.id ?? null
+          ));
         }
       } catch (loadError) {
         if (active) {
@@ -312,45 +313,26 @@ export function SettingsScreen({
         {notice ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
 
         {canSwitchTenant ? (
-          <Card>
-            <CardHeader className="p-5 pb-0">
-              <CardTitle>Tenant scope</CardTitle>
-              <CardDescription>Super admins can maintain sheet names for any tenant.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-md border border-slate-700 bg-slate-800/70 p-4">
-                <p className="text-sm font-semibold text-white">
-                  {selectedTenant ? `Managing settings for ${selectedTenant.name}` : 'No tenant selected'}
-                </p>
-                <p className="mt-1 text-sm text-slate-400">
-                  {selectedTenant ? selectedTenant.id : 'Select a tenant below. Settings are tenant-specific.'}
-                </p>
+          <section className="flex flex-wrap gap-4">
+            <div className="w-full sm:w-[320px]">
+              <div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Tenant</span>
+                <select
+                  id="sheet-name-tenant"
+                  className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+                  value={selectedTenantId ?? ''}
+                  onChange={(event) => {
+                    const nextTenantId = event.target.value || null;
+                    confirmDiscardChanges(() => setSelectedTenantId(nextTenantId));
+                  }}
+                >
+                  {tenants.map((tenant) => (
+                    <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
+                  ))}
+                </select>
               </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {tenants.map((tenant) => {
-                  const active = selectedTenantId === tenant.id;
-                  return (
-                    <button
-                      key={tenant.id}
-                      className={active
-                        ? 'rounded-md border border-violet-400 bg-violet-500/10 p-4 text-left shadow-[0_10px_25px_-12px_rgba(105, 53, 228,0.85)] transition'
-                        : 'rounded-md border border-slate-700 bg-slate-800/80 p-4 text-left transition hover:border-slate-500 hover:bg-slate-800'}
-                      onClick={() => setSelectedTenantId(tenant.id)}
-                      type="button"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-base font-bold text-white">{tenant.name}</p>
-                          <p className="mt-2 break-all text-xs text-slate-400">{tenant.id}</p>
-                        </div>
-                        {active ? <Badge>Selected</Badge> : null}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          </section>
         ) : null}
 
         <section className="max-w-5xl space-y-5">
