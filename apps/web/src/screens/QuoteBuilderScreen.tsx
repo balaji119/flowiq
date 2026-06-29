@@ -398,8 +398,8 @@ function ArtworkThumbnailWithHoverPreview({
   const [previewPosition, setPreviewPosition] = useState<{ left: number; top: number } | null>(null);
 
   function updatePreviewPosition(clientX: number, clientY: number) {
-    const previewWidth = Math.min(320, window.innerWidth - 32);
-    const previewHeightEstimate = Math.min(420, window.innerHeight - 32);
+    const previewWidth = Math.min(640, window.innerWidth - 32);
+    const previewHeightEstimate = Math.min(840, window.innerHeight - 32);
     const left = clientX + 18 + previewWidth <= window.innerWidth
       ? clientX + 18
       : Math.max(16, clientX - previewWidth - 18);
@@ -422,7 +422,7 @@ function ArtworkThumbnailWithHoverPreview({
         ? createPortal(
             <div
               aria-hidden="true"
-              className="pointer-events-none fixed w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-violet-400/60 bg-slate-950 p-2 shadow-2xl shadow-black/70"
+              className="pointer-events-none fixed w-[40rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-violet-400/60 bg-slate-950 p-2 shadow-2xl shadow-black/70"
               style={{ left: previewPosition.left, top: previewPosition.top, zIndex: 2147483647 }}
             >
               <img alt="" className="max-h-[60vh] w-full rounded object-contain" src={previewSrc} />
