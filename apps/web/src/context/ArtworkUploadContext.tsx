@@ -108,19 +108,24 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     monitoredOneDriveRef.current.clear();
-    setJobs((current) => current.filter((job) => job.origin !== 'onedrive'));
+    // A session bootstrap must not replay completed uploads as new events.
+    // Keep only local work that is still active and restore only active
+    // OneDrive imports below.
+    setJobs((current) => current.filter((job) => (
+      job.origin !== 'onedrive' && (job.status === 'queued' || job.status === 'uploading')
+    )));
+    setNotice(null);
     if (!session) return;
     let active = true;
     void listOneDriveArtworkImports()
       .then(({ imports }) => {
         if (!active) return;
+        const activeImports = imports.filter((job) => job.status !== 'completed' && job.status !== 'error');
         setJobs((current) => {
           const localJobs = current.filter((job) => job.origin !== 'onedrive');
-          return [...localJobs, ...imports.map(toArtworkJob)];
+          return [...localJobs, ...activeImports.map(toArtworkJob)];
         });
-        imports
-          .filter((job) => job.status !== 'completed' && job.status !== 'error')
-          .forEach(monitorOneDriveJob);
+        activeImports.forEach(monitorOneDriveJob);
       })
       .catch(() => {
         // Authentication bootstrap or a temporary network outage may race this
