@@ -134,8 +134,8 @@ export function CampaignScheduleViewDialog({
       market.assets.some((asset) => {
         const hasFormatMapping = Object.values(asset.creativeImageIds ?? {}).some((imageId) => Boolean((imageId || '').trim()));
         if (hasFormatMapping) return true;
-        const hasMultiFormatMapping = Object.values(asset.multiCreativeImageIds ?? {}).some((imageIds) =>
-          (imageIds ?? []).some((imageId) => Boolean((imageId || '').trim())),
+        const hasMultiFormatMapping = Object.values(asset.artworkMaterialAssignments ?? {}).some((assignments) =>
+          (assignments ?? []).some((assignment) => Boolean((assignment.artworkImageId || '').trim())),
         );
         if (hasMultiFormatMapping) return true;
         return Boolean((asset.creativeImageId || '').trim());
@@ -693,13 +693,9 @@ export function CampaignScheduleViewDialog({
     };
 
     formatKeys.forEach((typeKey) => {
-      const multiAssigned = (asset.multiCreativeImageIds?.[typeKey] ?? []).map((id) => (id || '').trim()).filter(Boolean);
-      if (multiAssigned.length > 0) {
-        const frameCountByImage = new Map<string, number>();
-        multiAssigned.forEach((imageId) => {
-          frameCountByImage.set(imageId, (frameCountByImage.get(imageId) ?? 0) + 1);
-        });
-        frameCountByImage.forEach((frameCount, imageId) => pushArtwork(imageId, typeKey, frameCount));
+      const combinedAssignments = asset.artworkMaterialAssignments?.[typeKey] ?? [];
+      if (combinedAssignments.some((assignment) => Boolean((assignment.artworkImageId || '').trim()))) {
+        combinedAssignments.forEach((assignment) => pushArtwork(assignment.artworkImageId, typeKey, assignment.frameCount));
         return;
       }
       const singleAssigned = (asset.creativeImageIds?.[typeKey] || '').trim();
@@ -709,7 +705,7 @@ export function CampaignScheduleViewDialog({
     });
 
     const hasTypedAssignments = formatKeys.some((typeKey) => Boolean((asset.creativeImageIds?.[typeKey] || '').trim()))
-      || formatKeys.some((typeKey) => (asset.multiCreativeImageIds?.[typeKey] ?? []).some((id) => Boolean((id || '').trim())));
+      || formatKeys.some((typeKey) => (asset.artworkMaterialAssignments?.[typeKey] ?? []).some((assignment) => Boolean((assignment.artworkImageId || '').trim())));
     if (!hasTypedAssignments && (asset.creativeImageId || '').trim()) {
       pushArtwork(asset.creativeImageId, '8-sheet', 1);
     }

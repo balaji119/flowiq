@@ -17,9 +17,7 @@ export function createCampaignAsset(id: string, weekCount = 1): CampaignAsset {
     selectedWeeks: createAllWeeks(weekCount),
     creativeImageId: '',
     creativeImageIds: {},
-    multiCreativeImageIds: {},
-    materialIds: {},
-    multiMaterialIds: {},
+    artworkMaterialAssignments: {},
     deliveryAddress: '',
   };
 }

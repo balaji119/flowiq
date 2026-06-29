@@ -121,22 +121,10 @@ func cloneOrderFormValues(values orderFormValues) orderFormValues {
 					clonedAsset.CreativeImageIDs[key] = value
 				}
 			}
-			if sourceAsset.MultiCreativeImageIDs != nil {
-				clonedAsset.MultiCreativeImageIDs = make(map[string][]string, len(sourceAsset.MultiCreativeImageIDs))
-				for key, value := range sourceAsset.MultiCreativeImageIDs {
-					clonedAsset.MultiCreativeImageIDs[key] = append([]string(nil), value...)
-				}
-			}
-			if sourceAsset.MaterialIDs != nil {
-				clonedAsset.MaterialIDs = make(map[string]string, len(sourceAsset.MaterialIDs))
-				for key, value := range sourceAsset.MaterialIDs {
-					clonedAsset.MaterialIDs[key] = value
-				}
-			}
-			if sourceAsset.MultiMaterialIDs != nil {
-				clonedAsset.MultiMaterialIDs = make(map[string][]string, len(sourceAsset.MultiMaterialIDs))
-				for key, value := range sourceAsset.MultiMaterialIDs {
-					clonedAsset.MultiMaterialIDs[key] = append([]string(nil), value...)
+			if sourceAsset.ArtworkMaterialAssignments != nil {
+				clonedAsset.ArtworkMaterialAssignments = make(map[string][]artworkMaterialAssignment, len(sourceAsset.ArtworkMaterialAssignments))
+				for key, value := range sourceAsset.ArtworkMaterialAssignments {
+					clonedAsset.ArtworkMaterialAssignments[key] = append([]artworkMaterialAssignment(nil), value...)
 				}
 			}
 		}
@@ -347,9 +335,7 @@ func buildSubCampaignValues(parent *campaignRecord, sequence int) orderFormValue
 			asset.SelectedWeeks = []int{}
 			asset.CreativeImageID = ""
 			asset.CreativeImageIDs = map[string]string{}
-			asset.MultiCreativeImageIDs = map[string][]string{}
-			asset.MaterialIDs = map[string]string{}
-			asset.MultiMaterialIDs = map[string][]string{}
+			asset.ArtworkMaterialAssignments = map[string][]artworkMaterialAssignment{}
 		}
 	}
 

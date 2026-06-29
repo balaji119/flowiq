@@ -128,16 +128,20 @@ type orderFormValues struct {
 }
 
 type campaignAsset struct {
-	ID                    string              `json:"id"`
-	AssetID               string              `json:"assetId"`
-	AssetSearch           string              `json:"assetSearch"`
-	SelectedWeeks         []int               `json:"selectedWeeks"`
-	CreativeImageID       string              `json:"creativeImageId"`
-	CreativeImageIDs      map[string]string   `json:"creativeImageIds,omitempty"`
-	MultiCreativeImageIDs map[string][]string `json:"multiCreativeImageIds,omitempty"`
-	MaterialIDs           map[string]string   `json:"materialIds,omitempty"`
-	MultiMaterialIDs      map[string][]string `json:"multiMaterialIds,omitempty"`
-	DeliveryAddress       string              `json:"deliveryAddress"`
+	ID                         string                                 `json:"id"`
+	AssetID                    string                                 `json:"assetId"`
+	AssetSearch                string                                 `json:"assetSearch"`
+	SelectedWeeks              []int                                  `json:"selectedWeeks"`
+	CreativeImageID            string                                 `json:"creativeImageId"`
+	CreativeImageIDs           map[string]string                      `json:"creativeImageIds,omitempty"`
+	ArtworkMaterialAssignments map[string][]artworkMaterialAssignment `json:"artworkMaterialAssignments,omitempty"`
+	DeliveryAddress            string                                 `json:"deliveryAddress"`
+}
+
+type artworkMaterialAssignment struct {
+	ArtworkImageID string `json:"artworkImageId"`
+	MaterialID     string `json:"materialId"`
+	FrameCount     int    `json:"frameCount"`
 }
 
 type campaignMarket struct {

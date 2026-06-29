@@ -104,6 +104,12 @@ export type ContactDetails = {
   email: string;
 };
 
+export type ArtworkMaterialAssignment = {
+  artworkImageId: string;
+  materialId: string;
+  frameCount: number;
+};
+
 export type CampaignAsset = {
   id: string;
   assetId: string;
@@ -111,9 +117,7 @@ export type CampaignAsset = {
   selectedWeeks: number[];
   creativeImageId: string;
   creativeImageIds?: Partial<Record<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'QA0' | 'Mega' | 'DOT M' | 'MP' | 'FF', string>>;
-  multiCreativeImageIds?: Partial<Record<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'QA0' | 'Mega' | 'DOT M' | 'MP' | 'FF', string[]>>;
-  materialIds?: Partial<Record<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'QA0' | 'Mega' | 'DOT M' | 'MP' | 'FF', string>>;
-  multiMaterialIds?: Partial<Record<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'QA0' | 'Mega' | 'DOT M' | 'MP' | 'FF', string[]>>;
+  artworkMaterialAssignments?: Partial<Record<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'QA0' | 'Mega' | 'DOT M' | 'MP' | 'FF', ArtworkMaterialAssignment[]>>;
   deliveryAddress: string;
 };
 
