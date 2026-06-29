@@ -6306,9 +6306,7 @@ export function QuoteBuilderScreen({
                   </div>
 
                   {draftMarketSummary ? (
-                    <div className="space-y-2.5">
-                      <p className="text-[12px] font-semibold text-white">Asset Counts</p>
-                      <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/65">
+                    <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/65">
                         {(() => {
                           const lineByAssetId = new Map(draftMarketLines.map((line) => [line.id, line]));
                           const visibleAssetFormatKeys = Array.from(new Set([
@@ -6371,65 +6369,14 @@ export function QuoteBuilderScreen({
                             </table>
                           );
                         })()}
-                      </div>
-                      <p className="text-[12px] font-semibold text-white">Market Totals</p>
-                      <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/65">
-                        <table className="dense-table w-full table-fixed border-collapse text-[12px]">
-                          {(() => {
-                            const visibleDraftMarketFormatKeys = visibleBreakdownKeys(draftMarketSummary.breakdown);
-                            return (
-                              <>
-                          <thead>
-                            <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-300">
-                              <th className="border border-slate-700 px-3 py-2 text-left">Type</th>
-                              {visibleDraftMarketFormatKeys.map((key) => (
-                                <th key={`draft-market-head-${key}`} className="border border-slate-700 px-3 py-2 text-center">{formatBreakdownKeyLabel(key, normalizedSheetNameOverrides)}</th>
-                              ))}
-                              <th className="border border-slate-700 px-3 py-2 text-center">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {buildReviewRows(draftMarketSummary).map((row) => {
-                              const displayedValues = visibleDraftMarketFormatKeys.map((key) => (
-                                breakdownValueForKey(row.breakdown, key)
-                              ));
-                              const displayedTotal = displayedValues.reduce((total, value) => total + value, 0);
-                              return (
-                                <tr key={`draft-market-row-${row.label}`} className="bg-slate-800/70 border-t border-slate-700/70">
-                                  <th className="border border-slate-700 px-3 py-2 text-left font-semibold text-slate-100">{row.label}</th>
-                                  {visibleDraftMarketFormatKeys.map((key, index) => (
-                                    <td key={`draft-market-cell-${row.label}-${key}`} className="border border-slate-700 px-2 py-1.5 text-center font-semibold text-white">
-                                      <Input
-                                        aria-label={`${row.label} ${formatBreakdownKeyLabel(key, normalizedSheetNameOverrides)}`}
-                                        className={cn(
-                                          'mx-auto h-7 min-w-0 rounded px-1 text-center text-[12px] font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
-                                          'cursor-default border-slate-700 bg-slate-800/70 text-slate-300',
-                                        )}
-                                        min={0}
-                                        readOnly
-                                        type="number"
-                                        value={displayedValues[index]}
-                                      />
-                                    </td>
-                                  ))}
-                                  <td className="border border-slate-700 px-3 py-2 text-center font-black text-white">{displayedTotal}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                              </>
-                            );
-                          })()}
-                        </table>
-                      </div>
                     </div>
                   ) : draftMarketCalculating ? (
                     <div className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900/65 px-2.5 py-2 text-[12px] text-slate-300">
                       <LoaderCircle className="h-3.5 w-3.5 animate-spin text-violet-300" />
-                      Calculating market totals...
+                      Calculating asset counts...
                     </div>
                   ) : (
-                    <p className="text-[12px] leading-4 text-slate-400">Configure assets in this market to see its sheet-level mix and totals here.</p>
+                    <p className="text-[12px] leading-4 text-slate-400">Configure assets in this market to see their sheet-level counts here.</p>
                   )}
                 </div>
               </div>
