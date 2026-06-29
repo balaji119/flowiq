@@ -64,6 +64,53 @@ func applyBreakdownOverrides(target quantityBreakdown, overrides quantityBreakdo
 	}
 }
 
+// distributeBreakdownOverride keeps the asset-level results in step with a
+// market-level poster override. Existing quantities are used as weights so a
+// market with more than one asset retains the same relative allocation.
+func distributeBreakdownOverride(lines []campaignLineResult, lineIndexes []int, key string, target int) {
+	if len(lineIndexes) == 0 || strings.TrimSpace(key) == "" {
+		return
+	}
+	if target < 0 {
+		target = 0
+	}
+
+	total := 0
+	for _, index := range lineIndexes {
+		total += lines[index].Breakdown[key]
+	}
+	if total <= 0 {
+		for position, index := range lineIndexes {
+			if position == 0 {
+				lines[index].Breakdown[key] = target
+			} else {
+				lines[index].Breakdown[key] = 0
+			}
+		}
+		return
+	}
+
+	type remainderEntry struct {
+		index     int
+		remainder int
+	}
+	remainders := make([]remainderEntry, 0, len(lineIndexes))
+	allocated := 0
+	for _, index := range lineIndexes {
+		weighted := lines[index].Breakdown[key] * target
+		quantity := weighted / total
+		lines[index].Breakdown[key] = quantity
+		allocated += quantity
+		remainders = append(remainders, remainderEntry{index: index, remainder: weighted % total})
+	}
+	sort.SliceStable(remainders, func(left, right int) bool {
+		return remainders[left].remainder > remainders[right].remainder
+	})
+	for offset := 0; offset < target-allocated; offset++ {
+		lines[remainders[offset%len(remainders)].index].Breakdown[key]++
+	}
+}
+
 func sumBreakdown(breakdown quantityBreakdown) int {
 	total := 0
 	for _, value := range breakdown {
@@ -105,6 +152,7 @@ func (c *calculatorService) calculateCampaign(tenantID string, lines []campaignL
 	}
 
 	lineResults := make([]campaignLineResult, 0)
+	lineIndexesByMarket := make(map[string][]int)
 	perMarketMap := make(map[string]*campaignTotals, len(markets))
 	assetLookup := createAssetLookup(markets)
 	marketOverrides := make(map[string]*campaignQuantityOverrides)
@@ -159,11 +207,21 @@ func (c *calculatorService) calculateCampaign(tenantID string, lines []campaignL
 			SelectedWeeks: selectedWeeks,
 			Breakdown:     breakdown,
 		})
+		lineIndexesByMarket[asset.Market] = append(lineIndexesByMarket[asset.Market], len(lineResults)-1)
 
 		totals := perMarketMap[asset.Market]
 		addBreakdown(totals.Breakdown, breakdown, 1)
 		totals.ActiveAssets++
 		totals.ActiveRuns += runCount
+	}
+
+	for market, overrides := range marketOverrides {
+		if overrides == nil {
+			continue
+		}
+		for key, value := range overrides.Posters {
+			distributeBreakdownOverride(lineResults, lineIndexesByMarket[market], key, value)
+		}
 	}
 
 	perMarket := make([]campaignTotals, 0, len(markets))
@@ -178,9 +236,6 @@ func (c *calculatorService) calculateCampaign(tenantID string, lines []campaignL
 			applyBreakdownOverrides(entry.Breakdown, overrides.Posters)
 		}
 		entry.FrameBreakdown = calculateFrameBreakdown(entry.Breakdown)
-		if overrides := marketOverrides[market.Name]; overrides != nil {
-			applyBreakdownOverrides(entry.FrameBreakdown, overrides.Frames)
-		}
 		entry.PosterTotal = posterTotal(entry.Breakdown)
 		entry.FrameTotal = sumBreakdown(entry.FrameBreakdown)
 		entry.SpecialFormatTotal = specialFormatTotal(entry.Breakdown)

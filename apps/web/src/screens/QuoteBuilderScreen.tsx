@@ -1143,6 +1143,11 @@ function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: n
   const allWeeks = createAllWeeks(maxWeeks);
   return campaignMarkets.map((market) => ({
     ...market,
+    // Frame counts are derived from posters. Drop historical frame overrides
+    // when a campaign is loaded so they cannot influence later calculations.
+    quantityOverrides: market.quantityOverrides?.posters
+      ? { posters: { ...market.quantityOverrides.posters } }
+      : undefined,
     assets: market.assets.map((asset) => {
       const creativeImageIds = normalizeCreativeImageIds(asset);
       const normalizedSelectedWeeks = Array.isArray(asset.selectedWeeks)
@@ -2369,15 +2374,14 @@ export function QuoteBuilderScreen({
     setDraftMarket((current) => (current ? updater(current) : current));
   }
 
-  function updateDraftMarketQuantityOverride(type: 'posters' | 'frames', key: string, rawValue: string) {
+  function updateDraftMarketQuantityOverride(key: string, rawValue: string) {
     const parsedValue = Number.parseInt(rawValue || '0', 10);
     const value = Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
     updateDraftMarket((market) => ({
       ...market,
       quantityOverrides: {
-        ...market.quantityOverrides,
-        [type]: {
-          ...(market.quantityOverrides?.[type] ?? {}),
+        posters: {
+          ...(market.quantityOverrides?.posters ?? {}),
           [key]: value,
         },
       },
@@ -6258,8 +6262,8 @@ export function QuoteBuilderScreen({
                           </thead>
                           <tbody>
                             {buildReviewRows(draftMarketSummary).map((row) => {
-                              const overrideType = row.label === 'Posters' ? 'posters' : 'frames';
-                              const overrides = draftMarket.quantityOverrides?.[overrideType] ?? {};
+                              const isPosterRow = row.label === 'Posters';
+                              const overrides = isPosterRow ? (draftMarket.quantityOverrides?.posters ?? {}) : {};
                               const displayedValues = visibleDraftMarketFormatKeys.map((key) => (
                                 overrides[key] ?? breakdownValueForKey(row.breakdown, key)
                               ));
@@ -6271,10 +6275,16 @@ export function QuoteBuilderScreen({
                                     <td key={`draft-market-cell-${row.label}-${key}`} className="border border-slate-700 px-2 py-1.5 text-center font-semibold text-white">
                                       <Input
                                         aria-label={`${row.label} ${formatBreakdownKeyLabel(key, normalizedSheetNameOverrides)}`}
-                                        className="mx-auto h-7 min-w-0 rounded border-slate-600 bg-slate-950/70 px-1 text-center text-[12px] font-semibold text-white [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                        className={cn(
+                                          'mx-auto h-7 min-w-0 rounded px-1 text-center text-[12px] font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+                                          isPosterRow
+                                            ? 'border-slate-600 bg-slate-950/70 text-white'
+                                            : 'cursor-default border-slate-700 bg-slate-800/70 text-slate-300',
+                                        )}
                                         min={0}
-                                        onChange={(event) => updateDraftMarketQuantityOverride(overrideType, key, event.target.value)}
-                                        onFocus={(event) => event.currentTarget.select()}
+                                        onChange={isPosterRow ? (event) => updateDraftMarketQuantityOverride(key, event.target.value) : undefined}
+                                        onFocus={isPosterRow ? (event) => event.currentTarget.select() : undefined}
+                                        readOnly={!isPosterRow}
                                         type="number"
                                         value={displayedValues[index]}
                                       />
