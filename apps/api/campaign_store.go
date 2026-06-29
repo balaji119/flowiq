@@ -115,6 +115,11 @@ func cloneOrderFormValues(values orderFormValues) orderFormValues {
 			sourceAsset := values.CampaignMarkets[marketIndex].Assets[assetIndex]
 			clonedAsset := &cloned.CampaignMarkets[marketIndex].Assets[assetIndex]
 			clonedAsset.SelectedWeeks = append([]int(nil), sourceAsset.SelectedWeeks...)
+			if sourceAsset.QuantityOverrides != nil {
+				clonedAsset.QuantityOverrides = &campaignQuantityOverrides{
+					Posters: cloneQuantityBreakdown(sourceAsset.QuantityOverrides.Posters),
+				}
+			}
 			if sourceAsset.CreativeImageIDs != nil {
 				clonedAsset.CreativeImageIDs = make(map[string]string, len(sourceAsset.CreativeImageIDs))
 				for key, value := range sourceAsset.CreativeImageIDs {
@@ -236,6 +241,7 @@ func normalizeCampaignLines(values orderFormValues) []campaignLine {
 				AssetSearch:             asset.AssetSearch,
 				SelectedWeeks:           append([]int(nil), asset.SelectedWeeks...),
 				Market:                  market.Market,
+				QuantityOverrides:       asset.QuantityOverrides,
 				MarketQuantityOverrides: market.QuantityOverrides,
 			})
 		}

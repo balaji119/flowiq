@@ -135,6 +135,7 @@ type campaignAsset struct {
 	CreativeImageID            string                                 `json:"creativeImageId"`
 	CreativeImageIDs           map[string]string                      `json:"creativeImageIds,omitempty"`
 	ArtworkMaterialAssignments map[string][]artworkMaterialAssignment `json:"artworkMaterialAssignments,omitempty"`
+	QuantityOverrides          *campaignQuantityOverrides             `json:"quantityOverrides,omitempty"`
 	DeliveryAddress            string                                 `json:"deliveryAddress"`
 }
 
@@ -377,6 +378,7 @@ type campaignLine struct {
 	AssetSearch             string                     `json:"assetSearch,omitempty"`
 	SelectedWeeks           []int                      `json:"selectedWeeks"`
 	Market                  string                     `json:"market,omitempty"`
+	QuantityOverrides       *campaignQuantityOverrides `json:"quantityOverrides,omitempty"`
 	MarketQuantityOverrides *campaignQuantityOverrides `json:"marketQuantityOverrides,omitempty"`
 }
 

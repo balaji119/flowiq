@@ -118,6 +118,9 @@ export type CampaignAsset = {
   creativeImageId: string;
   creativeImageIds?: Partial<Record<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'QA0' | 'Mega' | 'DOT M' | 'MP' | 'FF', string>>;
   artworkMaterialAssignments?: Partial<Record<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'QA0' | 'Mega' | 'DOT M' | 'MP' | 'FF', ArtworkMaterialAssignment[]>>;
+  quantityOverrides?: {
+    posters?: Record<string, number>;
+  };
   deliveryAddress: string;
 };
 

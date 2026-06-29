@@ -197,6 +197,9 @@ func (c *calculatorService) calculateCampaign(tenantID string, lines []campaignL
 			}
 			addBreakdown(breakdown, runAsset.Quantities, 1)
 		}
+		if line.QuantityOverrides != nil {
+			applyBreakdownOverrides(breakdown, line.QuantityOverrides.Posters)
+		}
 
 		lineResults = append(lineResults, campaignLineResult{
 			ID:            line.ID,

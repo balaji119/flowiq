@@ -1157,6 +1157,9 @@ function normalizeCampaignMarkets(campaignMarkets: CampaignMarket[], maxWeeks: n
         ...asset,
         creativeImageId: getCreativeImageIdForFormat({ ...asset, creativeImageIds }, '8-sheet') || '',
         creativeImageIds,
+        quantityOverrides: asset.quantityOverrides?.posters
+          ? { posters: { ...asset.quantityOverrides.posters } }
+          : undefined,
         deliveryAddress: asset.deliveryAddress || '',
         selectedWeeks: normalizedSelectedWeeks,
       };
@@ -1285,6 +1288,7 @@ export function QuoteBuilderScreen({
   const [addMarketDialogOpen, setAddMarketDialogOpen] = useState(false);
   const [draftMarket, setDraftMarket] = useState<CampaignMarket | null>(null);
   const [draftMarketSummary, setDraftMarketSummary] = useState<CampaignCalculationSummary['perMarket'][number] | null>(null);
+  const [draftMarketLines, setDraftMarketLines] = useState<CampaignCalculationSummary['lines']>([]);
   const [draftMarketCalculating, setDraftMarketCalculating] = useState(false);
   const [editingMarketId, setEditingMarketId] = useState<string | null>(null);
   const [hiddenInlineMarketIds, setHiddenInlineMarketIds] = useState<string[]>([]);
@@ -2228,8 +2232,13 @@ export function QuoteBuilderScreen({
         if (!active) return;
         const nextSummary = result.perMarket.find((entry) => entry.market === draftMarket.market) ?? null;
         setDraftMarketSummary(nextSummary);
+        const draftAssetIds = new Set(draftMarket.assets.map((asset) => asset.id));
+        setDraftMarketLines(result.lines.filter((line) => draftAssetIds.has(line.id)));
       } catch {
-        if (active) setDraftMarketSummary(null);
+        if (active) {
+          setDraftMarketSummary(null);
+          setDraftMarketLines([]);
+        }
       } finally {
         if (active) setDraftMarketCalculating(false);
       }
@@ -2289,6 +2298,7 @@ export function QuoteBuilderScreen({
     });
     setEditingMarketId(null);
     setDraftMarketSummary(null);
+    setDraftMarketLines([]);
     setAddMarketDialogOpen(true);
   }
 
@@ -2301,6 +2311,9 @@ export function QuoteBuilderScreen({
         ...asset,
         selectedWeeks: [...asset.selectedWeeks],
         creativeImageIds: { ...(asset.creativeImageIds ?? {}) },
+        quantityOverrides: asset.quantityOverrides?.posters
+          ? { posters: { ...asset.quantityOverrides.posters } }
+          : undefined,
         artworkMaterialAssignments: Object.fromEntries(
           Object.entries(asset.artworkMaterialAssignments ?? {}).map(([key, assignments]) => [key, assignments?.map((assignment) => ({ ...assignment })) ?? []]),
         ),
@@ -2308,6 +2321,7 @@ export function QuoteBuilderScreen({
     });
     setEditingMarketId(marketId);
     setDraftMarketSummary(null);
+    setDraftMarketLines([]);
     setAddMarketDialogOpen(true);
   }
 
@@ -2347,6 +2361,7 @@ export function QuoteBuilderScreen({
     setAddMarketDialogOpen(false);
     setDraftMarket(null);
     setDraftMarketSummary(null);
+    setDraftMarketLines([]);
   }
 
   function handleDeleteMarket(marketId: string) {
@@ -2364,6 +2379,7 @@ export function QuoteBuilderScreen({
       setEditingMarketId(null);
       setDraftMarket(null);
       setDraftMarketSummary(null);
+      setDraftMarketLines([]);
     }
   }
 
@@ -2371,17 +2387,25 @@ export function QuoteBuilderScreen({
     setDraftMarket((current) => (current ? updater(current) : current));
   }
 
-  function updateDraftMarketQuantityOverride(key: string, rawValue: string) {
+  function updateDraftAssetQuantityOverride(assetId: string, key: string, rawValue: string) {
     const parsedValue = Number.parseInt(rawValue || '0', 10);
     const value = Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
     updateDraftMarket((market) => ({
       ...market,
-      quantityOverrides: {
-        posters: {
-          ...(market.quantityOverrides?.posters ?? {}),
-          [key]: value,
-        },
-      },
+      // Once an asset is edited, migrate any legacy market override to the
+      // per-asset values currently returned by the calculator.
+      quantityOverrides: undefined,
+      assets: market.assets.map((asset) => {
+        const calculatedLine = draftMarketLines.find((line) => line.id === asset.id);
+        const migratedOverrides = market.quantityOverrides?.posters && calculatedLine
+          ? { ...(calculatedLine.breakdown as Record<string, number>) }
+          : (asset.quantityOverrides?.posters ?? {});
+        return asset.id === assetId
+          ? { ...asset, quantityOverrides: { posters: { ...migratedOverrides, [key]: value } } }
+          : market.quantityOverrides?.posters && calculatedLine
+            ? { ...asset, quantityOverrides: { posters: migratedOverrides } }
+            : asset;
+      }),
     }));
   }
 
@@ -3486,6 +3510,8 @@ export function QuoteBuilderScreen({
         rolled: boolean;
       }>();
       const creativeSummary = new Map<number, QuantityBreakdown>();
+      const materialQuantitiesByCreative = new Map<number, Map<string, number>>();
+      const materialById = new Map(materials.map((material) => [material.id, material]));
       const deliveryInfoBlocks: string[] = [];
       const seenDeliveryInfo = new Set<string>();
       const pushDeliveryInfo = (address: string, marketName: string, stateHint?: ExportState | null) => {
@@ -3609,6 +3635,28 @@ export function QuoteBuilderScreen({
               : posterQuantity;
             if (exportQuantity <= 0) return;
             const creativeFormat = isStandardFormat ? toCreativeFormatKey(key as keyof QuantityBreakdown) : null;
+            if (creativeFormat) {
+              let remainingMaterialFrames = exportQuantity;
+              artworkMaterialAssignmentsForFormat(asset, creativeFormat).forEach((materialAssignment) => {
+                if (remainingMaterialFrames <= 0) return;
+                const assignedFrames = Math.min(
+                  remainingMaterialFrames,
+                  Math.max(0, Math.floor(materialAssignment.frameCount || 0)),
+                );
+                remainingMaterialFrames -= assignedFrames;
+                const materialId = (materialAssignment.materialId || '').trim();
+                if (!materialId || assignedFrames <= 0) return;
+                const artworkImageId = (materialAssignment.artworkImageId || '').trim()
+                  || getCreativeImageIdForFormat(asset, creativeFormat);
+                const creative = imageById.get(artworkImageId);
+                if (!creative) return;
+                const materialName = materialById.get(materialId)?.name.trim() || `Unknown material (${materialId})`;
+                const materialKey = `${state}\x00${creativeFormat}\x00${materialName}`;
+                const materialBucket = materialQuantitiesByCreative.get(creative.creativeNumber) ?? new Map<string, number>();
+                materialBucket.set(materialKey, (materialBucket.get(materialKey) ?? 0) + assignedFrames);
+                materialQuantitiesByCreative.set(creative.creativeNumber, materialBucket);
+              });
+            }
             const multiSlotImageIds = creativeFormat
               ? expandedArtworkImageIdsForFormat(asset, creativeFormat)
                 .filter((imageId) => Boolean(imageById.get(imageId)))
@@ -4242,6 +4290,21 @@ export function QuoteBuilderScreen({
           drawWrappedLine(`• Creative ${creativeNumber} (${creativeTypeLabel}): ${summary}`, false, undefined, 16);
         });
         cursorY -= 8;
+        if (materialQuantitiesByCreative.size > 0) {
+          drawSectionHeader('Materials');
+          Array.from(materialQuantitiesByCreative.entries())
+            .sort((left, right) => left[0] - right[0])
+            .forEach(([creativeNumber, materialQuantities]) => {
+              const parts = Array.from(materialQuantities.entries())
+                .sort((left, right) => left[0].localeCompare(right[0]))
+                .map(([materialKey, quantity]) => {
+                  const [state, formatKey, materialName] = materialKey.split('\x00') as [ExportState, keyof QuantityBreakdown, string];
+                  return `${quantity} x ${quantityLabelForStateAndKey(state, formatKey)} - ${materialName}`;
+                });
+              drawWrappedLine(`Creative ${creativeNumber}: ${parts.join(' & ')}`, false, undefined, 16);
+            });
+          cursorY -= 8;
+        }
         drawSectionHeader('Creative Files & Thumbnails');
         for (const [creativeNumber, creativeRows] of Array.from(rowsByCreative.entries()).sort((a, b) => a[0] - b[0])) {
           const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
@@ -5264,12 +5327,14 @@ export function QuoteBuilderScreen({
                                               return {
                                                 ...current,
                                                 market: value,
+                                                quantityOverrides: undefined,
                                                 assets: current.assets.map((asset) => ({
                                                   ...asset,
                                                   assetId: '',
                                                   assetSearch: '',
                                                   deliveryAddress: preferredAddress,
                                                   selectedWeeks: [],
+                                                  quantityOverrides: undefined,
                                                 })),
                                               };
                                             })
@@ -5323,6 +5388,7 @@ export function QuoteBuilderScreen({
                                               ...current,
                                               assetId: value,
                                               assetSearch: availableAssets.find((entry) => entry.id === value)?.label ?? '',
+                                              quantityOverrides: undefined,
                                             }))
                                           }
                                           placeholder={availableAssets.length ? 'Choose an asset' : 'No assets available'}
@@ -6049,6 +6115,7 @@ export function QuoteBuilderScreen({
             setEditingMarketId(null);
             setDraftMarket(null);
             setDraftMarketSummary(null);
+            setDraftMarketLines([]);
           }
         }}
       >
@@ -6074,12 +6141,14 @@ export function QuoteBuilderScreen({
                           return {
                             ...current,
                             market: value,
+                            quantityOverrides: undefined,
                             assets: current.assets.map((asset) => ({
                               ...asset,
                               assetId: '',
                               assetSearch: '',
                               deliveryAddress: preferredAddress,
                               selectedWeeks: [],
+                              quantityOverrides: undefined,
                             })),
                           };
                         })
@@ -6193,6 +6262,7 @@ export function QuoteBuilderScreen({
                                         ...current,
                                         assetId: value,
                                         assetSearch: availableAssets.find((entry) => entry.id === value)?.label ?? '',
+                                        quantityOverrides: undefined,
                                       }))
                                     }
                                     placeholder={availableAssets.length ? 'Choose an asset' : 'No assets available'}
@@ -6237,6 +6307,71 @@ export function QuoteBuilderScreen({
 
                   {draftMarketSummary ? (
                     <div className="space-y-2.5">
+                      <p className="text-[12px] font-semibold text-white">Asset Counts</p>
+                      <div className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900/65">
+                        {(() => {
+                          const lineByAssetId = new Map(draftMarketLines.map((line) => [line.id, line]));
+                          const visibleAssetFormatKeys = Array.from(new Set([
+                            ...visibleBreakdownKeys(draftMarketSummary.breakdown),
+                            ...Object.keys(draftMarket.quantityOverrides?.posters ?? {}),
+                            ...draftMarket.assets.flatMap((asset) => Object.keys(asset.quantityOverrides?.posters ?? {})),
+                          ]));
+                          return (
+                            <table className="dense-table min-w-[760px] w-full table-fixed border-collapse text-[12px]">
+                              <thead>
+                                <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-300">
+                                  <th className="border border-slate-700 px-3 py-2 text-left">Asset</th>
+                                  <th className="w-20 border border-slate-700 px-2 py-2 text-left">Type</th>
+                                  {visibleAssetFormatKeys.map((key) => (
+                                    <th key={`draft-asset-head-${key}`} className="border border-slate-700 px-2 py-2 text-center">{formatBreakdownKeyLabel(key, normalizedSheetNameOverrides)}</th>
+                                  ))}
+                                  <th className="border border-slate-700 px-3 py-2 text-center">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {draftMarket.assets.flatMap((asset) => {
+                                  const line = lineByAssetId.get(asset.id);
+                                  const posterValues = visibleAssetFormatKeys.map((key) =>
+                                    asset.quantityOverrides?.posters?.[key] ?? breakdownValueForKey(line?.breakdown ?? ({} as QuantityBreakdown), key));
+                                  const frameValues = visibleAssetFormatKeys.map((key, index) => {
+                                    const divisor = isKnownFormatKey(key) ? (formatToFrameDivisor[toCreativeFormatKey(key)] ?? 1) : 1;
+                                    return Math.ceil(Math.max(0, posterValues[index]) / Math.max(1, divisor));
+                                  });
+                                  return [
+                                    <tr key={`draft-asset-posters-${asset.id}`} className="border-t border-slate-700/70 bg-slate-800/70">
+                                      <th className="border border-slate-700 px-3 py-2 text-left font-semibold text-slate-100" rowSpan={2}>
+                                        {asset.assetSearch || line?.assetLabel || 'Asset not selected'}
+                                      </th>
+                                      <th className="border border-slate-700 px-2 py-2 text-left font-semibold text-slate-100">Posters</th>
+                                      {visibleAssetFormatKeys.map((key, index) => (
+                                        <td key={`draft-asset-poster-${asset.id}-${key}`} className="border border-slate-700 px-2 py-1.5 text-center">
+                                          <Input
+                                            aria-label={`${asset.assetSearch || 'Asset'} Posters ${formatBreakdownKeyLabel(key, normalizedSheetNameOverrides)}`}
+                                            className="mx-auto h-7 min-w-0 rounded border-slate-600 bg-slate-950/70 px-1 text-center text-[12px] font-semibold text-white [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                            min={0}
+                                            onChange={(event) => updateDraftAssetQuantityOverride(asset.id, key, event.target.value)}
+                                            onFocus={(event) => event.currentTarget.select()}
+                                            type="number"
+                                            value={posterValues[index]}
+                                          />
+                                        </td>
+                                      ))}
+                                      <td className="border border-slate-700 px-3 py-2 text-center font-black text-white">{posterValues.reduce((sum, value) => sum + value, 0)}</td>
+                                    </tr>,
+                                    <tr key={`draft-asset-frames-${asset.id}`} className="bg-slate-800/45">
+                                      <th className="border border-slate-700 px-2 py-2 text-left font-semibold text-slate-300">Frames</th>
+                                      {frameValues.map((value, index) => (
+                                        <td key={`draft-asset-frame-${asset.id}-${visibleAssetFormatKeys[index]}`} className="border border-slate-700 px-2 py-2 text-center font-semibold text-slate-300">{value}</td>
+                                      ))}
+                                      <td className="border border-slate-700 px-3 py-2 text-center font-black text-slate-300">{frameValues.reduce((sum, value) => sum + value, 0)}</td>
+                                    </tr>,
+                                  ];
+                                })}
+                              </tbody>
+                            </table>
+                          );
+                        })()}
+                      </div>
                       <p className="text-[12px] font-semibold text-white">Market Totals</p>
                       <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/65">
                         <table className="dense-table w-full table-fixed border-collapse text-[12px]">
@@ -6255,10 +6390,8 @@ export function QuoteBuilderScreen({
                           </thead>
                           <tbody>
                             {buildReviewRows(draftMarketSummary).map((row) => {
-                              const isPosterRow = row.label === 'Posters';
-                              const overrides = isPosterRow ? (draftMarket.quantityOverrides?.posters ?? {}) : {};
                               const displayedValues = visibleDraftMarketFormatKeys.map((key) => (
-                                overrides[key] ?? breakdownValueForKey(row.breakdown, key)
+                                breakdownValueForKey(row.breakdown, key)
                               ));
                               const displayedTotal = displayedValues.reduce((total, value) => total + value, 0);
                               return (
@@ -6270,14 +6403,10 @@ export function QuoteBuilderScreen({
                                         aria-label={`${row.label} ${formatBreakdownKeyLabel(key, normalizedSheetNameOverrides)}`}
                                         className={cn(
                                           'mx-auto h-7 min-w-0 rounded px-1 text-center text-[12px] font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
-                                          isPosterRow
-                                            ? 'border-slate-600 bg-slate-950/70 text-white'
-                                            : 'cursor-default border-slate-700 bg-slate-800/70 text-slate-300',
+                                          'cursor-default border-slate-700 bg-slate-800/70 text-slate-300',
                                         )}
                                         min={0}
-                                        onChange={isPosterRow ? (event) => updateDraftMarketQuantityOverride(key, event.target.value) : undefined}
-                                        onFocus={isPosterRow ? (event) => event.currentTarget.select() : undefined}
-                                        readOnly={!isPosterRow}
+                                        readOnly
                                         type="number"
                                         value={displayedValues[index]}
                                       />
@@ -6314,6 +6443,7 @@ export function QuoteBuilderScreen({
                 setEditingMarketId(null);
                 setDraftMarket(null);
                 setDraftMarketSummary(null);
+                setDraftMarketLines([]);
               }}
               type="button"
               variant="ghost"
