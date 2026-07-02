@@ -3499,6 +3499,7 @@ export function QuoteBuilderScreen({
           fileName: string;
           state: ExportState;
           quantities: Record<number, number>;
+          formatQuantities: Record<string, number>;
         }
       >();
       const deliveryRows = new Map<string, {
@@ -3559,7 +3560,7 @@ export function QuoteBuilderScreen({
         return 21;
       };
 
-      const getSizeDisplayName = (key: keyof QuantityBreakdown) => {
+      const getSizeDisplayName = (key: string) => {
         if (key === '8-sheet') return resolveFormatName('8-sheet', normalizedSheetNameOverrides);
         if (key === '6-sheet') return resolveFormatName('6-sheet', normalizedSheetNameOverrides);
         if (key === '4-sheet') return resolveFormatName('4-sheet', normalizedSheetNameOverrides);
@@ -3568,7 +3569,8 @@ export function QuoteBuilderScreen({
         if (key === 'Mega') return resolveFormatName('Mega', normalizedSheetNameOverrides);
         if (key === 'DOT M') return resolveFormatName('DOT M', normalizedSheetNameOverrides);
         if (key === 'MP') return resolveFormatName('MP', normalizedSheetNameOverrides);
-        return resolveFormatName('FF', normalizedSheetNameOverrides);
+        if (key === 'FF') return resolveFormatName('FF', normalizedSheetNameOverrides);
+        return resolveSheetName(key, normalizedSheetNameOverrides);
       };
 
       const getDeliveryTypeLabel = (state: ExportState, key: keyof QuantityBreakdown) => {
@@ -3636,9 +3638,8 @@ export function QuoteBuilderScreen({
               ? getExportQuantityForFormat(key as keyof QuantityBreakdown, posterQuantity)
               : posterQuantity;
             if (exportQuantity <= 0) return;
-            const creativeFormat = isStandardFormat ? toCreativeFormatKey(key as keyof QuantityBreakdown) : null;
-            if (creativeFormat) {
-              let remainingMaterialFrames = exportQuantity;
+            const creativeFormat = toCreativeFormatKey(key as keyof QuantityBreakdown);
+            let remainingMaterialFrames = exportQuantity;
               artworkMaterialAssignmentsForFormat(asset, creativeFormat).forEach((materialAssignment) => {
                 if (remainingMaterialFrames <= 0) return;
                 const assignedFrames = Math.min(
@@ -3658,14 +3659,9 @@ export function QuoteBuilderScreen({
                 materialBucket.set(materialKey, (materialBucket.get(materialKey) ?? 0) + assignedFrames);
                 materialQuantitiesByCreative.set(creative.creativeNumber, materialBucket);
               });
-            }
-            const multiSlotImageIds = creativeFormat
-              ? expandedArtworkImageIdsForFormat(asset, creativeFormat)
-                .filter((imageId) => Boolean(imageById.get(imageId)))
-              : [];
-            const useMultiArtworkForFormat = creativeFormat
-              ? Boolean(normalizedMultipleArtworkFormats[canonicalKeyForFormat(creativeFormat)])
-              : false;
+            const multiSlotImageIds = expandedArtworkImageIdsForFormat(asset, creativeFormat)
+              .filter((imageId) => Boolean(imageById.get(imageId)));
+            const useMultiArtworkForFormat = Boolean(normalizedMultipleArtworkFormats[canonicalKeyForFormat(creativeFormat)]);
             const useMultiArtwork = useMultiArtworkForFormat && multiSlotImageIds.length > 0;
 
             const creativeAssignments = useMultiArtwork
@@ -3678,9 +3674,7 @@ export function QuoteBuilderScreen({
                   })).filter((assignment) => assignment.quantity > 0);
                 })()
               : (() => {
-                  const creativeImageId = creativeFormat
-                    ? getCreativeImageIdForFormat(asset, creativeFormat)
-                    : (asset.creativeImageId || '').trim();
+                  const creativeImageId = getCreativeImageIdForFormat(asset, creativeFormat);
                   return creativeImageId ? [{ imageId: creativeImageId, quantity: exportQuantity }] : [];
                 })();
 
@@ -3697,38 +3691,38 @@ export function QuoteBuilderScreen({
                 fileName,
                 state,
                 quantities: {},
+                formatQuantities: {},
               };
 
               if (isStandardFormat) {
                 const column = getPrintColumn(state, key as keyof QuantityBreakdown);
                 printRow.quantities[column] = (printRow.quantities[column] ?? 0) + assignment.quantity;
               }
+              printRow.formatQuantities[key] = (printRow.formatQuantities[key] ?? 0) + assignment.quantity;
               printRows.set(printRowKey, printRow);
 
-              if (isStandardFormat) {
-                const typeLabel = getDeliveryTypeLabel(state, key as keyof QuantityBreakdown);
-                const destination = formatDeliveryDestinationForExport(
-                  asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || '',
+              const typeLabel = getDeliveryTypeLabel(state, key as keyof QuantityBreakdown);
+              const destination = formatDeliveryDestinationForExport(
+                asset.deliveryAddress || defaultDeliveryAddressByMarket.get(market.market) || '',
+                state,
+              );
+              const deliveredTo = destination.fullAddress;
+              const rolled = state !== 'NSW';
+              const deliveryKey = `${creativeCode}\x00${fileName}\x00${typeLabel}\x00${deliveredTo}`;
+              const existingDeliveryRow = deliveryRows.get(deliveryKey);
+              if (existingDeliveryRow) {
+                existingDeliveryRow.quantity += assignment.quantity;
+              } else {
+                deliveryRows.set(deliveryKey, {
+                  creativeCode,
+                  fileName,
                   state,
-                );
-                const deliveredTo = destination.fullAddress;
-                const rolled = state !== 'NSW';
-                const deliveryKey = `${creativeCode}\x00${fileName}\x00${typeLabel}\x00${deliveredTo}`;
-                const existingDeliveryRow = deliveryRows.get(deliveryKey);
-                if (existingDeliveryRow) {
-                  existingDeliveryRow.quantity += assignment.quantity;
-                } else {
-                  deliveryRows.set(deliveryKey, {
-                    creativeCode,
-                    fileName,
-                    state,
-                    typeLabel,
-                    quantity: assignment.quantity,
-                    deliveredTo,
-                    deliveredToName: destination.contactName,
-                    rolled,
-                  });
-                }
+                  typeLabel,
+                  quantity: assignment.quantity,
+                  deliveredTo,
+                  deliveredToName: destination.contactName,
+                  rolled,
+                });
               }
 
               updateSummary(creative.creativeNumber, key as keyof QuantityBreakdown, assignment.quantity);
@@ -3960,10 +3954,8 @@ export function QuoteBuilderScreen({
           const creativeRows = rowsByCreative.get(creativeNumber) ?? [];
           const totalsByStateAndKey = new Map<string, number>();
           creativeRows.forEach((row) => {
-            Object.entries(row.quantities).forEach(([column, quantity]) => {
+            Object.entries(row.formatQuantities).forEach(([formatKey, quantity]) => {
               if ((quantity ?? 0) <= 0) return;
-              const formatKey = formatKeyForPrintColumn(Number(column));
-              if (!formatKey) return;
               const bucketKey = `${row.state}\x00${formatKey}`;
               totalsByStateAndKey.set(bucketKey, (totalsByStateAndKey.get(bucketKey) ?? 0) + quantity);
             });
