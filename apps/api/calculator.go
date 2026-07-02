@@ -126,7 +126,14 @@ func addBreakdown(target, source quantityBreakdown, multiplier int) {
 }
 
 func posterTotal(breakdown quantityBreakdown) int {
-	return breakdown["8-sheet"] + breakdown["6-sheet"] + breakdown["4-sheet"] + breakdown["2-sheet"] + breakdown["QA0"]
+	total := 0
+	for key, value := range breakdown {
+		if key == "Mega" || key == "DOT M" || key == "MP" || key == "FF" {
+			continue
+		}
+		total += value
+	}
+	return total
 }
 
 func frameTotal(breakdown quantityBreakdown) int {

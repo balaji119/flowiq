@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LoaderCircle, ShoppingCart } from 'lucide-react';
-import { CampaignRecord, CustomPrintCostRecord, formatKeys, frameTotal, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketShippingRateRecord, posterTotal } from '@flowiq/shared';
+import { CampaignRecord, CustomPrintCostRecord, formatKeys, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketShippingRateRecord } from '@flowiq/shared';
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
 import { submitCampaignToPrintIQ } from '../services/campaignApi';
 import { fetchCampaignCustomPrintCosts, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
@@ -668,7 +668,7 @@ export function CampaignScheduleViewDialog({
     return (value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
-  function formatArtworkType(typeKey: '8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'Mega' | 'DOT M' | 'MP' | 'FF') {
+  function formatArtworkType(typeKey: string) {
     if (typeKey === '8-sheet' || typeKey === '6-sheet' || typeKey === '4-sheet' || typeKey === '2-sheet') return 'Quad';
     if (typeKey === 'DOT M') return 'DOT Mega';
     if (typeKey === 'MP') return 'Mega Portrait';
@@ -678,9 +678,14 @@ export function CampaignScheduleViewDialog({
 
   function buildAttachedArtworkRows(asset: CampaignRecord['values']['campaignMarkets'][number]['assets'][number]) {
     const rowsByImageAndType = new Map<string, { imageId: string; frameCount: number; type: string }>();
-    const formatKeys: Array<'8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'Mega' | 'DOT M' | 'MP' | 'FF'> = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'Mega', 'DOT M', 'MP', 'FF'];
+    const standardFormatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0', 'Mega', 'DOT M', 'MP', 'FF'];
+    const assignedFormatKeys = Array.from(new Set([
+      ...standardFormatKeys,
+      ...Object.keys(asset.creativeImageIds ?? {}),
+      ...Object.keys(asset.artworkMaterialAssignments ?? {}),
+    ]));
 
-    const pushArtwork = (rawImageId: string, typeKey: '8-sheet' | '6-sheet' | '4-sheet' | '2-sheet' | 'Mega' | 'DOT M' | 'MP' | 'FF', frameCount: number) => {
+    const pushArtwork = (rawImageId: string, typeKey: string, frameCount: number) => {
       const imageId = (rawImageId || '').trim();
       if (!imageId || frameCount <= 0) return;
       const type = formatArtworkType(typeKey);
@@ -692,7 +697,7 @@ export function CampaignScheduleViewDialog({
       row.frameCount += frameCount;
     };
 
-    formatKeys.forEach((typeKey) => {
+    assignedFormatKeys.forEach((typeKey) => {
       const combinedAssignments = asset.artworkMaterialAssignments?.[typeKey] ?? [];
       if (combinedAssignments.some((assignment) => Boolean((assignment.artworkImageId || '').trim()))) {
         combinedAssignments.forEach((assignment) => pushArtwork(assignment.artworkImageId, typeKey, assignment.frameCount));
@@ -704,8 +709,8 @@ export function CampaignScheduleViewDialog({
       }
     });
 
-    const hasTypedAssignments = formatKeys.some((typeKey) => Boolean((asset.creativeImageIds?.[typeKey] || '').trim()))
-      || formatKeys.some((typeKey) => (asset.artworkMaterialAssignments?.[typeKey] ?? []).some((assignment) => Boolean((assignment.artworkImageId || '').trim())));
+    const hasTypedAssignments = assignedFormatKeys.some((typeKey) => Boolean((asset.creativeImageIds?.[typeKey] || '').trim()))
+      || assignedFormatKeys.some((typeKey) => (asset.artworkMaterialAssignments?.[typeKey] ?? []).some((assignment) => Boolean((assignment.artworkImageId || '').trim())));
     if (!hasTypedAssignments && (asset.creativeImageId || '').trim()) {
       pushArtwork(asset.creativeImageId, '8-sheet', 1);
     }
@@ -825,32 +830,20 @@ export function CampaignScheduleViewDialog({
                                   {market.assets.map((asset) => {
                             const line = summaryLineByLineId.get(asset.id)
                               ?? findSummaryLineForAsset(market.market, asset.assetId, asset.assetSearch || asset.assetId);
-                            const posters = line ? posterTotal(line.breakdown) : 0;
-                            const frames = line ? frameTotal(line.breakdown) : 0;
+                            const posterBreakdown = { ...((line?.breakdown ?? {}) as Record<string, number>) };
+                            const frameBreakdown = { ...posterBreakdown };
+                            frameBreakdown['8-sheet'] = Math.ceil((posterBreakdown['8-sheet'] ?? 0) / 4);
+                            frameBreakdown['6-sheet'] = Math.ceil((posterBreakdown['6-sheet'] ?? 0) / 3);
+                            frameBreakdown['4-sheet'] = Math.ceil((posterBreakdown['4-sheet'] ?? 0) / 2);
+                            frameBreakdown['2-sheet'] = posterBreakdown['2-sheet'] ?? 0;
+                            frameBreakdown.QA0 = Math.ceil((posterBreakdown.QA0 ?? 0) / 4);
+                            const specialFormatKeys = new Set(['Mega', 'DOT M', 'MP', 'FF']);
+                            const posters = Object.entries(posterBreakdown).reduce((total, [key, quantity]) =>
+                              specialFormatKeys.has(key) ? total : total + (quantity ?? 0), 0);
+                            const frames = Object.entries(frameBreakdown).reduce((total, [key, quantity]) =>
+                              specialFormatKeys.has(key) ? total : total + (quantity ?? 0), 0);
                             const attachedArtworkRows = buildAttachedArtworkRows(asset);
                             const attachedImageIds = attachedArtworkRows.map((row) => row.imageId);
-                            const posterBreakdown = {
-                              '8-sheet': line?.breakdown['8-sheet'] ?? 0,
-                              '6-sheet': line?.breakdown['6-sheet'] ?? 0,
-                              '4-sheet': line?.breakdown['4-sheet'] ?? 0,
-                              '2-sheet': line?.breakdown['2-sheet'] ?? 0,
-                              QA0: line?.breakdown.QA0 ?? 0,
-                              Mega: line?.breakdown.Mega ?? 0,
-                              'DOT M': line?.breakdown['DOT M'] ?? 0,
-                              MP: line?.breakdown.MP ?? 0,
-                              FF: line?.breakdown.FF ?? 0,
-                            };
-                            const frameBreakdown = {
-                              '8-sheet': (line?.breakdown['8-sheet'] ?? 0) / 4,
-                              '6-sheet': (line?.breakdown['6-sheet'] ?? 0) / 3,
-                              '4-sheet': (line?.breakdown['4-sheet'] ?? 0) / 2,
-                              '2-sheet': line?.breakdown['2-sheet'] ?? 0,
-                              QA0: (line?.breakdown.QA0 ?? 0) / 4,
-                              Mega: line?.breakdown.Mega ?? 0,
-                              'DOT M': line?.breakdown['DOT M'] ?? 0,
-                              MP: line?.breakdown.MP ?? 0,
-                              FF: line?.breakdown.FF ?? 0,
-                            };
                             const resolvedDeliveryAddress = resolveAssetDeliveryAddress(market.market, asset.deliveryAddress || '');
                             return (
                                     <button

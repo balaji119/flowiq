@@ -3737,10 +3737,16 @@ export function QuoteBuilderScreen({
         .sort((a, b) => a[0] - b[0])
         .map(([creativeNumber, breakdown]) => {
           const parts: string[] = [];
-          formatKeys.forEach((key) => {
-            const quantity = breakdown[key] ?? 0;
+          const breakdownRecord = breakdown as Record<string, number>;
+          const orderedKeys = Array.from(new Set([...formatKeys, ...Object.keys(breakdownRecord)]));
+          orderedKeys.forEach((key) => {
+            const quantity = breakdownRecord[key] ?? 0;
             if (quantity <= 0) return;
             const sizeDisplayName = getSizeDisplayName(key);
+            if (!isKnownFormatKey(key)) {
+              parts.push(`${quantity} x ${sizeDisplayName}`);
+              return;
+            }
             if (key === 'Mega' || key === 'DOT M' || key === 'MP') {
               parts.push(`${quantity} x ${summaryLabels[key]}`);
               return;
@@ -4475,9 +4481,24 @@ export function QuoteBuilderScreen({
         }
 
         const rows = Array.from(printRows.values()).sort((a, b) => a.creativeCode.localeCompare(b.creativeCode));
+        const customFormatKeys = Array.from(new Set(
+          rows.flatMap((row) => Object.keys(row.formatQuantities).filter((key) => !isKnownFormatKey(key))),
+        )).sort((left, right) => left.localeCompare(right));
+        if (customFormatKeys.length > 0) {
+          sheet.spliceColumns(22, 0, ...customFormatKeys.map(() => []));
+        }
+        const customColumnByFormat = new Map(customFormatKeys.map((key, index) => [key, 22 + index]));
+        const lastQuantityColumn = 21 + customFormatKeys.length;
+        customColumnByFormat.forEach((column, key) => {
+          const headerCell = sheet.getCell(10, column);
+          headerCell.value = getSizeDisplayName(key);
+          headerCell.style = { ...sheet.getCell(10, 21).style };
+          headerCell.alignment = { ...(headerCell.alignment ?? {}), wrapText: true, horizontal: 'center', vertical: 'middle' };
+          sheet.getColumn(column).width = Math.max(12, Math.min(24, getSizeDisplayName(key).length + 3));
+        });
         const usedQuantityColumns = new Set<number>();
         const columnTotals = new Map<number, number>();
-        for (let col = 9; col <= 20; col += 1) {
+        for (let col = 9; col <= lastQuantityColumn; col += 1) {
           columnTotals.set(col, 0);
         }
         const stateMarkerColumnByState = detectStateMarkerColumns(sheet, 10, 1, 30);
@@ -4501,7 +4522,11 @@ export function QuoteBuilderScreen({
           sheet.getCell(row, 5).value = null;
           sheet.getCell(row, 6).value = null;
           sheet.getCell(row, 7).value = null;
-          for (let col = 9; col <= 20; col += 1) sheet.getCell(row, col).value = null;
+          for (let col = 9; col <= lastQuantityColumn; col += 1) {
+            const cell = sheet.getCell(row, col);
+            cell.value = null;
+            if (col > 21) cell.style = { ...sheet.getCell(row, 21).style };
+          }
         }
 
         rows.forEach((entry, index) => {
@@ -4549,10 +4574,17 @@ export function QuoteBuilderScreen({
             }
             columnTotals.set(numericColumn, (columnTotals.get(numericColumn) ?? 0) + quantity);
           });
+          Object.entries(entry.formatQuantities).forEach(([formatKey, quantity]) => {
+            const customColumn = customColumnByFormat.get(formatKey);
+            if (!customColumn) return;
+            sheet.getCell(row, customColumn).value = quantity;
+            if (quantity > 0) usedQuantityColumns.add(customColumn);
+            columnTotals.set(customColumn, (columnTotals.get(customColumn) ?? 0) + quantity);
+          });
         });
 
         // Show only quantity columns that actually contain values in this export.
-        for (let col = 9; col <= 20; col += 1) {
+        for (let col = 9; col <= lastQuantityColumn; col += 1) {
           sheet.getColumn(col).hidden = !usedQuantityColumns.has(col);
         }
 
@@ -4576,11 +4608,16 @@ export function QuoteBuilderScreen({
           [18, 1], // Mega
           [19, 1], // DOT M
           [20, 1], // MP
+          [21, 1], // FF
         ]);
-        for (let col = 9; col <= 20; col += 1) {
+        for (let col = 9; col <= lastQuantityColumn; col += 1) {
           const columnLetter = sheet.getColumn(col).letter;
           const totalValue = columnTotals.get(col) ?? 0;
           const setDivisor = setsDivisorByColumn.get(col) ?? 1;
+          if (col > 21) {
+            sheet.getCell(totalRow, col).style = { ...sheet.getCell(totalRow, 21).style };
+            sheet.getCell(setsRow, col).style = { ...sheet.getCell(setsRow, 21).style };
+          }
           sheet.getCell(totalRow, col).value = {
             formula: `SUM(${columnLetter}${startRow}:${columnLetter}${lastDataRow})`,
             result: totalValue,
@@ -4880,13 +4917,15 @@ export function QuoteBuilderScreen({
       const usedCreativeImageIds = new Set(
         values.campaignMarkets.flatMap((market) =>
           market.assets.flatMap((asset) => {
-            const mapped = creativeFormatKeys
-              .map((format) => getCreativeImageIdForFormat(asset, format))
+            const mapped = Object.values(normalizeCreativeImageIds(asset))
               .filter((imageId) => Boolean(imageId.trim()));
-            const multiMapped = creativeFormatKeys.flatMap((format) =>
-              expandedArtworkImageIdsForFormat(asset, format),
+            const multiMapped = Object.values(normalizeArtworkMaterialAssignments(asset)).flatMap((assignments) =>
+              assignments.flatMap((assignment) =>
+                Array.from({ length: assignment.frameCount }, () => assignment.artworkImageId).filter(Boolean),
+              ),
             );
-            return Array.from(new Set([...mapped, ...multiMapped]));
+            const legacyMapped = (asset.creativeImageId || '').trim();
+            return Array.from(new Set([...mapped, ...multiMapped, ...(legacyMapped ? [legacyMapped] : [])]));
           }),
         ),
       );

@@ -50,3 +50,32 @@ func TestCalculateFrameBreakdownDerivesFramesFromPosters(t *testing.T) {
 		}
 	}
 }
+
+func TestCustomSheetIncludedInCampaignTotals(t *testing.T) {
+	breakdown := quantityBreakdown{
+		"Custom Sheet": 7,
+		"8-sheet":      4,
+		"Mega":         2,
+	}
+
+	if got := posterTotal(breakdown); got != 11 {
+		t.Fatalf("poster total = %d, want 11", got)
+	}
+	if got := totalUnits(breakdown); got != 13 {
+		t.Fatalf("total units = %d, want 13", got)
+	}
+}
+
+func TestCalculateFrameBreakdownPreservesCustomSheetQuantity(t *testing.T) {
+	frames := calculateFrameBreakdown(quantityBreakdown{
+		"Custom Sheet": 7,
+		"8-sheet":      5,
+	})
+
+	if got := frames["Custom Sheet"]; got != 7 {
+		t.Fatalf("custom-sheet frames = %d, want 7", got)
+	}
+	if got := frames["8-sheet"]; got != 2 {
+		t.Fatalf("8-sheet frames = %d, want 2", got)
+	}
+}
