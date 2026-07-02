@@ -250,10 +250,10 @@ function toCreativeFormatKey(key: keyof QuantityBreakdown): CreativeFormatKey {
   return key as CreativeFormatKey;
 }
 
-function normalizeCreativeImageIds(asset: CampaignAsset): Partial<Record<CreativeFormatKey, string>> {
-  const normalized: Partial<Record<CreativeFormatKey, string>> = {};
-  creativeFormatKeys.forEach((key) => {
-    const mapped = (asset.creativeImageIds?.[key] || '').trim();
+function normalizeCreativeImageIds(asset: CampaignAsset): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  Object.entries(asset.creativeImageIds ?? {}).forEach(([key, imageId]) => {
+    const mapped = (imageId || '').trim();
     if (mapped) {
       normalized[key] = mapped;
     }
@@ -270,8 +270,8 @@ function normalizeCreativeImageIds(asset: CampaignAsset): Partial<Record<Creativ
 
 function normalizeArtworkMaterialAssignments(asset: CampaignAsset) {
   const normalized: NonNullable<CampaignAsset['artworkMaterialAssignments']> = {};
-  creativeFormatKeys.forEach((key) => {
-    const assignments = (asset.artworkMaterialAssignments?.[key] ?? [])
+  Object.entries(asset.artworkMaterialAssignments ?? {}).forEach(([key, rawAssignments]) => {
+    const assignments = (rawAssignments ?? [])
       .map((assignment) => ({
         artworkImageId: (assignment.artworkImageId || '').trim(),
         materialId: (assignment.materialId || '').trim(),
@@ -1990,10 +1990,12 @@ export function QuoteBuilderScreen({
       market.assets.forEach((asset) => {
         const mappedCreativeImageIds = normalizeCreativeImageIds(asset);
         const mappedArtworkMaterialAssignments = normalizeArtworkMaterialAssignments(asset);
-        creativeFormatKeys.forEach((formatKey) => {
-          const mappedId = (mappedCreativeImageIds[formatKey] || '').trim();
+        Object.values(mappedCreativeImageIds).forEach((imageId) => {
+          const mappedId = (imageId || '').trim();
           if (mappedId) assignedIds.add(mappedId);
-          (mappedArtworkMaterialAssignments[formatKey] ?? []).forEach((assignment) => {
+        });
+        Object.values(mappedArtworkMaterialAssignments).forEach((assignments) => {
+          assignments.forEach((assignment) => {
             const trimmed = assignment.artworkImageId;
             if (trimmed) assignedIds.add(trimmed);
           });
