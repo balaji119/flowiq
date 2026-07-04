@@ -12,7 +12,7 @@ import (
 func scanMaterialRecord(scanner interface{ Scan(dest ...any) error }) (materialRecord, error) {
 	var record materialRecord
 	var createdAt, updatedAt time.Time
-	err := scanner.Scan(&record.ID, &record.TenantID, &record.Name, &createdAt, &updatedAt)
+	err := scanner.Scan(&record.ID, &record.TenantID, &record.Name, &record.IsDefault, &createdAt, &updatedAt)
 	record.CreatedAt = createdAt.UTC().Format(time.RFC3339)
 	record.UpdatedAt = updatedAt.UTC().Format(time.RFC3339)
 	return record, err
@@ -23,7 +23,7 @@ func (s *mappingStore) listMaterials(ctx context.Context, tenantID string) ([]ma
 		return nil, err
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id::text, tenant_id::text, name, created_at, updated_at
+		SELECT id::text, tenant_id::text, name, is_default, created_at, updated_at
 		FROM materials
 		WHERE tenant_id = $1
 		ORDER BY LOWER(name), name
@@ -48,6 +48,7 @@ func (s *mappingStore) replaceMaterials(ctx context.Context, tenantID string, pa
 		return nil, err
 	}
 	seen := make(map[string]bool, len(payload))
+	defaultCount := 0
 	for index := range payload {
 		payload[index].Name = strings.TrimSpace(payload[index].Name)
 		if payload[index].Name == "" {
@@ -61,6 +62,12 @@ func (s *mappingStore) replaceMaterials(ctx context.Context, tenantID string, pa
 			return nil, errors.New("Material names must be unique")
 		}
 		seen[key] = true
+		if payload[index].IsDefault {
+			defaultCount++
+		}
+	}
+	if len(payload) > 0 && defaultCount != 1 {
+		return nil, errors.New("Exactly one material must be the default")
 	}
 
 	tx, err := s.pool.Begin(ctx)
@@ -96,9 +103,9 @@ func (s *mappingStore) replaceMaterials(ctx context.Context, tenantID string, pa
 			id = uuid.NewString()
 		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO materials (id, tenant_id, name, created_at, updated_at)
-			VALUES ($1, $2, $3, NOW(), NOW())
-		`, id, tenantID, item.Name); err != nil {
+			INSERT INTO materials (id, tenant_id, name, is_default, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, NOW(), NOW())
+		`, id, tenantID, item.Name, item.IsDefault); err != nil {
 			return nil, err
 		}
 	}

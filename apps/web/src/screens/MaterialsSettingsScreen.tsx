@@ -11,18 +11,18 @@ type MaterialsSettingsScreenProps = {
   tenantId?: string | null;
 } & Omit<AdminWorkspaceHandlers, 'onBack' | 'onOpenMaterials'>;
 
-type MaterialDraft = { id: string; name: string };
+type MaterialDraft = { id: string; name: string; isDefault: boolean };
 
-function newMaterial(): MaterialDraft {
-  return { id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name: '' };
+function newMaterial(isDefault: boolean): MaterialDraft {
+  return { id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name: '', isDefault };
 }
 
 function toDrafts(records: MaterialRecord[]): MaterialDraft[] {
-  return records.map(({ id, name }) => ({ id, name }));
+  return records.map(({ id, name, isDefault }) => ({ id, name, isDefault }));
 }
 
 function snapshot(rows: MaterialDraft[]) {
-  return JSON.stringify(rows.map((row) => [row.id, row.name.trim()]));
+  return JSON.stringify(rows.map((row) => [row.id, row.name.trim(), row.isDefault]));
 }
 
 export function MaterialsSettingsScreen({
@@ -125,11 +125,15 @@ export function MaterialsSettingsScreen({
       setError('Material names must be unique');
       return false;
     }
+    if (normalized.length > 0 && normalized.filter((row) => row.isDefault).length !== 1) {
+      setError('Select one default material');
+      return false;
+    }
     try {
       setSaving(true);
       setError('');
       setNotice('');
-      const response = await replaceMaterials({ materials: normalized.map((row) => ({ id: row.id.startsWith('new-') ? undefined : row.id, name: row.name })) }, effectiveTenantId);
+      const response = await replaceMaterials({ materials: normalized.map((row) => ({ id: row.id.startsWith('new-') ? undefined : row.id, name: row.name, isDefault: row.isDefault })) }, effectiveTenantId);
       const next = toDrafts(response.materials);
       setMaterials(next);
       setSavedSnapshot(snapshot(next));
@@ -171,7 +175,66 @@ export function MaterialsSettingsScreen({
         {notice ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{notice}</div> : null}
         {canSwitchTenant ? <section className="flex flex-wrap gap-4"><div className="w-full sm:w-[320px]"><div className="inline-flex h-10 w-full overflow-hidden rounded-md border border-slate-600 bg-slate-800"><span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-4 text-sm font-medium text-slate-100">Tenant</span><select id="materials-tenant" className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70" value={selectedTenantId ?? ''} onChange={(event) => confirmDiscardChanges(() => setSelectedTenantId(event.target.value || null))}>{tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}</select></div></div></section> : null}
         <section className="w-full max-w-4xl space-y-5">
-          {loading ? <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14"><LoaderCircle className="h-6 w-6 animate-spin text-violet-300" /></div> : <div className="overflow-x-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]"><div className="flex items-center justify-between border-b border-slate-700/70 px-4 py-3"><Label className="text-sm font-semibold text-slate-100">Materials</Label><Button className="h-8 px-3" onClick={() => setMaterials((current) => [...current, newMaterial()])} size="sm" type="button" variant="secondary"><Plus className="h-4 w-4" />Add Material</Button></div><table className="w-full table-fixed border-collapse text-sm"><colgroup><col /><col className="w-[110px]" /></colgroup><thead><tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300"><th className="border border-slate-700 px-4 py-2 text-left">Material Name</th><th className="border border-slate-700 px-4 py-2 text-center">Action</th></tr></thead><tbody>{materials.length === 0 ? <tr><td className="border border-slate-700 px-4 py-8 text-center text-slate-400" colSpan={2}>No materials added yet.</td></tr> : materials.map((row) => <tr key={row.id} className="bg-slate-900/35"><td className="border border-slate-700 px-3 py-2"><Input aria-label="Material Name" maxLength={200} onChange={(event) => setMaterials((current) => current.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item))} placeholder="Enter material name" value={row.name} /></td><td className="border border-slate-700 px-3 py-2 text-center"><Button aria-label={`Delete ${row.name || 'material'}`} className="h-8 w-8 rounded-md border-0 p-0 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200" onClick={() => setMaterials((current) => current.filter((item) => item.id !== row.id))} type="button" variant="ghost"><Trash2 className="h-4 w-4" /></Button></td></tr>)}</tbody></table></div>}
+          {loading ? (
+            <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
+              <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
+              <div className="flex items-center justify-between border-b border-slate-700/70 px-4 py-3">
+                <Label className="text-sm font-semibold text-slate-100">Materials</Label>
+                <Button className="h-8 px-3" onClick={() => setMaterials((current) => [...current, newMaterial(current.length === 0)])} size="sm" type="button" variant="secondary">
+                  <Plus className="h-4 w-4" />Add Material
+                </Button>
+              </div>
+              <table className="w-full table-fixed border-collapse text-sm">
+                <colgroup><col /><col className="w-[120px]" /><col className="w-[110px]" /></colgroup>
+                <thead>
+                  <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
+                    <th className="border border-slate-700 px-4 py-2 text-left">Material Name</th>
+                    <th className="border border-slate-700 px-4 py-2 text-center">Default</th>
+                    <th className="border border-slate-700 px-4 py-2 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {materials.length === 0 ? (
+                    <tr><td className="border border-slate-700 px-4 py-8 text-center text-slate-400" colSpan={3}>No materials added yet.</td></tr>
+                  ) : materials.map((row) => (
+                    <tr key={row.id} className="bg-slate-900/35">
+                      <td className="border border-slate-700 px-3 py-2">
+                        <Input aria-label="Material Name" maxLength={200} onChange={(event) => setMaterials((current) => current.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item))} placeholder="Enter material name" value={row.name} />
+                      </td>
+                      <td className="border border-slate-700 px-3 py-2 text-center">
+                        <input
+                          aria-label={`Set ${row.name || 'material'} as default`}
+                          checked={row.isDefault}
+                          className="h-4 w-4 cursor-pointer accent-violet-500"
+                          name="default-material"
+                          onChange={() => setMaterials((current) => current.map((item) => ({ ...item, isDefault: item.id === row.id })))}
+                          type="radio"
+                        />
+                      </td>
+                      <td className="border border-slate-700 px-3 py-2 text-center">
+                        <Button
+                          aria-label={`Delete ${row.name || 'material'}`}
+                          className="h-8 w-8 rounded-md border-0 p-0 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200"
+                          onClick={() => setMaterials((current) => {
+                            const remaining = current.filter((item) => item.id !== row.id);
+                            if (row.isDefault && remaining.length > 0) remaining[0] = { ...remaining[0], isDefault: true };
+                            return remaining;
+                          })}
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {!loading ? <div className="flex justify-end"><Button className="h-9 min-w-[132px] rounded-md px-3 text-sm font-semibold btn-theme-primary" disabled={!effectiveTenantId || saving} onClick={() => void handleSave()} type="button">{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{saving ? 'Saving...' : 'Save Changes'}</Button></div> : null}
         </section>
       </main>

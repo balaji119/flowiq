@@ -1842,6 +1842,38 @@ export function QuoteBuilderScreen({
     return byLineId;
   }, [values.campaignMarkets]);
   const summaryLineByAssetId = useMemo(() => new Map((summary?.lines ?? []).map((line) => [line.id, line])), [summary]);
+  const defaultMaterialId = useMemo(() => materials.find((material) => material.isDefault)?.id ?? '', [materials]);
+
+  useEffect(() => {
+    if (loadingCampaign || !defaultMaterialId || summaryLineByAssetId.size === 0) return;
+    setValues((current) => {
+      let changed = false;
+      const campaignMarkets = current.campaignMarkets.map((market) => ({
+        ...market,
+        assets: market.assets.map((asset) => {
+          const line = summaryLineByAssetId.get(asset.id);
+          if (!line) return asset;
+          const assignmentsByFormat = normalizeArtworkMaterialAssignments(asset);
+          let assetChanged = false;
+          getCreativeFormatsForBreakdown(line.breakdown).forEach((formatKey) => {
+            const totalFrames = frameCountForFormat(line.breakdown, formatKey);
+            if (totalFrames <= 0 || (assignmentsByFormat[formatKey]?.length ?? 0) > 0) return;
+            assignmentsByFormat[formatKey] = [{
+              artworkImageId: getCreativeImageIdForFormat(asset, formatKey),
+              materialId: defaultMaterialId,
+              frameCount: totalFrames,
+            }];
+            assetChanged = true;
+          });
+          if (!assetChanged) return asset;
+          changed = true;
+          return { ...asset, artworkMaterialAssignments: assignmentsByFormat };
+        }),
+      }));
+      return changed ? { ...current, campaignMarkets } : current;
+    });
+  }, [defaultMaterialId, loadingCampaign, summaryLineByAssetId]);
+
   const megasPerBoxByMarket = useMemo(
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.megasPerBox ?? 1])),
     [marketShippingRates],
@@ -2536,7 +2568,7 @@ export function QuoteBuilderScreen({
       materialId: assignment.materialId,
       frameCount: assignment.frameCount,
     }));
-    setMultiMaterialRecords(records.length > 0 ? records : [{ id: `multi-material-record-${Date.now()}-0`, materialId: '', frameCount: safeTotalFrames }]);
+    setMultiMaterialRecords(records.length > 0 ? records : [{ id: `multi-material-record-${Date.now()}-0`, materialId: defaultMaterialId, frameCount: safeTotalFrames }]);
     setMaterialTarget({ marketId, assetId, formatKey, totalFrames: safeTotalFrames });
     setMaterialDialogMode('manage');
     setMaterialSelectionRecordIndex(null);
@@ -2628,7 +2660,7 @@ export function QuoteBuilderScreen({
         frameCount: Math.max(0, Math.floor(assignment.frameCount || 0)),
       })).filter((assignment) => assignment.frameCount > 0);
     } else {
-      recordsFromAsset = [{ id: `multi-artwork-record-${Date.now()}-0`, imageId: '', materialId: '', frameCount: safeTotalFrames }];
+      recordsFromAsset = [{ id: `multi-artwork-record-${Date.now()}-0`, imageId: '', materialId: defaultMaterialId, frameCount: safeTotalFrames }];
     }
     setMultiArtworkRecords(recordsFromAsset);
     setMultiArtworkTarget({ marketId, assetId, formatKey, totalFrames: safeTotalFrames });

@@ -33,14 +33,16 @@ type sheetNameOverrideRecord struct {
 }
 
 type materialInput struct {
-	ID   string `json:"id,omitempty"`
-	Name string `json:"name"`
+	ID        string `json:"id,omitempty"`
+	Name      string `json:"name"`
+	IsDefault bool   `json:"isDefault"`
 }
 
 type materialRecord struct {
 	ID        string `json:"id"`
 	TenantID  string `json:"tenantId"`
 	Name      string `json:"name"`
+	IsDefault bool   `json:"isDefault"`
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
 }

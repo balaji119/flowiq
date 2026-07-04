@@ -62,12 +62,14 @@ export type SheetNameOverrideRecord = {
 export type MaterialInput = {
   id?: string;
   name: string;
+  isDefault: boolean;
 };
 
 export type MaterialRecord = {
   id: string;
   tenantId: string;
   name: string;
+  isDefault: boolean;
   createdAt: string;
   updatedAt: string;
 };
