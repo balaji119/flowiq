@@ -2388,9 +2388,11 @@ export function QuoteBuilderScreen({
     setDraftMarket((current) => (current ? updater(current) : current));
   }
 
-  function updateDraftAssetQuantityOverride(assetId: string, key: string, rawValue: string) {
+  function updateDraftAssetFrameOverride(assetId: string, key: string, rawValue: string) {
     const parsedValue = Number.parseInt(rawValue || '0', 10);
-    const value = Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
+    const frameValue = Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
+    const divisor = isKnownFormatKey(key) ? (formatToFrameDivisor[toCreativeFormatKey(key)] ?? 1) : 1;
+    const posterValue = frameValue * Math.max(1, divisor);
     updateDraftMarket((market) => ({
       ...market,
       // Once an asset is edited, migrate any legacy market override to the
@@ -2402,7 +2404,7 @@ export function QuoteBuilderScreen({
           ? { ...(calculatedLine.breakdown as Record<string, number>) }
           : (asset.quantityOverrides?.posters ?? {});
         return asset.id === assetId
-          ? { ...asset, quantityOverrides: { posters: { ...migratedOverrides, [key]: value } } }
+          ? { ...asset, quantityOverrides: { posters: { ...migratedOverrides, [key]: posterValue } } }
           : market.quantityOverrides?.posters && calculatedLine
             ? { ...asset, quantityOverrides: { posters: migratedOverrides } }
             : asset;
@@ -6374,16 +6376,8 @@ export function QuoteBuilderScreen({
                                       </th>
                                       <th className="border border-slate-700 px-2 py-2 text-left font-semibold text-slate-100">Posters</th>
                                       {visibleAssetFormatKeys.map((key, index) => (
-                                        <td key={`draft-asset-poster-${asset.id}-${key}`} className="border border-slate-700 px-2 py-1.5 text-center">
-                                          <Input
-                                            aria-label={`${asset.assetSearch || 'Asset'} Posters ${formatBreakdownKeyLabel(key, normalizedSheetNameOverrides)}`}
-                                            className="mx-auto h-7 min-w-0 rounded border-slate-600 bg-slate-950/70 px-1 text-center text-[12px] font-semibold text-white [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                            min={0}
-                                            onChange={(event) => updateDraftAssetQuantityOverride(asset.id, key, event.target.value)}
-                                            onFocus={(event) => event.currentTarget.select()}
-                                            type="number"
-                                            value={posterValues[index]}
-                                          />
+                                        <td key={`draft-asset-poster-${asset.id}-${key}`} className="border border-slate-700 px-2 py-2 text-center font-semibold text-slate-100">
+                                          {posterValues[index]}
                                         </td>
                                       ))}
                                       <td className="border border-slate-700 px-3 py-2 text-center font-black text-white">{posterValues.reduce((sum, value) => sum + value, 0)}</td>
@@ -6391,7 +6385,17 @@ export function QuoteBuilderScreen({
                                     <tr key={`draft-asset-frames-${asset.id}`} className="bg-slate-800/45">
                                       <th className="border border-slate-700 px-2 py-2 text-left font-semibold text-slate-300">Frames</th>
                                       {frameValues.map((value, index) => (
-                                        <td key={`draft-asset-frame-${asset.id}-${visibleAssetFormatKeys[index]}`} className="border border-slate-700 px-2 py-2 text-center font-semibold text-slate-300">{value}</td>
+                                        <td key={`draft-asset-frame-${asset.id}-${visibleAssetFormatKeys[index]}`} className="border border-slate-700 px-2 py-1.5 text-center">
+                                          <Input
+                                            aria-label={`${asset.assetSearch || 'Asset'} Frames ${formatBreakdownKeyLabel(visibleAssetFormatKeys[index], normalizedSheetNameOverrides)}`}
+                                            className="mx-auto h-7 min-w-0 rounded border-slate-600 bg-slate-950/70 px-1 text-center text-[12px] font-semibold text-white [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                            min={0}
+                                            onChange={(event) => updateDraftAssetFrameOverride(asset.id, visibleAssetFormatKeys[index], event.target.value)}
+                                            onFocus={(event) => event.currentTarget.select()}
+                                            type="number"
+                                            value={value}
+                                          />
+                                        </td>
                                       ))}
                                       <td className="border border-slate-700 px-3 py-2 text-center font-black text-slate-300">{frameValues.reduce((sum, value) => sum + value, 0)}</td>
                                     </tr>,
