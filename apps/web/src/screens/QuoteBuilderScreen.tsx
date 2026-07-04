@@ -2887,7 +2887,11 @@ export function QuoteBuilderScreen({
     setMultiArtworkRecords((current) => {
       const usedFrames = current.reduce((sum, record) => sum + Math.max(0, Math.floor(record.frameCount || 0)), 0);
       const remainingFrames = Math.max(0, (multiArtworkTarget?.totalFrames ?? 0) - usedFrames);
-      const next = [...current, { id: `multi-artwork-record-${Date.now()}-${current.length}`, imageId: '', materialId: defaultMaterialId, frameCount: remainingFrames }];
+      const previousFrameCount = current.length > 0
+        ? Math.max(0, Math.floor(current[current.length - 1].frameCount || 0))
+        : remainingFrames;
+      const frameCount = Math.min(previousFrameCount, remainingFrames);
+      const next = [...current, { id: `multi-artwork-record-${Date.now()}-${current.length}`, imageId: '', materialId: defaultMaterialId, frameCount }];
       syncMultiArtworkRecordsToAsset(next);
       return next;
     });
@@ -6391,7 +6395,10 @@ export function QuoteBuilderScreen({
                             ...visibleBreakdownKeys(draftMarketSummary.breakdown),
                             ...Object.keys(draftMarket.quantityOverrides?.posters ?? {}),
                             ...draftMarket.assets.flatMap((asset) => Object.keys(asset.quantityOverrides?.posters ?? {})),
-                          ]));
+                          ])).filter((key) =>
+                            breakdownValueForKey(draftMarketSummary.breakdown, key) > 0
+                            || (draftMarket.quantityOverrides?.posters?.[key] ?? 0) > 0
+                            || draftMarket.assets.some((asset) => (asset.quantityOverrides?.posters?.[key] ?? 0) > 0));
                           return (
                             <table className="dense-table min-w-[760px] w-full table-fixed border-collapse text-[12px]">
                               <thead>
