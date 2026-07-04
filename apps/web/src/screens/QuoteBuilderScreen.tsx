@@ -645,9 +645,17 @@ function inferStateFromMarket(marketName: string) {
 }
 
 function marketShortLabelForState(state: ExportState) {
-  if (state === 'NSW') return 'Syd';
-  if (state === 'QLD') return 'Bris';
-  return '';
+  const labelByState: Record<ExportState, string> = {
+    NSW: 'Syd',
+    VIC: 'Melb',
+    QLD: 'Bris',
+    WA: 'Perth',
+    SA: 'Adel',
+    TAS: 'Hob',
+    ACT: 'Canb',
+    NT: 'Darwin',
+  };
+  return labelByState[state];
 }
 
 function sanitizeFileName(value: string) {
