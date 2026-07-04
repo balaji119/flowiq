@@ -47,7 +47,6 @@ const creatableRolesForSuperAdmin: AuthRole[] = [
   "admin",
   "user",
 ];
-const tenantScopedRolesForSuperAdmin: AuthRole[] = ["admin", "user"];
 const creatableRolesForAdmin: AuthRole[] = ["admin", "user"];
 
 function emptyUserForm(): UserFormState {
@@ -126,11 +125,9 @@ export function UserManagementScreen({
       if (session?.user.role !== "super_admin") {
         return creatableRolesForAdmin;
       }
-      return editingUser && editingUser.role !== "super_admin"
-        ? tenantScopedRolesForSuperAdmin
-        : creatableRolesForSuperAdmin;
+      return creatableRolesForSuperAdmin;
     },
-    [editingUser, session?.user.role],
+    [session?.user.role],
   );
   const isSuperAdmin = session?.user.role === "super_admin";
   const effectiveTenantId = isSuperAdmin ? selectedTenantId : tenantId;
