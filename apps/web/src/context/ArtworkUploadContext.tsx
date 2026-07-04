@@ -21,6 +21,8 @@ export type ArtworkUploadJob = {
   phaseCurrent?: number;
   phaseTotal?: number;
   origin?: 'local' | 'onedrive';
+  batchId?: string;
+  batchSize?: number;
 };
 
 type QueuedArtworkUpload = {
@@ -28,6 +30,8 @@ type QueuedArtworkUpload = {
   campaignId: string;
   tenantId?: string | null;
   file: File;
+  batchId: string;
+  batchSize: number;
 };
 
 type ArtworkUploadContextValue = {
@@ -48,11 +52,31 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
   const workerActiveRef = useRef(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const monitoredOneDriveRef = useRef(new Set<string>());
+  const uploadBatchRef = useRef(new Map<string, { total: number; remaining: number; completed: number; pages: number; failed: number }>());
 
   function showNotice(kind: 'success' | 'error', message: string) {
     setNotice({ kind, message });
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = setTimeout(() => setNotice(null), kind === 'success' ? 6000 : 12000);
+  }
+
+  function recordBatchCompletion(batchId: string | undefined, pageCount: number, failed: boolean) {
+    if (!batchId) return false;
+    const batch = uploadBatchRef.current.get(batchId);
+    if (!batch) return false;
+    batch.remaining = Math.max(0, batch.remaining - 1);
+    batch.pages += pageCount;
+    if (failed) batch.failed += 1;
+    else batch.completed += 1;
+    if (batch.remaining > 0) return true;
+    uploadBatchRef.current.delete(batchId);
+    const fileLabel = `${batch.total} artwork file${batch.total === 1 ? '' : 's'}`;
+    if (batch.failed > 0) {
+      showNotice('error', `${fileLabel} finished: ${batch.completed} uploaded, ${batch.failed} failed (${batch.pages} artwork page${batch.pages === 1 ? '' : 's'} generated).`);
+    } else {
+      showNotice('success', `${fileLabel} uploaded successfully (${batch.pages} artwork page${batch.pages === 1 ? '' : 's'} generated).`);
+    }
+    return true;
   }
 
   function toArtworkJob(remoteJob: OneDriveImportJob): ArtworkUploadJob {
@@ -76,7 +100,7 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
     };
   }
 
-  function monitorOneDriveJob(initialJob: OneDriveImportJob) {
+  function monitorOneDriveJob(initialJob: OneDriveImportJob, batchId?: string) {
     if (monitoredOneDriveRef.current.has(initialJob.id)) return;
     monitoredOneDriveRef.current.add(initialJob.id);
     void (async () => {
@@ -96,9 +120,9 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
         if (!monitoredOneDriveRef.current.has(remoteJob.id)) return;
         setJobs((current) => current.map((job) => job.id === remoteJob.id ? { ...job, ...toArtworkJob(remoteJob) } : job));
         if (remoteJob.status === 'error') {
-          showNotice('error', `${remoteJob.fileName}: ${remoteJob.error || 'Unable to import artwork from OneDrive'}`);
+          if (!recordBatchCompletion(batchId, 0, true)) showNotice('error', `${remoteJob.fileName}: ${remoteJob.error || 'Unable to import artwork from OneDrive'}`);
         } else if (remoteJob.status === 'completed') {
-          showNotice('success', `${remoteJob.fileName} imported from OneDrive (${remoteJob.images.length} artwork page${remoteJob.images.length === 1 ? '' : 's'}).`);
+          if (!recordBatchCompletion(batchId, remoteJob.images.length, false)) showNotice('success', `${remoteJob.fileName} imported from OneDrive (${remoteJob.images.length} artwork page${remoteJob.images.length === 1 ? '' : 's'}).`);
         }
       } finally {
         monitoredOneDriveRef.current.delete(remoteJob.id);
@@ -125,7 +149,7 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
           const localJobs = current.filter((job) => job.origin !== 'onedrive');
           return [...localJobs, ...activeImports.map(toArtworkJob)];
         });
-        activeImports.forEach(monitorOneDriveJob);
+        activeImports.forEach((job) => monitorOneDriveJob(job));
       })
       .catch(() => {
         // Authentication bootstrap or a temporary network outage may race this
@@ -163,11 +187,11 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
           setJobs((current) => current.map((job) => (
             job.id === next.jobId ? { ...job, status: 'completed', images: result.images } : job
           )));
-          showNotice('success', `${next.file.name} uploaded successfully (${result.images.length} artwork page${result.images.length === 1 ? '' : 's'}).`);
+          recordBatchCompletion(next.batchId, result.images.length, false);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unable to upload artwork PDF';
           setJobs((current) => current.map((job) => (job.id === next.jobId ? { ...job, status: 'error', error: message } : job)));
-          showNotice('error', `${next.file.name}: ${message}`);
+          recordBatchCompletion(next.batchId, 0, true);
         }
       }
     } finally {
@@ -176,11 +200,15 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
   }
 
   function enqueueArtworkFiles(campaignId: string, tenantId: string | null | undefined, files: File[]) {
+    const batchId = crypto.randomUUID();
+    uploadBatchRef.current.set(batchId, { total: files.length, remaining: files.length, completed: 0, pages: 0, failed: 0 });
     const queued = files.map((file) => ({
       jobId: crypto.randomUUID(),
       campaignId,
       tenantId,
       file,
+      batchId,
+      batchSize: files.length,
     }));
     queueRef.current.push(...queued);
     setJobs((current) => [
@@ -193,6 +221,8 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
         status: 'queued',
         images: [],
         origin: 'local',
+        batchId: item.batchId,
+        batchSize: item.batchSize,
       })),
     ]);
     void processQueue();
@@ -204,6 +234,8 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
     tenantId: string | null | undefined,
     selection: OneDriveSelection,
     accessToken: string,
+    batchId: string,
+    batchSize: number,
   ) {
     const localJobId = crypto.randomUUID();
     setJobs((current) => [
@@ -219,6 +251,8 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
         uploadedBytes: 0,
         totalBytes: selection.size,
         origin: 'onedrive',
+        batchId,
+        batchSize,
       },
     ]);
     let remoteJob: OneDriveImportJob;
@@ -227,11 +261,11 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to import artwork from OneDrive';
       setJobs((current) => current.map((job) => job.id === localJobId ? { ...job, status: 'error', error: message } : job));
-      showNotice('error', `${selection.name}: ${message}`);
+      recordBatchCompletion(batchId, 0, true);
       throw error;
     }
-    setJobs((current) => current.map((job) => job.id === localJobId ? toArtworkJob(remoteJob) : job));
-    monitorOneDriveJob(remoteJob);
+    setJobs((current) => current.map((job) => job.id === localJobId ? { ...job, ...toArtworkJob(remoteJob) } : job));
+    monitorOneDriveJob(remoteJob, batchId);
     return remoteJob.id;
   }
 
@@ -241,11 +275,17 @@ export function ArtworkUploadProvider({ children }: PropsWithChildren) {
     selections: OneDriveSelection[],
     accessToken: string,
   ) {
+    const batchId = crypto.randomUUID();
+    uploadBatchRef.current.set(batchId, { total: selections.length, remaining: selections.length, completed: 0, pages: 0, failed: 0 });
     const jobIds: string[] = [];
     for (const selection of selections) {
       // Keep each OneDrive PDF independent so a single failure doesn't block the rest.
       // The underlying server-side processing already runs one import job per file.
-      jobIds.push(await enqueueOneDriveFile(campaignId, tenantId, selection, accessToken));
+      try {
+        jobIds.push(await enqueueOneDriveFile(campaignId, tenantId, selection, accessToken, batchId, selections.length));
+      } catch {
+        // The batch notification summarizes individual failures after all selections are attempted.
+      }
     }
     return jobIds;
   }

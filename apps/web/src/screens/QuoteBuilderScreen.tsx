@@ -1379,7 +1379,17 @@ export function QuoteBuilderScreen({
   }, [values.dueDate]);
 
   useEffect(() => {
-    const terminalJobs = campaignArtworkUploadJobs.filter((job) => job.status === 'completed' || job.status === 'error');
+    const jobsByBatch = new Map<string, typeof campaignArtworkUploadJobs>();
+    campaignArtworkUploadJobs.forEach((job) => {
+      const key = job.batchId || job.id;
+      jobsByBatch.set(key, [...(jobsByBatch.get(key) ?? []), job]);
+    });
+    const terminalJobs = Array.from(jobsByBatch.values()).flatMap((batchJobs) => {
+      const expectedSize = batchJobs[0]?.batchSize ?? 1;
+      const batchComplete = batchJobs.length >= expectedSize
+        && batchJobs.every((job) => job.status === 'completed' || job.status === 'error');
+      return batchComplete ? batchJobs : [];
+    });
     if (terminalJobs.length === 0) return;
 
     const completedJobs = terminalJobs.filter((job) => job.status === 'completed');
