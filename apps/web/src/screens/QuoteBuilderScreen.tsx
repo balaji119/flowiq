@@ -1867,7 +1867,8 @@ export function QuoteBuilderScreen({
           let assetChanged = false;
           getCreativeFormatsForBreakdown(line.breakdown).forEach((formatKey) => {
             const totalFrames = frameCountForFormat(line.breakdown, formatKey);
-            if (totalFrames <= 0 || (assignmentsByFormat[formatKey]?.length ?? 0) > 0) return;
+            const hasExplicitAssignment = Object.prototype.hasOwnProperty.call(asset.artworkMaterialAssignments ?? {}, formatKey);
+            if (totalFrames <= 0 || hasExplicitAssignment) return;
             assignmentsByFormat[formatKey] = [{
               artworkImageId: getCreativeImageIdForFormat(asset, formatKey),
               materialId: defaultMaterialId,
@@ -2661,8 +2662,9 @@ export function QuoteBuilderScreen({
     const targetMarket = values.campaignMarkets.find((market) => market.id === marketId);
     const targetAsset = targetMarket?.assets.find((asset) => asset.id === assetId);
     const persistedAssignments = targetAsset?.artworkMaterialAssignments?.[formatKey] ?? [];
+    const hasExplicitAssignments = Object.prototype.hasOwnProperty.call(targetAsset?.artworkMaterialAssignments ?? {}, formatKey);
     let recordsFromAsset: MultiArtworkRecord[];
-    if (persistedAssignments.length > 0) {
+    if (hasExplicitAssignments) {
       recordsFromAsset = persistedAssignments.map((assignment, index) => ({
         id: `multi-artwork-record-${Date.now()}-${index}`,
         imageId: (assignment.artworkImageId || '').trim(),
@@ -2885,7 +2887,7 @@ export function QuoteBuilderScreen({
     setMultiArtworkRecords((current) => {
       const usedFrames = current.reduce((sum, record) => sum + Math.max(0, Math.floor(record.frameCount || 0)), 0);
       const remainingFrames = Math.max(0, (multiArtworkTarget?.totalFrames ?? 0) - usedFrames);
-      const next = [...current, { id: `multi-artwork-record-${Date.now()}-${current.length}`, imageId: '', materialId: '', frameCount: remainingFrames }];
+      const next = [...current, { id: `multi-artwork-record-${Date.now()}-${current.length}`, imageId: '', materialId: defaultMaterialId, frameCount: remainingFrames }];
       syncMultiArtworkRecordsToAsset(next);
       return next;
     });
@@ -2893,7 +2895,7 @@ export function QuoteBuilderScreen({
 
   function removeMultiArtworkRecord(recordIndex: number) {
     setMultiArtworkRecords((current) => {
-      if (current.length <= 1 || recordIndex < 0 || recordIndex >= current.length) return current;
+      if (recordIndex < 0 || recordIndex >= current.length) return current;
       const next = current.filter((_, index) => index !== recordIndex);
       syncMultiArtworkRecordsToAsset(next);
       return next;
@@ -6747,6 +6749,7 @@ export function QuoteBuilderScreen({
                     <col className="w-[120px]" />
                     <col className="w-auto" />
                     <col className="w-[220px]" />
+                    <col className="w-[90px]" />
                   </colgroup>
                   <thead>
                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
@@ -6757,6 +6760,7 @@ export function QuoteBuilderScreen({
                       <th className="border border-slate-700 px-3 py-2 text-center">Frame Count</th>
                       <th className="border border-slate-700 px-3 py-2 text-left">Artwork Filename</th>
                       <th className="border border-slate-700 px-3 py-2 text-left">Material</th>
+                      <th className="border border-slate-700 px-3 py-2 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -6802,42 +6806,41 @@ export function QuoteBuilderScreen({
                           <td className="border border-slate-700 px-3 py-2 text-slate-100">
                             <div className="flex items-center justify-between gap-2">
                               <p className="min-w-0 flex-1 whitespace-normal break-all leading-snug">{fileName}</p>
-                              {record.imageId ? (
-                                <Button
-                                  aria-label={`Remove artwork from slot ${index + 1}`}
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => updateMultiArtworkRecordImage(index, '')}
-                                  type="button"
-                                  variant="destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              ) : (
-                                <Button
-                                  aria-label={`Assign artwork to record ${index + 1}`}
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => openAssignArtworkDialog(multiArtworkTarget.marketId, multiArtworkTarget.assetId, multiArtworkTarget.formatKey, index)}
-                                  type="button"
-                                  variant="secondary"
-                                >
-                                  <Plus className="h-4 w-4" />
-                                </Button>
-                              )}
+                              <Button
+                                aria-label={`${record.imageId ? 'Change' : 'Assign'} artwork for record ${index + 1}`}
+                                className="h-8 w-8 p-0"
+                                onClick={() => openAssignArtworkDialog(multiArtworkTarget.marketId, multiArtworkTarget.assetId, multiArtworkTarget.formatKey, index)}
+                                type="button"
+                                variant={record.imageId ? 'outline' : 'secondary'}
+                              >
+                                {record.imageId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                              </Button>
                             </div>
                           </td>
                           <td className="border border-slate-700 px-3 py-2 text-slate-100">
                             <div className="flex items-center justify-between gap-2">
                               <p className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{assignedMaterial?.name || '-'}</p>
-                              {record.materialId ? (
-                                <Button aria-label={`Remove material from record ${index + 1}`} className="h-8 w-8 p-0" onClick={() => updateMultiArtworkRecordMaterial(index, '')} type="button" variant="destructive">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              ) : (
-                                <Button aria-label={`Assign material to record ${index + 1}`} className="h-8 w-8 p-0" onClick={() => { setMultiArtworkMaterialSelectionIndex(index); setMaterialSearchQuery(''); }} type="button" variant="secondary">
-                                  <Plus className="h-4 w-4" />
-                                </Button>
-                              )}
+                              <Button
+                                aria-label={`${record.materialId ? 'Change' : 'Assign'} material for record ${index + 1}`}
+                                className="h-8 w-8 p-0"
+                                onClick={() => { setMultiArtworkMaterialSelectionIndex(index); setMaterialSearchQuery(''); }}
+                                type="button"
+                                variant={record.materialId ? 'outline' : 'secondary'}
+                              >
+                                {record.materialId ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                              </Button>
                             </div>
+                          </td>
+                          <td className="border border-slate-700 px-3 py-2 text-center">
+                            <Button
+                              aria-label={`Delete record ${index + 1}`}
+                              className="h-8 w-8 p-0"
+                              onClick={() => removeMultiArtworkRecord(index)}
+                              type="button"
+                              variant="destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </td>
                         </tr>
                       );
