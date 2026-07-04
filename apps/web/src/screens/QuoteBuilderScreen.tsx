@@ -365,10 +365,9 @@ function formatWeekLabel(week: number, startDate: string) {
   if (!parsedStartDate) return `Week ${week}`;
   const weekDate = new Date(parsedStartDate);
   weekDate.setDate(parsedStartDate.getDate() + (week - 1) * 7);
-  return weekDate.toLocaleDateString(undefined, {
+  return weekDate.toLocaleDateString('en-AU', {
     day: 'numeric',
     month: 'short',
-    year: 'numeric',
   });
 }
 
@@ -1055,7 +1054,7 @@ function WeekSelector({
   onToggleWeek?: (week: number) => void;
 }) {
   return (
-    <div className={cn('flex gap-2', compact ? 'flex-nowrap whitespace-nowrap' : 'flex-wrap')}>
+    <div className={cn('flex', compact ? 'gap-1.5 whitespace-nowrap' : 'flex-wrap gap-1.5')}>
       {Array.from({ length: weekCount }, (_, index) => index + 1).map((week) => {
         const selected = selectedWeeks.includes(week);
         return (
@@ -1063,7 +1062,7 @@ function WeekSelector({
             key={week}
             className={cn(
               'rounded-full border font-semibold transition',
-              compact ? 'px-2.5 py-1 text-[11px]' : small ? 'px-2 py-1 text-[10px]' : 'px-3 py-1.5 text-xs',
+              compact ? 'px-2 py-0.5 text-[10px]' : small ? 'px-1.5 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs',
               selected ? 'border-violet-400 bg-violet-500 text-white' : 'border-slate-600 bg-slate-900 text-slate-300 hover:border-slate-500',
             )}
             aria-pressed={selected}
