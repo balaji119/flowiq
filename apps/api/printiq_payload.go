@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -24,6 +25,68 @@ type parsedDeliveryAddress struct {
 type printIQArtworkUpload struct {
 	ArtworkURL       string
 	OverrideFileName string
+}
+
+type printIQSheetProduct struct {
+	FormatKey   string
+	ProductCode string
+	Quantity    int
+}
+
+var printIQSheetFormatOrder = []struct {
+	breakdownKey string
+	settingsKey  string
+}{
+	{"8-sheet", "8-sheet"},
+	{"QA0", "8-sheet-a0"},
+	{"6-sheet", "6-sheet"},
+	{"4-sheet", "4-sheet"},
+	{"2-sheet", "2-sheet"},
+	{"Mega", "mega"},
+	{"DOT M", "dot-m"},
+	{"MP", "mega-portrait"},
+	{"FF", "ff"},
+}
+
+func resolvePrintIQSheetProducts(summary *campaignSummary, productCodes map[string]string) ([]printIQSheetProduct, error) {
+	if summary == nil {
+		return nil, errors.New("Campaign calculation summary is required")
+	}
+	products := make([]printIQSheetProduct, 0)
+	for _, format := range printIQSheetFormatOrder {
+		quantity := summary.GrandTotal.Breakdown[format.breakdownKey]
+		if quantity <= 0 {
+			continue
+		}
+		productCode := strings.TrimSpace(productCodes[format.settingsKey])
+		if productCode == "" {
+			return nil, fmt.Errorf("Product Code is required for sheet type %s", format.breakdownKey)
+		}
+		products = append(products, printIQSheetProduct{
+			FormatKey:   format.breakdownKey,
+			ProductCode: productCode,
+			Quantity:    quantity,
+		})
+	}
+	if len(products) == 0 {
+		return nil, errors.New("Campaign has no sheet quantities to submit")
+	}
+	return products, nil
+}
+
+func buildPrintIQGetPriceForProductPayload(product printIQSheetProduct, quoteNo, customerCode string) map[string]any {
+	return map[string]any{
+		"ProductCode": product.ProductCode,
+		"Quantities": []map[string]any{{
+			"Quantity": product.Quantity,
+			"Kinds":    1,
+		}},
+		"QuoteNo":          quoteNo,
+		"JobTitle":         product.ProductCode,
+		"CustomerCode":     customerCode,
+		"AccountManagerID": "00000000-0000-0000-0000-000000000000",
+		"CopyDeliveryFromFirstProductToAllProducts": true,
+	}
 }
 
 func resolveQuantity(values orderFormValues, summary *campaignSummary) int {

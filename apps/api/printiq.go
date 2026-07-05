@@ -476,6 +476,10 @@ func (o *optionService) createQuoteWithDelivery(payload any) (any, int, error) {
 	return o.postQuoteProcess("CreateQuoteWithDelivery", payload)
 }
 
+func (o *optionService) getPriceForProduct(payload any) (any, int, error) {
+	return o.postQuoteProcess("GetPriceForProduct", payload)
+}
+
 func (o *optionService) acceptQuote(payload any) (any, int, error) {
 	return o.postQuoteProcess("AcceptQuote", payload)
 }

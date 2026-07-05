@@ -1079,7 +1079,28 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 
 	requestID := createRequestID()
 
-	createQuotePayload := buildPrintIQCreateQuotePayload(campaign.Values, campaign.Summary)
+	tenant, err := a.authStore.getTenant(campaign.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	sheetSettings, err := a.mappingStore.listSheetNameOverrides(r.Context(), campaign.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	sheetProducts, err := resolvePrintIQSheetProducts(campaign.Summary, sheetSettings.ProductCodes)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	firstProduct := sheetProducts[0]
+	createQuoteValues := campaign.Values
+	createQuoteValues.CustomerCode = tenant.Code
+	createQuoteValues.ProductCode = firstProduct.ProductCode
+	createQuoteValues.Quantity = strconv.Itoa(firstProduct.Quantity)
+	createQuotePayload := buildPrintIQCreateQuotePayload(createQuoteValues, campaign.Summary)
 	createQuoteResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "CreateQuoteWithDelivery", createQuotePayload, a.optionService.createQuoteWithDelivery)
 	if !ok {
 		return
@@ -1089,6 +1110,18 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	if quoteNo == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "PrintIQ create quote response did not include QuoteNo", "details": createQuoteResponse})
 		return
+	}
+
+	getPricePayloads := make([]any, 0, len(sheetProducts)-1)
+	getPriceResponses := make([]any, 0, len(sheetProducts)-1)
+	for _, product := range sheetProducts[1:] {
+		getPricePayload := buildPrintIQGetPriceForProductPayload(product, quoteNo, tenant.Code)
+		getPricePayloads = append(getPricePayloads, getPricePayload)
+		getPriceResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetPriceForProduct", getPricePayload, a.optionService.getPriceForProduct)
+		if !ok {
+			return
+		}
+		getPriceResponses = append(getPriceResponses, getPriceResponse)
 	}
 
 	acceptQuotePayload := map[string]any{"QuoteNo": quoteNo}
@@ -1131,11 +1164,13 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 
 	requestPayload := map[string]any{
 		"createQuoteWithDelivery": createQuotePayload,
+		"getPriceForProduct":      getPricePayloads,
 		"acceptQuote":             acceptQuotePayload,
 		"uploadArtworkURL":        uploadArtworkPayloads,
 	}
 	responsePayload := map[string]any{
 		"createQuoteWithDelivery": createQuoteResponse,
+		"getPriceForProduct":      getPriceResponses,
 		"acceptQuote":             acceptQuoteResponse,
 		"uploadArtworkURL":        uploadArtworkResponses,
 		"quoteNo":                 quoteNo,
