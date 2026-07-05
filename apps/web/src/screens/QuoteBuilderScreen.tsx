@@ -37,6 +37,7 @@ import { sendEmailToAds } from '../services/finalizeApi';
 import { fetchCampaignCustomPrintCosts, fetchCampaignMaterials, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
+import { fetchTenant } from '../services/tenantApi';
 import { canonicalKeyForFormat, resolveFormatName, resolveSheetName, sanitizeSheetNameOverrides, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 import ExcelJS from 'exceljs';
 import { Document as WordDocument, ExternalHyperlink, ImageRun, LineRuleType, Packer, Paragraph, TextRun, UnderlineType } from 'docx';
@@ -1208,8 +1209,6 @@ function stableSerialize(value: unknown) {
   return JSON.stringify(toStableValue(value));
 }
 
-const defaultValuesSerialized = stableSerialize(defaultValues);
-
 export function QuoteBuilderScreen({
   campaignId: selectedCampaignId,
   tenantId,
@@ -1484,7 +1483,10 @@ export function QuoteBuilderScreen({
             await setStoredCampaignId(null, effectiveTenantId);
           }
         }
-        setValues(defaultValues);
+        const tenantResponse = await fetchTenant(effectiveTenantId);
+        if (!active) return;
+        const tenantDefaultValues = createDefaultFormValues(tenantResponse.tenant.code);
+        setValues(tenantDefaultValues);
         setSummary(null);
         setUploadedPurchaseOrderName('');
         setCampaignId(null);
@@ -1493,7 +1495,7 @@ export function QuoteBuilderScreen({
         setTreatDefaultMarketAsPlaceholder(true);
         setMarketPopupManagedFlow(true);
         setHasSavedMarketViaPopup(false);
-        lastPersistedValuesRef.current = defaultValuesSerialized;
+        lastPersistedValuesRef.current = stableSerialize(tenantDefaultValues);
         campaignHydratedRef.current = true;
         await setStoredCampaignId(null, effectiveTenantId);
       } catch {

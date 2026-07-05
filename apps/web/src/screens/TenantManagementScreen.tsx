@@ -33,11 +33,13 @@ type TenantManagementScreenProps = {
 
 type TenantFormState = {
   name: string;
+  code: string;
 };
 
 function emptyTenantForm(): TenantFormState {
   return {
     name: "",
+    code: "",
   };
 }
 
@@ -106,7 +108,7 @@ export function TenantManagementScreen({
 
   function openEditTenantDialog(tenant: TenantRecord) {
     setEditingTenantId(tenant.id);
-    setTenantForm({ name: tenant.name });
+    setTenantForm({ name: tenant.name, code: tenant.code });
     setTenantDialogError("");
     setTenantDialogOpen(true);
   }
@@ -127,6 +129,7 @@ export function TenantManagementScreen({
       if (editingTenantId) {
         const response = await updateTenant(editingTenantId, {
           name: tenantForm.name,
+          code: tenantForm.code,
         });
         setTenants((current) =>
           current.map((tenant) =>
@@ -137,6 +140,7 @@ export function TenantManagementScreen({
       } else {
         const response = await createTenant({
           name: tenantForm.name,
+          code: tenantForm.code,
         });
         setTenants((current) =>
           [...current, response.tenant].sort((left, right) =>
@@ -390,13 +394,27 @@ export function TenantManagementScreen({
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label>Code</Label>
+                <Input
+                  value={tenantForm.code}
+                  onChange={(event) =>
+                    setTenantForm((current) => ({
+                      ...current,
+                      code: event.target.value,
+                    }))
+                  }
+                  placeholder="C00003"
+                />
+              </div>
+
               <div className="flex justify-end gap-3">
                 <Button onClick={closeTenantDialog} type="button" variant="ghost">
                   Cancel
                 </Button>
 
                 <Button
-                  disabled={savingTenant || !tenantForm.name.trim()}
+                  disabled={savingTenant || !tenantForm.name.trim() || !tenantForm.code.trim()}
                   onClick={() => void handleSaveTenant()}
                   type="button"
                 >

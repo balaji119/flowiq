@@ -1,0 +1,9 @@
+ALTER TABLE tenants
+ADD COLUMN code TEXT;
+
+UPDATE tenants
+SET code = 'C00003'
+WHERE code IS NULL;
+
+ALTER TABLE tenants
+ALTER COLUMN code SET NOT NULL;

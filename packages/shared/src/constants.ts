@@ -30,9 +30,9 @@ export function createCampaignMarket(id: string, weekCount = 1): CampaignMarket 
   };
 }
 
-export function createDefaultFormValues(): OrderFormValues {
+export function createDefaultFormValues(customerCode = ''): OrderFormValues {
   return {
-    customerCode: 'C00003',
+    customerCode,
     customerReference: 'Q14259:1.0',
     campaignName: '',
     jobDescription: '',

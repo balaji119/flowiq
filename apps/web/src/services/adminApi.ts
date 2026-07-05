@@ -29,14 +29,14 @@ export async function fetchTenants() {
   return apiFetchJson<{ tenants: TenantRecord[] }>('/api/admin/tenants');
 }
 
-export async function createTenant(payload: { name: string }) {
+export async function createTenant(payload: { name: string; code: string }) {
   return apiFetchJson<{ tenant: TenantRecord }>('/api/admin/tenants', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export async function updateTenant(tenantId: string, payload: { name: string }) {
+export async function updateTenant(tenantId: string, payload: { name: string; code: string }) {
   return apiFetchJson<{ tenant: TenantRecord }>(`/api/admin/tenants/${encodeURIComponent(tenantId)}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),

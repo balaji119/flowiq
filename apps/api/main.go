@@ -285,6 +285,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/campaign-images/{storedName}/chunk", http.HandlerFunc(a.handleCampaignImageChunk))
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(filepath.Join(".", "storage", "uploads")))))
 	mux.Handle("GET /api/admin/tenants", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListTenants), "super_admin")))
+	mux.Handle("GET /api/tenant", a.withAuth(http.HandlerFunc(a.handleGetTenant)))
 	mux.Handle("POST /api/admin/tenants", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleCreateTenant), "super_admin")))
 	mux.Handle("PATCH /api/admin/tenants/{tenantId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpdateTenant), "super_admin")))
 	mux.Handle("DELETE /api/admin/tenants/{tenantId}", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleDeleteTenant), "super_admin")))
@@ -1750,16 +1751,31 @@ func (a *app) handleListTenants(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"tenants": tenants})
 }
 
+func (a *app) handleGetTenant(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	tenant, err := a.authStore.getTenant(*tenantID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tenant": tenant})
+}
+
 func (a *app) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		Name string `json:"name"`
+		Code string `json:"code"`
 	}
 	if err := decodeJSONBody(r, &payload); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
 
-	tenant, err := a.authStore.createTenant(payload.Name)
+	tenant, err := a.authStore.createTenant(payload.Name, payload.Code)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -1770,13 +1786,14 @@ func (a *app) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 func (a *app) handleUpdateTenant(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		Name string `json:"name"`
+		Code string `json:"code"`
 	}
 	if err := decodeJSONBody(r, &payload); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
 
-	tenant, err := a.authStore.updateTenant(r.PathValue("tenantId"), payload.Name)
+	tenant, err := a.authStore.updateTenant(r.PathValue("tenantId"), payload.Name, payload.Code)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
