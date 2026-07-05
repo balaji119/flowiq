@@ -5622,7 +5622,7 @@ export function QuoteBuilderScreen({
                                       const multiArtworkFrameCount = formatKey ? frameCountForFormat(line?.breakdown, formatKey) : 0;
                                       const slotArtworkIds = formatKey ? expandedArtworkImageIdsForFormat(asset, formatKey) : [];
                                       const hasAnySlotArtwork = slotArtworkIds.some((id) => Boolean((id || '').trim()));
-                                      const hasCombinedAssignment = hasAnySlotArtwork || hasAssignedMaterial;
+                                      const hasArtworkAssignment = hasAnySlotArtwork;
                                       return (
                                         <tr key={`finalize-map-row-${asset.id}-${formatKey ?? 'none'}-${index}`} className="border-b border-slate-700/70 align-middle last:border-b-0">
                                           {index === 0 ? (
@@ -5650,10 +5650,10 @@ export function QuoteBuilderScreen({
                                                         : openAssignArtworkDialog(market.id, asset.id, formatKey)
                                                   }
                                                   type="button"
-                                                  variant={multiArtworkSlotCount > 0 ? (hasCombinedAssignment ? 'outline' : 'secondary') : selectedCreativeId ? 'outline' : 'secondary'}
+                                                  variant={multiArtworkSlotCount > 0 ? (hasArtworkAssignment ? 'outline' : 'secondary') : selectedCreativeId ? 'outline' : 'secondary'}
                                                 >
                                                   {multiArtworkSlotCount > 0 ? (
-                                                    hasCombinedAssignment ? (
+                                                    hasArtworkAssignment ? (
                                                       <>
                                                         <Eye className="h-3.5 w-3.5" />
                                                         Show
@@ -6074,7 +6074,7 @@ export function QuoteBuilderScreen({
                               const multiArtworkFrameCount = formatKey ? frameCountForFormat(line?.breakdown, formatKey) : 0;
                               const slotArtworkIds = formatKey ? expandedArtworkImageIdsForFormat(asset, formatKey) : [];
                               const hasAnySlotArtwork = slotArtworkIds.some((id) => Boolean((id || '').trim()));
-                              const hasCombinedAssignment = hasAnySlotArtwork || hasAssignedMaterial;
+                              const hasArtworkAssignment = hasAnySlotArtwork;
                               return (
                                 <tr key={`expanded-market-row-${asset.id}-${formatKey ?? 'none'}-${index}`} className="border-b border-slate-700/70 align-top last:border-b-0">
                                   {index === 0 ? (
@@ -6102,10 +6102,10 @@ export function QuoteBuilderScreen({
                                                 : openAssignArtworkDialog(expandedMarket.id, asset.id, formatKey)
                                           }
                                           type="button"
-                                          variant={multiArtworkSlotCount > 0 ? (hasCombinedAssignment ? 'outline' : 'secondary') : selectedCreativeId ? 'outline' : 'secondary'}
+                                          variant={multiArtworkSlotCount > 0 ? (hasArtworkAssignment ? 'outline' : 'secondary') : selectedCreativeId ? 'outline' : 'secondary'}
                                         >
                                           {multiArtworkSlotCount > 0 ? (
-                                            hasCombinedAssignment ? (
+                                            hasArtworkAssignment ? (
                                               <>
                                                 <Eye className="h-3.5 w-3.5" />
                                                 Show
