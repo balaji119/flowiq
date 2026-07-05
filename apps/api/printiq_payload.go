@@ -133,7 +133,7 @@ func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSum
 	}
 	setStringIfPresent(payload, "Notes", values.Notes)
 	setStringIfPresent(payload, "JobTitle", values.CampaignName)
-	setStringIfPresent(payload, "ProductCode", values.ProductCategory)
+	setStringIfPresent(payload, "ProductCode", values.ProductCode)
 	setStringIfPresent(payload, "CustomerCode", values.CustomerCode)
 	setStringIfPresent(payload, "CustomerReference", values.CustomerReference)
 	setStringIfPresent(payload, "SpecialInstructions", values.JobDescription)

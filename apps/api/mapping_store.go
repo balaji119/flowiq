@@ -110,6 +110,7 @@ type sheetNameOverrideRow struct {
 	Overrides              []byte
 	MultipleArtworkFormats []byte
 	CustomPrintCostFormats []byte
+	ProductCodes           []byte
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 }
@@ -483,6 +484,7 @@ func scanSheetNameOverrideRow(scanner interface {
 		&row.Overrides,
 		&row.MultipleArtworkFormats,
 		&row.CustomPrintCostFormats,
+		&row.ProductCodes,
 		&row.CreatedAt,
 		&row.UpdatedAt,
 	)
@@ -520,6 +522,7 @@ func decodeSheetNameOverrideRow(row sheetNameOverrideRow) (sheetNameOverrideReco
 	overrides := sheetNameOverrides{}
 	multipleArtworkFormats := map[string]bool{}
 	customPrintCostFormats := map[string]bool{}
+	productCodes := sheetNameOverrides{}
 	if len(row.Overrides) > 0 {
 		if err := json.Unmarshal(row.Overrides, &overrides); err != nil {
 			return sheetNameOverrideRecord{}, err
@@ -535,11 +538,17 @@ func decodeSheetNameOverrideRow(row sheetNameOverrideRow) (sheetNameOverrideReco
 			return sheetNameOverrideRecord{}, err
 		}
 	}
+	if len(row.ProductCodes) > 0 {
+		if err := json.Unmarshal(row.ProductCodes, &productCodes); err != nil {
+			return sheetNameOverrideRecord{}, err
+		}
+	}
 	return sheetNameOverrideRecord{
 		TenantID:               row.TenantID,
 		Overrides:              normalizeSheetNameOverrides(overrides),
 		MultipleArtworkFormats: normalizeMultipleArtworkFormats(multipleArtworkFormats),
 		CustomPrintCostFormats: normalizeMultipleArtworkFormats(customPrintCostFormats),
+		ProductCodes:           normalizeSheetNameOverrides(productCodes),
 		CreatedAt:              row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:              row.UpdatedAt.UTC().Format(time.RFC3339),
 	}, nil
@@ -551,12 +560,12 @@ func (s *mappingStore) listSheetNameOverrides(ctx context.Context, tenantID stri
 	}
 
 	row, err := scanSheetNameOverrideRow(s.pool.QueryRow(ctx, `
-		SELECT tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, created_at, updated_at
+		SELECT tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, product_codes, created_at, updated_at
 		FROM sheet_name_overrides
 		WHERE tenant_id = $1
 	`, tenantID))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return s.upsertSheetNameOverrides(ctx, tenantID, defaultSheetNameOverrides(), map[string]bool{}, map[string]bool{})
+		return s.upsertSheetNameOverrides(ctx, tenantID, defaultSheetNameOverrides(), map[string]bool{}, map[string]bool{}, sheetNameOverrides{"2-sheet": "2SheetTest"})
 	}
 	if err != nil {
 		return nil, err
@@ -569,7 +578,7 @@ func (s *mappingStore) listSheetNameOverrides(ctx context.Context, tenantID stri
 	return &record, nil
 }
 
-func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID string, overrides sheetNameOverrides, multipleArtworkFormats, customPrintCostFormats map[string]bool) (*sheetNameOverrideRecord, error) {
+func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID string, overrides sheetNameOverrides, multipleArtworkFormats, customPrintCostFormats map[string]bool, productCodes sheetNameOverrides) (*sheetNameOverrideRecord, error) {
 	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
 		return nil, err
 	}
@@ -577,6 +586,7 @@ func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID st
 	normalized := normalizeSheetNameOverrides(overrides)
 	normalizedMultipleArtworkFormats := normalizeMultipleArtworkFormats(multipleArtworkFormats)
 	normalizedCustomPrintCostFormats := normalizeMultipleArtworkFormats(customPrintCostFormats)
+	normalizedProductCodes := normalizeSheetNameOverrides(productCodes)
 	overridesJSON, err := json.Marshal(normalized)
 	if err != nil {
 		return nil, err
@@ -589,18 +599,23 @@ func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID st
 	if err != nil {
 		return nil, err
 	}
+	productCodesJSON, err := json.Marshal(normalizedProductCodes)
+	if err != nil {
+		return nil, err
+	}
 
 	row, err := scanSheetNameOverrideRow(s.pool.QueryRow(ctx, `
-		INSERT INTO sheet_name_overrides (tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, created_at, updated_at)
-		VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb, NOW(), NOW())
+		INSERT INTO sheet_name_overrides (tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, product_codes, created_at, updated_at)
+		VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb, NOW(), NOW())
 		ON CONFLICT (tenant_id)
 		DO UPDATE SET
 			overrides = EXCLUDED.overrides,
 			multiple_artwork_formats = EXCLUDED.multiple_artwork_formats,
 			custom_print_cost_formats = EXCLUDED.custom_print_cost_formats,
+			product_codes = EXCLUDED.product_codes,
 			updated_at = NOW()
-		RETURNING tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, created_at, updated_at
-	`, tenantID, string(overridesJSON), string(multipleArtworkFormatsJSON), string(customPrintCostFormatsJSON)))
+		RETURNING tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, product_codes, created_at, updated_at
+	`, tenantID, string(overridesJSON), string(multipleArtworkFormatsJSON), string(customPrintCostFormatsJSON), string(productCodesJSON)))
 	if err != nil {
 		return nil, err
 	}

@@ -30,14 +30,14 @@ export function createCampaignMarket(id: string, weekCount = 1): CampaignMarket 
   };
 }
 
-export function createDefaultFormValues(customerCode = ''): OrderFormValues {
+export function createDefaultFormValues(customerCode = '', productCode = ''): OrderFormValues {
   return {
     customerCode,
     customerReference: 'Q14259:1.0',
     campaignName: '',
     jobDescription: '',
     notes: '',
-    productCategory: '2SheetTest',
+    productCode,
     quantity: '',
     kindName: 'Campaign-01',
     campaignStartDate: getTodayDateInputValue(),

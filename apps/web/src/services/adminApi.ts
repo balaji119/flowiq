@@ -232,7 +232,7 @@ export async function fetchAdminSheetNameOverrides(tenantId?: string) {
   return apiFetchJson<{ settings: SheetNameOverrideRecord }>(`/api/admin/sheet-name-overrides${query}`);
 }
 
-export async function upsertAdminSheetNameOverrides(payload: { overrides: SheetNameOverrides; multipleArtworkFormats?: Record<string, boolean>; customPrintCostFormats?: Record<string, boolean> }, tenantId?: string) {
+export async function upsertAdminSheetNameOverrides(payload: { overrides: SheetNameOverrides; multipleArtworkFormats?: Record<string, boolean>; customPrintCostFormats?: Record<string, boolean>; productCodes?: Record<string, string> }, tenantId?: string) {
   const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
   return apiFetchJson<{ settings: SheetNameOverrideRecord }>(`/api/admin/sheet-name-overrides${query}`, {
     method: 'PUT',

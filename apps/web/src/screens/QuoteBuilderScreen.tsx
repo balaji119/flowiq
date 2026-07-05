@@ -452,7 +452,7 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
 
   return {
     ...values,
-    productCategory: values.productCategory || createDefaultFormValues().productCategory,
+    productCode: values.productCode || createDefaultFormValues().productCode,
     campaignMarkets: (values.campaignMarkets ?? []).map((market) => ({
       ...market,
       assets: (market.assets ?? []).map((asset) => {
@@ -1480,9 +1480,15 @@ export function QuoteBuilderScreen({
             await setStoredCampaignId(null, effectiveTenantId);
           }
         }
-        const tenantResponse = await fetchTenant(effectiveTenantId);
+        const [tenantResponse, sheetSettingsResponse] = await Promise.all([
+          fetchTenant(effectiveTenantId),
+          fetchCampaignSheetNameOverrides(effectiveTenantId),
+        ]);
         if (!active) return;
-        const tenantDefaultValues = createDefaultFormValues(tenantResponse.tenant.code);
+        const tenantDefaultValues = createDefaultFormValues(
+          tenantResponse.tenant.code,
+          sheetSettingsResponse.settings.productCodes?.['2-sheet'] ?? '',
+        );
         setValues(tenantDefaultValues);
         setSummary(null);
         setUploadedPurchaseOrderName('');

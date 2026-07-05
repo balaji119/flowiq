@@ -22,6 +22,7 @@ type sheetNameOverrideRecord struct {
 	Overrides              sheetNameOverrides `json:"overrides"`
 	MultipleArtworkFormats map[string]bool    `json:"multipleArtworkFormats,omitempty"`
 	CustomPrintCostFormats map[string]bool    `json:"customPrintCostFormats,omitempty"`
+	ProductCodes           map[string]string  `json:"productCodes,omitempty"`
 	CreatedAt              string             `json:"createdAt"`
 	UpdatedAt              string             `json:"updatedAt"`
 }
@@ -98,7 +99,7 @@ type orderFormValues struct {
 	CampaignName            string               `json:"campaignName"`
 	JobDescription          string               `json:"jobDescription"`
 	Notes                   string               `json:"notes"`
-	ProductCategory         string               `json:"productCategory"`
+	ProductCode             string               `json:"productCode"`
 	Quantity                string               `json:"quantity"`
 	KindName                string               `json:"kindName"`
 	CampaignStartDate       string               `json:"campaignStartDate"`

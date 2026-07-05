@@ -44,6 +44,7 @@ export type SheetNameOverrideRecord = {
   overrides: SheetNameOverrides;
   multipleArtworkFormats?: Record<string, boolean>;
   customPrintCostFormats?: Record<string, boolean>;
+  productCodes?: Record<string, string>;
   createdAt: string;
   updatedAt: string;
 };
@@ -309,7 +310,7 @@ export type OrderFormValues = {
   campaignName: string;
   jobDescription: string;
   notes: string;
-  productCategory: string;
+  productCode: string;
   quantity: string;
   kindName: string;
   campaignStartDate: string;
