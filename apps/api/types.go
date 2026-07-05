@@ -99,20 +99,7 @@ type orderFormValues struct {
 	JobDescription          string               `json:"jobDescription"`
 	Notes                   string               `json:"notes"`
 	ProductCategory         string               `json:"productCategory"`
-	SectionType             string               `json:"sectionType"`
-	FoldCatalog             string               `json:"foldCatalog"`
-	StockCode               string               `json:"stockCode"`
-	Packing                 string               `json:"packing"`
-	Finish                  string               `json:"finish"`
-	Print                   string               `json:"print"`
-	ProductCode             string               `json:"productCode"`
-	TargetFreightPrice      string               `json:"targetFreightPrice"`
 	Quantity                string               `json:"quantity"`
-	FinishWidth             string               `json:"finishWidth"`
-	FinishHeight            string               `json:"finishHeight"`
-	SectionWidth            string               `json:"sectionWidth"`
-	SectionHeight           string               `json:"sectionHeight"`
-	Pages                   string               `json:"pages"`
 	KindName                string               `json:"kindName"`
 	CampaignStartDate       string               `json:"campaignStartDate"`
 	DueDate                 string               `json:"dueDate"`

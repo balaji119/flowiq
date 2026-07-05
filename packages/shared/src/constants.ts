@@ -38,20 +38,7 @@ export function createDefaultFormValues(customerCode = ''): OrderFormValues {
     jobDescription: '',
     notes: '',
     productCategory: '2SheetTest',
-    sectionType: 'Single-Section',
-    foldCatalog: 'Flat Product',
-    productCode: '1177V01',
-    stockCode: '200gsm Sovereign Silk',
-    packing: 'Bulk Pack and Label',
-    finish: 'Trim to size',
-    print: '4 Colour Process - One side',
-    targetFreightPrice: '',
     quantity: '',
-    finishWidth: '80',
-    finishHeight: '420',
-    sectionWidth: '80',
-    sectionHeight: '420',
-    pages: '2',
     kindName: 'Campaign-01',
     campaignStartDate: getTodayDateInputValue(),
     dueDate: '',
@@ -67,5 +54,3 @@ export function createDefaultFormValues(customerCode = ''): OrderFormValues {
     },
   };
 }
-
-export const defaultFormValues: OrderFormValues = createDefaultFormValues();

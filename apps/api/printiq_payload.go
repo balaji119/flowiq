@@ -37,14 +37,6 @@ func resolveQuantity(values orderFormValues, summary *campaignSummary) int {
 	return 0
 }
 
-func numberOrZero(value string) int {
-	parsed, err := strconv.Atoi(strings.TrimSpace(value))
-	if err != nil {
-		return 0
-	}
-	return parsed
-}
-
 func firstCampaignDeliveryAddress(values orderFormValues) string {
 	for _, market := range values.CampaignMarkets {
 		for _, asset := range market.Assets {
@@ -129,8 +121,6 @@ func stringMapHasValues(value map[string]any) bool {
 
 func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSummary) map[string]any {
 	quantity := resolveQuantity(values, summary)
-	finishWidth := numberOrZero(values.FinishWidth)
-	finishHeight := numberOrZero(values.FinishHeight)
 	deliveryAddress := parseCampaignDeliveryAddress(firstCampaignDeliveryAddress(values))
 
 	payload := map[string]any{
@@ -186,28 +176,6 @@ func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSum
 		payload["DeliveryContact"] = deliveryContact
 	}
 	setStringIfPresent(payload, "DeliveryNotes", deliveryAddress.Notes)
-
-	externalProduct := map[string]any{}
-	setStringIfPresent(externalProduct, "ProductCode", values.ProductCode)
-	setStringIfPresent(externalProduct, "Description", firstNonEmpty(values.JobDescription, values.CampaignName))
-	if finishWidth > 0 || finishHeight > 0 {
-		size := map[string]any{}
-		if finishWidth > 0 {
-			size["Width"] = float64(finishWidth)
-		}
-		if finishHeight > 0 {
-			size["Height"] = float64(finishHeight)
-		}
-		externalProduct["SizeMM"] = size
-	}
-	setStringIfPresent(externalProduct, "Print", values.Print)
-	setStringIfPresent(externalProduct, "Stock", values.StockCode)
-	setStringIfPresent(externalProduct, "Finish", values.Finish)
-	setStringIfPresent(externalProduct, "Packing", values.Packing)
-	setStringIfPresent(externalProduct, "InternalSKU", values.KindName)
-	if stringMapHasValues(externalProduct) {
-		payload["ExternalProduct"] = externalProduct
-	}
 
 	return payload
 }

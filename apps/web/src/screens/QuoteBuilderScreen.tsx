@@ -452,9 +452,6 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
 
   return {
     ...values,
-    packing: values.packing || createDefaultFormValues().packing,
-    finish: values.finish || createDefaultFormValues().finish,
-    print: values.print || createDefaultFormValues().print,
     productCategory: values.productCategory || createDefaultFormValues().productCategory,
     campaignMarkets: (values.campaignMarkets ?? []).map((market) => ({
       ...market,
