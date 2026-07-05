@@ -701,7 +701,7 @@ func (s *campaignStore) calculateCampaign(ctx context.Context, user AuthUser, ca
 	return updatedCampaign, summary, nil
 }
 
-func (s *campaignStore) recordSubmission(ctx context.Context, user AuthUser, campaignID string, requestPayload, responsePayload any, amount any, externalJobID string) (*campaignRecord, error) {
+func (s *campaignStore) recordSubmission(ctx context.Context, user AuthUser, campaignID string, requestPayload, responsePayload any, amount any, externalJobIDs []string) (*campaignRecord, error) {
 	campaign, err := s.getCampaign(ctx, user, campaignID)
 	if err != nil {
 		return nil, err
@@ -736,17 +736,17 @@ func (s *campaignStore) recordSubmission(ctx context.Context, user AuthUser, cam
 		return nil, err
 	}
 
-	var externalJobIDText *string
-	if strings.TrimSpace(externalJobID) != "" {
-		value := strings.TrimSpace(externalJobID)
-		externalJobIDText = &value
-	}
-
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO jobs (id, tenant_id, campaign_id, quote_id, external_job_id, status, request_payload, response_payload, created_by_user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, 'submitted_to_printiq', $6::jsonb, $7::jsonb, $8, NOW(), NOW())
-	`, uuid.NewString(), campaign.TenantID, campaign.ID, quoteID, externalJobIDText, string(requestPayloadJSON), string(responsePayloadJSON), user.ID); err != nil {
-		return nil, err
+	for _, externalJobID := range externalJobIDs {
+		trimmedJobID := strings.TrimSpace(externalJobID)
+		if trimmedJobID == "" {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO jobs (id, tenant_id, campaign_id, quote_id, external_job_id, status, request_payload, response_payload, created_by_user_id, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, 'submitted_to_printiq', $6::jsonb, $7::jsonb, $8, NOW(), NOW())
+		`, uuid.NewString(), campaign.TenantID, campaign.ID, quoteID, trimmedJobID, string(requestPayloadJSON), string(responsePayloadJSON), user.ID); err != nil {
+			return nil, err
+		}
 	}
 
 	if _, err := tx.Exec(ctx, `

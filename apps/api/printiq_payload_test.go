@@ -3,11 +3,9 @@ package main
 import "testing"
 
 func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndQuantities(t *testing.T) {
-	summary := &campaignSummary{GrandTotal: campaignTotals{Breakdown: quantityBreakdown{
-		"8-sheet": 40,
-		"4-sheet": 10,
-	}}}
-	products, err := resolvePrintIQSheetProducts(summary, map[string]string{
+	values := orderFormValues{CampaignMarkets: []campaignMarket{{Assets: []campaignAsset{{ID: "asset-1"}}}}}
+	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]string{
 		"8-sheet": "Quad Product",
 		"4-sheet": "Double Product",
 	})
@@ -26,12 +24,38 @@ func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndQuantities(t *testing.
 }
 
 func TestResolvePrintIQSheetProductsRequiresEveryActiveProductCode(t *testing.T) {
-	summary := &campaignSummary{GrandTotal: campaignTotals{Breakdown: quantityBreakdown{
-		"8-sheet": 40,
-		"4-sheet": 10,
-	}}}
-	if _, err := resolvePrintIQSheetProducts(summary, map[string]string{"8-sheet": "Quad Product"}); err == nil {
+	values := orderFormValues{CampaignMarkets: []campaignMarket{{Assets: []campaignAsset{{ID: "asset-1"}}}}}
+	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}
+	if _, err := resolvePrintIQSheetProducts(values, summary, map[string]string{"8-sheet": "Quad Product"}); err == nil {
 		t.Fatal("expected missing product code error")
+	}
+}
+
+func TestResolvePrintIQSheetProductsSplitsQuantityByArtwork(t *testing.T) {
+	values := orderFormValues{
+		CampaignMarkets: []campaignMarket{
+			{
+				Assets: []campaignAsset{
+					{
+						ID: "asset-1",
+						ArtworkMaterialAssignments: map[string][]artworkMaterialAssignment{
+							"8-sheet": {
+								{ArtworkImageID: "artwork-a", FrameCount: 15},
+								{ArtworkImageID: "artwork-b", FrameCount: 10},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Breakdown: quantityBreakdown{"8-sheet": 100}}}}
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]string{"8-sheet": "Quad Product"})
+	if err != nil {
+		t.Fatalf("resolve products: %v", err)
+	}
+	if len(products) != 2 || products[0].Quantity != 60 || products[0].ArtworkImageID != "artwork-a" || products[1].Quantity != 40 || products[1].ArtworkImageID != "artwork-b" {
+		t.Fatalf("unexpected split products: %#v", products)
 	}
 }
 
@@ -47,5 +71,20 @@ func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 	quantities, ok := payload["Quantities"].([]map[string]any)
 	if !ok || len(quantities) != 1 || quantities[0]["Quantity"] != 10 || quantities[0]["Kinds"] != 1 {
 		t.Fatalf("unexpected quantities: %#v", payload["Quantities"])
+	}
+}
+
+func TestExtractAcceptedProductsPreservesProductOrder(t *testing.T) {
+	response := map[string]any{
+		"AcceptanceDetails": map[string]any{
+			"Products": []any{
+				map[string]any{"JobNo": "J29328-01", "MiddlewareProductDetail": map[string]any{"Sections": []any{map[string]any{"QSTKey": float64(1)}}}},
+				map[string]any{"JobNo": "J29328-02", "MiddlewareProductDetail": map[string]any{"Sections": []any{map[string]any{"QSTKey": float64(2)}}}},
+			},
+		},
+	}
+	products := extractAcceptedProducts(response)
+	if len(products) != 2 || products[0].JobNo != "J29328-01" || products[1].JobNo != "J29328-02" {
+		t.Fatalf("unexpected accepted products: %#v", products)
 	}
 }

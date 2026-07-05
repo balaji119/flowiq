@@ -1089,7 +1089,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	sheetProducts, err := resolvePrintIQSheetProducts(campaign.Summary, sheetSettings.ProductCodes)
+	sheetProducts, err := resolvePrintIQSheetProducts(campaign.Values, campaign.Summary, sheetSettings.ProductCodes)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -1130,30 +1130,43 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobNo := extractJobNo(acceptQuoteResponse)
-	if jobNo == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "PrintIQ accept quote response did not include JobNo", "details": acceptQuoteResponse})
+	acceptedProducts := extractAcceptedProducts(acceptQuoteResponse)
+	if len(acceptedProducts) != len(sheetProducts) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ returned %d accepted products for %d submitted product lines", len(acceptedProducts), len(sheetProducts)), "details": acceptQuoteResponse})
 		return
+	}
+	jobNos := make([]string, len(acceptedProducts))
+	for index, acceptedProduct := range acceptedProducts {
+		if acceptedProduct.JobNo == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ accepted product %d did not include JobNo", index+1), "details": acceptQuoteResponse})
+			return
+		}
+		jobNos[index] = acceptedProduct.JobNo
 	}
 
-	qstKey := extractQSTKey(acceptQuoteResponse)
-	if qstKey == nil {
-		qstKey = extractQSTKey(createQuoteResponse)
-	}
-
-	artworkUploads, err := a.extractCampaignArtworkUploads(r.Context(), campaign.Values)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	uploadArtworkPayloads := make([]any, 0, len(artworkUploads))
-	uploadArtworkResponses := make([]any, 0, len(artworkUploads))
-	if len(artworkUploads) > 0 && qstKey == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "PrintIQ response did not include QSTKey for artwork upload", "details": acceptQuoteResponse})
-		return
-	}
-	for index, artwork := range artworkUploads {
-		uploadPayload := buildPrintIQUploadArtworkPayload(jobNo, qstKey, artwork, index, len(artworkUploads))
+	uploadArtworkPayloads := make([]any, 0, len(sheetProducts))
+	uploadArtworkResponses := make([]any, 0, len(sheetProducts))
+	for index, product := range sheetProducts {
+		artwork, err := a.extractCampaignArtworkUpload(r.Context(), campaign.Values, product.ArtworkImageID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if artwork == nil {
+			continue
+		}
+		qstKey := acceptedProducts[index].QSTKey
+		if qstKey == nil {
+			qstKey = extractQSTKey(acceptQuoteResponse)
+		}
+		if qstKey == nil {
+			qstKey = extractQSTKey(createQuoteResponse)
+		}
+		if qstKey == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ accepted product %d did not include QSTKey for artwork upload", index+1), "details": acceptQuoteResponse})
+			return
+		}
+		uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, qstKey, *artwork, 0, 1)
 		uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
 		uploadResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
 		if !ok {
@@ -1174,17 +1187,16 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		"acceptQuote":             acceptQuoteResponse,
 		"uploadArtworkURL":        uploadArtworkResponses,
 		"quoteNo":                 quoteNo,
-		"jobNo":                   jobNo,
-		"qstKey":                  qstKey,
+		"jobNos":                  jobNos,
 	}
 
-	updatedCampaign, err := a.campaignStore.recordSubmission(r.Context(), *user, campaign.ID, requestPayload, responsePayload, nil, jobNo)
+	updatedCampaign, err := a.campaignStore.recordSubmission(r.Context(), *user, campaign.ID, requestPayload, responsePayload, nil, jobNos)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"campaign": updatedCampaign, "amount": nil, "quoteNo": quoteNo, "jobNo": jobNo})
+	writeJSON(w, http.StatusOK, map[string]any{"campaign": updatedCampaign, "amount": nil, "quoteNo": quoteNo, "jobNo": jobNos[0], "jobNos": jobNos})
 }
 
 func (a *app) handleMarkCampaignSubmitted(w http.ResponseWriter, r *http.Request) {

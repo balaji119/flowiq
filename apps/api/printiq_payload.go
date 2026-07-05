@@ -28,9 +28,10 @@ type printIQArtworkUpload struct {
 }
 
 type printIQSheetProduct struct {
-	FormatKey   string
-	ProductCode string
-	Quantity    int
+	FormatKey      string
+	ProductCode    string
+	Quantity       int
+	ArtworkImageID string
 }
 
 var printIQSheetFormatOrder = []struct {
@@ -48,25 +49,61 @@ var printIQSheetFormatOrder = []struct {
 	{"FF", "ff"},
 }
 
-func resolvePrintIQSheetProducts(summary *campaignSummary, productCodes map[string]string) ([]printIQSheetProduct, error) {
+func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummary, productCodes map[string]string) ([]printIQSheetProduct, error) {
 	if summary == nil {
 		return nil, errors.New("Campaign calculation summary is required")
 	}
+	assets := map[string]campaignAsset{}
+	for _, market := range values.CampaignMarkets {
+		for _, asset := range market.Assets {
+			assets[asset.ID] = asset
+		}
+	}
 	products := make([]printIQSheetProduct, 0)
 	for _, format := range printIQSheetFormatOrder {
-		quantity := summary.GrandTotal.Breakdown[format.breakdownKey]
-		if quantity <= 0 {
-			continue
-		}
 		productCode := strings.TrimSpace(productCodes[format.settingsKey])
-		if productCode == "" {
-			return nil, fmt.Errorf("Product Code is required for sheet type %s", format.breakdownKey)
+		for _, summaryLine := range summary.Lines {
+			quantity := summaryLine.Breakdown[format.breakdownKey]
+			if quantity <= 0 {
+				continue
+			}
+			if productCode == "" {
+				return nil, fmt.Errorf("Product Code is required for sheet type %s", format.breakdownKey)
+			}
+			asset := assets[summaryLine.ID]
+			assignments := asset.ArtworkMaterialAssignments[format.breakdownKey]
+			if len(assignments) == 0 {
+				artworkImageID := asset.CreativeImageIDs[format.breakdownKey]
+				if artworkImageID == "" && format.breakdownKey == "8-sheet" {
+					artworkImageID = asset.CreativeImageID
+				}
+				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, Quantity: quantity, ArtworkImageID: artworkImageID})
+				continue
+			}
+
+			divisor := map[string]int{"8-sheet": 4, "QA0": 4, "6-sheet": 3, "4-sheet": 2}[format.breakdownKey]
+			if divisor == 0 {
+				divisor = 1
+			}
+			remaining := quantity
+			firstProductIndex := len(products)
+			for _, assignment := range assignments {
+				if assignment.FrameCount <= 0 || remaining <= 0 {
+					continue
+				}
+				assignedQuantity := assignment.FrameCount * divisor
+				if assignedQuantity > remaining {
+					assignedQuantity = remaining
+				}
+				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, Quantity: assignedQuantity, ArtworkImageID: assignment.ArtworkImageID})
+				remaining -= assignedQuantity
+			}
+			if remaining > 0 && len(products) > firstProductIndex {
+				products[len(products)-1].Quantity += remaining
+			} else if remaining > 0 {
+				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, Quantity: remaining})
+			}
 		}
-		products = append(products, printIQSheetProduct{
-			FormatKey:   format.breakdownKey,
-			ProductCode: productCode,
-			Quantity:    quantity,
-		})
 	}
 	if len(products) == 0 {
 		return nil, errors.New("Campaign has no sheet quantities to submit")
@@ -243,39 +280,32 @@ func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSum
 	return payload
 }
 
-func (a *app) extractCampaignArtworkUploads(ctx context.Context, values orderFormValues) ([]printIQArtworkUpload, error) {
-	uploads := make([]printIQArtworkUpload, 0, len(values.PrintImages))
-	seen := map[string]bool{}
-	for index, image := range values.PrintImages {
+func (a *app) extractCampaignArtworkUpload(ctx context.Context, values orderFormValues, imageID string) (*printIQArtworkUpload, error) {
+	trimmedImageID := strings.TrimSpace(imageID)
+	if trimmedImageID == "" {
+		return nil, nil
+	}
+	for _, image := range values.PrintImages {
+		if image.ID != trimmedImageID {
+			continue
+		}
 		artworkURL, err := a.resolvePrintIQArtworkURL(ctx, image)
 		if err != nil {
 			return nil, err
 		}
-		if artworkURL == "" || seen[artworkURL] {
-			continue
+		if artworkURL == "" {
+			return nil, nil
 		}
-		seen[artworkURL] = true
-
-		overrideFileName := strings.TrimSpace(values.CreativeNameAssignments[image.ID])
-		if overrideFileName == "" {
-			overrideFileName = strings.TrimSpace(image.Name)
-		}
+		overrideFileName := strings.TrimSpace(image.Name)
 		if overrideFileName == "" {
 			overrideFileName = strings.TrimSpace(image.FileName)
-		}
-		if overrideFileName == "" {
-			overrideFileName = fmt.Sprintf("Artwork %d", index+1)
 		}
 		if ext := filepath.Ext(overrideFileName); ext != "" {
 			overrideFileName = strings.TrimSuffix(overrideFileName, ext)
 		}
-
-		uploads = append(uploads, printIQArtworkUpload{
-			ArtworkURL:       artworkURL,
-			OverrideFileName: overrideFileName,
-		})
+		return &printIQArtworkUpload{ArtworkURL: artworkURL, OverrideFileName: overrideFileName}, nil
 	}
-	return uploads, nil
+	return nil, fmt.Errorf("Assigned artwork %s was not found", trimmedImageID)
 }
 
 func (a *app) resolvePrintIQArtworkURL(ctx context.Context, image campaignPrintImage) (string, error) {

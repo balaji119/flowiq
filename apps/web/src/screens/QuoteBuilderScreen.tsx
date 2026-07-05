@@ -3290,7 +3290,8 @@ export function QuoteBuilderScreen({
       const savedCampaignId = await saveCampaignDraft();
       if (!savedCampaignId) return;
       const response = await submitCampaignToPrintIQ(savedCampaignId, effectiveTenantId);
-      const printIQNumbers = [response.quoteNo ? `Quote: ${response.quoteNo}` : '', response.jobNo ? `Job: ${response.jobNo}` : ''].filter(Boolean).join(', ');
+      const jobNumbers = response.jobNos?.length ? response.jobNos.join(', ') : response.jobNo;
+      const printIQNumbers = [response.quoteNo ? `Quote: ${response.quoteNo}` : '', jobNumbers ? `Jobs: ${jobNumbers}` : ''].filter(Boolean).join(', ');
       applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
       lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
       setQuoteResponseMessage(printIQNumbers ? `Quote created successfully. ${printIQNumbers}` : 'Quote created successfully.');

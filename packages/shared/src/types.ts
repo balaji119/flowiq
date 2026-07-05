@@ -377,6 +377,7 @@ export type CampaignSubmitResponse = {
   amount: number | string | null;
   quoteNo?: string;
   jobNo?: string;
+  jobNos?: string[];
 };
 
 export type LoginResponse = AuthSession;

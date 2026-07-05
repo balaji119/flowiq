@@ -525,11 +525,28 @@ func extractQuoteNo(result any) string {
 	return printIQStringValue(valueAtPath(result, "QuoteNo"))
 }
 
-func extractJobNo(result any) string {
-	if jobNo := findStringField(result, "JobNo"); jobNo != "" {
-		return jobNo
+type printIQAcceptedProduct struct {
+	JobNo  string
+	QSTKey any
+}
+
+func extractAcceptedProducts(result any) []printIQAcceptedProduct {
+	rawProducts, ok := valueAtPath(result, "AcceptanceDetails", "Products").([]any)
+	if !ok {
+		return nil
 	}
-	return findStringField(result, "JobNumber")
+	products := make([]printIQAcceptedProduct, 0, len(rawProducts))
+	for _, rawProduct := range rawProducts {
+		product, ok := rawProduct.(map[string]any)
+		if !ok {
+			continue
+		}
+		products = append(products, printIQAcceptedProduct{
+			JobNo:  printIQStringValue(product["JobNo"]),
+			QSTKey: findNonZeroField(product, "QSTKey"),
+		})
+	}
+	return products
 }
 
 func extractQSTKey(result any) any {
@@ -537,27 +554,6 @@ func extractQSTKey(result any) any {
 		return qstKey
 	}
 	return nil
-}
-
-func findStringField(value any, fieldName string) string {
-	switch typed := value.(type) {
-	case map[string]any:
-		if result := printIQStringValue(typed[fieldName]); result != "" {
-			return result
-		}
-		for _, nested := range typed {
-			if result := findStringField(nested, fieldName); result != "" {
-				return result
-			}
-		}
-	case []any:
-		for _, nested := range typed {
-			if result := findStringField(nested, fieldName); result != "" {
-				return result
-			}
-		}
-	}
-	return ""
 }
 
 func findNonZeroField(value any, fieldName string) any {
