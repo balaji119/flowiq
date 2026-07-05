@@ -263,6 +263,9 @@ export function TenantManagementScreen({
                     <th className="border border-slate-700 px-4 py-3 text-left">
                       Tenant
                     </th>
+                    <th className="border border-slate-700 px-4 py-3 text-left">
+                      Code
+                    </th>
                     <th className="border border-slate-700 px-4 py-3 text-center">
                       Users
                     </th>
@@ -291,6 +294,9 @@ export function TenantManagementScreen({
                             <Building2 className="h-4 w-4 text-violet-300" />
                             {tenant.name}
                           </span>
+                        </td>
+                        <td className="border border-slate-700 px-4 py-3 font-medium text-slate-200">
+                          {tenant.code}
                         </td>
                         <td className="border border-slate-700 px-4 py-3 text-center text-slate-200">
                           {tenant.userCount ?? 0}
@@ -338,7 +344,7 @@ export function TenantManagementScreen({
                     <tr className="bg-[#1a1733]">
                       <td
                         className="border border-slate-700 px-4 py-8 text-center text-sm text-slate-400"
-                        colSpan={5}
+                        colSpan={6}
                       >
                         No tenants found yet.
                       </td>
