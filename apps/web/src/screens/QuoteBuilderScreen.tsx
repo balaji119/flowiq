@@ -1255,6 +1255,7 @@ export function QuoteBuilderScreen({
   const [calculating, setCalculating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [quoteResponseMessage, setQuoteResponseMessage] = useState('');
+  const [quoteResponseStatus, setQuoteResponseStatus] = useState<'success' | 'error'>('success');
   const [error, setError] = useState('');
   const [exportingTemplates, setExportingTemplates] = useState(false);
   const [sendingAdsEmail, setSendingAdsEmail] = useState(false);
@@ -3285,6 +3286,7 @@ export function QuoteBuilderScreen({
     setSubmitting(true);
     setError('');
     setQuoteResponseMessage('');
+    setQuoteResponseStatus('success');
 
     try {
       const savedCampaignId = await saveCampaignDraft();
@@ -3296,7 +3298,13 @@ export function QuoteBuilderScreen({
       lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
       setQuoteResponseMessage(printIQNumbers ? `Quote created successfully. ${printIQNumbers}` : 'Quote created successfully.');
     } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : 'Unable to create quote');
+      const message = submissionError instanceof Error ? submissionError.message : 'Unable to create quote';
+      setQuoteResponseStatus('error');
+      setQuoteResponseMessage(
+        message.toLowerCase().includes('product code')
+          ? 'Product code configured is not correct. Contact Support'
+          : message,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -5115,7 +5123,6 @@ export function QuoteBuilderScreen({
       {(error || metadataError) ? (
         <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error || metadataError}</div>
       ) : null}
-      {quoteResponseMessage ? <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200">{quoteResponseMessage}</div> : null}
 
       <div className={cn('grid gap-7 pb-0 transition-[padding-right] duration-200 ease-out', reviewDrawerOpen ? 'lg:pr-[488px]' : 'lg:pr-0')}>
         <section>
@@ -7227,6 +7234,36 @@ export function QuoteBuilderScreen({
           <div className="flex justify-end">
             <Button
               onClick={() => setPurchaseOrderUploadSuccessOpen(false)}
+              type="button"
+              variant="secondary"
+            >
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(quoteResponseMessage)}
+        onOpenChange={(open) => {
+          if (!open) setQuoteResponseMessage('');
+        }}
+      >
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 30rem)' }}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {quoteResponseStatus === 'error' ? (
+                <CircleAlert className="h-5 w-5 text-rose-300" />
+              ) : (
+                <Check className="h-5 w-5 text-emerald-300" />
+              )}
+              {quoteResponseStatus === 'error' ? 'Unable to Submit Order' : 'Order Submitted'}
+            </DialogTitle>
+            <DialogDescription>{quoteResponseMessage}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <Button
+              onClick={() => setQuoteResponseMessage('')}
               type="button"
               variant="secondary"
             >

@@ -68,7 +68,7 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 				continue
 			}
 			if productCode == "" {
-				return nil, fmt.Errorf("Product Code is required for sheet type %s", format.breakdownKey)
+				return nil, errors.New("Product code configured is not correct. Contact Support")
 			}
 			asset := assets[summaryLine.ID]
 			assignments := asset.ArtworkMaterialAssignments[format.breakdownKey]
