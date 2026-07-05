@@ -655,8 +655,9 @@ export function CampaignScheduleViewDialog({
     setActionSuccess('');
     setSubmittingOrder(true);
     try {
-      await submitCampaignToPrintIQ(campaign.id, tenantId);
-      setActionSuccess('Order submitted to PrintIQ.');
+      const response = await submitCampaignToPrintIQ(campaign.id, tenantId);
+      const printIQNumbers = [response.quoteNo ? `Quote: ${response.quoteNo}` : '', response.jobNo ? `Job: ${response.jobNo}` : ''].filter(Boolean).join(', ');
+      setActionSuccess(printIQNumbers ? `Order submitted to PrintIQ. ${printIQNumbers}` : 'Order submitted to PrintIQ.');
     } catch (submitError) {
       setActionError(submitError instanceof Error ? submitError.message : 'Unable to submit order to PrintIQ.');
     } finally {

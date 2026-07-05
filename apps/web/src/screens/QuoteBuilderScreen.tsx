@@ -18,7 +18,6 @@ import {
   OrderFormValues,
   QuantityBreakdown,
   SheetNameOverrides,
-  buildPrintIqPayload,
   createCampaignAsset,
   createCampaignMarket,
   createDefaultFormValues,
@@ -36,7 +35,6 @@ import { deleteCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
 import { fetchCampaignCustomPrintCosts, fetchCampaignMaterials, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
-import { fetchQuoteOptions } from '../services/printiqOptionsApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
 import { canonicalKeyForFormat, resolveFormatName, resolveSheetName, sanitizeSheetNameOverrides, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
@@ -453,6 +451,10 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
 
   return {
     ...values,
+    packing: values.packing || createDefaultFormValues().packing,
+    finish: values.finish || createDefaultFormValues().finish,
+    print: values.print || createDefaultFormValues().print,
+    productCategory: values.productCategory || createDefaultFormValues().productCategory,
     campaignMarkets: (values.campaignMarkets ?? []).map((market) => ({
       ...market,
       assets: (market.assets ?? []).map((asset) => {
@@ -1678,39 +1680,6 @@ export function QuoteBuilderScreen({
     };
   }, [effectiveTenantId]);
 
-  useEffect(() => {
-    if (loadingCampaign) return;
-
-    let active = true;
-
-    async function loadQuoteOptions() {
-      try {
-        const response = await fetchQuoteOptions();
-        if (!active) return;
-
-        setValues((current) => ({
-          ...current,
-          selectedJobOperations:
-            current.selectedJobOperations.length > 0
-              ? current.selectedJobOperations
-              : response.jobOperations.filter((option) => option.enabledByDefault).map((option) => option.operationName),
-          selectedSectionOperations:
-            current.selectedSectionOperations.length > 0
-              ? current.selectedSectionOperations
-              : response.sectionOperations.filter((option) => option.enabledByDefault).map((option) => option.operationName),
-        }));
-      } catch (loadError) {
-        if (active) setError(loadError instanceof Error ? loadError.message : 'Unable to load PrintIQ quote options');
-      }
-    }
-
-    void loadQuoteOptions();
-    return () => {
-      active = false;
-    };
-  }, [loadingCampaign]);
-
-  const payload = useMemo(() => buildPrintIqPayload(values, summary), [summary, values]);
   const normalizedSheetNameOverrides = useMemo(
     () => sanitizeSheetNameOverrides(sheetNameOverrides),
     [sheetNameOverrides],
@@ -3316,10 +3285,10 @@ export function QuoteBuilderScreen({
       const savedCampaignId = await saveCampaignDraft();
       if (!savedCampaignId) return;
       const response = await submitCampaignToPrintIQ(savedCampaignId, effectiveTenantId);
-      const amount = response.amount === null || response.amount === undefined || response.amount === '' ? 'N/A' : String(response.amount);
+      const printIQNumbers = [response.quoteNo ? `Quote: ${response.quoteNo}` : '', response.jobNo ? `Job: ${response.jobNo}` : ''].filter(Boolean).join(', ');
       applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
       lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
-      setQuoteResponseMessage(`Quote created successfully. Amount: ${amount}`);
+      setQuoteResponseMessage(printIQNumbers ? `Quote created successfully. ${printIQNumbers}` : 'Quote created successfully.');
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Unable to create quote');
     } finally {

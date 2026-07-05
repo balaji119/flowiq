@@ -4,22 +4,10 @@ export type FormatKey = (typeof formatKeys)[number];
 
 export type QuantityBreakdown = Record<FormatKey, number>;
 
-export type OperationOption = {
-  id?: string;
-  label: string;
-  operationName: string;
-  enabledByDefault?: boolean;
-};
-
 export type PrintIqStockOption = {
   value: string;
   label: string;
   description?: string;
-};
-
-export type PrintIqQuoteOptionsResponse = {
-  jobOperations: OperationOption[];
-  sectionOperations: OperationOption[];
 };
 
 export type AuthRole = 'super_admin' | 'admin' | 'user';
@@ -324,8 +312,10 @@ export type OrderFormValues = {
   sectionType: string;
   foldCatalog: string;
   stockCode: string;
-  processFront: string;
-  processReverse: string;
+  packing: string;
+  finish: string;
+  print: string;
+  productCode: string;
   targetFreightPrice: string;
   quantity: string;
   finishWidth: string;
@@ -341,8 +331,6 @@ export type OrderFormValues = {
   creativeNameAssignments?: Record<string, string>;
   campaignMarkets: CampaignMarket[];
   contact: ContactDetails;
-  selectedJobOperations: string[];
-  selectedSectionOperations: string[];
 };
 
 export type CampaignRecord = {
@@ -398,57 +386,8 @@ export type CampaignCalculationResponse = {
 export type CampaignSubmitResponse = {
   campaign: CampaignRecord;
   amount: number | string | null;
-};
-
-export type PrintIqQuotePayload = {
-  CustomProduct: {
-    ProductCategory: string | null;
-    FinishSizeWidth: number;
-    FinishSizeHeight: number;
-    Sections: Array<{
-      SectionType: string;
-      StockCode: string;
-      ProcessFront: string;
-      ProcessReverse: string | null;
-      SectionSizeWidth: number;
-      SectionSizeHeight: number;
-      FoldCatalog: string;
-      Pages: number;
-      SectionOperations: Array<{ OperationName: string }>;
-      SideOperations: Array<{ OperationName: string }>;
-    }>;
-    JobOperations: Array<{ OperationName: string }>;
-  };
-  SelectedQuantity: {
-    Quantity: number;
-    Kinds: number;
-    TargetRetailPrice: number;
-    TargetWholesalePrice: number;
-    AdvancedKinds: {
-      KindsArePacks: boolean;
-      Kinds: Array<{
-        Name: string;
-        Quantity: number;
-        Sections: Array<{ SectionNumber: number }>;
-      }>;
-    };
-  };
-  QuoteContact: {
-    Title: string;
-    FirstName: string;
-    Surname: string;
-    Email: string;
-  };
-  Deliveries: unknown[];
-  TargetFreightPrice: string;
-  CustomerCode: string;
-  AcceptQuote: boolean;
-  JobDescription: string;
-  JobTitle: string;
-  Notes: string | null;
-  CustomerExpectedDate: string | null;
-  JobDueDate: string | null;
-  CustomerReference: string;
+  quoteNo?: string;
+  jobNo?: string;
 };
 
 export type LoginResponse = AuthSession;

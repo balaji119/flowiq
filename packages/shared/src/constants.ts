@@ -32,17 +32,19 @@ export function createCampaignMarket(id: string, weekCount = 1): CampaignMarket 
 
 export function createDefaultFormValues(): OrderFormValues {
   return {
-    customerCode: 'C00648',
+    customerCode: 'C00003',
     customerReference: 'Q14259:1.0',
     campaignName: '',
     jobDescription: '',
     notes: '',
-    productCategory: '',
+    productCategory: '2SheetTest',
     sectionType: 'Single-Section',
     foldCatalog: 'Flat Product',
-    stockCode: 'ARTBOARD005',
-    processFront: 'Standard/Heavy CMYK (160sqm/hr)',
-    processReverse: '',
+    productCode: '1177V01',
+    stockCode: '200gsm Sovereign Silk',
+    packing: 'Bulk Pack and Label',
+    finish: 'Trim to size',
+    print: '4 Colour Process - One side',
     targetFreightPrice: '',
     quantity: '',
     finishWidth: '80',
@@ -63,8 +65,6 @@ export function createDefaultFormValues(): OrderFormValues {
       surname: 'Team',
       email: 'accounts@example.com',
     },
-    selectedJobOperations: [],
-    selectedSectionOperations: [],
   };
 }
 

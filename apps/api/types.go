@@ -1,12 +1,5 @@
 package main
 
-type OperationOption struct {
-	ID               string `json:"id,omitempty"`
-	Label            string `json:"label"`
-	OperationName    string `json:"operationName"`
-	EnabledByDefault bool   `json:"enabledByDefault,omitempty"`
-}
-
 type PrintIQStockOption struct {
 	Value       string `json:"value"`
 	Label       string `json:"label"`
@@ -99,34 +92,34 @@ type campaignPrintImage struct {
 }
 
 type orderFormValues struct {
-	CustomerCode              string               `json:"customerCode"`
-	CustomerReference         string               `json:"customerReference"`
-	CampaignName              string               `json:"campaignName"`
-	JobDescription            string               `json:"jobDescription"`
-	Notes                     string               `json:"notes"`
-	ProductCategory           string               `json:"productCategory"`
-	SectionType               string               `json:"sectionType"`
-	FoldCatalog               string               `json:"foldCatalog"`
-	StockCode                 string               `json:"stockCode"`
-	ProcessFront              string               `json:"processFront"`
-	ProcessReverse            string               `json:"processReverse"`
-	TargetFreightPrice        string               `json:"targetFreightPrice"`
-	Quantity                  string               `json:"quantity"`
-	FinishWidth               string               `json:"finishWidth"`
-	FinishHeight              string               `json:"finishHeight"`
-	SectionWidth              string               `json:"sectionWidth"`
-	SectionHeight             string               `json:"sectionHeight"`
-	Pages                     string               `json:"pages"`
-	KindName                  string               `json:"kindName"`
-	CampaignStartDate         string               `json:"campaignStartDate"`
-	DueDate                   string               `json:"dueDate"`
-	NumberOfWeeks             string               `json:"numberOfWeeks"`
-	PrintImages               []campaignPrintImage `json:"printImages"`
-	CreativeNameAssignments   map[string]string    `json:"creativeNameAssignments,omitempty"`
-	CampaignMarkets           []campaignMarket     `json:"campaignMarkets"`
-	Contact                   contactDetails       `json:"contact"`
-	SelectedJobOperations     []string             `json:"selectedJobOperations"`
-	SelectedSectionOperations []string             `json:"selectedSectionOperations"`
+	CustomerCode            string               `json:"customerCode"`
+	CustomerReference       string               `json:"customerReference"`
+	CampaignName            string               `json:"campaignName"`
+	JobDescription          string               `json:"jobDescription"`
+	Notes                   string               `json:"notes"`
+	ProductCategory         string               `json:"productCategory"`
+	SectionType             string               `json:"sectionType"`
+	FoldCatalog             string               `json:"foldCatalog"`
+	StockCode               string               `json:"stockCode"`
+	Packing                 string               `json:"packing"`
+	Finish                  string               `json:"finish"`
+	Print                   string               `json:"print"`
+	ProductCode             string               `json:"productCode"`
+	TargetFreightPrice      string               `json:"targetFreightPrice"`
+	Quantity                string               `json:"quantity"`
+	FinishWidth             string               `json:"finishWidth"`
+	FinishHeight            string               `json:"finishHeight"`
+	SectionWidth            string               `json:"sectionWidth"`
+	SectionHeight           string               `json:"sectionHeight"`
+	Pages                   string               `json:"pages"`
+	KindName                string               `json:"kindName"`
+	CampaignStartDate       string               `json:"campaignStartDate"`
+	DueDate                 string               `json:"dueDate"`
+	NumberOfWeeks           string               `json:"numberOfWeeks"`
+	PrintImages             []campaignPrintImage `json:"printImages"`
+	CreativeNameAssignments map[string]string    `json:"creativeNameAssignments,omitempty"`
+	CampaignMarkets         []campaignMarket     `json:"campaignMarkets"`
+	Contact                 contactDetails       `json:"contact"`
 }
 
 type campaignAsset struct {
@@ -196,11 +189,6 @@ type cacheRefreshBucket struct {
 type optionsCacheStatus struct {
 	Stocks    cacheBucket `json:"stocks"`
 	Processes cacheBucket `json:"processes"`
-}
-
-type quoteFormOptions struct {
-	JobOperations     []OperationOption `json:"jobOperations"`
-	SectionOperations []OperationOption `json:"sectionOperations"`
 }
 
 type quantityBreakdown map[string]int
