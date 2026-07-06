@@ -1262,6 +1262,7 @@ export function QuoteBuilderScreen({
   const [quoteResponseStatus, setQuoteResponseStatus] = useState<'success' | 'error'>('success');
   const [error, setError] = useState('');
   const [exportingTemplates, setExportingTemplates] = useState(false);
+  const [visualsDownloadError, setVisualsDownloadError] = useState('');
   const [sendingAdsEmail, setSendingAdsEmail] = useState(false);
   const [exportProgressMessage, setExportProgressMessage] = useState('');
   const [selectedPurchaseOrderFile, setSelectedPurchaseOrderFile] = useState<File | null>(null);
@@ -4897,6 +4898,7 @@ export function QuoteBuilderScreen({
     setError('');
     setReviewActionError('');
     setReviewActionNeedsDueDate(false);
+    setVisualsDownloadError('');
     setExportingTemplates(true);
     setExportProgressMessage('Preparing export...');
 
@@ -4910,6 +4912,7 @@ export function QuoteBuilderScreen({
     } catch (exportError) {
       const message = exportError instanceof Error ? exportError.message : 'Unable to download visual export. Please try again.';
       setReviewValidationError(message);
+      setVisualsDownloadError(message);
       setExportProgressMessage('');
       return false;
     } finally {
@@ -7233,6 +7236,32 @@ export function QuoteBuilderScreen({
             <Button disabled={savingCampaign} onClick={() => void handleSaveAndLeave()} type="button">
               {savingCampaign ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : null}
               {savingCampaign ? 'Saving…' : 'Save'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(visualsDownloadError)}
+        onOpenChange={(open) => {
+          if (!open) setVisualsDownloadError('');
+        }}
+      >
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 30rem)' }}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CircleAlert className="h-5 w-5 text-rose-300" />
+              Unable to Download Visuals
+            </DialogTitle>
+            <DialogDescription className="break-words text-left">{visualsDownloadError}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <Button
+              onClick={() => setVisualsDownloadError('')}
+              type="button"
+              variant="secondary"
+            >
+              OK
             </Button>
           </div>
         </DialogContent>
