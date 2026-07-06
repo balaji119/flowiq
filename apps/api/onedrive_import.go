@@ -783,8 +783,14 @@ func (a *app) runOneDriveArtworkImport(
 			a.oneDriveImports.fail(ctx, jobID, err)
 			return
 		}
+		previewPath, err := renderPDFPage(ctx, pdfPath, filepath.Join(workDir, fmt.Sprintf("preview-%04d", page)), page, 1200, 85)
+		if err != nil {
+			a.oneDriveImports.fail(ctx, jobID, err)
+			return
+		}
 		fullStoredName := fmt.Sprintf("%s-%s-page-%04d-full.jpg", jobID, safeBase, page)
 		thumbStoredName := fmt.Sprintf("%s-%s-page-%04d-thumb.jpg", jobID, safeBase, page)
+		previewStoredName := fmt.Sprintf("%s-%s-page-%04d-preview.jpg", jobID, safeBase, page)
 		if err := a.storeFileAsCampaignImage(ctx, fullStoredName, "image/jpeg", fullPath); err != nil {
 			a.oneDriveImports.fail(ctx, jobID, err)
 			return
@@ -795,6 +801,11 @@ func (a *app) runOneDriveArtworkImport(
 			return
 		}
 		storedObjects = append(storedObjects, thumbStoredName)
+		if err := a.storeFileAsCampaignImage(ctx, previewStoredName, "image/jpeg", previewPath); err != nil {
+			a.oneDriveImports.fail(ctx, jobID, err)
+			return
+		}
+		storedObjects = append(storedObjects, previewStoredName)
 		pageSuffix := ""
 		imageName := baseName
 		if totalPages > 1 {
@@ -811,12 +822,16 @@ func (a *app) runOneDriveArtworkImport(
 			ThumbnailFileName:   baseName + pageSuffix + ".thumb.jpg",
 			ThumbnailStoredName: thumbStoredName,
 			ThumbnailURL:        "/api/campaign-images/" + thumbStoredName,
+			PreviewFileName:     baseName + pageSuffix + ".preview.jpg",
+			PreviewStoredName:   previewStoredName,
+			PreviewURL:          "/api/campaign-images/" + previewStoredName,
 			SourcePDFFileName:   initialItem.Name,
 			SourcePDFStoredName: sourceStoredName,
 			SourcePDFURL:        "/api/campaign-images/" + sourceStoredName,
 		})
 		_ = os.Remove(fullPath)
 		_ = os.Remove(thumbPath)
+		_ = os.Remove(previewPath)
 		_ = a.oneDriveImports.updateProgress(ctx, jobID, "processing", initialItem.Size, page, totalPages)
 	}
 

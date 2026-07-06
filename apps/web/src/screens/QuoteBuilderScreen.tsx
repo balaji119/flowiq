@@ -41,7 +41,8 @@ import { fetchTenant } from '../services/tenantApi';
 import { canonicalKeyForFormat, resolveFormatName, resolveSheetName, sanitizeSheetNameOverrides, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 import ExcelJS from 'exceljs';
 import { Document as WordDocument, ExternalHyperlink, ImageRun, LineRuleType, Packer, Paragraph, TextRun, UnderlineType } from 'docx';
-import { PDFArray, PDFDocument, PDFName, PDFString, StandardFonts, rgb } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
+import { PDFArray, PDFDocument, PDFName, PDFString, rgb } from 'pdf-lib';
 
 const ACTIVE_CAMPAIGN_ID_KEY = 'adsconnect-active-campaign-id';
 const REVIEW_DRAWER_OPEN_KEY = 'adsconnect-review-drawer-open';
@@ -475,6 +476,9 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
       thumbnailFileName: image.thumbnailFileName,
       thumbnailStoredName: image.thumbnailStoredName,
       thumbnailUrl: normalizeCampaignImageUrl(image.thumbnailUrl),
+      previewFileName: image.previewFileName,
+      previewStoredName: image.previewStoredName,
+      previewUrl: normalizeCampaignImageUrl(image.previewUrl),
       sourcePdfFileName: image.sourcePdfFileName,
       sourcePdfStoredName: image.sourcePdfStoredName,
       sourcePdfUrl: normalizeCampaignImageUrl(image.sourcePdfUrl),
@@ -2973,7 +2977,7 @@ export function QuoteBuilderScreen({
     try {
       const storedNames = Array.from(
         new Set(
-          [image.storedName, image.thumbnailStoredName]
+          [image.storedName, image.thumbnailStoredName, image.previewStoredName]
             .map((value) => (value || '').trim())
             .filter(Boolean),
         ),
@@ -3885,8 +3889,8 @@ export function QuoteBuilderScreen({
                   const parsed = previewDataUrl ? dataUrlToBytes(previewDataUrl) : null;
                   if (parsed) creativePreviewById.set(imageId, parsed);
                 } else if (isImage) {
-                  const previewUrl = image.thumbnailUrl
-                    ? withCampaignImageProxy(toAbsoluteUrl(buildApiUrl(image.thumbnailUrl)))
+                  const previewUrl = (image.previewUrl || image.imageUrl)
+                    ? withCampaignImageProxy(toAbsoluteUrl(buildApiUrl(image.previewUrl || image.imageUrl || '')))
                     : '';
                   const previewResponse = previewUrl ? await fetch(previewUrl) : response;
                   const previewBlob = previewResponse.ok ? await previewResponse.blob() : blob;
@@ -4089,9 +4093,21 @@ export function QuoteBuilderScreen({
 
         const deadlineText = formatDeliveryDeadline(values.dueDate);
         const pdfDoc = await PDFDocument.create();
+        pdfDoc.registerFontkit(fontkit);
         let page = pdfDoc.addPage([595.28, 841.89]);
-        const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-        const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+        const [regularFontResponse, boldFontResponse] = await Promise.all([
+          fetch('/fonts/NotoSans-Regular.ttf'),
+          fetch('/fonts/NotoSans-Bold.ttf'),
+        ]);
+        if (!regularFontResponse.ok || !boldFontResponse.ok) {
+          throw new Error('Unable to load the Unicode PDF fonts.');
+        }
+        const [regularFontBytes, boldFontBytes] = await Promise.all([
+          regularFontResponse.arrayBuffer(),
+          boldFontResponse.arrayBuffer(),
+        ]);
+        const font = await pdfDoc.embedFont(regularFontBytes, { subset: true });
+        const bold = await pdfDoc.embedFont(boldFontBytes, { subset: true });
         let adsLogoPngBytes: Uint8Array | null = null;
         try {
           const logoResponse = await fetch('/ads-logo.webp');

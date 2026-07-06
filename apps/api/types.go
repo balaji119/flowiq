@@ -88,6 +88,9 @@ type campaignPrintImage struct {
 	ThumbnailFileName   string `json:"thumbnailFileName,omitempty"`
 	ThumbnailStoredName string `json:"thumbnailStoredName,omitempty"`
 	ThumbnailURL        string `json:"thumbnailUrl,omitempty"`
+	PreviewFileName     string `json:"previewFileName,omitempty"`
+	PreviewStoredName   string `json:"previewStoredName,omitempty"`
+	PreviewURL          string `json:"previewUrl,omitempty"`
 	SourcePDFFileName   string `json:"sourcePdfFileName,omitempty"`
 	SourcePDFStoredName string `json:"sourcePdfStoredName,omitempty"`
 	SourcePDFURL        string `json:"sourcePdfUrl,omitempty"`

@@ -39,10 +39,18 @@ function buildArtworkThumbnailFileName(fileName: string, pageNumber: number, tot
   return `${baseName}-page-${String(pageNumber).padStart(digits, '0')}.thumb.webp`;
 }
 
+function buildArtworkPreviewFileName(fileName: string, pageNumber: number, totalPages: number) {
+  const baseName = toFileBaseName(fileName);
+  if (totalPages <= 1) return `${baseName}.preview.webp`;
+  const digits = Math.max(2, String(totalPages).length);
+  return `${baseName}-page-${String(pageNumber).padStart(digits, '0')}.preview.webp`;
+}
+
 async function convertPdfToArtworkPages(
   pdfFile: File,
   uploadMaxWidth = 2400,
   thumbnailMaxWidth = 320,
+  previewMaxWidth = 1200,
   onPageProcessed?: (pageNumber: number, totalPages: number) => void,
 ) {
   const pdfjs = await loadPdfJsRuntime();
@@ -51,12 +59,12 @@ async function convertPdfToArtworkPages(
     const loadingTask = pdfjs.getDocument({ url: objectUrl });
     const pdf = await loadingTask.promise;
     const totalPages = Number(pdf.numPages ?? 0);
-    const pages: Array<{ file: File; thumbnailFile: File; pageNumber: number; totalPages: number }> = [];
+    const pages: Array<{ file: File; thumbnailFile: File; previewFile: File; pageNumber: number; totalPages: number }> = [];
 
     for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
       const baseViewport = page.getViewport({ scale: 1 });
-      const uploadScale = Math.min(1, uploadMaxWidth / Math.max(baseViewport.width, 1));
+      const uploadScale = uploadMaxWidth / Math.max(baseViewport.width, 1);
       const uploadViewport = page.getViewport({ scale: uploadScale });
       const uploadCanvas = document.createElement('canvas');
       uploadCanvas.width = Math.max(1, Math.ceil(uploadViewport.width));
@@ -81,7 +89,21 @@ async function convertPdfToArtworkPages(
         { type: 'image/webp' },
       );
 
-      pages.push({ file: uploadFile, thumbnailFile, pageNumber, totalPages });
+      const previewScale = Math.min(1, previewMaxWidth / Math.max(uploadCanvas.width, 1));
+      const previewCanvas = document.createElement('canvas');
+      previewCanvas.width = Math.max(1, Math.ceil(uploadCanvas.width * previewScale));
+      previewCanvas.height = Math.max(1, Math.ceil(uploadCanvas.height * previewScale));
+      const previewContext = previewCanvas.getContext('2d');
+      if (!previewContext) throw new Error('Unable to prepare artwork preview');
+      previewContext.drawImage(uploadCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
+      const previewBlob = await canvasToBlob(previewCanvas, 'image/webp', 0.85);
+      const previewFile = new File(
+        [previewBlob],
+        buildArtworkPreviewFileName(pdfFile.name, pageNumber, totalPages),
+        { type: 'image/webp' },
+      );
+
+      pages.push({ file: uploadFile, thumbnailFile, previewFile, pageNumber, totalPages });
       onPageProcessed?.(pageNumber, totalPages);
     }
     return pages;
@@ -117,6 +139,7 @@ export async function processArtworkPdf(
     pdfFile,
     2400,
     320,
+    1200,
     (current, total) => onProgress?.({ phase: 'processing-pdf', current, total }),
   );
   const uploadedImages: CampaignPrintImage[] = [];
@@ -124,9 +147,10 @@ export async function processArtworkPdf(
   for (let pageIndex = 0; pageIndex < pageImages.length; pageIndex += 1) {
     const pageImage = pageImages[pageIndex];
     onProgress?.({ phase: 'uploading-pages', current: pageIndex, total: pageImages.length });
-    const [uploadResponse, thumbnailUploadResponse] = await Promise.all([
+    const [uploadResponse, thumbnailUploadResponse, previewUploadResponse] = await Promise.all([
       uploadCampaignImage(pageImage.file),
       uploadCampaignImage(pageImage.thumbnailFile),
+      uploadCampaignImage(pageImage.previewFile),
     ]);
     const baseName = toFileBaseName(pdfFile.name) || 'Artwork';
     const imageName = pageImage.totalPages > 1 ? `${baseName} (Page ${pageImage.pageNumber})` : baseName;
@@ -140,6 +164,9 @@ export async function processArtworkPdf(
       thumbnailFileName: thumbnailUploadResponse.originalName || pageImage.thumbnailFile.name,
       thumbnailStoredName: thumbnailUploadResponse.storedName,
       thumbnailUrl: thumbnailUploadResponse.url || `/api/campaign-images/${thumbnailUploadResponse.storedName}`,
+      previewFileName: previewUploadResponse.originalName || pageImage.previewFile.name,
+      previewStoredName: previewUploadResponse.storedName,
+      previewUrl: previewUploadResponse.url || `/api/campaign-images/${previewUploadResponse.storedName}`,
       sourcePdfFileName: sourcePdfUpload.originalName || pdfFile.name,
       sourcePdfStoredName: sourcePdfUpload.storedName,
       sourcePdfUrl: sourcePdfUpload.url || `/api/campaign-images/${sourcePdfUpload.storedName}`,

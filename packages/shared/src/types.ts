@@ -136,6 +136,9 @@ export type CampaignPrintImage = {
   thumbnailFileName?: string;
   thumbnailStoredName?: string;
   thumbnailUrl?: string;
+  previewFileName?: string;
+  previewStoredName?: string;
+  previewUrl?: string;
   sourcePdfFileName?: string;
   sourcePdfStoredName?: string;
   sourcePdfUrl?: string;

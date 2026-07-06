@@ -1763,6 +1763,7 @@ func collectCampaignImageStoredNames(campaign *campaignRecord) []string {
 		candidates := []string{
 			strings.TrimSpace(image.StoredName),
 			strings.TrimSpace(image.ThumbnailStoredName),
+			strings.TrimSpace(image.PreviewStoredName),
 			strings.TrimSpace(image.SourcePDFStoredName),
 		}
 		for _, candidate := range candidates {
