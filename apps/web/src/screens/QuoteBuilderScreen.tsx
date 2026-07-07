@@ -4481,7 +4481,7 @@ export function QuoteBuilderScreen({
         }
         drawSectionHeader('Print Quantities');
         drawPrintQuantitiesTable();
-        cursorY -= 8;
+        cursorY -= 18;
         drawSectionHeader('Creative Files & Thumbnails');
         for (const [creativeNumber, creativeRows] of Array.from(rowsByCreative.entries()).sort((a, b) => a[0] - b[0])) {
           const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
