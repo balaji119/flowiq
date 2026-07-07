@@ -3567,6 +3567,14 @@ export function QuoteBuilderScreen({
       }>();
       const creativeSummary = new Map<number, QuantityBreakdown>();
       const materialQuantitiesByCreative = new Map<number, Map<string, number>>();
+      const pdfPrintQuantityRows = new Map<string, {
+        creativeNumber: number;
+        artworkImageId: string;
+        sheet: string;
+        asset: string;
+        material: string;
+        count: number;
+      }>();
       const materialById = new Map(materials.map((material) => [material.id, material]));
       const deliveryInfoBlocks: string[] = [];
       const seenDeliveryInfo = new Set<string>();
@@ -3730,6 +3738,55 @@ export function QuoteBuilderScreen({
                   const creativeImageId = getCreativeImageIdForFormat(asset, creativeFormat);
                   return creativeImageId ? [{ imageId: creativeImageId, quantity: exportQuantity }] : [];
                 })();
+
+            if (exportMode === 'pdf') {
+              const sheet = getDeliveryTypeLabel(state, key as keyof QuantityBreakdown);
+              const assetLabel = (asset.assetSearch || mappingOptionByMarketAssetId.get(`${market.market}\x00${asset.assetId}`)?.label || asset.assetId || '-').trim();
+              const formatMaterialAssignments = artworkMaterialAssignmentsForFormat(asset, creativeFormat);
+              creativeAssignments.forEach((assignment) => {
+                const creative = imageById.get(assignment.imageId);
+                if (!creative) return;
+                let remainingCount = assignment.quantity;
+                formatMaterialAssignments
+                  .filter((materialAssignment) => {
+                    const assignedArtworkId = (materialAssignment.artworkImageId || '').trim()
+                      || getCreativeImageIdForFormat(asset, creativeFormat);
+                    return assignedArtworkId === assignment.imageId;
+                  })
+                  .forEach((materialAssignment) => {
+                    if (remainingCount <= 0) return;
+                    const count = Math.min(remainingCount, Math.max(0, Math.floor(materialAssignment.frameCount || 0)));
+                    if (count <= 0) return;
+                    remainingCount -= count;
+                    const materialId = (materialAssignment.materialId || '').trim();
+                    const materialName = materialId
+                      ? materialById.get(materialId)?.name.trim() || `Unknown material (${materialId})`
+                      : '-';
+                    const rowKey = `${creative.creativeNumber}\x00${assignment.imageId}\x00${sheet}\x00${assetLabel}\x00${materialName}`;
+                    const existing = pdfPrintQuantityRows.get(rowKey);
+                    pdfPrintQuantityRows.set(rowKey, {
+                      creativeNumber: creative.creativeNumber,
+                      artworkImageId: assignment.imageId,
+                      sheet,
+                      asset: assetLabel,
+                      material: materialName,
+                      count: (existing?.count ?? 0) + count,
+                    });
+                  });
+                if (remainingCount > 0) {
+                  const rowKey = `${creative.creativeNumber}\x00${assignment.imageId}\x00${sheet}\x00${assetLabel}\x00-`;
+                  const existing = pdfPrintQuantityRows.get(rowKey);
+                  pdfPrintQuantityRows.set(rowKey, {
+                    creativeNumber: creative.creativeNumber,
+                    artworkImageId: assignment.imageId,
+                    sheet,
+                    asset: assetLabel,
+                    material: '-',
+                    count: (existing?.count ?? 0) + remainingCount,
+                  });
+                }
+              });
+            }
 
             creativeAssignments.forEach((assignment) => {
               const creative = imageById.get(assignment.imageId);
@@ -4342,6 +4399,80 @@ export function QuoteBuilderScreen({
           flush();
         };
 
+        const drawPrintQuantitiesTable = () => {
+          const columns = [
+            { label: 'Artwork', width: 82 },
+            { label: 'Sheet', width: 105 },
+            { label: 'Asset', width: 125 },
+            { label: 'Material', width: 145 },
+            { label: 'Count', width: maxWidth - 457 },
+          ];
+          const tableFontSize = 8.5;
+          const cellPadding = 5;
+          const tableLineHeight = 11;
+          const splitCellLines = (text: string, width: number) => {
+            const words = (text || '-').split(/\s+/);
+            const lines: string[] = [];
+            let current = '';
+            words.forEach((word) => {
+              const candidate = current ? `${current} ${word}` : word;
+              if (!current || font.widthOfTextAtSize(candidate, tableFontSize) <= width - cellPadding * 2) current = candidate;
+              else {
+                lines.push(current);
+                current = word;
+              }
+            });
+            if (current) lines.push(current);
+            return lines.length > 0 ? lines : ['-'];
+          };
+          const drawTableRow = (values: string[], header = false) => {
+            const linesByCell = values.map((value, index) => splitCellLines(value, columns[index].width));
+            const rowHeight = Math.max(22, Math.max(...linesByCell.map((lines) => lines.length)) * tableLineHeight + cellPadding * 2);
+            if (cursorY - rowHeight < marginBottom) {
+              page = pdfDoc.addPage([595.28, 841.89]);
+              cursorY = page.getHeight() - marginTop;
+              if (!header) drawTableRow(columns.map((column) => column.label), true);
+            }
+            let x = marginX;
+            columns.forEach((column, index) => {
+              page.drawRectangle({
+                x,
+                y: cursorY - rowHeight,
+                width: column.width,
+                height: rowHeight,
+                color: header ? sectionBg : rgb(1, 1, 1),
+                borderColor: sectionBorder,
+                borderWidth: 0.75,
+              });
+              linesByCell[index].forEach((line, lineIndex) => {
+                page.drawText(line, {
+                  x: x + cellPadding,
+                  y: cursorY - cellPadding - tableFontSize - lineIndex * tableLineHeight,
+                  size: tableFontSize,
+                  font: header ? bold : font,
+                  color: rgb(0.08, 0.12, 0.18),
+                });
+              });
+              x += column.width;
+            });
+            cursorY -= rowHeight;
+          };
+
+          drawTableRow(columns.map((column) => column.label), true);
+          Array.from(pdfPrintQuantityRows.values())
+            .sort((left, right) => left.creativeNumber - right.creativeNumber
+              || left.sheet.localeCompare(right.sheet)
+              || left.asset.localeCompare(right.asset)
+              || left.material.localeCompare(right.material))
+            .forEach((row) => drawTableRow([
+              `Creative ${row.creativeNumber}`,
+              row.sheet,
+              row.asset,
+              row.material,
+              String(row.count),
+            ]));
+        };
+
         drawTitleBlock(values.campaignName.trim() || 'Artwork', `Creative Mix: ${creativeHeadline}`);
         if (artworkFolderUrl) {
           drawSectionHeader('Resources');
@@ -4349,27 +4480,8 @@ export function QuoteBuilderScreen({
           cursorY -= 4;
         }
         drawSectionHeader('Print Quantities');
-        Array.from(rowsByCreative.keys()).sort((a, b) => a - b).forEach((creativeNumber) => {
-          const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
-          const summary = (quantityPartsByCreative.get(creativeNumber) ?? []).join(' & ') || 'No mapped quantities';
-          drawWrappedLine(`• Creative ${creativeNumber} (${creativeTypeLabel}): ${summary}`, false, undefined, 16);
-        });
+        drawPrintQuantitiesTable();
         cursorY -= 8;
-        if (materialQuantitiesByCreative.size > 0) {
-          drawSectionHeader('Materials');
-          Array.from(materialQuantitiesByCreative.entries())
-            .sort((left, right) => left[0] - right[0])
-            .forEach(([creativeNumber, materialQuantities]) => {
-              const parts = Array.from(materialQuantities.entries())
-                .sort((left, right) => left[0].localeCompare(right[0]))
-                .map(([materialKey, quantity]) => {
-                  const [state, formatKey, materialName] = materialKey.split('\x00') as [ExportState, keyof QuantityBreakdown, string];
-                  return `${quantity} x ${quantityLabelForStateAndKey(state, formatKey)} - ${materialName}`;
-                });
-              drawWrappedLine(`Creative ${creativeNumber}: ${parts.join(' & ')}`, false, undefined, 16);
-            });
-          cursorY -= 8;
-        }
         drawSectionHeader('Creative Files & Thumbnails');
         for (const [creativeNumber, creativeRows] of Array.from(rowsByCreative.entries()).sort((a, b) => a[0] - b[0])) {
           const creativeTypeLabel = resolveCreativeTypeLabel(creativeTypeByNumber.get(creativeNumber) ?? 'Artwork');
