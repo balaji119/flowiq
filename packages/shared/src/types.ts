@@ -64,6 +64,18 @@ export type MaterialRecord = {
   updatedAt: string;
 };
 
+export type MaterialMappingInput = {
+  market: string;
+  sheetKey: string;
+  productCode: string;
+};
+
+export type MaterialMappingRecord = MaterialMappingInput & {
+  tenantId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CustomPrintCostInput = {
   sheetKey: string;
   onePageCost: number;

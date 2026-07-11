@@ -27,6 +27,21 @@ type sheetNameOverrideRecord struct {
 	UpdatedAt              string             `json:"updatedAt"`
 }
 
+type materialMappingInput struct {
+	Market      string `json:"market"`
+	SheetKey    string `json:"sheetKey"`
+	ProductCode string `json:"productCode"`
+}
+
+type materialMappingRecord struct {
+	TenantID    string `json:"tenantId"`
+	Market      string `json:"market"`
+	SheetKey    string `json:"sheetKey"`
+	ProductCode string `json:"productCode"`
+	CreatedAt   string `json:"createdAt"`
+	UpdatedAt   string `json:"updatedAt"`
+}
+
 type materialInput struct {
 	ID        string `json:"id,omitempty"`
 	Name      string `json:"name"`

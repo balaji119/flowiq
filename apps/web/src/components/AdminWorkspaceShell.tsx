@@ -3,7 +3,7 @@ import { ArrowLeft, Building2, ChevronRight, CircleDollarSign, Database, Home, L
 import { cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 
-export type AdminWorkspaceSection = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings' | 'sheet-size-settings' | 'materials';
+export type AdminWorkspaceSection = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings' | 'sheet-size-settings' | 'material-mapping' | 'materials';
 
 export type AdminWorkspaceHandlers = {
   onBack?: () => void;
@@ -17,6 +17,7 @@ export type AdminWorkspaceHandlers = {
   onOpenPrintingCosts?: () => void;
   onOpenSettings?: () => void;
   onOpenSheetSizeSettings?: () => void;
+  onOpenMaterialMapping?: () => void;
   onOpenMaterials?: () => void;
 };
 
@@ -64,6 +65,7 @@ export function AdminWorkspaceShell({
   onOpenPrintingCosts,
   onOpenSettings,
   onOpenSheetSizeSettings,
+  onOpenMaterialMapping,
   onOpenMaterials,
   children,
 }: AdminWorkspaceShellProps) {
@@ -156,16 +158,17 @@ export function AdminWorkspaceShell({
       label: 'Settings',
       icon: <Settings className="h-[22px] w-[22px]" />,
       onClick: () => {
-        if (onOpenSheetSizeSettings || onOpenMaterials) {
+        if (onOpenSheetSizeSettings || onOpenMaterialMapping || onOpenMaterials) {
           setSettingsMenuOpen((current) => !current);
           return;
         }
         onOpenSettings();
       },
-      menuItems: onOpenSheetSizeSettings || onOpenMaterials
+      menuItems: onOpenSheetSizeSettings || onOpenMaterialMapping || onOpenMaterials
         ? [
             { label: 'Sheet Name', active: activeSection === 'settings', onClick: onOpenSettings },
             ...(onOpenSheetSizeSettings ? [{ label: 'Sheet Size', active: activeSection === 'sheet-size-settings', onClick: onOpenSheetSizeSettings }] : []),
+            ...(onOpenMaterialMapping ? [{ label: 'Material Mapping', active: activeSection === 'material-mapping', onClick: onOpenMaterialMapping }] : []),
             ...(onOpenMaterials ? [{ label: 'Materials', active: activeSection === 'materials', onClick: onOpenMaterials }] : []),
           ]
         : undefined,

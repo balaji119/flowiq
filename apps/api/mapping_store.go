@@ -115,6 +115,15 @@ type sheetNameOverrideRow struct {
 	UpdatedAt              time.Time
 }
 
+type materialMappingRow struct {
+	TenantID    string
+	Market      string
+	SheetKey    string
+	ProductCode string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 func newMappingStore(pool *pgxpool.Pool) *mappingStore {
 	return &mappingStore{pool: pool}
 }
@@ -552,6 +561,139 @@ func decodeSheetNameOverrideRow(row sheetNameOverrideRow) (sheetNameOverrideReco
 		CreatedAt:              row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:              row.UpdatedAt.UTC().Format(time.RFC3339),
 	}, nil
+}
+
+func scanMaterialMappingRow(scanner interface {
+	Scan(dest ...any) error
+}) (materialMappingRow, error) {
+	var row materialMappingRow
+	err := scanner.Scan(
+		&row.TenantID,
+		&row.Market,
+		&row.SheetKey,
+		&row.ProductCode,
+		&row.CreatedAt,
+		&row.UpdatedAt,
+	)
+	return row, err
+}
+
+func decodeMaterialMappingRow(row materialMappingRow) materialMappingRecord {
+	return materialMappingRecord{
+		TenantID:    row.TenantID,
+		Market:      row.Market,
+		SheetKey:    row.SheetKey,
+		ProductCode: row.ProductCode,
+		CreatedAt:   row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:   row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func (s *mappingStore) listMaterialMappings(ctx context.Context, tenantID string) ([]materialMappingRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT mmm.tenant_id::text, m.name, mmm.sheet_key, mmm.product_code, mmm.created_at, mmm.updated_at
+		FROM market_material_mappings mmm
+		JOIN markets m ON m.id = mmm.market_id
+		WHERE mmm.tenant_id = $1
+		ORDER BY m.name ASC, mmm.sheet_key ASC
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]materialMappingRecord, 0)
+	for rows.Next() {
+		row, err := scanMaterialMappingRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, decodeMaterialMappingRow(row))
+	}
+	return records, rows.Err()
+}
+
+func (s *mappingStore) upsertMaterialMappings(ctx context.Context, tenantID string, payload []materialMappingInput) ([]materialMappingRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+	if len(payload) == 0 {
+		return []materialMappingRecord{}, nil
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	records := make([]materialMappingRecord, 0, len(payload))
+	for _, rawItem := range payload {
+		market, err := sanitizeMappingText(rawItem.Market, "market")
+		if err != nil {
+			return nil, err
+		}
+		sheetKey, err := sanitizeMappingText(rawItem.SheetKey, "sheetKey")
+		if err != nil {
+			return nil, err
+		}
+		productCode := strings.TrimSpace(rawItem.ProductCode)
+
+		var marketID string
+		if err := tx.QueryRow(ctx, `
+			SELECT id
+			FROM markets
+			WHERE tenant_id = $1 AND name = $2
+			LIMIT 1
+		`, tenantID, market).Scan(&marketID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, errors.New("Market not found in the selected tenant")
+			}
+			return nil, err
+		}
+
+		row, err := scanMaterialMappingRow(tx.QueryRow(ctx, `
+			INSERT INTO market_material_mappings (tenant_id, market_id, sheet_key, product_code, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, NOW(), NOW())
+			ON CONFLICT (tenant_id, market_id, sheet_key)
+			DO UPDATE SET product_code = EXCLUDED.product_code, updated_at = NOW()
+			RETURNING tenant_id::text, $5::text, sheet_key, product_code, created_at, updated_at
+		`, tenantID, marketID, sheetKey, productCode, market))
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, decodeMaterialMappingRow(row))
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+func (s *mappingStore) listMaterialProductCodesByMarket(ctx context.Context, tenantID string) (map[string]map[string]string, error) {
+	records, err := s.listMaterialMappings(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	productCodes := map[string]map[string]string{}
+	for _, record := range records {
+		market := strings.TrimSpace(record.Market)
+		sheetKey := strings.TrimSpace(record.SheetKey)
+		productCode := strings.TrimSpace(record.ProductCode)
+		if market == "" || sheetKey == "" || productCode == "" {
+			continue
+		}
+		if productCodes[market] == nil {
+			productCodes[market] = map[string]string{}
+		}
+		productCodes[market][sheetKey] = productCode
+	}
+	return productCodes, nil
 }
 
 func (s *mappingStore) listSheetNameOverrides(ctx context.Context, tenantID string) (*sheetNameOverrideRecord, error) {

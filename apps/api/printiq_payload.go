@@ -49,7 +49,7 @@ var printIQSheetFormatOrder = []struct {
 	{"FF", "ff"},
 }
 
-func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummary, productCodes map[string]string) ([]printIQSheetProduct, error) {
+func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummary, productCodesByMarket map[string]map[string]string, fallbackProductCodes map[string]string) ([]printIQSheetProduct, error) {
 	if summary == nil {
 		return nil, errors.New("Campaign calculation summary is required")
 	}
@@ -61,11 +61,14 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 	}
 	products := make([]printIQSheetProduct, 0)
 	for _, format := range printIQSheetFormatOrder {
-		productCode := strings.TrimSpace(productCodes[format.settingsKey])
 		for _, summaryLine := range summary.Lines {
 			quantity := summaryLine.Breakdown[format.breakdownKey]
 			if quantity <= 0 {
 				continue
+			}
+			productCode := strings.TrimSpace(productCodesByMarket[strings.TrimSpace(summaryLine.Market)][format.settingsKey])
+			if productCode == "" {
+				productCode = strings.TrimSpace(fallbackProductCodes[format.settingsKey])
 			}
 			if productCode == "" {
 				return nil, errors.New("Product code configured is not correct. Contact Support")

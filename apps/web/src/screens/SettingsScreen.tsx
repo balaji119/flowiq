@@ -48,7 +48,6 @@ export function SettingsScreen({
   const [presetOverrides, setPresetOverrides] = useState<Record<string, string>>({});
   const [multipleArtworkFormats, setMultipleArtworkFormats] = useState<Record<string, boolean>>({});
   const [customPrintCostFormats, setCustomPrintCostFormats] = useState<Record<string, boolean>>({});
-  const [productCodes, setProductCodes] = useState<Record<string, string>>({});
   const [customOverrides, setCustomOverrides] = useState<CustomOverrideRow[]>([]);
   const [savedSnapshot, setSavedSnapshot] = useState('');
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
@@ -62,7 +61,6 @@ export function SettingsScreen({
     customValues: CustomOverrideRow[],
     multipleArtworkValues: Record<string, boolean>,
     customPrintCostValues: Record<string, boolean>,
-    productCodeValues: Record<string, string>,
   ) {
     const merged: SheetNameOverrides = {};
     sheetNamePresetEntries.forEach((entry) => {
@@ -85,13 +83,12 @@ export function SettingsScreen({
       overrides: merged,
       multipleArtworkFormats: normalizedMultipleArtworkFormats,
       customPrintCostFormats: normalizedCustomPrintCostFormats,
-      productCodes: Object.fromEntries(Object.entries(productCodeValues).filter(([, code]) => code.trim()).map(([key, code]) => [key, code.trim()])),
     });
   }
 
   const currentSnapshot = useMemo(
-    () => buildSettingsSnapshot(presetOverrides, customOverrides, multipleArtworkFormats, customPrintCostFormats, productCodes),
-    [presetOverrides, customOverrides, multipleArtworkFormats, customPrintCostFormats, productCodes],
+    () => buildSettingsSnapshot(presetOverrides, customOverrides, multipleArtworkFormats, customPrintCostFormats),
+    [presetOverrides, customOverrides, multipleArtworkFormats, customPrintCostFormats],
   );
   const hasUnsavedChanges = savedSnapshot !== '' && currentSnapshot !== savedSnapshot;
 
@@ -164,7 +161,6 @@ export function SettingsScreen({
               overrides: { ...normalized, ...importedCustomColumns },
               multipleArtworkFormats: response.settings.multipleArtworkFormats ?? {},
               customPrintCostFormats: response.settings.customPrintCostFormats ?? {},
-              productCodes: response.settings.productCodes ?? {},
             },
             effectiveTenantId,
           );
@@ -179,14 +175,13 @@ export function SettingsScreen({
         setPresetOverrides(nextPreset);
         setMultipleArtworkFormats(response.settings.multipleArtworkFormats ?? {});
         setCustomPrintCostFormats(response.settings.customPrintCostFormats ?? {});
-        setProductCodes(response.settings.productCodes ?? {});
 
         const nextCustom = Object.entries(normalized)
           .filter(([key]) => !presetKeys.has(key))
           .map(([key, value]) => createCustomRow(key, value))
           .sort((left, right) => left.source.localeCompare(right.source));
         setCustomOverrides(nextCustom);
-        setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}, response.settings.customPrintCostFormats ?? {}, response.settings.productCodes ?? {}));
+        setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}, response.settings.customPrintCostFormats ?? {}));
       } catch (loadError) {
         if (active) {
           setError(loadError instanceof Error ? loadError.message : 'Unable to load settings');
@@ -237,8 +232,7 @@ export function SettingsScreen({
       const response = await upsertAdminSheetNameOverrides({
         overrides: merged,
         multipleArtworkFormats: normalizedMultipleArtworkFormats,
-      customPrintCostFormats: normalizedCustomPrintCostFormats,
-      productCodes,
+        customPrintCostFormats: normalizedCustomPrintCostFormats,
       }, effectiveTenantId);
       const normalized = sanitizeSheetNameOverrides(response.settings.overrides);
 
@@ -249,7 +243,6 @@ export function SettingsScreen({
       setPresetOverrides(nextPreset);
       setMultipleArtworkFormats(response.settings.multipleArtworkFormats ?? {});
       setCustomPrintCostFormats(response.settings.customPrintCostFormats ?? {});
-      setProductCodes(response.settings.productCodes ?? {});
 
       const presetKeys = new Set(sheetNamePresetEntries.map((entry) => entry.key));
       const nextCustom = Object.entries(normalized)
@@ -257,7 +250,7 @@ export function SettingsScreen({
         .map(([key, value]) => createCustomRow(key, value))
         .sort((left, right) => left.source.localeCompare(right.source));
       setCustomOverrides(nextCustom);
-      setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}, response.settings.customPrintCostFormats ?? {}, response.settings.productCodes ?? {}));
+      setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}, response.settings.customPrintCostFormats ?? {}));
       setNotice('Sheet name overrides saved.');
       return true;
     } catch (saveError) {
@@ -374,7 +367,6 @@ export function SettingsScreen({
                   <colgroup>
                     <col className="w-[220px]" />
                     <col className="w-[340px]" />
-                    <col className="w-[220px]" />
                     <col className="w-[180px]" />
                     <col className="w-[180px]" />
                     <col className="w-[90px]" />
@@ -383,7 +375,6 @@ export function SettingsScreen({
                     <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                       <th className="border border-slate-700 px-4 py-2 text-left">Current Name</th>
                       <th className="border border-slate-700 px-4 py-2 text-left">Override Name</th>
-                      <th className="border border-slate-700 px-4 py-2 text-left">Product Code</th>
                       <th className="border border-slate-700 px-4 py-2 text-center">Multiple Artwork</th>
                       <th className="border border-slate-700 px-4 py-2 text-center">Custom Print Cost</th>
                       <th className="border border-slate-700 px-4 py-2 text-center">Action</th>
@@ -407,16 +398,6 @@ export function SettingsScreen({
                             }
                             placeholder={`Override for ${entry.label}`}
                             value={presetOverrides[entry.key] || ''}
-                          />
-                        </td>
-                        <td className="border border-slate-700 px-4 py-2">
-                          <Input
-                            className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-violet-400 focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={session?.user.role !== 'super_admin'}
-                            onChange={(event) => setProductCodes((current) => ({ ...current, [entry.key]: event.target.value }))}
-                            placeholder={`Product code for ${entry.label}`}
-                            title={session?.user.role === 'super_admin' ? 'PrintIQ product code' : 'Super admin only'}
-                            value={productCodes[entry.key] || ''}
                           />
                         </td>
                         <td className="border border-slate-700 px-4 py-2 text-center">
@@ -482,23 +463,9 @@ export function SettingsScreen({
                                 setCustomOverrides((current) => current.map((item) => (item.id === row.id ? { ...item, name: event.target.value } : item)))
                               }
                               placeholder={`Override for ${displayName}`}
-                              value={row.name}
-                            />
-                          </td>
-                          <td className="border border-slate-700 px-4 py-2">
-                            <Input
-                              className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-violet-400 focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={session?.user.role !== 'super_admin'}
-                              onChange={(event) => {
-                                const customKey = toCanonicalSheetNameKey(row.source);
-                                if (!customKey) return;
-                                setProductCodes((current) => ({ ...current, [customKey]: event.target.value }));
-                              }}
-                              placeholder={`Product code for ${displayName}`}
-                              title={session?.user.role === 'super_admin' ? 'PrintIQ product code' : 'Super admin only'}
-                              value={productCodes[toCanonicalSheetNameKey(row.source)] || ''}
-                            />
-                          </td>
+                            value={row.name}
+                          />
+                        </td>
                           <td className="border border-slate-700 px-4 py-2 text-center">
                             <input
                               checked={Boolean(multipleArtworkFormats[toCanonicalSheetNameKey(row.source)])}
@@ -544,11 +511,6 @@ export function SettingsScreen({
                                     return next;
                                   });
                                   setCustomPrintCostFormats((current) => {
-                                    const next = { ...current };
-                                    delete next[customKey];
-                                    return next;
-                                  });
-                                  setProductCodes((current) => {
                                     const next = { ...current };
                                     delete next[customKey];
                                     return next;

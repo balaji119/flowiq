@@ -3,11 +3,16 @@ package main
 import "testing"
 
 func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndQuantities(t *testing.T) {
-	values := orderFormValues{CampaignMarkets: []campaignMarket{{Assets: []campaignAsset{{ID: "asset-1"}}}}}
-	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}
-	products, err := resolvePrintIQSheetProducts(values, summary, map[string]string{
-		"8-sheet": "Quad Product",
-		"4-sheet": "Double Product",
+	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
+	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]string{
+		"NSW": {
+			"8-sheet": "NSW Quad Product",
+			"4-sheet": "NSW Double Product",
+		},
+	}, map[string]string{
+		"8-sheet": "Fallback Quad Product",
+		"4-sheet": "Fallback Double Product",
 	})
 	if err != nil {
 		t.Fatalf("resolve products: %v", err)
@@ -15,18 +20,18 @@ func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndQuantities(t *testing.
 	if len(products) != 2 {
 		t.Fatalf("expected 2 products, got %d", len(products))
 	}
-	if products[0].ProductCode != "Quad Product" || products[0].Quantity != 40 {
+	if products[0].ProductCode != "NSW Quad Product" || products[0].Quantity != 40 {
 		t.Fatalf("unexpected first product: %#v", products[0])
 	}
-	if products[1].ProductCode != "Double Product" || products[1].Quantity != 10 {
+	if products[1].ProductCode != "NSW Double Product" || products[1].Quantity != 10 {
 		t.Fatalf("unexpected second product: %#v", products[1])
 	}
 }
 
 func TestResolvePrintIQSheetProductsRequiresEveryActiveProductCode(t *testing.T) {
-	values := orderFormValues{CampaignMarkets: []campaignMarket{{Assets: []campaignAsset{{ID: "asset-1"}}}}}
-	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}
-	if _, err := resolvePrintIQSheetProducts(values, summary, map[string]string{"8-sheet": "Quad Product"}); err == nil {
+	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
+	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}
+	if _, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]string{"NSW": map[string]string{"8-sheet": "Quad Product"}}, map[string]string{}); err == nil {
 		t.Fatal("expected missing product code error")
 	}
 }
@@ -49,8 +54,8 @@ func TestResolvePrintIQSheetProductsSplitsQuantityByArtwork(t *testing.T) {
 			},
 		},
 	}
-	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Breakdown: quantityBreakdown{"8-sheet": 100}}}}
-	products, err := resolvePrintIQSheetProducts(values, summary, map[string]string{"8-sheet": "Quad Product"})
+	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 100}}}}
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]string{}, map[string]string{"8-sheet": "Quad Product"})
 	if err != nil {
 		t.Fatalf("resolve products: %v", err)
 	}

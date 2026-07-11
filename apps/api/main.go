@@ -313,6 +313,8 @@ func (a *app) routes() http.Handler {
 	mux.Handle("PUT /api/admin/market-sheet-sizes", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMarketSheetSizes), "super_admin", "admin")))
 	mux.Handle("GET /api/admin/sheet-name-overrides", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleGetSheetNameOverrides), "super_admin", "admin")))
 	mux.Handle("PUT /api/admin/sheet-name-overrides", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertSheetNameOverrides), "super_admin", "admin")))
+	mux.Handle("GET /api/admin/material-mappings", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListMaterialMappings), "super_admin")))
+	mux.Handle("PUT /api/admin/material-mappings", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertMaterialMappings), "super_admin")))
 	mux.Handle("GET /api/admin/materials", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleListMaterials), "super_admin", "admin")))
 	mux.Handle("PUT /api/admin/materials", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleReplaceMaterials), "super_admin", "admin")))
 	mux.Handle("GET /api/admin/printiq-options/status", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleOptionsStatus), "super_admin")))
@@ -1089,7 +1091,12 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	sheetProducts, err := resolvePrintIQSheetProducts(campaign.Values, campaign.Summary, sheetSettings.ProductCodes)
+	materialProductCodes, err := a.mappingStore.listMaterialProductCodesByMarket(r.Context(), campaign.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	sheetProducts, err := resolvePrintIQSheetProducts(campaign.Values, campaign.Summary, materialProductCodes, sheetSettings.ProductCodes)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -2494,14 +2501,14 @@ func (a *app) handleUpsertSheetNameOverrides(w http.ResponseWriter, r *http.Requ
 	if payload.ProductCodes == nil {
 		payload.ProductCodes = sheetNameOverrides{}
 	}
+	existing, loadErr := a.mappingStore.listSheetNameOverrides(r.Context(), *tenantID)
+	if loadErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": loadErr.Error()})
+		return
+	}
+	payload.ProductCodes = existing.ProductCodes
 	if user := currentUser(r.Context()); user == nil || user.Role != "super_admin" {
-		existing, loadErr := a.mappingStore.listSheetNameOverrides(r.Context(), *tenantID)
-		if loadErr != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": loadErr.Error()})
-			return
-		}
 		payload.CustomPrintCostFormats = existing.CustomPrintCostFormats
-		payload.ProductCodes = existing.ProductCodes
 	}
 
 	record, err := a.mappingStore.upsertSheetNameOverrides(r.Context(), *tenantID, payload.Overrides, payload.MultipleArtworkFormats, payload.CustomPrintCostFormats, payload.ProductCodes)
@@ -2510,4 +2517,45 @@ func (a *app) handleUpsertSheetNameOverrides(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"settings": record})
+}
+
+func (a *app) handleListMaterialMappings(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	records, err := a.mappingStore.listMaterialMappings(r.Context(), *tenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mappings": records})
+}
+
+func (a *app) handleUpsertMaterialMappings(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := a.managedTenantID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var payload struct {
+		Mappings []materialMappingInput `json:"mappings"`
+	}
+	if err := decodeJSONBody(r, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	if payload.Mappings == nil {
+		payload.Mappings = []materialMappingInput{}
+	}
+
+	records, err := a.mappingStore.upsertMaterialMappings(r.Context(), *tenantID, payload.Mappings)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mappings": records})
 }
