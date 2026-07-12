@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 )
 
 type parsedDeliveryAddress struct {
@@ -395,6 +396,19 @@ func (a *app) ensurePrintIQArtworkPDF(ctx context.Context, image campaignPrintIm
 		return "", errors.New("Source PDF is required to submit artwork to PrintIQ")
 	}
 	pageNumber := resolveArtworkSourcePageNumber(image)
+	sourcePDFBytes, err := a.readCampaignImage(ctx, sourcePDFStoredName)
+	if err != nil {
+		return "", err
+	}
+	if pageNumber <= 0 {
+		pageCount, err := api.PageCount(bytes.NewReader(sourcePDFBytes), model.NewDefaultConfiguration())
+		if err != nil {
+			return "", err
+		}
+		if pageCount == 1 {
+			pageNumber = 1
+		}
+	}
 	if pageNumber <= 0 {
 		return "", fmt.Errorf("Source PDF page number is required for artwork %s", strings.TrimSpace(image.Name))
 	}
@@ -405,10 +419,6 @@ func (a *app) ensurePrintIQArtworkPDF(ctx context.Context, image campaignPrintIm
 		return "", err
 	}
 
-	sourcePDFBytes, err := a.readCampaignImage(ctx, sourcePDFStoredName)
-	if err != nil {
-		return "", err
-	}
 	pdfBytes, err := extractSinglePDFPage(sourcePDFBytes, pageNumber)
 	if err != nil {
 		return "", err
@@ -435,7 +445,7 @@ func extractSinglePDFPage(sourcePDFBytes []byte, pageNumber int) ([]byte, error)
 			output = extracted
 			return nil
 		},
-		nil,
+		model.NewDefaultConfiguration(),
 	)
 	if err != nil {
 		return nil, err

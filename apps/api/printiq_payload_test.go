@@ -138,6 +138,41 @@ func TestResolveArtworkSourcePageNumberRequiresPageSignalUnlessSinglePage(t *tes
 	}
 }
 
+func TestResolvePrintIQArtworkURLUsesFirstPageForSinglePageSourcePDFWithoutMetadata(t *testing.T) {
+	tempDir := t.TempDir()
+	sourcePDF := gofpdf.New("P", "pt", "A4", "")
+	sourcePDF.AddPage()
+	sourcePDF.Text(20, 20, "single page")
+	if err := sourcePDF.OutputFileAndClose(filepath.Join(tempDir, "source.pdf")); err != nil {
+		t.Fatalf("create source pdf: %v", err)
+	}
+
+	pageImage := image.NewRGBA(image.Rect(0, 0, 20, 10))
+	pageFile, err := os.Create(filepath.Join(tempDir, "page-1.png"))
+	if err != nil {
+		t.Fatalf("create page image: %v", err)
+	}
+	if err := png.Encode(pageFile, pageImage); err != nil {
+		t.Fatalf("encode page image: %v", err)
+	}
+	if err := pageFile.Close(); err != nil {
+		t.Fatalf("close page image: %v", err)
+	}
+
+	t.Setenv("APP_BASE_URL", "https://app.example.com")
+	artworkURL, err := (&app{campaignImageDir: tempDir}).resolvePrintIQArtworkURL(t.Context(), campaignPrintImage{
+		Name:                "CRTV-26903_SFL_Rev360_QLD_BRUNSWICK_MEGA_4200x2890_@25_HR",
+		StoredName:          "page-1.png",
+		SourcePDFStoredName: "source.pdf",
+	})
+	if err != nil {
+		t.Fatalf("resolve artwork URL: %v", err)
+	}
+	if artworkURL != "https://app.example.com/api/campaign-images/source-page-0001-printiq.pdf/download" {
+		t.Fatalf("expected first page PDF URL, got %s", artworkURL)
+	}
+}
+
 func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 	payload := buildPrintIQGetPriceForProductPayload(
 		printIQSheetProduct{ProductCode: "Double Product", Quantity: 10},
