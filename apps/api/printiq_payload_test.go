@@ -64,6 +64,21 @@ func TestResolvePrintIQSheetProductsSplitsQuantityByArtwork(t *testing.T) {
 	}
 }
 
+func TestResolvePrintIQArtworkURLPrefersPageArtworkOverSourcePDF(t *testing.T) {
+	artworkURL, err := (&app{}).resolvePrintIQArtworkURL(t.Context(), campaignPrintImage{
+		StoredName:          "page-1.jpg",
+		ImageURL:            "https://cdn.example.com/page-1.jpg",
+		SourcePDFStoredName: "source.pdf",
+		SourcePDFURL:        "https://cdn.example.com/source.pdf",
+	})
+	if err != nil {
+		t.Fatalf("resolve artwork URL: %v", err)
+	}
+	if artworkURL != "https://cdn.example.com/page-1.jpg" {
+		t.Fatalf("expected page artwork URL, got %s", artworkURL)
+	}
+}
+
 func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 	payload := buildPrintIQGetPriceForProductPayload(
 		printIQSheetProduct{ProductCode: "Double Product", Quantity: 10},
