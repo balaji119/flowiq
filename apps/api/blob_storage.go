@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 )
 
@@ -84,6 +85,7 @@ func (a *app) storeCampaignImageReader(ctx context.Context, storedName, contentT
 		_, err := a.objectStorage.client.PutObject(ctx, &s3.PutObjectInput{
 			Bucket:        aws.String(a.objectStorage.bucket),
 			Key:           aws.String(storedName),
+			ACL:           types.ObjectCannedACLPublicRead,
 			Body:          content,
 			ContentLength: aws.Int64(contentLength),
 			ContentType:   aws.String(ctype),
@@ -139,10 +141,13 @@ func (a *app) campaignImageReadURL(ctx context.Context, storedName, contentDispo
 	return presigned.URL, true, nil
 }
 
-func (a *app) campaignImagePublicURL(storedName string) (string, bool) {
+func (a *app) campaignImagePublicURL(ctx context.Context, storedName string) (string, bool, error) {
 	trimmedStoredName := strings.Trim(strings.TrimSpace(storedName), "/")
 	if a.objectStorage == nil || trimmedStoredName == "" {
-		return "", false
+		return "", false, nil
+	}
+	if err := a.ensureCampaignImagePublic(ctx, trimmedStoredName); err != nil {
+		return "", false, err
 	}
 
 	if baseURL := strings.TrimRight(strings.TrimSpace(firstNonEmpty(
@@ -150,19 +155,51 @@ func (a *app) campaignImagePublicURL(storedName string) (string, bool) {
 		os.Getenv("DO_SPACES_CDN_URL"),
 		os.Getenv("DO_SPACES_PUBLIC_URL"),
 	)), "/"); baseURL != "" {
-		return baseURL + "/" + escapeObjectKey(trimmedStoredName), true
+		return baseURL + "/" + escapeObjectKey(trimmedStoredName), true, nil
 	}
 
 	parsedEndpoint, err := url.Parse(a.objectStorage.endpoint)
 	if err != nil || parsedEndpoint.Scheme == "" || parsedEndpoint.Host == "" {
-		return "", false
+		return "", false, nil
 	}
-	parsedEndpoint.Host = a.objectStorage.bucket + "." + parsedEndpoint.Host
+	parsedEndpoint.Host = publicSpacesHost(a.objectStorage.bucket, parsedEndpoint.Host)
 	parsedEndpoint.Path = "/" + escapeObjectKey(trimmedStoredName)
 	parsedEndpoint.RawPath = ""
 	parsedEndpoint.RawQuery = ""
 	parsedEndpoint.Fragment = ""
-	return parsedEndpoint.String(), true
+	return parsedEndpoint.String(), true, nil
+}
+
+func (a *app) ensureCampaignImagePublic(ctx context.Context, storedName string) error {
+	if a.objectStorage == nil {
+		return nil
+	}
+	if _, err := a.objectStorage.client.PutObjectAcl(ctx, &s3.PutObjectAclInput{
+		Bucket: aws.String(a.objectStorage.bucket),
+		Key:    aws.String(storedName),
+		ACL:    types.ObjectCannedACLPublicRead,
+	}); err != nil {
+		return fmt.Errorf("make DigitalOcean Spaces object public: %w", err)
+	}
+	return nil
+}
+
+func publicSpacesHost(bucket, endpointHost string) string {
+	trimmedBucket := strings.Trim(strings.TrimSpace(bucket), ".")
+	trimmedHost := strings.Trim(strings.TrimSpace(endpointHost), ".")
+	if trimmedBucket == "" || trimmedHost == "" {
+		return trimmedHost
+	}
+	if strings.Contains(trimmedHost, ".cdn.digitaloceanspaces.com") {
+		return trimmedBucket + "." + trimmedHost
+	}
+	if strings.HasSuffix(trimmedHost, ".digitaloceanspaces.com") {
+		region := strings.TrimSuffix(trimmedHost, ".digitaloceanspaces.com")
+		if region != "" && !strings.Contains(region, ".") {
+			return trimmedBucket + "." + region + ".cdn.digitaloceanspaces.com"
+		}
+	}
+	return trimmedBucket + "." + trimmedHost
 }
 
 func escapeObjectKey(storedName string) string {
