@@ -121,6 +121,23 @@ func TestResolvePrintIQArtworkURLExtractsSourcePDFPage(t *testing.T) {
 	}
 }
 
+func TestResolveArtworkSourcePageNumberRequiresPageSignalUnlessSinglePage(t *testing.T) {
+	pageNumber := resolveArtworkSourcePageNumber(campaignPrintImage{
+		Name: "CRTV-26903_SFL_Rev360_QLD_BRUNSWICK_MEGA_4200x2890_@25_HR",
+	})
+	if pageNumber != 0 {
+		t.Fatalf("expected missing page signal, got %d", pageNumber)
+	}
+
+	pageNumber = resolveArtworkSourcePageNumber(campaignPrintImage{
+		Name:               "CRTV-26903_SFL_Rev360_QLD_BRUNSWICK_MEGA_4200x2890_@25_HR",
+		SourcePDFPageCount: 1,
+	})
+	if pageNumber != 1 {
+		t.Fatalf("expected single page source to use page 1, got %d", pageNumber)
+	}
+}
+
 func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 	payload := buildPrintIQGetPriceForProductPayload(
 		printIQSheetProduct{ProductCode: "Double Product", Quantity: 10},

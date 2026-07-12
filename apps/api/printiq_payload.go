@@ -375,6 +375,9 @@ func resolveArtworkSourcePageNumber(image campaignPrintImage) int {
 	if image.SourcePDFPageNumber > 0 {
 		return image.SourcePDFPageNumber
 	}
+	if image.SourcePDFPageCount == 1 {
+		return 1
+	}
 	matches := artworkPageNamePattern.FindStringSubmatch(image.Name)
 	if len(matches) < 2 {
 		return 0
