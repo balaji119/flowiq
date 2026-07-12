@@ -168,7 +168,7 @@ export function AdminWorkspaceShell({
         ? [
             { label: 'Sheet Name', active: activeSection === 'settings', onClick: onOpenSettings },
             ...(onOpenSheetSizeSettings ? [{ label: 'Sheet Size', active: activeSection === 'sheet-size-settings', onClick: onOpenSheetSizeSettings }] : []),
-            ...(onOpenMaterialMapping ? [{ label: 'Material Mapping', active: activeSection === 'material-mapping', onClick: onOpenMaterialMapping }] : []),
+            ...(onOpenMaterialMapping ? [{ label: 'Product Mapping', active: activeSection === 'material-mapping', onClick: onOpenMaterialMapping }] : []),
             ...(onOpenMaterials ? [{ label: 'Materials', active: activeSection === 'materials', onClick: onOpenMaterials }] : []),
           ]
         : undefined,

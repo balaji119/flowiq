@@ -251,7 +251,7 @@ export function MaterialMappingScreen({
       canAccessManagement
       canAccessShippingCosts
       canAccessPrintingCosts
-      pageTitle="Material Mapping"
+      pageTitle="Product Mapping"
       onBack={() => confirmDiscardChanges(onBack)}
       onOpenLanding={() => confirmDiscardChanges(onBack)}
       onOpenMappings={onOpenMappings ? () => confirmDiscardChanges(onOpenMappings) : undefined}
@@ -378,7 +378,7 @@ export function MaterialMappingScreen({
           <DialogHeader className="pb-1">
             <DialogTitle>Unsaved Changes</DialogTitle>
             <DialogDescription>
-              You have unsaved changes in Material Mapping. Leaving now will discard them.
+              You have unsaved changes in Product Mapping. Leaving now will discard them.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-3 pt-2">
