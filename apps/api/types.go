@@ -109,6 +109,8 @@ type campaignPrintImage struct {
 	SourcePDFFileName   string `json:"sourcePdfFileName,omitempty"`
 	SourcePDFStoredName string `json:"sourcePdfStoredName,omitempty"`
 	SourcePDFURL        string `json:"sourcePdfUrl,omitempty"`
+	SourcePDFPageNumber int    `json:"sourcePdfPageNumber,omitempty"`
+	SourcePDFPageCount  int    `json:"sourcePdfPageCount,omitempty"`
 }
 
 type orderFormValues struct {

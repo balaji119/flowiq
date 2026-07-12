@@ -1,14 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/pdfcpu/pdfcpu/pkg/api"
 )
 
 type parsedDeliveryAddress struct {
@@ -313,6 +318,20 @@ func (a *app) extractCampaignArtworkUpload(ctx context.Context, values orderForm
 
 func (a *app) resolvePrintIQArtworkURL(ctx context.Context, image campaignPrintImage) (string, error) {
 	storedName := strings.TrimSpace(firstNonEmpty(image.StoredName, image.SourcePDFStoredName))
+	generatedArtworkPDF := false
+	if strings.TrimSpace(image.StoredName) != "" && !isPDFStoredName(image.StoredName) {
+		pdfStoredName, err := a.ensurePrintIQArtworkPDF(ctx, image)
+		if err != nil {
+			return "", err
+		}
+		if publicURL, ok, err := a.campaignImagePublicURL(ctx, pdfStoredName); err != nil {
+			return "", err
+		} else if ok {
+			return publicURL, nil
+		}
+		storedName = pdfStoredName
+		generatedArtworkPDF = true
+	}
 	if publicURL, ok, err := a.campaignImagePublicURL(ctx, storedName); err != nil {
 		return "", err
 	} else if ok {
@@ -320,6 +339,9 @@ func (a *app) resolvePrintIQArtworkURL(ctx context.Context, image campaignPrintI
 	}
 
 	artworkURL := strings.TrimSpace(firstNonEmpty(image.ImageURL, image.SourcePDFURL))
+	if generatedArtworkPDF {
+		artworkURL = ""
+	}
 	if artworkURL == "" && storedName != "" {
 		artworkURL = "/api/campaign-images/" + url.PathEscape(storedName) + "/download"
 	}
@@ -335,6 +357,90 @@ func (a *app) resolvePrintIQArtworkURL(ctx context.Context, image campaignPrintI
 		return artworkURL, nil
 	}
 	return appBaseURL + "/" + strings.TrimLeft(artworkURL, "/"), nil
+}
+
+func isPDFStoredName(storedName string) bool {
+	return strings.EqualFold(filepath.Ext(strings.TrimSpace(storedName)), ".pdf")
+}
+
+func printIQSourcePagePDFStoredName(sourcePDFStoredName string, pageNumber int) string {
+	extension := filepath.Ext(sourcePDFStoredName)
+	baseName := strings.TrimSuffix(sourcePDFStoredName, extension)
+	return fmt.Sprintf("%s-page-%04d-printiq.pdf", baseName, pageNumber)
+}
+
+var artworkPageNamePattern = regexp.MustCompile(`(?i)\(\s*page\s+(\d+)\s*\)`)
+
+func resolveArtworkSourcePageNumber(image campaignPrintImage) int {
+	if image.SourcePDFPageNumber > 0 {
+		return image.SourcePDFPageNumber
+	}
+	matches := artworkPageNamePattern.FindStringSubmatch(image.Name)
+	if len(matches) < 2 {
+		return 0
+	}
+	pageNumber, err := strconv.Atoi(matches[1])
+	if err != nil || pageNumber <= 0 {
+		return 0
+	}
+	return pageNumber
+}
+
+func (a *app) ensurePrintIQArtworkPDF(ctx context.Context, image campaignPrintImage) (string, error) {
+	sourcePDFStoredName := strings.TrimSpace(image.SourcePDFStoredName)
+	if sourcePDFStoredName == "" {
+		return "", errors.New("Source PDF is required to submit artwork to PrintIQ")
+	}
+	pageNumber := resolveArtworkSourcePageNumber(image)
+	if pageNumber <= 0 {
+		return "", fmt.Errorf("Source PDF page number is required for artwork %s", strings.TrimSpace(image.Name))
+	}
+	pdfStoredName := printIQSourcePagePDFStoredName(sourcePDFStoredName, pageNumber)
+	if _, err := a.readCampaignImage(ctx, pdfStoredName); err == nil {
+		return pdfStoredName, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	sourcePDFBytes, err := a.readCampaignImage(ctx, sourcePDFStoredName)
+	if err != nil {
+		return "", err
+	}
+	pdfBytes, err := extractSinglePDFPage(sourcePDFBytes, pageNumber)
+	if err != nil {
+		return "", err
+	}
+	if err := a.storeCampaignImage(ctx, pdfStoredName, "application/pdf", pdfBytes); err != nil {
+		return "", err
+	}
+	return pdfStoredName, nil
+}
+
+func extractSinglePDFPage(sourcePDFBytes []byte, pageNumber int) ([]byte, error) {
+	if pageNumber <= 0 {
+		return nil, errors.New("PDF page number must be greater than 0")
+	}
+	var output []byte
+	err := api.ExtractPages(
+		bytes.NewReader(sourcePDFBytes),
+		[]string{strconv.Itoa(pageNumber)},
+		func(reader io.Reader, _ int) error {
+			extracted, err := io.ReadAll(reader)
+			if err != nil {
+				return err
+			}
+			output = extracted
+			return nil
+		},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(output) == 0 {
+		return nil, fmt.Errorf("PDF page %d could not be extracted", pageNumber)
+	}
+	return output, nil
 }
 
 func buildPrintIQUploadArtworkPayload(jobNo string, qstKey any, artwork printIQArtworkUpload, index, total int) map[string]any {

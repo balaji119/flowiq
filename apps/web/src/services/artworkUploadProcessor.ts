@@ -170,6 +170,8 @@ export async function processArtworkPdf(
       sourcePdfFileName: sourcePdfUpload.originalName || pdfFile.name,
       sourcePdfStoredName: sourcePdfUpload.storedName,
       sourcePdfUrl: sourcePdfUpload.url || `/api/campaign-images/${sourcePdfUpload.storedName}`,
+      sourcePdfPageNumber: pageImage.pageNumber,
+      sourcePdfPageCount: pageImage.totalPages,
     });
     onProgress?.({ phase: 'uploading-pages', current: pageIndex + 1, total: pageImages.length });
   }

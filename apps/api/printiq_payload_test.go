@@ -1,6 +1,15 @@
 package main
 
-import "testing"
+import (
+	"image"
+	"image/color"
+	"image/png"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/jung-kurt/gofpdf"
+)
 
 func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndQuantities(t *testing.T) {
 	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
@@ -64,18 +73,51 @@ func TestResolvePrintIQSheetProductsSplitsQuantityByArtwork(t *testing.T) {
 	}
 }
 
-func TestResolvePrintIQArtworkURLPrefersPageArtworkOverSourcePDF(t *testing.T) {
-	artworkURL, err := (&app{}).resolvePrintIQArtworkURL(t.Context(), campaignPrintImage{
-		StoredName:          "page-1.jpg",
-		ImageURL:            "https://cdn.example.com/page-1.jpg",
+func TestResolvePrintIQArtworkURLExtractsSourcePDFPage(t *testing.T) {
+	tempDir := t.TempDir()
+	sourcePDF := gofpdf.New("P", "pt", "A4", "")
+	sourcePDF.AddPage()
+	sourcePDF.Text(20, 20, "page 1")
+	sourcePDF.AddPage()
+	sourcePDF.Text(20, 20, "page 2")
+	if err := sourcePDF.OutputFileAndClose(filepath.Join(tempDir, "source.pdf")); err != nil {
+		t.Fatalf("create source pdf: %v", err)
+	}
+
+	pageImage := image.NewRGBA(image.Rect(0, 0, 20, 10))
+	for y := 0; y < 10; y += 1 {
+		for x := 0; x < 20; x += 1 {
+			pageImage.Set(x, y, color.RGBA{R: 120, G: 30, B: 200, A: 255})
+		}
+	}
+	pageFile, err := os.Create(filepath.Join(tempDir, "page-1.png"))
+	if err != nil {
+		t.Fatalf("create page image: %v", err)
+	}
+	if err := png.Encode(pageFile, pageImage); err != nil {
+		t.Fatalf("encode page image: %v", err)
+	}
+	if err := pageFile.Close(); err != nil {
+		t.Fatalf("close page image: %v", err)
+	}
+
+	t.Setenv("APP_BASE_URL", "https://app.example.com")
+	artworkURL, err := (&app{campaignImageDir: tempDir}).resolvePrintIQArtworkURL(t.Context(), campaignPrintImage{
+		StoredName:          "page-1.png",
+		ImageURL:            "https://cdn.example.com/page-1.png",
+		SourcePDFPageNumber: 2,
+		SourcePDFPageCount:  2,
 		SourcePDFStoredName: "source.pdf",
 		SourcePDFURL:        "https://cdn.example.com/source.pdf",
 	})
 	if err != nil {
 		t.Fatalf("resolve artwork URL: %v", err)
 	}
-	if artworkURL != "https://cdn.example.com/page-1.jpg" {
-		t.Fatalf("expected page artwork URL, got %s", artworkURL)
+	if artworkURL != "https://app.example.com/api/campaign-images/source-page-0002-printiq.pdf/download" {
+		t.Fatalf("expected page artwork PDF URL, got %s", artworkURL)
+	}
+	if _, err := os.Stat(filepath.Join(tempDir, "source-page-0002-printiq.pdf")); err != nil {
+		t.Fatalf("expected generated PDF: %v", err)
 	}
 }
 

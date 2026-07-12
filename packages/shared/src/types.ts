@@ -154,6 +154,8 @@ export type CampaignPrintImage = {
   sourcePdfFileName?: string;
   sourcePdfStoredName?: string;
   sourcePdfUrl?: string;
+  sourcePdfPageNumber?: number;
+  sourcePdfPageCount?: number;
 };
 
 export type CampaignLine = CampaignAsset & {

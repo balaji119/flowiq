@@ -108,6 +108,29 @@ func (a *app) storeCampaignImageReader(ctx context.Context, storedName, contentT
 	return nil
 }
 
+func (a *app) readCampaignImage(ctx context.Context, storedName string) ([]byte, error) {
+	if a.objectStorage != nil {
+		response, err := a.objectStorage.client.GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(a.objectStorage.bucket),
+			Key:    aws.String(storedName),
+		})
+		if err != nil {
+			if isMissingObjectStorageObject(err) {
+				return nil, os.ErrNotExist
+			}
+			return nil, fmt.Errorf("read DigitalOcean Spaces object: %w", err)
+		}
+		defer response.Body.Close()
+		return io.ReadAll(response.Body)
+	}
+
+	content, err := os.ReadFile(filepath.Join(a.campaignImageDir, storedName))
+	if err != nil {
+		return nil, err
+	}
+	return content, nil
+}
+
 func (a *app) campaignImageReadURL(ctx context.Context, storedName, contentDisposition string) (string, bool, error) {
 	if a.objectStorage == nil {
 		return "", false, nil
