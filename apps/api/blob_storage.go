@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -136,6 +137,40 @@ func (a *app) campaignImageReadURL(ctx context.Context, storedName, contentDispo
 	}
 
 	return presigned.URL, true, nil
+}
+
+func (a *app) campaignImagePublicURL(storedName string) (string, bool) {
+	trimmedStoredName := strings.Trim(strings.TrimSpace(storedName), "/")
+	if a.objectStorage == nil || trimmedStoredName == "" {
+		return "", false
+	}
+
+	if baseURL := strings.TrimRight(strings.TrimSpace(firstNonEmpty(
+		os.Getenv("DO_SPACES_PUBLIC_BASE_URL"),
+		os.Getenv("DO_SPACES_CDN_URL"),
+		os.Getenv("DO_SPACES_PUBLIC_URL"),
+	)), "/"); baseURL != "" {
+		return baseURL + "/" + escapeObjectKey(trimmedStoredName), true
+	}
+
+	parsedEndpoint, err := url.Parse(a.objectStorage.endpoint)
+	if err != nil || parsedEndpoint.Scheme == "" || parsedEndpoint.Host == "" {
+		return "", false
+	}
+	parsedEndpoint.Host = a.objectStorage.bucket + "." + parsedEndpoint.Host
+	parsedEndpoint.Path = "/" + escapeObjectKey(trimmedStoredName)
+	parsedEndpoint.RawPath = ""
+	parsedEndpoint.RawQuery = ""
+	parsedEndpoint.Fragment = ""
+	return parsedEndpoint.String(), true
+}
+
+func escapeObjectKey(storedName string) string {
+	parts := strings.Split(strings.Trim(storedName, "/"), "/")
+	for index, part := range parts {
+		parts[index] = url.PathEscape(part)
+	}
+	return strings.Join(parts, "/")
 }
 
 func (a *app) deleteCampaignImage(ctx context.Context, storedName string) error {

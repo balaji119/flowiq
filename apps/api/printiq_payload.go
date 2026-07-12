@@ -313,12 +313,8 @@ func (a *app) extractCampaignArtworkUpload(ctx context.Context, values orderForm
 
 func (a *app) resolvePrintIQArtworkURL(ctx context.Context, image campaignPrintImage) (string, error) {
 	storedName := strings.TrimSpace(firstNonEmpty(image.SourcePDFStoredName, image.StoredName))
-	if storedName != "" {
-		if signedURL, ok, err := a.campaignImageReadURL(ctx, storedName, ""); err != nil {
-			return "", err
-		} else if ok {
-			return signedURL, nil
-		}
+	if publicURL, ok := a.campaignImagePublicURL(storedName); ok {
+		return publicURL, nil
 	}
 
 	artworkURL := strings.TrimSpace(firstNonEmpty(image.SourcePDFURL, image.ImageURL))
