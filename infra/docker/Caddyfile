@@ -6,7 +6,7 @@
   }
 }
 
-:80 {
+adsconnect.com.au, www.adsconnect.com.au {
   @compressible not path /api/campaign-images/* /campaign-files/*
   encode @compressible zstd gzip
 
