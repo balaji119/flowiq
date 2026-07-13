@@ -1107,7 +1107,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	createQuoteValues.CustomerCode = tenant.Code
 	createQuoteValues.ProductCode = firstProduct.ProductCode
 	createQuoteValues.Quantity = strconv.Itoa(firstProduct.Quantity)
-	createQuotePayload := buildPrintIQCreateQuotePayload(createQuoteValues, campaign.Summary)
+	createQuotePayload := buildPrintIQCreateQuotePayload(createQuoteValues, campaign.Summary, firstProduct)
 	createQuoteResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "CreateQuoteWithDelivery", createQuotePayload, a.optionService.createQuoteWithDelivery)
 	if !ok {
 		return
@@ -1122,7 +1122,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	getPricePayloads := make([]any, 0, len(sheetProducts)-1)
 	getPriceResponses := make([]any, 0, len(sheetProducts)-1)
 	for _, product := range sheetProducts[1:] {
-		getPricePayload := buildPrintIQGetPriceForProductPayload(product, quoteNo, tenant.Code)
+		getPricePayload := buildPrintIQGetPriceForProductPayload(campaign.Values, product, quoteNo, tenant.Code)
 		getPricePayloads = append(getPricePayloads, getPricePayload)
 		getPriceResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetPriceForProduct", getPricePayload, a.optionService.getPriceForProduct)
 		if !ok {

@@ -40,6 +40,44 @@ type printIQSheetProduct struct {
 	ArtworkImageID string
 }
 
+var creativeNamePattern = regexp.MustCompile(`(?i)^Creative(\d+)$`)
+
+func resolveCreativeNumber(values orderFormValues, artworkImageID string) int {
+	trimmedArtworkImageID := strings.TrimSpace(artworkImageID)
+	if trimmedArtworkImageID != "" {
+		for creativeName, imageID := range values.CreativeNameAssignments {
+			if strings.TrimSpace(imageID) != trimmedArtworkImageID {
+				continue
+			}
+			match := creativeNamePattern.FindStringSubmatch(strings.TrimSpace(creativeName))
+			if len(match) == 2 {
+				if number, err := strconv.Atoi(match[1]); err == nil && number > 0 {
+					return number
+				}
+			}
+		}
+		for index, image := range values.PrintImages {
+			if strings.TrimSpace(image.ID) == trimmedArtworkImageID {
+				return index + 1
+			}
+		}
+	}
+	return 1
+}
+
+func buildPrintIQJobTitle(values orderFormValues, product printIQSheetProduct) string {
+	creativeNumber := resolveCreativeNumber(values, product.ArtworkImageID)
+	productCode := strings.TrimSpace(product.ProductCode)
+	campaignName := strings.TrimSpace(values.CampaignName)
+	if productCode == "" {
+		productCode = strings.TrimSpace(values.ProductCode)
+	}
+	if campaignName == "" {
+		return fmt.Sprintf("C%d / %s", creativeNumber, productCode)
+	}
+	return fmt.Sprintf("C%d / %s ( %s)", creativeNumber, productCode, campaignName)
+}
+
 var printIQSheetFormatOrder = []struct {
 	breakdownKey string
 	settingsKey  string
@@ -120,7 +158,7 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 	return products, nil
 }
 
-func buildPrintIQGetPriceForProductPayload(product printIQSheetProduct, quoteNo, customerCode string) map[string]any {
+func buildPrintIQGetPriceForProductPayload(values orderFormValues, product printIQSheetProduct, quoteNo, customerCode string) map[string]any {
 	return map[string]any{
 		"ProductCode": product.ProductCode,
 		"Quantities": []map[string]any{{
@@ -128,7 +166,7 @@ func buildPrintIQGetPriceForProductPayload(product printIQSheetProduct, quoteNo,
 			"Kinds":    1,
 		}},
 		"QuoteNo":          quoteNo,
-		"JobTitle":         product.ProductCode,
+		"JobTitle":         buildPrintIQJobTitle(values, product),
 		"CustomerCode":     customerCode,
 		"AccountManagerID": "00000000-0000-0000-0000-000000000000",
 		"CopyDeliveryFromFirstProductToAllProducts": true,
@@ -228,7 +266,7 @@ func stringMapHasValues(value map[string]any) bool {
 	return false
 }
 
-func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSummary) map[string]any {
+func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSummary, product printIQSheetProduct) map[string]any {
 	quantity := resolveQuantity(values, summary)
 	deliveryAddress := parseCampaignDeliveryAddress(firstCampaignDeliveryAddress(values))
 
@@ -241,7 +279,7 @@ func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSum
 		"AllArtworkSubmitted": "false",
 	}
 	setStringIfPresent(payload, "Notes", values.Notes)
-	setStringIfPresent(payload, "JobTitle", values.CampaignName)
+	setStringIfPresent(payload, "JobTitle", buildPrintIQJobTitle(values, product))
 	setStringIfPresent(payload, "ProductCode", values.ProductCode)
 	setStringIfPresent(payload, "CustomerCode", values.CustomerCode)
 	setStringIfPresent(payload, "CustomerReference", values.CustomerReference)

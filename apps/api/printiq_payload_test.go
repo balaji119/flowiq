@@ -175,16 +175,49 @@ func TestResolvePrintIQArtworkURLUsesFirstPageForSinglePageSourcePDFWithoutMetad
 
 func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 	payload := buildPrintIQGetPriceForProductPayload(
-		printIQSheetProduct{ProductCode: "Double Product", Quantity: 10},
+		orderFormValues{
+			CampaignName: "Asahi - GNBC Q3 - Campaign",
+			PrintImages: []campaignPrintImage{
+				{ID: "artwork-a"},
+				{ID: "artwork-b"},
+			},
+			CreativeNameAssignments: map[string]string{
+				"Creative1": "artwork-a",
+				"Creative2": "artwork-b",
+			},
+		},
+		printIQSheetProduct{ProductCode: "Double Product", Quantity: 10, ArtworkImageID: "artwork-b"},
 		"Q50206",
 		"C00003",
 	)
 	if payload["ProductCode"] != "Double Product" || payload["QuoteNo"] != "Q50206" || payload["CustomerCode"] != "C00003" {
 		t.Fatalf("unexpected payload: %#v", payload)
 	}
+	if payload["JobTitle"] != "C2 / Double Product ( Asahi - GNBC Q3 - Campaign)" {
+		t.Fatalf("unexpected job title: %#v", payload["JobTitle"])
+	}
 	quantities, ok := payload["Quantities"].([]map[string]any)
 	if !ok || len(quantities) != 1 || quantities[0]["Quantity"] != 10 || quantities[0]["Kinds"] != 1 {
 		t.Fatalf("unexpected quantities: %#v", payload["Quantities"])
+	}
+}
+
+func TestBuildPrintIQCreateQuotePayloadUsesFormattedJobTitle(t *testing.T) {
+	values := orderFormValues{
+		CampaignName: "Asahi - GNBC Q3 - Campaign",
+		ProductCode:  "Syd A0 Quad 3364x1189",
+		Quantity:     "25",
+		CreativeNameAssignments: map[string]string{
+			"Creative1": "artwork-a",
+		},
+	}
+	payload := buildPrintIQCreateQuotePayload(
+		values,
+		nil,
+		printIQSheetProduct{ProductCode: "Syd A0 Quad 3364x1189", Quantity: 25, ArtworkImageID: "artwork-a"},
+	)
+	if payload["JobTitle"] != "C1 / Syd A0 Quad 3364x1189 ( Asahi - GNBC Q3 - Campaign)" {
+		t.Fatalf("unexpected job title: %#v", payload["JobTitle"])
 	}
 }
 
