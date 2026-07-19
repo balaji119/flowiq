@@ -7115,16 +7115,16 @@ export function QuoteBuilderScreen({
           }
         }}
       >
-        <DialogContent style={{ width: '70vw', maxWidth: '70vw' }}>
+        <DialogContent style={{ width: '95vw', maxWidth: '95vw', maxHeight: '95vh' }}>
           <DialogHeader>
             <DialogTitle>Artwork &amp; Material</DialogTitle>
           </DialogHeader>
           {multiArtworkTarget ? (
             <div className="space-y-3">
-              <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/70">
+              <div className="overflow-auto rounded-md border border-slate-700 bg-slate-900/70">
                 <table className="w-full table-fixed border-collapse text-sm">
                   <colgroup>
-                    <col className="w-[120px]" />
+                    <col className="w-[664px]" />
                     <col className="w-[170px]" />
                     <col className="w-[120px]" />
                     <col className="w-auto" />
@@ -7147,6 +7147,7 @@ export function QuoteBuilderScreen({
                     {multiArtworkRecords.map((record, index) => {
                       const slotImage = record.imageId ? values.printImages.find((image) => image.id === record.imageId) : null;
                       const thumbnailSrc = slotImage?.thumbnailUrl ? buildApiUrl(slotImage.thumbnailUrl) : (slotImage?.imageUrl ? buildApiUrl(slotImage.imageUrl) : '');
+                      const artworkSrc = slotImage?.imageUrl ? buildApiUrl(slotImage.imageUrl) : thumbnailSrc;
                       const fileName = slotImage?.fileName || slotImage?.name || '-';
                       const assignedMaterial = materials.find((material) => material.id === record.materialId) ?? null;
                       const mappedCreativeName = record.imageId
@@ -7157,12 +7158,13 @@ export function QuoteBuilderScreen({
                       return (
                         <tr key={record.id} className="border-t border-slate-700/70 bg-slate-800/65">
                           <td className="border border-slate-700 px-3 py-2">
-                            <div className="mx-auto h-14 w-14 overflow-hidden rounded border border-slate-700 bg-slate-900">
-                              {thumbnailSrc ? (
-                                <ArtworkThumbnailWithHoverPreview
+                            <div className="mx-auto w-[40rem] max-w-[calc(100vw-4rem)] overflow-hidden rounded-lg border border-violet-400/60 bg-slate-950 p-2">
+                              {artworkSrc ? (
+                                <img
                                   alt={slotImage?.name || slotImage?.fileName || `Slot ${index + 1} artwork`}
-                                  previewSrc={buildApiUrl(slotImage?.imageUrl || slotImage?.thumbnailUrl || '')}
-                                  thumbnailSrc={thumbnailSrc}
+                                  className="max-h-[60vh] w-full rounded object-contain"
+                                  loading="lazy"
+                                  src={artworkSrc}
                                 />
                               ) : null}
                             </div>
