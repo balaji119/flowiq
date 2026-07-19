@@ -126,9 +126,18 @@ type orderFormValues struct {
 	DueDate                 string               `json:"dueDate"`
 	NumberOfWeeks           string               `json:"numberOfWeeks"`
 	PrintImages             []campaignPrintImage `json:"printImages"`
+	SupportingDocuments     []supportingDocument `json:"supportingDocuments,omitempty"`
 	CreativeNameAssignments map[string]string    `json:"creativeNameAssignments,omitempty"`
 	CampaignMarkets         []campaignMarket     `json:"campaignMarkets"`
 	Contact                 contactDetails       `json:"contact"`
+}
+
+type supportingDocument struct {
+	OriginalName string `json:"originalName"`
+	StoredName   string `json:"storedName"`
+	MimeType     string `json:"mimeType"`
+	Size         int64  `json:"size"`
+	UploadedAt   string `json:"uploadedAt"`
 }
 
 type campaignAsset struct {

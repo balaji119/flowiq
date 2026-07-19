@@ -4,6 +4,7 @@ import {
   CampaignListItem,
   CampaignPrintImage,
   CampaignRecord,
+  CampaignSupportingDocument,
   CampaignSubmitResponse,
   CampaignUpsertPayload,
 } from '@flowiq/shared';
@@ -53,6 +54,17 @@ export async function appendCampaignPrintImages(campaignId: string, images: Camp
   return apiFetchJson<{ campaign: CampaignRecord }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/print-images`, tenantId), {
     method: 'POST',
     body: JSON.stringify({ images }),
+  });
+}
+
+export async function appendCampaignSupportingDocuments(
+  campaignId: string,
+  documents: CampaignSupportingDocument[],
+  tenantId?: string | null,
+) {
+  return apiFetchJson<{ campaign: CampaignRecord }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/supporting-documents`, tenantId), {
+    method: 'POST',
+    body: JSON.stringify({ documents }),
   });
 }
 

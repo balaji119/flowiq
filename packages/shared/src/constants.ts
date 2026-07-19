@@ -44,6 +44,7 @@ export function createDefaultFormValues(customerCode = '', productCode = ''): Or
     dueDate: '',
     numberOfWeeks: '3',
     printImages: [],
+    supportingDocuments: [],
     creativeNameAssignments: {},
     campaignMarkets: [],
     contact: {

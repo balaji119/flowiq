@@ -321,6 +321,14 @@ export type CalculatorMetadataResponse = {
   formatKeys: FormatKey[];
 };
 
+export type CampaignSupportingDocument = {
+  originalName: string;
+  storedName: string;
+  mimeType: string;
+  size: number;
+  uploadedAt: string;
+};
+
 export type OrderFormValues = {
   customerCode: string;
   customerReference: string;
@@ -334,6 +342,7 @@ export type OrderFormValues = {
   dueDate: string;
   numberOfWeeks: string;
   printImages: CampaignPrintImage[];
+  supportingDocuments?: CampaignSupportingDocument[];
   creativeNameAssignments?: Record<string, string>;
   campaignMarkets: CampaignMarket[];
   contact: ContactDetails;

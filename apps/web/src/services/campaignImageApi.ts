@@ -210,3 +210,24 @@ export async function deleteCampaignImage(storedName: string): Promise<{ deleted
 
   return (payload as { deleted: boolean }) ?? { deleted: true };
 }
+
+export async function downloadCampaignImage(storedName: string, originalName: string): Promise<Blob> {
+  const normalizedStoredName = storedName.trim();
+  if (!normalizedStoredName) throw new Error('Missing stored file name');
+
+  const response = await fetch(buildApiUrl(
+    `/api/campaign-images/${encodeURIComponent(normalizedStoredName)}/download?filename=${encodeURIComponent(originalName)}&proxy=1`,
+  ), { headers: authenticatedHeaders() });
+  if (!response.ok) {
+    const payload = await response.text();
+    let message = `Download failed (${response.status})`;
+    try {
+      const decoded = JSON.parse(payload) as { error?: string };
+      if (decoded.error) message = decoded.error;
+    } catch {
+      // Keep the status-based error when the response is not JSON.
+    }
+    throw new Error(message);
+  }
+  return response.blob();
+}

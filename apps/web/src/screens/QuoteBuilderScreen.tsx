@@ -3,6 +3,7 @@ import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, CircleAlert, Ey
 import {
   CampaignAsset,
   CampaignPrintImage,
+  CampaignSupportingDocument,
   CampaignRecord,
   CampaignCalculationSummary,
   CustomPrintCostRecord,
@@ -30,8 +31,8 @@ import { useArtworkUploads } from '../context/ArtworkUploadContext';
 import { OneDriveArtworkImportDialog } from '../components/OneDriveArtworkImportDialog';
 import { OneDriveSelection } from '../services/oneDriveApi';
 import { buildApiUrl } from '../services/apiBase';
-import { acquireCampaignEditLock, createCampaign, fetchCampaign, markCampaignSubmitted, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
-import { deleteCampaignImage } from '../services/campaignImageApi';
+import { acquireCampaignEditLock, appendCampaignSupportingDocuments, createCampaign, fetchCampaign, markCampaignSubmitted, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
+import { deleteCampaignImage, downloadCampaignImage, uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
 import { fetchCampaignCustomPrintCosts, fetchCampaignMaterials, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
@@ -40,6 +41,7 @@ import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
 import { fetchTenant } from '../services/tenantApi';
 import { canonicalKeyForFormat, resolveFormatName, resolveSheetName, sanitizeSheetNameOverrides, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { Document as WordDocument, ExternalHyperlink, ImageRun, LineRuleType, Packer, Paragraph, TextRun, UnderlineType } from 'docx';
 import fontkit from '@pdf-lib/fontkit';
 import { PDFArray, PDFDocument, PDFName, PDFString, rgb } from 'pdf-lib';
@@ -484,6 +486,7 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
       sourcePdfStoredName: image.sourcePdfStoredName,
       sourcePdfUrl: normalizeCampaignImageUrl(image.sourcePdfUrl),
     })),
+    supportingDocuments: (values.supportingDocuments ?? []).map((document) => ({ ...document })),
     creativeNameAssignments: normalizeCreativeNameAssignments(values.creativeNameAssignments),
   };
 }
@@ -1270,6 +1273,7 @@ export function QuoteBuilderScreen({
   const [selectedPurchaseOrderFile, setSelectedPurchaseOrderFile] = useState<File | null>(null);
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
   const [uploadedPurchaseOrderName, setUploadedPurchaseOrderName] = useState('');
+  const [uploadingSupportingDocuments, setUploadingSupportingDocuments] = useState(false);
   const [purchaseOrderUploadSuccessOpen, setPurchaseOrderUploadSuccessOpen] = useState(false);
   const [purchaseOrderUploadSuccessMessage, setPurchaseOrderUploadSuccessMessage] = useState('');
   const [assignArtworkDialogOpen, setAssignArtworkDialogOpen] = useState(false);
@@ -1328,6 +1332,7 @@ export function QuoteBuilderScreen({
   const [topBarActionsHost, setTopBarActionsHost] = useState<HTMLElement | null>(null);
   const [bottomBarHost, setBottomBarHost] = useState<HTMLElement | null>(null);
   const purchaseOrderInputRef = useRef<HTMLInputElement | null>(null);
+  const supportingDocumentInputRef = useRef<HTMLInputElement | null>(null);
   const campaignStartPickerRef = useRef<HTMLInputElement | null>(null);
   const dueDatePickerRef = useRef<HTMLInputElement | null>(null);
   const artworkPdfInputRef = useRef<HTMLInputElement | null>(null);
@@ -3340,6 +3345,48 @@ export function QuoteBuilderScreen({
     }
   }
 
+  function openSupportingDocumentPicker() {
+    supportingDocumentInputRef.current?.click();
+  }
+
+  async function handleUploadSupportingDocuments(fileList: FileList | null) {
+    const files = Array.from(fileList ?? []);
+    if (files.length === 0 || uploadingSupportingDocuments) return;
+
+    setUploadingSupportingDocuments(true);
+    setError('');
+    const completedUploads: CampaignSupportingDocument[] = [];
+    try {
+      const savedCampaignId = await saveCampaignDraft();
+      if (!savedCampaignId) return;
+
+      for (const file of files) {
+        const upload = await uploadCampaignImage(file);
+        completedUploads.push({
+          originalName: upload.originalName,
+          storedName: upload.storedName,
+          mimeType: upload.mimeType || file.type || 'application/octet-stream',
+          size: upload.size,
+          uploadedAt: upload.uploadedAt,
+        });
+      }
+
+      const response = await appendCampaignSupportingDocuments(savedCampaignId, completedUploads, effectiveTenantId);
+      setValues(normalizeFormValues(response.campaign.values));
+      setCampaignStatus(response.campaign.status);
+      lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
+      setExportProgressMessage(
+        `${completedUploads.length} supporting document${completedUploads.length === 1 ? '' : 's'} uploaded for Installs.`,
+      );
+    } catch (uploadError) {
+      await Promise.allSettled(completedUploads.map((document) => deleteCampaignImage(document.storedName)));
+      setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload supporting documents');
+    } finally {
+      setUploadingSupportingDocuments(false);
+      if (supportingDocumentInputRef.current) supportingDocumentInputRef.current.value = '';
+    }
+  }
+
   function costLinesForMarket(marketName: string) {
     const marketLines = summary?.lines.filter((line) => line.market === marketName) ?? [];
     const targetBreakdown = marketSummaryByName.get(marketName)?.breakdown;
@@ -5250,14 +5297,49 @@ export function QuoteBuilderScreen({
     setReviewActionNeedsDueDate(false);
     setInstallDownloadError('');
     setExportingTemplates(true);
-    setExportProgressMessage('Preparing installation sheet...');
+    setExportProgressMessage('Preparing Installs ZIP...');
 
     try {
-      await generateArtworkTemplates(true, 'pdf', 'installs');
-      setExportProgressMessage('Installation sheet download started. Check your browser download bar.');
+      const generatedFiles = await generateArtworkTemplates(false, 'pdf', 'installs');
+      const installationSheet = generatedFiles[0];
+      if (!installationSheet) throw new Error('Installation sheet generation did not produce a PDF');
+
+      const zip = new JSZip();
+      zip.file(installationSheet.fileName, installationSheet.blob);
+      const supportingDocumentsFolder = zip.folder('Supporting Documents');
+      const usedDocumentNames = new Set<string>();
+      const uniqueDocumentName = (originalName: string) => {
+        const safeName = originalName
+          .replace(/[\\/\u0000-\u001f\u007f]/g, '_')
+          .replace(/^\.+/, '')
+          .trim() || 'Supporting Document';
+        const extensionIndex = safeName.lastIndexOf('.');
+        const base = extensionIndex > 0 ? safeName.slice(0, extensionIndex) : safeName;
+        const extension = extensionIndex > 0 ? safeName.slice(extensionIndex) : '';
+        let candidate = safeName;
+        let suffix = 2;
+        while (usedDocumentNames.has(candidate.toLocaleLowerCase())) {
+          candidate = `${base} (${suffix})${extension}`;
+          suffix += 1;
+        }
+        usedDocumentNames.add(candidate.toLocaleLowerCase());
+        return candidate;
+      };
+
+      for (const document of values.supportingDocuments ?? []) {
+        setExportProgressMessage(`Adding supporting document: ${document.originalName}`);
+        const documentBlob = await downloadCampaignImage(document.storedName, document.originalName);
+        supportingDocumentsFolder?.file(uniqueDocumentName(document.originalName), documentBlob);
+      }
+
+      setExportProgressMessage('Creating Installs ZIP...');
+      const zipBlob = await zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
+      const baseName = sanitizeFileName((values.campaignName || 'Campaign').trim() || 'Campaign');
+      downloadBlobWithFileName(zipBlob, `${baseName} - Installs.zip`);
+      setExportProgressMessage('Installs ZIP download started. Check your browser download bar.');
       return true;
     } catch (exportError) {
-      const message = exportError instanceof Error ? exportError.message : 'Unable to download the installation sheet. Please try again.';
+      const message = exportError instanceof Error ? exportError.message : 'Unable to download the Installs ZIP. Please try again.';
       setReviewValidationError(message);
       setInstallDownloadError(message);
       setExportProgressMessage('');
@@ -5651,7 +5733,7 @@ export function QuoteBuilderScreen({
                 </div>
               </div>
                 </div>
-                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,226px)_minmax(0,226px)_minmax(0,136px)] xl:items-center">
+                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,210px)_minmax(0,210px)_minmax(0,210px)_minmax(0,136px)] xl:items-center">
                   <div className="flex h-11 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
                     <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Purchase Order</span>
                     <button
@@ -5687,6 +5769,30 @@ export function QuoteBuilderScreen({
                       type="file"
                     />
                   </div>
+                  <Button
+                    className="h-10 min-w-0 rounded-lg border-white/15 px-4 text-sm font-semibold"
+                    disabled={uploadingSupportingDocuments}
+                    onClick={openSupportingDocumentPicker}
+                    title={(values.supportingDocuments?.length ?? 0) > 0
+                      ? `${values.supportingDocuments?.length} supporting document${values.supportingDocuments?.length === 1 ? '' : 's'} for Installs`
+                      : 'Upload supporting documents for Installs'}
+                    type="button"
+                    variant="outline"
+                  >
+                    {uploadingSupportingDocuments ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <Upload className="h-4 w-4" />}
+                    {uploadingSupportingDocuments
+                      ? 'Uploading...'
+                      : (values.supportingDocuments?.length ?? 0) > 0
+                        ? `Supporting Docs (${values.supportingDocuments?.length})`
+                        : 'Supporting Docs'}
+                  </Button>
+                  <input
+                    ref={supportingDocumentInputRef}
+                    className="hidden"
+                    multiple
+                    onChange={(event) => void handleUploadSupportingDocuments(event.target.files)}
+                    type="file"
+                  />
                   <Button
                     className="h-10 min-w-0 rounded-lg border-white/15 px-4 text-sm font-semibold"
                     onClick={openUploadManagerDialog}
@@ -6332,7 +6438,7 @@ export function QuoteBuilderScreen({
                     </Button>
                     <Button
                       className="h-9 min-w-0 rounded-xl border-white/10 bg-slate-800/65 px-1.5 text-[11px] font-semibold text-slate-100 transition hover:bg-slate-700/75"
-                      disabled={exportingTemplates || sendingAdsEmail}
+                      disabled={exportingTemplates || sendingAdsEmail || uploadingSupportingDocuments}
                       onClick={() => void downloadInstallationSheet()}
                       type="button"
                       variant="outline"

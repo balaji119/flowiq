@@ -96,6 +96,7 @@ func validateCampaignDates(values orderFormValues) error {
 func cloneOrderFormValues(values orderFormValues) orderFormValues {
 	cloned := values
 	cloned.PrintImages = append([]campaignPrintImage(nil), values.PrintImages...)
+	cloned.SupportingDocuments = append([]supportingDocument(nil), values.SupportingDocuments...)
 	if values.CreativeNameAssignments != nil {
 		cloned.CreativeNameAssignments = make(map[string]string, len(values.CreativeNameAssignments))
 		for key, value := range values.CreativeNameAssignments {
@@ -330,6 +331,7 @@ func buildSubCampaignValues(parent *campaignRecord, sequence int) orderFormValue
 	values.CampaignName = fmt.Sprintf("%s - subcampaign - %d", parentName, sequence)
 	values.Quantity = ""
 	values.CreativeNameAssignments = map[string]string{}
+	values.SupportingDocuments = []supportingDocument{}
 
 	for marketIndex := range values.CampaignMarkets {
 		values.CampaignMarkets[marketIndex].ID = uuid.NewString()
@@ -606,6 +608,77 @@ func (s *campaignStore) appendCampaignPrintImages(ctx context.Context, user Auth
 		}
 		imageIndexByID[image.ID] = len(values.PrintImages)
 		values.PrintImages = append(values.PrintImages, image)
+	}
+
+	nextFormData, err := marshalJSON(values)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE campaigns
+		SET form_data = $3::jsonb,
+			updated_by_user_id = $4,
+			updated_at = NOW()
+		WHERE id = $1 AND tenant_id = $2
+	`, campaignID, *user.TenantID, string(nextFormData), user.ID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return s.getCampaign(ctx, user, campaignID)
+}
+
+func (s *campaignStore) appendCampaignSupportingDocuments(ctx context.Context, user AuthUser, campaignID string, documents []supportingDocument) (*campaignRecord, error) {
+	if user.TenantID == nil {
+		return nil, errors.New("current user is not assigned to a tenant")
+	}
+	for _, document := range documents {
+		if strings.TrimSpace(document.OriginalName) == "" {
+			return nil, errors.New("Supporting document name is required")
+		}
+		if strings.TrimSpace(document.StoredName) == "" {
+			return nil, errors.New("Supporting document stored name is required")
+		}
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var formData []byte
+	err = tx.QueryRow(ctx, `
+		SELECT form_data
+		FROM campaigns
+		WHERE id = $1 AND tenant_id = $2
+		FOR UPDATE
+	`, campaignID, *user.TenantID).Scan(&formData)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errors.New("Campaign not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	values := orderFormValues{}
+	if len(formData) > 0 {
+		if err := json.Unmarshal(formData, &values); err != nil {
+			return nil, err
+		}
+	}
+	documentIndexByStoredName := make(map[string]int, len(values.SupportingDocuments)+len(documents))
+	for index, document := range values.SupportingDocuments {
+		documentIndexByStoredName[document.StoredName] = index
+	}
+	for _, document := range documents {
+		if index, exists := documentIndexByStoredName[document.StoredName]; exists {
+			values.SupportingDocuments[index] = document
+			continue
+		}
+		documentIndexByStoredName[document.StoredName] = len(values.SupportingDocuments)
+		values.SupportingDocuments = append(values.SupportingDocuments, document)
 	}
 
 	nextFormData, err := marshalJSON(values)
