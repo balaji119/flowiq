@@ -52,6 +52,7 @@ const QUOTE_AUTOMATION_RESULT_EVENT = 'flowiq:quote-automation-result';
 const LANDING_NOTICE_KEY = 'flowiq:landing-notice';
 
 type VisualsExportMode = 'excel' | 'pdf';
+type ArtworkExportPurpose = 'visuals' | 'installs';
 type ReviewDrawerMode = 'high-level' | 'detailed';
 
 type GeneratedVisualExportFile = {
@@ -1263,6 +1264,7 @@ export function QuoteBuilderScreen({
   const [error, setError] = useState('');
   const [exportingTemplates, setExportingTemplates] = useState(false);
   const [visualsDownloadError, setVisualsDownloadError] = useState('');
+  const [installDownloadError, setInstallDownloadError] = useState('');
   const [sendingAdsEmail, setSendingAdsEmail] = useState(false);
   const [exportProgressMessage, setExportProgressMessage] = useState('');
   const [selectedPurchaseOrderFile, setSelectedPurchaseOrderFile] = useState<File | null>(null);
@@ -3514,7 +3516,11 @@ export function QuoteBuilderScreen({
   );
   const totalEstimateCost = totalPrintingCost + totalShippingCost;
 
-  async function generateArtworkTemplates(downloadFiles: boolean, exportMode: VisualsExportMode): Promise<GeneratedVisualExportFile[]> {
+  async function generateArtworkTemplates(
+    downloadFiles: boolean,
+    exportMode: VisualsExportMode,
+    purpose: ArtworkExportPurpose = 'visuals',
+  ): Promise<GeneratedVisualExportFile[]> {
     try {
       const ExcelJSRuntime = ExcelJS as any;
       const baseName = sanitizeFileName((values.campaignName || 'Campaign').trim() || 'Campaign');
@@ -3538,9 +3544,75 @@ export function QuoteBuilderScreen({
         ]),
       );
       const mappingOptionByMarketAssetId = new Map<string, MarketMetadata['assets'][number]>();
+      const mappingOptionById = new Map<string, MarketMetadata['assets'][number]>();
       markets.forEach((marketMetadata) => {
         marketMetadata.assets.forEach((assetOption) => {
           mappingOptionByMarketAssetId.set(`${marketMetadata.name}\x00${assetOption.id}`, assetOption);
+          mappingOptionById.set(assetOption.id, assetOption);
+        });
+      });
+      type InstallWeekRow = {
+        week: number;
+        state: string;
+        asset: string;
+        breakdown: Record<string, number>;
+        rowOrder: number;
+      };
+      const installWeekRows: InstallWeekRow[] = [];
+      const allInstallWeeks = Array.from(new Set([
+        ...createAllWeeks(weekCount),
+        ...values.campaignMarkets.flatMap((market) => market.assets.flatMap((asset) => asset.selectedWeeks)),
+      ])).sort((left, right) => left - right);
+      let installRowOrder = 0;
+      values.campaignMarkets.forEach((market) => {
+        market.assets.forEach((campaignAsset) => {
+          const baseOption = mappingOptionById.get(campaignAsset.assetId);
+          const maintenanceOption = baseOption?.maintenanceAssetId
+            ? mappingOptionById.get(baseOption.maintenanceAssetId)
+            : null;
+          const defaultLabel = campaignAsset.assetSearch || campaignAsset.assetId;
+          const selectedWeekSet = new Set(campaignAsset.selectedWeeks);
+          const state = (
+            inferStateFromMarket(market.market)
+            ?? normalizeExportState(baseOption?.state || maintenanceOption?.state || '')
+            ?? market.market
+          ) || '-';
+          const displayRows = [
+            {
+              asset: baseOption?.label || defaultLabel,
+              appliesToMaintenanceWeeks: false,
+              quantities: baseOption?.quantities ?? ({} as QuantityBreakdown),
+            },
+            ...(maintenanceOption
+              ? [{
+                asset: maintenanceOption.label || `${baseOption?.label || defaultLabel} (maintenance)`,
+                appliesToMaintenanceWeeks: true,
+                quantities: maintenanceOption.quantities ?? ({} as QuantityBreakdown),
+              }]
+              : []),
+          ];
+
+          displayRows.forEach((displayRow) => {
+            const rowOrder = installRowOrder++;
+            allInstallWeeks.forEach((week) => {
+              const usesMaintenanceWeek = week % 2 === 0 && Boolean(maintenanceOption);
+              const isSelected = selectedWeekSet.has(week);
+              const matchesWeek = displayRow.appliesToMaintenanceWeeks ? usesMaintenanceWeek : !usesMaintenanceWeek;
+              const breakdown = isSelected && matchesWeek
+                ? Object.fromEntries(
+                  Object.entries(displayRow.quantities as Record<string, number>)
+                    .map(([key, value]) => [key, Math.max(0, Math.floor(Number(value) || 0))]),
+                )
+                : {};
+              installWeekRows.push({
+                week,
+                state,
+                asset: displayRow.asset,
+                breakdown,
+                rowOrder,
+              });
+            });
+          });
         });
       });
       const printRows = new Map<
@@ -3920,7 +3992,7 @@ export function QuoteBuilderScreen({
         }
       };
 
-      if (shouldGenerateExcel || exportMode === 'pdf') {
+      if (shouldGenerateExcel || (exportMode === 'pdf' && purpose === 'visuals')) {
         setExportProgressMessage('Preparing artwork previews...');
         await Promise.all(
           Array.from(requiredCreativeImageIds).map(async (imageId) => {
@@ -4152,7 +4224,8 @@ export function QuoteBuilderScreen({
         const deadlineText = formatDeliveryDeadline(values.dueDate);
         const pdfDoc = await PDFDocument.create();
         pdfDoc.registerFontkit(fontkit);
-        let page = pdfDoc.addPage([595.28, 841.89]);
+        const pdfPageSize: [number, number] = purpose === 'installs' ? [841.89, 595.28] : [595.28, 841.89];
+        let page = pdfDoc.addPage(pdfPageSize);
         const [regularFontResponse, boldFontResponse] = await Promise.all([
           fetch('/fonts/NotoSans-Regular.ttf'),
           fetch('/fonts/NotoSans-Bold.ttf'),
@@ -4224,7 +4297,7 @@ export function QuoteBuilderScreen({
 
         const ensureSpace = (requiredHeight: number) => {
           if (cursorY - requiredHeight < marginBottom) {
-            page = pdfDoc.addPage([595.28, 841.89]);
+            page = pdfDoc.addPage(pdfPageSize);
             cursorY = page.getHeight() - marginTop;
           }
         };
@@ -4277,7 +4350,7 @@ export function QuoteBuilderScreen({
           cursorY -= (h + 10);
         };
 
-        const drawSectionHeader = (label: string) => {
+        const drawSectionHeader = (label: string, spacingAfter = 12) => {
           const h = 22;
           ensureSpace(h + 6);
           page.drawRectangle({
@@ -4304,7 +4377,7 @@ export function QuoteBuilderScreen({
             color: rgb(0.1, 0.16, 0.26),
           });
           cursorY -= (h + 6);
-          cursorY -= 6;
+          cursorY -= spacingAfter;
         };
 
         const drawWrappedLine = (
@@ -4429,7 +4502,7 @@ export function QuoteBuilderScreen({
             const linesByCell = values.map((value, index) => splitCellLines(value, columns[index].width));
             const rowHeight = Math.max(22, Math.max(...linesByCell.map((lines) => lines.length)) * tableLineHeight + cellPadding * 2);
             if (cursorY - rowHeight < marginBottom) {
-              page = pdfDoc.addPage([595.28, 841.89]);
+              page = pdfDoc.addPage(pdfPageSize);
               cursorY = page.getHeight() - marginTop;
               if (!header) drawTableRow(columns.map((column) => column.label), true);
             }
@@ -4473,7 +4546,135 @@ export function QuoteBuilderScreen({
             ]));
         };
 
-        drawTitleBlock(values.campaignName.trim() || 'Artwork', `Creative Mix: ${creativeHeadline}`);
+        const installFormatKeys = Array.from(new Set([
+          ...formatKeys,
+          ...installWeekRows.flatMap((row) => Object.keys(row.breakdown)),
+        ])).filter((key) => installWeekRows.some((row) => (row.breakdown[key] ?? 0) > 0));
+        const installFrameDivisor = (key: string) => formatToFrameDivisor[key as CreativeFormatKey] ?? 1;
+        const installFrameCount = (key: string, posters: number) => Math.ceil(posters / Math.max(1, installFrameDivisor(key)));
+        const installDateForWeek = (week: number) => {
+          if (!weekCommencing) return `Week ${week}`;
+          const date = new Date(weekCommencing);
+          date.setDate(date.getDate() + (week - 1) * 7);
+          const year = String(date.getFullYear());
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          return `w/c ${formatDocumentDate(`${year}-${month}-${day}`)}`;
+        };
+        const drawInstallWeekTable = (week: number, rows: InstallWeekRow[]) => {
+          const stateWidth = 44;
+          const assetWidth = Math.max(155, maxWidth - stateWidth - installFormatKeys.length * 54);
+          const quantityWidth = (maxWidth - stateWidth - assetWidth) / Math.max(1, installFormatKeys.length);
+          const columns = [
+            { label: 'State', width: stateWidth },
+            { label: 'Asset', width: assetWidth },
+            ...installFormatKeys.map((key) => ({ label: getSizeDisplayName(key), width: quantityWidth })),
+          ];
+          const tableFontSize = installFormatKeys.length > 8 ? 7 : 7.8;
+          const rowHeight = 21;
+          const drawRow = (cells: string[], header = false, total = false) => {
+            if (cursorY - rowHeight < marginBottom) {
+              page = pdfDoc.addPage(pdfPageSize);
+              cursorY = page.getHeight() - marginTop;
+              if (!header) drawRow(columns.map((column) => column.label), true);
+            }
+            let x = marginX;
+            columns.forEach((column, index) => {
+              page.drawRectangle({
+                x,
+                y: cursorY - rowHeight,
+                width: column.width,
+                height: rowHeight,
+                color: header ? brandBlue : total ? sectionBg : rgb(1, 1, 1),
+                borderColor: sectionBorder,
+                borderWidth: 0.7,
+              });
+              const text = cells[index] || '';
+              const useFont = header || total ? bold : font;
+              const color = header ? rgb(1, 1, 1) : rgb(0.08, 0.12, 0.18);
+              const available = column.width - 8;
+              let display = text;
+              while (display.length > 1 && useFont.widthOfTextAtSize(display, tableFontSize) > available) {
+                display = `${display.slice(0, -2)}...`;
+              }
+              const textWidth = useFont.widthOfTextAtSize(display, tableFontSize);
+              page.drawText(display, {
+                x: index >= 2 ? x + Math.max(4, (column.width - textWidth) / 2) : x + 4,
+                y: cursorY - 14,
+                size: tableFontSize,
+                font: useFont,
+                color,
+              });
+              x += column.width;
+            });
+            cursorY -= rowHeight;
+          };
+          drawSectionHeader(`Install Schedule - ${installDateForWeek(week)}`, 0);
+          cursorY += 10;
+          drawRow(columns.map((column) => column.label), true);
+          const orderedRows = [...rows].sort((left, right) => left.rowOrder - right.rowOrder);
+          let lastState = '';
+          orderedRows.forEach((row) => {
+            const showState = row.state !== lastState;
+            drawRow([
+              showState ? row.state : '',
+              row.asset,
+              ...installFormatKeys.map((key) => String(row.breakdown[key] ?? 0)),
+            ]);
+            lastState = row.state;
+          });
+          const states = orderedRows.reduce<string[]>((list, row) => {
+            if (!list.includes(row.state)) list.push(row.state);
+            return list;
+          }, []);
+          states.forEach((state) => {
+            const stateRows = orderedRows.filter((row) => row.state === state);
+            const totals = Object.fromEntries(installFormatKeys.map((key) => [
+              key,
+              stateRows.reduce((sum, row) => sum + (row.breakdown[key] ?? 0), 0),
+            ]));
+            drawRow([state, 'Posters', ...installFormatKeys.map((key) => String(totals[key] ?? 0))], false, true);
+            drawRow(['', 'Frames', ...installFormatKeys.map((key) => String(installFrameCount(key, totals[key] ?? 0)))], false, true);
+          });
+          cursorY -= 20;
+        };
+
+        drawTitleBlock(
+          purpose === 'installs' ? `${values.campaignName.trim() || 'Campaign'} - Installation Sheet` : values.campaignName.trim() || 'Artwork',
+          purpose === 'installs'
+            ? `Weekly installation schedule${campaignNumber ? ` - ${campaignNumber}` : ''}`
+            : `Creative Mix: ${creativeHeadline}`,
+        );
+        if (purpose === 'installs') {
+          drawSectionHeader('Job Details');
+          drawWrappedSegments([
+            { text: 'Job / Campaign Number: ', isBold: true },
+            { text: campaignNumber || '-' },
+          ], 16);
+          if (values.jobDescription.trim()) {
+            drawWrappedSegments([
+              { text: 'Description: ', isBold: true },
+              { text: values.jobDescription.trim() },
+            ], 16);
+          }
+          if (values.notes.trim()) {
+            drawWrappedSegments([
+              { text: 'Installation Notes: ', isBold: true },
+              { text: values.notes.trim() },
+            ], 16);
+          }
+          cursorY -= 4;
+          const hasInstallSchedule = installWeekRows.some((row) =>
+            Object.values(row.breakdown).some((quantity) => quantity > 0));
+          if (hasInstallSchedule) {
+            allInstallWeeks.forEach((week) => {
+              const rows = installWeekRows.filter((row) => row.week === week);
+              drawInstallWeekTable(week, rows);
+            });
+          } else {
+            drawWrappedLine('No scheduled installs are available for this campaign.', false, undefined, 16);
+          }
+        } else {
         if (artworkFolderUrl) {
           drawSectionHeader('Resources');
           drawWrappedLine('Artwork Folder', false, artworkFolderUrl, 16);
@@ -4547,6 +4748,7 @@ export function QuoteBuilderScreen({
           });
           cursorY -= 6;
         });
+        }
 
         const generatedAt = new Date().toLocaleString('en-AU', {
           day: '2-digit',
@@ -4588,7 +4790,7 @@ export function QuoteBuilderScreen({
         const pdfArrayBuffer = new ArrayBuffer(pdfBytes.byteLength);
         new Uint8Array(pdfArrayBuffer).set(pdfBytes);
         const blob = new Blob([pdfArrayBuffer], { type: 'application/pdf' });
-        const fileName = `${baseName} - Visuals.pdf`;
+        const fileName = `${baseName} - ${purpose === 'installs' ? 'Installation Sheet' : 'Visuals'}.pdf`;
         if (downloadFiles) {
           downloadBlobWithFileName(blob, fileName);
         }
@@ -5025,6 +5227,39 @@ export function QuoteBuilderScreen({
       const message = exportError instanceof Error ? exportError.message : 'Unable to download visual export. Please try again.';
       setReviewValidationError(message);
       setVisualsDownloadError(message);
+      setExportProgressMessage('');
+      return false;
+    } finally {
+      setExportingTemplates(false);
+    }
+  }
+
+  async function downloadInstallationSheet() {
+    if (exportingTemplates || sendingAdsEmail) return false;
+    if (!hasDeliveryDueDate) {
+      setReviewValidationError('Add a due date before downloading the installation sheet.', { dueDate: true });
+      return false;
+    }
+    if (!hasMappedCreatives) {
+      setReviewValidationError('Map at least one creative to a market asset before downloading the installation sheet');
+      return false;
+    }
+
+    setError('');
+    setReviewActionError('');
+    setReviewActionNeedsDueDate(false);
+    setInstallDownloadError('');
+    setExportingTemplates(true);
+    setExportProgressMessage('Preparing installation sheet...');
+
+    try {
+      await generateArtworkTemplates(true, 'pdf', 'installs');
+      setExportProgressMessage('Installation sheet download started. Check your browser download bar.');
+      return true;
+    } catch (exportError) {
+      const message = exportError instanceof Error ? exportError.message : 'Unable to download the installation sheet. Please try again.';
+      setReviewValidationError(message);
+      setInstallDownloadError(message);
       setExportProgressMessage('');
       return false;
     } finally {
@@ -6085,24 +6320,33 @@ export function QuoteBuilderScreen({
                   <p className="mt-1 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-[30px] font-extrabold leading-none text-transparent drop-shadow-[0_0_18px_rgba(255,255,255,0.12)]">
                     {formatCurrency(totalEstimateCost)}
                   </p>
-                  <div className="mt-5 grid grid-cols-2 gap-2">
+                  <div className="mt-5 grid grid-cols-3 gap-1.5">
                     <Button
-                      className="h-9 rounded-xl border-white/10 bg-slate-800/65 px-2 text-xs font-semibold text-slate-100 transition hover:bg-slate-700/75"
+                      className="h-9 min-w-0 rounded-xl border-white/10 bg-slate-800/65 px-1.5 text-[11px] font-semibold text-slate-100 transition hover:bg-slate-700/75"
                       disabled={exportingTemplates || sendingAdsEmail}
                       onClick={() => void downloadArtworkVisuals()}
                       type="button"
                       variant="outline"
                     >
-                      {exportingTemplates ? 'Generating...' : 'Download Visuals'}
+                      Visuals
                     </Button>
                     <Button
-                      className="h-9 rounded-xl border border-violet-300/35 bg-gradient-to-r from-violet-600 to-violet-500 px-2 text-xs font-semibold text-white shadow-[0_10px_24px_rgba(105,53,228,0.26)] transition hover:brightness-105"
+                      className="h-9 min-w-0 rounded-xl border-white/10 bg-slate-800/65 px-1.5 text-[11px] font-semibold text-slate-100 transition hover:bg-slate-700/75"
+                      disabled={exportingTemplates || sendingAdsEmail}
+                      onClick={() => void downloadInstallationSheet()}
+                      type="button"
+                      variant="outline"
+                    >
+                      Installs
+                    </Button>
+                    <Button
+                      className="h-9 min-w-0 rounded-xl border border-violet-300/35 bg-gradient-to-r from-violet-600 to-violet-500 px-1.5 text-[11px] font-semibold text-white shadow-[0_10px_24px_rgba(105,53,228,0.26)] transition hover:brightness-105"
                       disabled={submitting || exportingTemplates || sendingAdsEmail}
                       onClick={() => void handleSubmitQuote()}
                       type="button"
                       variant="secondary"
                     >
-                      {submitting ? 'Submitting...' : 'Submit Order'}
+                      {submitting ? 'Submitting...' : 'Submit'}
                     </Button>
                   </div>
                 </div>
@@ -7373,6 +7617,28 @@ export function QuoteBuilderScreen({
               type="button"
               variant="secondary"
             >
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(installDownloadError)}
+        onOpenChange={(open) => {
+          if (!open) setInstallDownloadError('');
+        }}
+      >
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 30rem)' }}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CircleAlert className="h-5 w-5 text-rose-300" />
+              Unable to Download Installation Sheet
+            </DialogTitle>
+            <DialogDescription className="break-words text-left">{installDownloadError}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <Button onClick={() => setInstallDownloadError('')} type="button" variant="secondary">
               OK
             </Button>
           </div>
