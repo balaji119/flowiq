@@ -50,8 +50,8 @@ export function createDefaultFormValues(customerCode = '', productCode = ''): Or
     contact: {
       title: 'Accounts Payable',
       firstName: 'Accounts',
-      surname: 'Team',
-      email: 'accounts@example.com',
+      surname: 'Payable',
+      email: 'accounts@revolution360.com.au',
     },
   };
 }
