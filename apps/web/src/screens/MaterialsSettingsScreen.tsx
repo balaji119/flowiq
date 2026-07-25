@@ -28,6 +28,7 @@ function snapshot(rows: MaterialDraft[]) {
 export function MaterialsSettingsScreen({
   onBack,
   onOpenMappings,
+  onOpenMaterialMapping,
   onOpenPrintingCosts,
   onOpenSettings,
   onOpenSheetSizeSettings,
@@ -161,6 +162,7 @@ export function MaterialsSettingsScreen({
       onBack={() => confirmDiscardChanges(onBack)}
       onOpenLanding={() => confirmDiscardChanges(onBack)}
       onOpenMappings={onOpenMappings ? () => confirmDiscardChanges(onOpenMappings) : undefined}
+      onOpenMaterialMapping={onOpenMaterialMapping ? () => confirmDiscardChanges(onOpenMaterialMapping) : undefined}
       onOpenMaterials={() => {}}
       onOpenPrintingCosts={onOpenPrintingCosts ? () => confirmDiscardChanges(onOpenPrintingCosts) : undefined}
       onOpenSettings={onOpenSettings ? () => confirmDiscardChanges(onOpenSettings) : undefined}

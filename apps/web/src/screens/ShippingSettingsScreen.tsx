@@ -115,7 +115,7 @@ function parseDeliveryAddress(rawAddress: string): AddressFormState {
   };
 }
 
-export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenMaterials, onOpenPrintingCosts, onOpenSettings, onOpenSheetSizeSettings, onOpenShippingCosts, onOpenTenants, onOpenUsers, tenantId }: ShippingSettingsScreenProps) {
+export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenMaterialMapping, onOpenMaterials, onOpenPrintingCosts, onOpenSettings, onOpenSheetSizeSettings, onOpenShippingCosts, onOpenTenants, onOpenUsers, tenantId }: ShippingSettingsScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -494,6 +494,7 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenMaterials
       onBack={onBack}
       onOpenLanding={onBack}
       onOpenMappings={onOpenMappings}
+      onOpenMaterialMapping={onOpenMaterialMapping}
       onOpenMaterials={onOpenMaterials}
       onOpenPrintingCosts={onOpenPrintingCosts}
       onOpenSettings={onOpenSettings}

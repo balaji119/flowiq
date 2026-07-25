@@ -46,6 +46,7 @@ function emptyTenantForm(): TenantFormState {
 export function TenantManagementScreen({
   onBack,
   onOpenMappings,
+  onOpenMaterialMapping,
   onOpenMaterials,
   onOpenPrintingCosts,
   onOpenSettings,
@@ -229,6 +230,7 @@ export function TenantManagementScreen({
       onBack={onBack}
       onOpenLanding={onBack}
       onOpenMappings={onOpenMappings}
+      onOpenMaterialMapping={onOpenMaterialMapping}
       onOpenMaterials={onOpenMaterials}
       onOpenPrintingCosts={onOpenPrintingCosts}
       onOpenSettings={onOpenSettings}

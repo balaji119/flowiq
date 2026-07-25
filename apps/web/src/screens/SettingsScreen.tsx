@@ -29,6 +29,7 @@ function createCustomRow(source = '', name = ''): CustomOverrideRow {
 export function SettingsScreen({
   onBack,
   onOpenMappings,
+  onOpenMaterialMapping,
   onOpenMaterials,
   onOpenPrintingCosts,
   onOpenSheetSizeSettings,
@@ -306,6 +307,7 @@ export function SettingsScreen({
       onBack={() => confirmDiscardChanges(onBack)}
       onOpenLanding={() => confirmDiscardChanges(onBack)}
       onOpenMappings={onOpenMappings ? () => confirmDiscardChanges(onOpenMappings) : undefined}
+      onOpenMaterialMapping={onOpenMaterialMapping ? () => confirmDiscardChanges(onOpenMaterialMapping) : undefined}
       onOpenMaterials={onOpenMaterials ? () => confirmDiscardChanges(onOpenMaterials) : undefined}
       onOpenPrintingCosts={onOpenPrintingCosts ? () => confirmDiscardChanges(onOpenPrintingCosts) : undefined}
       onOpenSettings={() => {}}
