@@ -27,6 +27,9 @@ type contextKey string
 
 const authUserKey contextKey = "authUser"
 const activeUsersWindow = 1 * time.Minute
+const printIQLogRetention = 30 * 24 * time.Hour
+const printIQLogPrefix = "printiq-submissions-"
+const printIQLogSuffix = ".log"
 
 type app struct {
 	authStore        *authStore
@@ -36,7 +39,7 @@ type app struct {
 	optionService    *optionService
 	jwtSecret        []byte
 	jwtExpiry        time.Duration
-	logPath          string
+	logDir           string
 	uploadDir        string
 	campaignImageDir string
 	printIQBaseURL   string
@@ -83,7 +86,7 @@ func main() {
 		optionService:    newOptionService(envOrDefault("PRINTIQ_BASE_URL", "https://adsaust.printiq.com"), filepath.Join(baseDir, "storage", "data")),
 		jwtSecret:        jwtSecret,
 		jwtExpiry:        parseDurationOrDefault(envOrDefault("JWT_EXPIRES_IN", "8h"), 8*time.Hour),
-		logPath:          filepath.Join(baseDir, "storage", "logs", "printiq-payloads.log"),
+		logDir:           filepath.Join(baseDir, "storage", "logs"),
 		uploadDir:        filepath.Join(baseDir, "storage", "uploads", "purchase-orders"),
 		campaignImageDir: filepath.Join(baseDir, "storage", "uploads", "campaign-images"),
 		printIQBaseURL:   envOrDefault("PRINTIQ_BASE_URL", "https://adsaust.printiq.com"),
@@ -91,7 +94,7 @@ func main() {
 		oneDriveWorkerID: uuid.NewString(),
 	}
 
-	if err := os.MkdirAll(filepath.Dir(api.logPath), 0o755); err != nil {
+	if err := os.MkdirAll(api.logDir, 0o755); err != nil {
 		log.Fatalf("failed to create log directory: %v", err)
 	}
 	if err := os.MkdirAll(api.uploadDir, 0o755); err != nil {
@@ -104,6 +107,7 @@ func main() {
 		log.Fatalf("failed to initialize campaign object storage: %v", err)
 	}
 	go api.runOneDriveImportWorker(ctx)
+	go api.runLogRetentionWorker(ctx)
 
 	address := fmt.Sprintf(":%s", envOrDefault("PORT", "4000"))
 	log.Printf("FlowIQ API listening on http://localhost%s", address)
@@ -437,12 +441,58 @@ func (a *app) appendPrintIQLog(entry any) {
 	if err != nil {
 		return
 	}
-	file, err := os.OpenFile(a.logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	file, err := os.OpenFile(a.printIQLogPath(time.Now()), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return
 	}
 	defer file.Close()
 	_, _ = file.Write(append(bytes, '\n'))
+}
+
+func (a *app) printIQLogPath(now time.Time) string {
+	return filepath.Join(a.logDir, printIQLogPrefix+now.UTC().Format("2006-01-02")+printIQLogSuffix)
+}
+
+func (a *app) runLogRetentionWorker(ctx context.Context) {
+	a.deleteOldPrintIQLogs()
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			a.deleteOldPrintIQLogs()
+		}
+	}
+}
+
+func (a *app) deleteOldPrintIQLogs() {
+	entries, err := os.ReadDir(a.logDir)
+	if err != nil {
+		log.Printf("PrintIQ log retention failed: %v", err)
+		return
+	}
+	cutoff := time.Now().Add(-printIQLogRetention)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasPrefix(name, printIQLogPrefix) || !strings.HasSuffix(name, printIQLogSuffix) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(cutoff) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(a.logDir, name)); err != nil {
+			log.Printf("PrintIQ log retention delete failed for %s: %v", name, err)
+		}
+	}
 }
 
 func createRequestID() string {
@@ -995,6 +1045,100 @@ func printIQResponseError(parsed any) (bool, string) {
 	return true, message
 }
 
+func printIQStepLabel(step string) string {
+	switch step {
+	case "CreateQuoteWithDelivery":
+		return "create the PrintIQ quote"
+	case "GetPriceForProduct":
+		return "add one of the product lines to the PrintIQ quote"
+	case "AcceptQuote":
+		return "accept the PrintIQ quote and create jobs"
+	case "UploadArtworkURL":
+		return "upload artwork to the PrintIQ job"
+	default:
+		return "submit the order to PrintIQ"
+	}
+}
+
+func printIQStepFailureMessage(step string, status int, parsed any, err error) string {
+	if err != nil {
+		return fmt.Sprintf("Unable to %s. %s", printIQStepLabel(step), err.Error())
+	}
+	if isError, message := printIQResponseError(parsed); isError {
+		return fmt.Sprintf("Unable to %s. PrintIQ said: %s", printIQStepLabel(step), message)
+	}
+	if status == http.StatusBadGateway {
+		return fmt.Sprintf("Unable to %s. PrintIQ returned a bad gateway response. The quote may already exist in PrintIQ, so check PrintIQ before retrying.", printIQStepLabel(step))
+	}
+	if status >= 500 {
+		return fmt.Sprintf("Unable to %s. PrintIQ returned status %d. The quote may already exist in PrintIQ, so check PrintIQ before retrying.", printIQStepLabel(step), status)
+	}
+	return fmt.Sprintf("Unable to %s. PrintIQ returned status %d.", printIQStepLabel(step), status)
+}
+
+func summarizePrintIQPayload(step string, payload any) map[string]any {
+	summary := map[string]any{"step": step}
+	payloadMap, ok := payload.(map[string]any)
+	if !ok {
+		return summary
+	}
+	copyStringField(summary, payloadMap, "QuoteNo")
+	copyStringField(summary, payloadMap, "CustomerCode")
+	copyStringField(summary, payloadMap, "ProductCode")
+	copyStringField(summary, payloadMap, "JobTitle")
+	copyStringField(summary, payloadMap, "Quantity")
+	copyStringField(summary, payloadMap, "JobNo")
+	copyStringField(summary, payloadMap, "OverrideFileName")
+	if _, ok := payloadMap["ArtworkUrl"]; ok {
+		summary["hasArtworkUrl"] = true
+	}
+	if _, ok := payloadMap["QSTKey"]; ok {
+		summary["hasQSTKey"] = true
+	}
+	return summary
+}
+
+func summarizePrintIQResponse(step string, parsed any) map[string]any {
+	summary := map[string]any{"step": step}
+	if quoteNo := extractQuoteNo(parsed); quoteNo != "" {
+		summary["quoteNo"] = quoteNo
+	}
+	acceptedProducts := extractAcceptedProducts(parsed)
+	if len(acceptedProducts) > 0 {
+		jobNos := make([]string, 0, len(acceptedProducts))
+		qstKeyCount := 0
+		for _, product := range acceptedProducts {
+			if product.JobNo != "" {
+				jobNos = append(jobNos, product.JobNo)
+			}
+			if product.QSTKey != nil {
+				qstKeyCount++
+			}
+		}
+		summary["acceptedProductCount"] = len(acceptedProducts)
+		if len(jobNos) > 0 {
+			summary["jobNos"] = jobNos
+		}
+		if qstKeyCount > 0 {
+			summary["qstKeyCount"] = qstKeyCount
+		}
+	}
+	if isError, message := printIQResponseError(parsed); isError {
+		summary["isError"] = true
+		summary["errorMessage"] = message
+	}
+	if parsed == nil {
+		summary["emptyResponse"] = true
+	}
+	return summary
+}
+
+func copyStringField(target map[string]any, source map[string]any, key string) {
+	if value := printIQStringValue(source[key]); value != "" {
+		target[key] = value
+	}
+}
+
 func (a *app) runPrintIQSubmissionStep(
 	w http.ResponseWriter,
 	requestID string,
@@ -1012,11 +1156,12 @@ func (a *app) runPrintIQSubmissionStep(
 		"tenantId":   campaign.TenantID,
 		"userId":     user.ID,
 		"campaignId": campaign.ID,
-		"payload":    payload,
+		"payload":    summarizePrintIQPayload(step, payload),
 	})
 
 	parsed, status, err := call(payload)
 	if err != nil {
+		message := printIQStepFailureMessage(step, status, parsed, err)
 		a.appendPrintIQLog(map[string]any{
 			"requestId":  requestID,
 			"timestamp":  time.Now().UTC().Format(time.RFC3339),
@@ -1025,13 +1170,14 @@ func (a *app) runPrintIQSubmissionStep(
 			"tenantId":   campaign.TenantID,
 			"userId":     user.ID,
 			"campaignId": campaign.ID,
-			"response":   err.Error(),
+			"message":    message,
 			"status":     500,
 		})
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": message, "step": step, "requestId": requestID})
 		return nil, false
 	}
 	if status < 200 || status >= 300 {
+		message := printIQStepFailureMessage(step, status, parsed, nil)
 		a.appendPrintIQLog(map[string]any{
 			"requestId":  requestID,
 			"timestamp":  time.Now().UTC().Format(time.RFC3339),
@@ -1040,13 +1186,15 @@ func (a *app) runPrintIQSubmissionStep(
 			"tenantId":   campaign.TenantID,
 			"userId":     user.ID,
 			"campaignId": campaign.ID,
-			"response":   parsed,
+			"message":    message,
+			"response":   summarizePrintIQResponse(step, parsed),
 			"status":     status,
 		})
-		writeJSON(w, status, map[string]any{"error": "PrintIQ " + step + " request failed", "details": parsed})
+		writeJSON(w, status, map[string]any{"error": message, "step": step, "requestId": requestID})
 		return nil, false
 	}
 	if isError, message := printIQResponseError(parsed); isError {
+		displayMessage := printIQStepFailureMessage(step, status, parsed, nil)
 		a.appendPrintIQLog(map[string]any{
 			"requestId":  requestID,
 			"timestamp":  time.Now().UTC().Format(time.RFC3339),
@@ -1055,10 +1203,11 @@ func (a *app) runPrintIQSubmissionStep(
 			"tenantId":   campaign.TenantID,
 			"userId":     user.ID,
 			"campaignId": campaign.ID,
-			"response":   parsed,
+			"message":    displayMessage,
+			"response":   summarizePrintIQResponse(step, parsed),
 			"status":     status,
 		})
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": message})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": displayMessage, "printIqMessage": message, "step": step, "requestId": requestID})
 		return nil, false
 	}
 
@@ -1070,7 +1219,7 @@ func (a *app) runPrintIQSubmissionStep(
 		"tenantId":   campaign.TenantID,
 		"userId":     user.ID,
 		"campaignId": campaign.ID,
-		"response":   parsed,
+		"response":   summarizePrintIQResponse(step, parsed),
 		"status":     status,
 	})
 	return parsed, true

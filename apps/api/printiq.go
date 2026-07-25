@@ -446,9 +446,7 @@ func (o *optionService) postQuoteProcess(endpoint string, payload any) (any, int
 		return nil, 500, err
 	}
 
-	// TEMP DEBUG: Log the JSON body for replaying this request in Postman.
-	// Do not log requestURL here because it contains the PrintIQ login token.
-	log.Printf("PrintIQ %s payload: %s", endpoint, body)
+	log.Printf("PrintIQ %s request: %v", endpoint, summarizePrintIQPayload(endpoint, payload))
 
 	request, _ := http.NewRequest(http.MethodPost, requestURL, bytes.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")

@@ -137,17 +137,20 @@ On smaller screens, the summary appears below the main form area.
 
 ## Logging and debugging
 
-Every PrintIQ quote request is logged on the server side for troubleshooting.
+Every PrintIQ quote submission step is logged on the server side for troubleshooting.
 
-Log file location:
+Log file location pattern:
 
-`apps/api/storage/logs/printiq-payloads.log`
+`apps/api/storage/logs/printiq-submissions-YYYY-MM-DD.log`
 
 The log includes:
 
-- request payload
-- response payload
-- error responses
+- request ID
+- campaign, tenant, user, and PrintIQ step
+- status code
+- quote number, job numbers, product code, quantity, and error message when available
+
+Full request and response payloads are not logged. PrintIQ submission logs older than 30 days are deleted automatically by the API service.
 - timestamps
 
 ## Recommended usage pattern
