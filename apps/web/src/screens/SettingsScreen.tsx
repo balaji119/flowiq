@@ -49,6 +49,7 @@ export function SettingsScreen({
   const [presetOverrides, setPresetOverrides] = useState<Record<string, string>>({});
   const [multipleArtworkFormats, setMultipleArtworkFormats] = useState<Record<string, boolean>>({});
   const [customPrintCostFormats, setCustomPrintCostFormats] = useState<Record<string, boolean>>({});
+  const [customSheetSizeFormats, setCustomSheetSizeFormats] = useState<Record<string, boolean>>({});
   const [customOverrides, setCustomOverrides] = useState<CustomOverrideRow[]>([]);
   const [savedSnapshot, setSavedSnapshot] = useState('');
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
@@ -62,6 +63,7 @@ export function SettingsScreen({
     customValues: CustomOverrideRow[],
     multipleArtworkValues: Record<string, boolean>,
     customPrintCostValues: Record<string, boolean>,
+    customSheetSizeValues: Record<string, boolean>,
   ) {
     const merged: SheetNameOverrides = {};
     sheetNamePresetEntries.forEach((entry) => {
@@ -80,16 +82,20 @@ export function SettingsScreen({
     const normalizedCustomPrintCostFormats = Object.fromEntries(
       Object.entries(customPrintCostValues).filter(([, enabled]) => Boolean(enabled)),
     );
+    const normalizedCustomSheetSizeFormats = Object.fromEntries(
+      Object.entries(customSheetSizeValues).filter(([, enabled]) => Boolean(enabled)),
+    );
     return JSON.stringify({
       overrides: merged,
       multipleArtworkFormats: normalizedMultipleArtworkFormats,
       customPrintCostFormats: normalizedCustomPrintCostFormats,
+      customSheetSizeFormats: normalizedCustomSheetSizeFormats,
     });
   }
 
   const currentSnapshot = useMemo(
-    () => buildSettingsSnapshot(presetOverrides, customOverrides, multipleArtworkFormats, customPrintCostFormats),
-    [presetOverrides, customOverrides, multipleArtworkFormats, customPrintCostFormats],
+    () => buildSettingsSnapshot(presetOverrides, customOverrides, multipleArtworkFormats, customPrintCostFormats, customSheetSizeFormats),
+    [presetOverrides, customOverrides, multipleArtworkFormats, customPrintCostFormats, customSheetSizeFormats],
   );
   const hasUnsavedChanges = savedSnapshot !== '' && currentSnapshot !== savedSnapshot;
 
@@ -131,6 +137,9 @@ export function SettingsScreen({
     if (!effectiveTenantId) {
       setPresetOverrides({});
       setCustomOverrides([]);
+      setMultipleArtworkFormats({});
+      setCustomPrintCostFormats({});
+      setCustomSheetSizeFormats({});
       setLoading(false);
       return;
     }
@@ -162,12 +171,15 @@ export function SettingsScreen({
               overrides: { ...normalized, ...importedCustomColumns },
               multipleArtworkFormats: response.settings.multipleArtworkFormats ?? {},
               customPrintCostFormats: response.settings.customPrintCostFormats ?? {},
+              customSheetSizeFormats: response.settings.customSheetSizeFormats ?? {},
             },
             effectiveTenantId,
           );
           if (!active) return;
           normalized = sanitizeSheetNameOverrides(synchronized.settings.overrides);
           response.settings.multipleArtworkFormats = synchronized.settings.multipleArtworkFormats;
+          response.settings.customPrintCostFormats = synchronized.settings.customPrintCostFormats;
+          response.settings.customSheetSizeFormats = synchronized.settings.customSheetSizeFormats;
         }
         const nextPreset: Record<string, string> = {};
         sheetNamePresetEntries.forEach((entry) => {
@@ -176,13 +188,14 @@ export function SettingsScreen({
         setPresetOverrides(nextPreset);
         setMultipleArtworkFormats(response.settings.multipleArtworkFormats ?? {});
         setCustomPrintCostFormats(response.settings.customPrintCostFormats ?? {});
+        setCustomSheetSizeFormats(response.settings.customSheetSizeFormats ?? {});
 
         const nextCustom = Object.entries(normalized)
           .filter(([key]) => !presetKeys.has(key))
           .map(([key, value]) => createCustomRow(key, value))
           .sort((left, right) => left.source.localeCompare(right.source));
         setCustomOverrides(nextCustom);
-        setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}, response.settings.customPrintCostFormats ?? {}));
+        setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}, response.settings.customPrintCostFormats ?? {}, response.settings.customSheetSizeFormats ?? {}));
       } catch (loadError) {
         if (active) {
           setError(loadError instanceof Error ? loadError.message : 'Unable to load settings');
@@ -225,6 +238,9 @@ export function SettingsScreen({
     const normalizedCustomPrintCostFormats = Object.fromEntries(
       Object.entries(customPrintCostFormats).filter(([, enabled]) => Boolean(enabled)),
     );
+    const normalizedCustomSheetSizeFormats = Object.fromEntries(
+      Object.entries(customSheetSizeFormats).filter(([, enabled]) => Boolean(enabled)),
+    );
 
     setSaving(true);
     setError('');
@@ -234,6 +250,7 @@ export function SettingsScreen({
         overrides: merged,
         multipleArtworkFormats: normalizedMultipleArtworkFormats,
         customPrintCostFormats: normalizedCustomPrintCostFormats,
+        customSheetSizeFormats: normalizedCustomSheetSizeFormats,
       }, effectiveTenantId);
       const normalized = sanitizeSheetNameOverrides(response.settings.overrides);
 
@@ -244,6 +261,7 @@ export function SettingsScreen({
       setPresetOverrides(nextPreset);
       setMultipleArtworkFormats(response.settings.multipleArtworkFormats ?? {});
       setCustomPrintCostFormats(response.settings.customPrintCostFormats ?? {});
+      setCustomSheetSizeFormats(response.settings.customSheetSizeFormats ?? {});
 
       const presetKeys = new Set(sheetNamePresetEntries.map((entry) => entry.key));
       const nextCustom = Object.entries(normalized)
@@ -251,7 +269,7 @@ export function SettingsScreen({
         .map(([key, value]) => createCustomRow(key, value))
         .sort((left, right) => left.source.localeCompare(right.source));
       setCustomOverrides(nextCustom);
-      setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}, response.settings.customPrintCostFormats ?? {}));
+      setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}, response.settings.customPrintCostFormats ?? {}, response.settings.customSheetSizeFormats ?? {}));
       setNotice('Sheet name overrides saved.');
       return true;
     } catch (saveError) {
@@ -371,6 +389,7 @@ export function SettingsScreen({
                     <col className="w-[340px]" />
                     <col className="w-[180px]" />
                     <col className="w-[180px]" />
+                    <col className="w-[180px]" />
                     <col className="w-[90px]" />
                   </colgroup>
                   <thead>
@@ -379,6 +398,7 @@ export function SettingsScreen({
                       <th className="border border-slate-700 px-4 py-2 text-left">Override Name</th>
                       <th className="border border-slate-700 px-4 py-2 text-center">Multiple Artwork</th>
                       <th className="border border-slate-700 px-4 py-2 text-center">Custom Print Cost</th>
+                      <th className="border border-slate-700 px-4 py-2 text-center">Custom Sheet Size</th>
                       <th className="border border-slate-700 px-4 py-2 text-center">Action</th>
                     </tr>
                   </thead>
@@ -425,6 +445,17 @@ export function SettingsScreen({
                               [entry.key]: event.target.checked,
                             }))}
                             title={session?.user.role === 'super_admin' ? 'Use tenant-level custom print cost tiers' : 'Super admin only'}
+                            type="checkbox"
+                          />
+                        </td>
+                        <td className="border border-slate-700 px-4 py-2 text-center">
+                          <input
+                            checked={Boolean(customSheetSizeFormats[entry.key])}
+                            className="h-4 w-4 accent-violet-400"
+                            onChange={(event) => setCustomSheetSizeFormats((current) => ({
+                              ...current,
+                              [entry.key]: event.target.checked,
+                            }))}
                             type="checkbox"
                           />
                         </td>
@@ -501,6 +532,21 @@ export function SettingsScreen({
                             />
                           </td>
                           <td className="border border-slate-700 px-4 py-2 text-center">
+                            <input
+                              checked={Boolean(customSheetSizeFormats[toCanonicalSheetNameKey(row.source)])}
+                              className="h-4 w-4 accent-violet-400"
+                              onChange={(event) => {
+                                const customKey = toCanonicalSheetNameKey(row.source);
+                                if (!customKey) return;
+                                setCustomSheetSizeFormats((current) => ({
+                                  ...current,
+                                  [customKey]: event.target.checked,
+                                }));
+                              }}
+                              type="checkbox"
+                            />
+                          </td>
+                          <td className="border border-slate-700 px-4 py-2 text-center">
                             <Button
                               className="h-8 w-8 rounded-md border-0 p-0 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200"
                               onClick={() => {
@@ -513,6 +559,11 @@ export function SettingsScreen({
                                     return next;
                                   });
                                   setCustomPrintCostFormats((current) => {
+                                    const next = { ...current };
+                                    delete next[customKey];
+                                    return next;
+                                  });
+                                  setCustomSheetSizeFormats((current) => {
                                     const next = { ...current };
                                     delete next[customKey];
                                     return next;

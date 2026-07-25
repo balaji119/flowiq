@@ -22,6 +22,7 @@ type sheetNameOverrideRecord struct {
 	Overrides              sheetNameOverrides `json:"overrides"`
 	MultipleArtworkFormats map[string]bool    `json:"multipleArtworkFormats,omitempty"`
 	CustomPrintCostFormats map[string]bool    `json:"customPrintCostFormats,omitempty"`
+	CustomSheetSizeFormats map[string]bool    `json:"customSheetSizeFormats,omitempty"`
 	ProductCodes           map[string]string  `json:"productCodes,omitempty"`
 	CreatedAt              string             `json:"createdAt"`
 	UpdatedAt              string             `json:"updatedAt"`

@@ -44,6 +44,7 @@ export type SheetNameOverrideRecord = {
   overrides: SheetNameOverrides;
   multipleArtworkFormats?: Record<string, boolean>;
   customPrintCostFormats?: Record<string, boolean>;
+  customSheetSizeFormats?: Record<string, boolean>;
   productCodes?: Record<string, string>;
   createdAt: string;
   updatedAt: string;

@@ -110,6 +110,7 @@ type sheetNameOverrideRow struct {
 	Overrides              []byte
 	MultipleArtworkFormats []byte
 	CustomPrintCostFormats []byte
+	CustomSheetSizeFormats []byte
 	ProductCodes           []byte
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
@@ -493,6 +494,7 @@ func scanSheetNameOverrideRow(scanner interface {
 		&row.Overrides,
 		&row.MultipleArtworkFormats,
 		&row.CustomPrintCostFormats,
+		&row.CustomSheetSizeFormats,
 		&row.ProductCodes,
 		&row.CreatedAt,
 		&row.UpdatedAt,
@@ -531,6 +533,7 @@ func decodeSheetNameOverrideRow(row sheetNameOverrideRow) (sheetNameOverrideReco
 	overrides := sheetNameOverrides{}
 	multipleArtworkFormats := map[string]bool{}
 	customPrintCostFormats := map[string]bool{}
+	customSheetSizeFormats := map[string]bool{}
 	productCodes := sheetNameOverrides{}
 	if len(row.Overrides) > 0 {
 		if err := json.Unmarshal(row.Overrides, &overrides); err != nil {
@@ -547,6 +550,11 @@ func decodeSheetNameOverrideRow(row sheetNameOverrideRow) (sheetNameOverrideReco
 			return sheetNameOverrideRecord{}, err
 		}
 	}
+	if len(row.CustomSheetSizeFormats) > 0 {
+		if err := json.Unmarshal(row.CustomSheetSizeFormats, &customSheetSizeFormats); err != nil {
+			return sheetNameOverrideRecord{}, err
+		}
+	}
 	if len(row.ProductCodes) > 0 {
 		if err := json.Unmarshal(row.ProductCodes, &productCodes); err != nil {
 			return sheetNameOverrideRecord{}, err
@@ -557,6 +565,7 @@ func decodeSheetNameOverrideRow(row sheetNameOverrideRow) (sheetNameOverrideReco
 		Overrides:              normalizeSheetNameOverrides(overrides),
 		MultipleArtworkFormats: normalizeMultipleArtworkFormats(multipleArtworkFormats),
 		CustomPrintCostFormats: normalizeMultipleArtworkFormats(customPrintCostFormats),
+		CustomSheetSizeFormats: normalizeMultipleArtworkFormats(customSheetSizeFormats),
 		ProductCodes:           normalizeSheetNameOverrides(productCodes),
 		CreatedAt:              row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:              row.UpdatedAt.UTC().Format(time.RFC3339),
@@ -702,12 +711,12 @@ func (s *mappingStore) listSheetNameOverrides(ctx context.Context, tenantID stri
 	}
 
 	row, err := scanSheetNameOverrideRow(s.pool.QueryRow(ctx, `
-		SELECT tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, product_codes, created_at, updated_at
+		SELECT tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, custom_sheet_size_formats, product_codes, created_at, updated_at
 		FROM sheet_name_overrides
 		WHERE tenant_id = $1
 	`, tenantID))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return s.upsertSheetNameOverrides(ctx, tenantID, defaultSheetNameOverrides(), map[string]bool{}, map[string]bool{}, sheetNameOverrides{"2-sheet": "2SheetTest"})
+		return s.upsertSheetNameOverrides(ctx, tenantID, defaultSheetNameOverrides(), map[string]bool{}, map[string]bool{}, map[string]bool{}, sheetNameOverrides{"2-sheet": "2SheetTest"})
 	}
 	if err != nil {
 		return nil, err
@@ -720,7 +729,7 @@ func (s *mappingStore) listSheetNameOverrides(ctx context.Context, tenantID stri
 	return &record, nil
 }
 
-func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID string, overrides sheetNameOverrides, multipleArtworkFormats, customPrintCostFormats map[string]bool, productCodes sheetNameOverrides) (*sheetNameOverrideRecord, error) {
+func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID string, overrides sheetNameOverrides, multipleArtworkFormats, customPrintCostFormats, customSheetSizeFormats map[string]bool, productCodes sheetNameOverrides) (*sheetNameOverrideRecord, error) {
 	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
 		return nil, err
 	}
@@ -728,6 +737,7 @@ func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID st
 	normalized := normalizeSheetNameOverrides(overrides)
 	normalizedMultipleArtworkFormats := normalizeMultipleArtworkFormats(multipleArtworkFormats)
 	normalizedCustomPrintCostFormats := normalizeMultipleArtworkFormats(customPrintCostFormats)
+	normalizedCustomSheetSizeFormats := normalizeMultipleArtworkFormats(customSheetSizeFormats)
 	normalizedProductCodes := normalizeSheetNameOverrides(productCodes)
 	overridesJSON, err := json.Marshal(normalized)
 	if err != nil {
@@ -741,23 +751,28 @@ func (s *mappingStore) upsertSheetNameOverrides(ctx context.Context, tenantID st
 	if err != nil {
 		return nil, err
 	}
+	customSheetSizeFormatsJSON, err := json.Marshal(normalizedCustomSheetSizeFormats)
+	if err != nil {
+		return nil, err
+	}
 	productCodesJSON, err := json.Marshal(normalizedProductCodes)
 	if err != nil {
 		return nil, err
 	}
 
 	row, err := scanSheetNameOverrideRow(s.pool.QueryRow(ctx, `
-		INSERT INTO sheet_name_overrides (tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, product_codes, created_at, updated_at)
-		VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb, NOW(), NOW())
+		INSERT INTO sheet_name_overrides (tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, custom_sheet_size_formats, product_codes, created_at, updated_at)
+		VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, NOW(), NOW())
 		ON CONFLICT (tenant_id)
 		DO UPDATE SET
 			overrides = EXCLUDED.overrides,
 			multiple_artwork_formats = EXCLUDED.multiple_artwork_formats,
 			custom_print_cost_formats = EXCLUDED.custom_print_cost_formats,
+			custom_sheet_size_formats = EXCLUDED.custom_sheet_size_formats,
 			product_codes = EXCLUDED.product_codes,
 			updated_at = NOW()
-		RETURNING tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, product_codes, created_at, updated_at
-	`, tenantID, string(overridesJSON), string(multipleArtworkFormatsJSON), string(customPrintCostFormatsJSON), string(productCodesJSON)))
+		RETURNING tenant_id, overrides, multiple_artwork_formats, custom_print_cost_formats, custom_sheet_size_formats, product_codes, created_at, updated_at
+	`, tenantID, string(overridesJSON), string(multipleArtworkFormatsJSON), string(customPrintCostFormatsJSON), string(customSheetSizeFormatsJSON), string(productCodesJSON)))
 	if err != nil {
 		return nil, err
 	}

@@ -2664,6 +2664,7 @@ func (a *app) handleUpsertSheetNameOverrides(w http.ResponseWriter, r *http.Requ
 		Overrides              sheetNameOverrides `json:"overrides"`
 		MultipleArtworkFormats map[string]bool    `json:"multipleArtworkFormats"`
 		CustomPrintCostFormats map[string]bool    `json:"customPrintCostFormats"`
+		CustomSheetSizeFormats map[string]bool    `json:"customSheetSizeFormats"`
 		ProductCodes           sheetNameOverrides `json:"productCodes"`
 	}
 	if err := decodeJSONBody(r, &payload); err != nil {
@@ -2679,6 +2680,9 @@ func (a *app) handleUpsertSheetNameOverrides(w http.ResponseWriter, r *http.Requ
 	if payload.CustomPrintCostFormats == nil {
 		payload.CustomPrintCostFormats = map[string]bool{}
 	}
+	if payload.CustomSheetSizeFormats == nil {
+		payload.CustomSheetSizeFormats = map[string]bool{}
+	}
 	if payload.ProductCodes == nil {
 		payload.ProductCodes = sheetNameOverrides{}
 	}
@@ -2692,7 +2696,7 @@ func (a *app) handleUpsertSheetNameOverrides(w http.ResponseWriter, r *http.Requ
 		payload.CustomPrintCostFormats = existing.CustomPrintCostFormats
 	}
 
-	record, err := a.mappingStore.upsertSheetNameOverrides(r.Context(), *tenantID, payload.Overrides, payload.MultipleArtworkFormats, payload.CustomPrintCostFormats, payload.ProductCodes)
+	record, err := a.mappingStore.upsertSheetNameOverrides(r.Context(), *tenantID, payload.Overrides, payload.MultipleArtworkFormats, payload.CustomPrintCostFormats, payload.CustomSheetSizeFormats, payload.ProductCodes)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
