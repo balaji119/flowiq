@@ -22,7 +22,7 @@ func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndQuantities(t *testing.
 	}, map[string]string{
 		"8-sheet": "Fallback Quad Product",
 		"4-sheet": "Fallback Double Product",
-	})
+	}, map[string]bool{})
 	if err != nil {
 		t.Fatalf("resolve products: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndQuantities(t *testing.
 func TestResolvePrintIQSheetProductsRequiresEveryActiveProductCode(t *testing.T) {
 	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}
-	if _, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]string{"NSW": map[string]string{"8-sheet": "Quad Product"}}, map[string]string{}); err == nil {
+	if _, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]string{"NSW": map[string]string{"8-sheet": "Quad Product"}}, map[string]string{}, map[string]bool{}); err == nil {
 		t.Fatal("expected missing product code error")
 	}
 }
@@ -64,12 +64,37 @@ func TestResolvePrintIQSheetProductsSplitsQuantityByArtwork(t *testing.T) {
 		},
 	}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 100}}}}
-	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]string{}, map[string]string{"8-sheet": "Quad Product"})
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]string{}, map[string]string{"8-sheet": "Quad Product"}, map[string]bool{})
 	if err != nil {
 		t.Fatalf("resolve products: %v", err)
 	}
 	if len(products) != 2 || products[0].Quantity != 60 || products[0].ArtworkImageID != "artwork-a" || products[1].Quantity != 40 || products[1].ArtworkImageID != "artwork-b" {
 		t.Fatalf("unexpected split products: %#v", products)
+	}
+}
+
+func TestResolvePrintIQSheetProductsUsesAssetCodeForCustomSheetSize(t *testing.T) {
+	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
+	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"Mega": 1, "8-sheet": 40}}}}
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]string{
+		"NSW": {
+			"8-sheet":       "NSW Quad Product",
+			"asset:asset-1": "Asset Mega Product",
+		},
+	}, map[string]string{
+		"mega": "Legacy Mega Product",
+	}, map[string]bool{"mega": true})
+	if err != nil {
+		t.Fatalf("resolve products: %v", err)
+	}
+	if len(products) != 2 {
+		t.Fatalf("expected 2 products, got %d", len(products))
+	}
+	if products[0].ProductCode != "NSW Quad Product" || products[0].Quantity != 40 {
+		t.Fatalf("unexpected non-custom product: %#v", products[0])
+	}
+	if products[1].ProductCode != "Asset Mega Product" || products[1].Quantity != 1 {
+		t.Fatalf("unexpected custom product: %#v", products[1])
 	}
 }
 

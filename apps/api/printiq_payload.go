@@ -93,7 +93,11 @@ var printIQSheetFormatOrder = []struct {
 	{"FF", "ff"},
 }
 
-func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummary, productCodesByMarket map[string]map[string]string, fallbackProductCodes map[string]string) ([]printIQSheetProduct, error) {
+func assetProductCodeKey(assetID string) string {
+	return "asset:" + strings.TrimSpace(assetID)
+}
+
+func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummary, productCodesByMarket map[string]map[string]string, fallbackProductCodes map[string]string, customSheetSizeFormats map[string]bool) ([]printIQSheetProduct, error) {
 	if summary == nil {
 		return nil, errors.New("Campaign calculation summary is required")
 	}
@@ -110,9 +114,15 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 			if quantity <= 0 {
 				continue
 			}
-			productCode := strings.TrimSpace(productCodesByMarket[strings.TrimSpace(summaryLine.Market)][format.settingsKey])
-			if productCode == "" {
-				productCode = strings.TrimSpace(fallbackProductCodes[format.settingsKey])
+			marketProductCodes := productCodesByMarket[strings.TrimSpace(summaryLine.Market)]
+			productCodeKey := format.settingsKey
+			useCustomSheetSize := customSheetSizeFormats[format.settingsKey]
+			if useCustomSheetSize {
+				productCodeKey = assetProductCodeKey(summaryLine.ID)
+			}
+			productCode := strings.TrimSpace(marketProductCodes[productCodeKey])
+			if productCode == "" && !useCustomSheetSize {
+				productCode = strings.TrimSpace(fallbackProductCodes[productCodeKey])
 			}
 			if productCode == "" {
 				return nil, errors.New("Product code configured is not correct. Contact Support")

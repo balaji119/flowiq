@@ -1277,7 +1277,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	sheetProducts, err := resolvePrintIQSheetProducts(campaign.Values, campaign.Summary, materialProductCodes, sheetSettings.ProductCodes)
+	sheetProducts, err := resolvePrintIQSheetProducts(campaign.Values, campaign.Summary, materialProductCodes, sheetSettings.ProductCodes, sheetSettings.CustomSheetSizeFormats)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return

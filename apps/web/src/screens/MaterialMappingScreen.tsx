@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, Save, Shield } from 'lucide-react';
-import { MaterialMappingRecord, TenantRecord } from '@flowiq/shared';
+import { CalculatorMappingRecord, MaterialMappingRecord, TenantRecord } from '@flowiq/shared';
 import { Button, Card, CardContent, CardDescription, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input } from '@flowiq/ui';
 import { AdminWorkspaceHandlers, AdminWorkspaceShell } from '../components/AdminWorkspaceShell';
 import { useAuth } from '../context/AuthContext';
 import { fetchAdminSheetNameOverrides, fetchCalculatorMappings, fetchMaterialMappings, fetchTenants, upsertMaterialMappings } from '../services/adminApi';
-import { defaultSheetNamePresetOverrides, sanitizeSheetNameOverrides, sheetNamePresetEntries } from '../services/sheetNameOverrides';
+import { defaultSheetNamePresetOverrides, sanitizeSheetNameOverrides, sheetNamePresetEntries, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 
 type MaterialMappingScreenProps = {
   onBack: () => void;
@@ -17,8 +17,21 @@ type SheetRow = {
   label: string;
 };
 
+const ASSET_MAPPING_PREFIX = 'asset:';
+
 function mappingKey(market: string, sheetKey: string) {
   return `${market}::${sheetKey}`;
+}
+
+function assetMappingKey(mappingId: string) {
+  return `${ASSET_MAPPING_PREFIX}${mappingId}`;
+}
+
+function quantityForSheetKey(mapping: CalculatorMappingRecord, sheetKey: string) {
+  const quantities = mapping.quantities as Record<string, number>;
+  if (typeof quantities[sheetKey] === 'number') return quantities[sheetKey];
+  const matchingKey = Object.keys(quantities).find((key) => toCanonicalSheetNameKey(key) === sheetKey);
+  return matchingKey ? quantities[matchingKey] ?? 0 : 0;
 }
 
 function buildDraftSnapshot(drafts: Record<string, string>) {
@@ -55,7 +68,7 @@ export function MaterialMappingScreen({
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(tenantId ?? session?.user.tenantId ?? null);
   const [markets, setMarkets] = useState<string[]>([]);
   const [selectedMarket, setSelectedMarket] = useState('');
-  const [sheetRows, setSheetRows] = useState<SheetRow[]>([]);
+  const [sheetRowsByMarket, setSheetRowsByMarket] = useState<Record<string, SheetRow[]>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [savedDrafts, setSavedDrafts] = useState<Record<string, string>>({});
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
@@ -67,6 +80,7 @@ export function MaterialMappingScreen({
     () => buildDraftSnapshot(drafts) !== buildDraftSnapshot(savedDrafts),
     [drafts, savedDrafts],
   );
+  const selectedSheetRows = useMemo(() => sheetRowsByMarket[selectedMarket] ?? [], [selectedMarket, sheetRowsByMarket]);
 
   useEffect(() => {
     let active = true;
@@ -101,7 +115,7 @@ export function MaterialMappingScreen({
     let active = true;
     if (!effectiveTenantId || !isSuperAdmin) {
       setMarkets([]);
-      setSheetRows([]);
+      setSheetRowsByMarket({});
       setDrafts({});
       setSavedDrafts({});
       setLoading(false);
@@ -123,7 +137,8 @@ export function MaterialMappingScreen({
         const nextMarkets = [...new Set(mappingResponse.mappings.map((mapping) => mapping.market))].sort((left, right) => left.localeCompare(right));
         const overrides = sanitizeSheetNameOverrides(sheetResponse.settings.overrides);
         const presetKeys = new Set(sheetNamePresetEntries.map((entry) => entry.key));
-        const nextSheetRows = [
+        const customSheetSizeFormats = sheetResponse.settings.customSheetSizeFormats ?? {};
+        const baseSheetRows = [
           ...sheetNamePresetEntries.map((entry) => ({
             key: entry.key,
             label: overrides[entry.key] || defaultSheetNamePresetOverrides[entry.key] || entry.label,
@@ -133,17 +148,36 @@ export function MaterialMappingScreen({
             .map(([key, value]) => ({ key, label: value || key }))
             .sort((left, right) => left.label.localeCompare(right.label)),
         ];
+        const customSheetKeys = new Set(Object.entries(customSheetSizeFormats).filter(([, enabled]) => enabled).map(([key]) => key));
+        const standardSheetRows = baseSheetRows.filter((row) => !customSheetKeys.has(row.key));
+        const mappingsByMarket = new Map<string, CalculatorMappingRecord[]>();
+        mappingResponse.mappings.forEach((mapping) => {
+          const marketMappings = mappingsByMarket.get(mapping.market) ?? [];
+          marketMappings.push(mapping);
+          mappingsByMarket.set(mapping.market, marketMappings);
+        });
+        const nextSheetRowsByMarket: Record<string, SheetRow[]> = {};
+        nextMarkets.forEach((market) => {
+          const customAssetRows = (mappingsByMarket.get(market) ?? [])
+            .filter((mapping) => [...customSheetKeys].some((sheetKey) => quantityForSheetKey(mapping, sheetKey) > 0))
+            .map((mapping) => ({
+              key: assetMappingKey(mapping.id),
+              label: mapping.asset || mapping.label,
+            }))
+            .sort((left, right) => left.label.localeCompare(right.label));
+          nextSheetRowsByMarket[market] = [...standardSheetRows, ...customAssetRows];
+        });
         const savedByKey = new Map(materialResponse.mappings.map((record) => [savedMappingKey(record), record.productCode]));
         const legacyProductCodes = sheetResponse.settings.productCodes ?? {};
         const nextDrafts: Record<string, string> = {};
         nextMarkets.forEach((market) => {
-          nextSheetRows.forEach((row) => {
+          (nextSheetRowsByMarket[market] ?? []).forEach((row) => {
             nextDrafts[mappingKey(market, row.key)] = savedByKey.get(mappingKey(market, row.key)) ?? legacyProductCodes[row.key] ?? '';
           });
         });
 
         setMarkets(nextMarkets);
-        setSheetRows(nextSheetRows);
+        setSheetRowsByMarket(nextSheetRowsByMarket);
         setDrafts(nextDrafts);
         setSavedDrafts(nextDrafts);
         setSelectedMarket((current) => (current && nextMarkets.includes(current) ? current : nextMarkets[0] ?? ''));
@@ -199,7 +233,7 @@ export function MaterialMappingScreen({
     setNotice('');
     try {
       const response = await upsertMaterialMappings({
-        mappings: sheetRows.map((row) => ({
+        mappings: selectedSheetRows.map((row) => ({
           market: selectedMarket,
           sheetKey: row.key,
           productCode: (drafts[mappingKey(selectedMarket, row.key)] || '').trim(),
@@ -208,14 +242,14 @@ export function MaterialMappingScreen({
       const updatedByKey = new Map(response.mappings.map((record) => [savedMappingKey(record), record.productCode]));
       setDrafts((current) => {
         const next = { ...current };
-        sheetRows.forEach((row) => {
+        selectedSheetRows.forEach((row) => {
           next[mappingKey(selectedMarket, row.key)] = updatedByKey.get(mappingKey(selectedMarket, row.key)) ?? '';
         });
         return next;
       });
       setSavedDrafts((current) => {
         const next = { ...current };
-        sheetRows.forEach((row) => {
+        selectedSheetRows.forEach((row) => {
           next[mappingKey(selectedMarket, row.key)] = updatedByKey.get(mappingKey(selectedMarket, row.key)) ?? '';
         });
         return next;
@@ -331,7 +365,7 @@ export function MaterialMappingScreen({
                   </tr>
                 </thead>
                 <tbody>
-                  {sheetRows.map((row, rowIndex) => (
+                  {selectedSheetRows.map((row, rowIndex) => (
                     <tr
                       key={row.key}
                       className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}`}
