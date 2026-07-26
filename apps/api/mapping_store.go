@@ -126,6 +126,11 @@ type materialMappingRow struct {
 	UpdatedAt   time.Time
 }
 
+type materialProductMapping struct {
+	ProductCode string
+	SheetCode   string
+}
+
 func newMappingStore(pool *pgxpool.Pool) *mappingStore {
 	return &mappingStore{pool: pool}
 }
@@ -688,25 +693,29 @@ func (s *mappingStore) upsertMaterialMappings(ctx context.Context, tenantID stri
 	return records, nil
 }
 
-func (s *mappingStore) listMaterialProductCodesByMarket(ctx context.Context, tenantID string) (map[string]map[string]string, error) {
+func (s *mappingStore) listMaterialProductMappingsByMarket(ctx context.Context, tenantID string) (map[string]map[string]materialProductMapping, error) {
 	records, err := s.listMaterialMappings(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	productCodes := map[string]map[string]string{}
+	productMappings := map[string]map[string]materialProductMapping{}
 	for _, record := range records {
 		market := strings.TrimSpace(record.Market)
 		sheetKey := strings.TrimSpace(record.SheetKey)
 		productCode := strings.TrimSpace(record.ProductCode)
+		sheetCode := strings.TrimSpace(record.SheetCode)
 		if market == "" || sheetKey == "" || productCode == "" {
 			continue
 		}
-		if productCodes[market] == nil {
-			productCodes[market] = map[string]string{}
+		if productMappings[market] == nil {
+			productMappings[market] = map[string]materialProductMapping{}
 		}
-		productCodes[market][sheetKey] = productCode
+		productMappings[market][sheetKey] = materialProductMapping{
+			ProductCode: productCode,
+			SheetCode:   sheetCode,
+		}
 	}
-	return productCodes, nil
+	return productMappings, nil
 }
 
 func (s *mappingStore) listSheetNameOverrides(ctx context.Context, tenantID string) (*sheetNameOverrideRecord, error) {

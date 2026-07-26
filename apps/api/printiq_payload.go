@@ -36,6 +36,7 @@ type printIQArtworkUpload struct {
 type printIQSheetProduct struct {
 	FormatKey      string
 	ProductCode    string
+	SheetCode      string
 	Quantity       int
 	ArtworkImageID string
 }
@@ -69,13 +70,29 @@ func buildPrintIQJobTitle(values orderFormValues, product printIQSheetProduct) s
 	creativeNumber := resolveCreativeNumber(values, product.ArtworkImageID)
 	productCode := strings.TrimSpace(product.ProductCode)
 	campaignName := strings.TrimSpace(values.CampaignName)
+	sheetCode := strings.TrimSpace(product.SheetCode)
+	purchaseOrderNumber := strings.TrimSpace(values.PurchaseOrderNumber)
 	if productCode == "" {
 		productCode = strings.TrimSpace(values.ProductCode)
 	}
+	jobTitle := fmt.Sprintf("C%d / %s", creativeNumber, productCode)
 	if campaignName == "" {
-		return fmt.Sprintf("C%d / %s", creativeNumber, productCode)
+		if sheetCode != "" {
+			jobTitle = fmt.Sprintf("%s - %s", jobTitle, sheetCode)
+		}
+		if purchaseOrderNumber != "" {
+			jobTitle = fmt.Sprintf("%s - %s", jobTitle, purchaseOrderNumber)
+		}
+		return jobTitle
 	}
-	return fmt.Sprintf("C%d / %s ( %s)", creativeNumber, productCode, campaignName)
+	jobTitle = fmt.Sprintf("%s ( %s)", jobTitle, campaignName)
+	if sheetCode != "" {
+		jobTitle = fmt.Sprintf("%s - %s", jobTitle, sheetCode)
+	}
+	if purchaseOrderNumber != "" {
+		jobTitle = fmt.Sprintf("%s - %s", jobTitle, purchaseOrderNumber)
+	}
+	return jobTitle
 }
 
 var printIQSheetFormatOrder = []struct {
@@ -97,7 +114,7 @@ func assetProductCodeKey(assetID string) string {
 	return "asset:" + strings.TrimSpace(assetID)
 }
 
-func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummary, productCodesByMarket map[string]map[string]string, fallbackProductCodes map[string]string, customSheetSizeFormats map[string]bool) ([]printIQSheetProduct, error) {
+func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummary, productMappingsByMarket map[string]map[string]materialProductMapping, fallbackProductCodes map[string]string, customSheetSizeFormats map[string]bool) ([]printIQSheetProduct, error) {
 	if summary == nil {
 		return nil, errors.New("Campaign calculation summary is required")
 	}
@@ -114,13 +131,15 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 			if quantity <= 0 {
 				continue
 			}
-			marketProductCodes := productCodesByMarket[strings.TrimSpace(summaryLine.Market)]
+			marketProductMappings := productMappingsByMarket[strings.TrimSpace(summaryLine.Market)]
 			productCodeKey := format.settingsKey
 			useCustomSheetSize := customSheetSizeFormats[format.settingsKey]
 			if useCustomSheetSize {
 				productCodeKey = assetProductCodeKey(summaryLine.ID)
 			}
-			productCode := strings.TrimSpace(marketProductCodes[productCodeKey])
+			productMapping := marketProductMappings[productCodeKey]
+			productCode := strings.TrimSpace(productMapping.ProductCode)
+			sheetCode := strings.TrimSpace(productMapping.SheetCode)
 			if productCode == "" && !useCustomSheetSize {
 				productCode = strings.TrimSpace(fallbackProductCodes[productCodeKey])
 			}
@@ -134,7 +153,7 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 				if artworkImageID == "" && format.breakdownKey == "8-sheet" {
 					artworkImageID = asset.CreativeImageID
 				}
-				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, Quantity: quantity, ArtworkImageID: artworkImageID})
+				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: quantity, ArtworkImageID: artworkImageID})
 				continue
 			}
 
@@ -152,13 +171,13 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 				if assignedQuantity > remaining {
 					assignedQuantity = remaining
 				}
-				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, Quantity: assignedQuantity, ArtworkImageID: assignment.ArtworkImageID})
+				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: assignedQuantity, ArtworkImageID: assignment.ArtworkImageID})
 				remaining -= assignedQuantity
 			}
 			if remaining > 0 && len(products) > firstProductIndex {
 				products[len(products)-1].Quantity += remaining
 			} else if remaining > 0 {
-				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, Quantity: remaining})
+				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: remaining})
 			}
 		}
 	}

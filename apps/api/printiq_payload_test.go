@@ -11,13 +11,21 @@ import (
 	"github.com/jung-kurt/gofpdf"
 )
 
+func testMaterialProductMapping(productCode string, sheetCode ...string) materialProductMapping {
+	mapping := materialProductMapping{ProductCode: productCode}
+	if len(sheetCode) > 0 {
+		mapping.SheetCode = sheetCode[0]
+	}
+	return mapping
+}
+
 func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndQuantities(t *testing.T) {
 	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}
-	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]string{
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
 		"NSW": {
-			"8-sheet": "NSW Quad Product",
-			"4-sheet": "NSW Double Product",
+			"8-sheet": testMaterialProductMapping("NSW Quad Product", "SHT-QUAD"),
+			"4-sheet": testMaterialProductMapping("NSW Double Product"),
 		},
 	}, map[string]string{
 		"8-sheet": "Fallback Quad Product",
@@ -29,7 +37,7 @@ func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndQuantities(t *testing.
 	if len(products) != 2 {
 		t.Fatalf("expected 2 products, got %d", len(products))
 	}
-	if products[0].ProductCode != "NSW Quad Product" || products[0].Quantity != 40 {
+	if products[0].ProductCode != "NSW Quad Product" || products[0].SheetCode != "SHT-QUAD" || products[0].Quantity != 40 {
 		t.Fatalf("unexpected first product: %#v", products[0])
 	}
 	if products[1].ProductCode != "NSW Double Product" || products[1].Quantity != 10 {
@@ -40,7 +48,11 @@ func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndQuantities(t *testing.
 func TestResolvePrintIQSheetProductsRequiresEveryActiveProductCode(t *testing.T) {
 	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}
-	if _, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]string{"NSW": map[string]string{"8-sheet": "Quad Product"}}, map[string]string{}, map[string]bool{}); err == nil {
+	if _, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
+		"NSW": {
+			"8-sheet": testMaterialProductMapping("Quad Product"),
+		},
+	}, map[string]string{}, map[string]bool{}); err == nil {
 		t.Fatal("expected missing product code error")
 	}
 }
@@ -64,7 +76,7 @@ func TestResolvePrintIQSheetProductsSplitsQuantityByArtwork(t *testing.T) {
 		},
 	}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 100}}}}
-	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]string{}, map[string]string{"8-sheet": "Quad Product"}, map[string]bool{})
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{}, map[string]string{"8-sheet": "Quad Product"}, map[string]bool{})
 	if err != nil {
 		t.Fatalf("resolve products: %v", err)
 	}
@@ -76,10 +88,10 @@ func TestResolvePrintIQSheetProductsSplitsQuantityByArtwork(t *testing.T) {
 func TestResolvePrintIQSheetProductsUsesAssetCodeForCustomSheetSize(t *testing.T) {
 	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"Mega": 1, "8-sheet": 40}}}}
-	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]string{
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
 		"NSW": {
-			"8-sheet":       "NSW Quad Product",
-			"asset:asset-1": "Asset Mega Product",
+			"8-sheet":       testMaterialProductMapping("NSW Quad Product"),
+			"asset:asset-1": testMaterialProductMapping("Asset Mega Product"),
 		},
 	}, map[string]string{
 		"mega": "Legacy Mega Product",
@@ -201,7 +213,8 @@ func TestResolvePrintIQArtworkURLUsesFirstPageForSinglePageSourcePDFWithoutMetad
 func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 	payload := buildPrintIQGetPriceForProductPayload(
 		orderFormValues{
-			CampaignName: "Asahi - GNBC Q3 - Campaign",
+			CampaignName:        "Asahi - GNBC Q3 - Campaign",
+			PurchaseOrderNumber: "PO-1001",
 			PrintImages: []campaignPrintImage{
 				{ID: "artwork-a"},
 				{ID: "artwork-b"},
@@ -211,14 +224,14 @@ func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 				"Creative2": "artwork-b",
 			},
 		},
-		printIQSheetProduct{ProductCode: "Double Product", Quantity: 10, ArtworkImageID: "artwork-b"},
+		printIQSheetProduct{ProductCode: "Double Product", SheetCode: "SHT-002", Quantity: 10, ArtworkImageID: "artwork-b"},
 		"Q50206",
 		"C00003",
 	)
 	if payload["ProductCode"] != "Double Product" || payload["QuoteNo"] != "Q50206" || payload["CustomerCode"] != "C00003" {
 		t.Fatalf("unexpected payload: %#v", payload)
 	}
-	if payload["JobTitle"] != "C2 / Double Product ( Asahi - GNBC Q3 - Campaign)" {
+	if payload["JobTitle"] != "C2 / Double Product ( Asahi - GNBC Q3 - Campaign) - SHT-002 - PO-1001" {
 		t.Fatalf("unexpected job title: %#v", payload["JobTitle"])
 	}
 	quantities, ok := payload["Quantities"].([]map[string]any)
@@ -229,9 +242,10 @@ func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 
 func TestBuildPrintIQCreateQuotePayloadUsesFormattedJobTitle(t *testing.T) {
 	values := orderFormValues{
-		CampaignName: "Asahi - GNBC Q3 - Campaign",
-		ProductCode:  "Syd A0 Quad 3364x1189",
-		Quantity:     "25",
+		CampaignName:        "Asahi - GNBC Q3 - Campaign",
+		ProductCode:         "Syd A0 Quad 3364x1189",
+		PurchaseOrderNumber: "PO-1001",
+		Quantity:            "25",
 		CreativeNameAssignments: map[string]string{
 			"Creative1": "artwork-a",
 		},
@@ -239,9 +253,9 @@ func TestBuildPrintIQCreateQuotePayloadUsesFormattedJobTitle(t *testing.T) {
 	payload := buildPrintIQCreateQuotePayload(
 		values,
 		nil,
-		printIQSheetProduct{ProductCode: "Syd A0 Quad 3364x1189", Quantity: 25, ArtworkImageID: "artwork-a"},
+		printIQSheetProduct{ProductCode: "Syd A0 Quad 3364x1189", SheetCode: "SHT-001", Quantity: 25, ArtworkImageID: "artwork-a"},
 	)
-	if payload["JobTitle"] != "C1 / Syd A0 Quad 3364x1189 ( Asahi - GNBC Q3 - Campaign)" {
+	if payload["JobTitle"] != "C1 / Syd A0 Quad 3364x1189 ( Asahi - GNBC Q3 - Campaign) - SHT-001 - PO-1001" {
 		t.Fatalf("unexpected job title: %#v", payload["JobTitle"])
 	}
 }
