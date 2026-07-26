@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
@@ -473,7 +475,7 @@ func (a *app) ensurePrintIQArtworkPDF(ctx context.Context, image campaignPrintIm
 		return pdfStoredName, nil
 	}
 
-	pdfPath, err := extractSinglePDFPageFile(sourcePDFPath, tempDir, pageNumber)
+	pdfPath, err := extractSinglePDFPageFile(ctx, sourcePDFPath, tempDir, pageNumber)
 	if err != nil {
 		return "", err
 	}
@@ -492,10 +494,36 @@ func (a *app) ensurePrintIQArtworkPDF(ctx context.Context, image campaignPrintIm
 	return pdfStoredName, nil
 }
 
-func extractSinglePDFPageFile(sourcePDFPath, outputDir string, pageNumber int) (string, error) {
+func extractSinglePDFPageFile(ctx context.Context, sourcePDFPath, outputDir string, pageNumber int) (string, error) {
 	if pageNumber <= 0 {
 		return "", errors.New("PDF page number must be greater than 0")
 	}
+	if pdfSeparatePath, err := exec.LookPath("pdfseparate"); err == nil {
+		outputPath := filepath.Join(outputDir, fmt.Sprintf("source-page-%d.pdf", pageNumber))
+		extractCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(
+			extractCtx,
+			pdfSeparatePath,
+			"-f", strconv.Itoa(pageNumber),
+			"-l", strconv.Itoa(pageNumber),
+			sourcePDFPath,
+			outputPath,
+		)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			if extractCtx.Err() != nil {
+				return "", fmt.Errorf("extract PDF page %d timed out", pageNumber)
+			}
+			return "", fmt.Errorf("extract PDF page %d with pdfseparate: %w: %s", pageNumber, err, strings.TrimSpace(string(output)))
+		}
+		if info, err := os.Stat(outputPath); err != nil {
+			return "", err
+		} else if info.Size() == 0 {
+			return "", fmt.Errorf("PDF page %d could not be extracted", pageNumber)
+		}
+		return outputPath, nil
+	}
+
 	if err := api.ExtractPagesFile(sourcePDFPath, outputDir, []string{strconv.Itoa(pageNumber)}, model.NewDefaultConfiguration()); err != nil {
 		return "", err
 	}
