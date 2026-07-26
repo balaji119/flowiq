@@ -1252,6 +1252,10 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
+	if strings.TrimSpace(campaign.Values.PurchaseOrderNumber) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Enter a purchase order number before submitting."})
+		return
+	}
 	if campaign.Summary == nil {
 		campaign, _, err = a.campaignStore.calculateCampaign(r.Context(), *user, campaign.ID, a.calculator)
 		if err != nil {

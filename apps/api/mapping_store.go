@@ -121,6 +121,7 @@ type materialMappingRow struct {
 	Market      string
 	SheetKey    string
 	ProductCode string
+	SheetCode   string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -581,6 +582,7 @@ func scanMaterialMappingRow(scanner interface {
 		&row.Market,
 		&row.SheetKey,
 		&row.ProductCode,
+		&row.SheetCode,
 		&row.CreatedAt,
 		&row.UpdatedAt,
 	)
@@ -593,6 +595,7 @@ func decodeMaterialMappingRow(row materialMappingRow) materialMappingRecord {
 		Market:      row.Market,
 		SheetKey:    row.SheetKey,
 		ProductCode: row.ProductCode,
+		SheetCode:   row.SheetCode,
 		CreatedAt:   row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:   row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -604,7 +607,7 @@ func (s *mappingStore) listMaterialMappings(ctx context.Context, tenantID string
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT mmm.tenant_id::text, m.name, mmm.sheet_key, mmm.product_code, mmm.created_at, mmm.updated_at
+		SELECT mmm.tenant_id::text, m.name, mmm.sheet_key, mmm.product_code, mmm.sheet_code, mmm.created_at, mmm.updated_at
 		FROM market_material_mappings mmm
 		JOIN markets m ON m.id = mmm.market_id
 		WHERE mmm.tenant_id = $1
@@ -651,6 +654,7 @@ func (s *mappingStore) upsertMaterialMappings(ctx context.Context, tenantID stri
 			return nil, err
 		}
 		productCode := strings.TrimSpace(rawItem.ProductCode)
+		sheetCode := strings.TrimSpace(rawItem.SheetCode)
 
 		var marketID string
 		if err := tx.QueryRow(ctx, `
@@ -666,12 +670,12 @@ func (s *mappingStore) upsertMaterialMappings(ctx context.Context, tenantID stri
 		}
 
 		row, err := scanMaterialMappingRow(tx.QueryRow(ctx, `
-			INSERT INTO market_material_mappings (tenant_id, market_id, sheet_key, product_code, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, NOW(), NOW())
+			INSERT INTO market_material_mappings (tenant_id, market_id, sheet_key, product_code, sheet_code, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
 			ON CONFLICT (tenant_id, market_id, sheet_key)
-			DO UPDATE SET product_code = EXCLUDED.product_code, updated_at = NOW()
-			RETURNING tenant_id::text, $5::text, sheet_key, product_code, created_at, updated_at
-		`, tenantID, marketID, sheetKey, productCode, market))
+			DO UPDATE SET product_code = EXCLUDED.product_code, sheet_code = EXCLUDED.sheet_code, updated_at = NOW()
+			RETURNING tenant_id::text, $6::text, sheet_key, product_code, sheet_code, created_at, updated_at
+		`, tenantID, marketID, sheetKey, productCode, sheetCode, market))
 		if err != nil {
 			return nil, err
 		}

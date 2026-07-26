@@ -32,6 +32,7 @@ type materialMappingInput struct {
 	Market      string `json:"market"`
 	SheetKey    string `json:"sheetKey"`
 	ProductCode string `json:"productCode"`
+	SheetCode   string `json:"sheetCode"`
 }
 
 type materialMappingRecord struct {
@@ -39,6 +40,7 @@ type materialMappingRecord struct {
 	Market      string `json:"market"`
 	SheetKey    string `json:"sheetKey"`
 	ProductCode string `json:"productCode"`
+	SheetCode   string `json:"sheetCode"`
 	CreatedAt   string `json:"createdAt"`
 	UpdatedAt   string `json:"updatedAt"`
 }
@@ -117,6 +119,7 @@ type campaignPrintImage struct {
 type orderFormValues struct {
 	CustomerCode            string               `json:"customerCode"`
 	CustomerReference       string               `json:"customerReference"`
+	PurchaseOrderNumber     string               `json:"purchaseOrderNumber"`
 	CampaignName            string               `json:"campaignName"`
 	JobDescription          string               `json:"jobDescription"`
 	Notes                   string               `json:"notes"`

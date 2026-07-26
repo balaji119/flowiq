@@ -456,6 +456,7 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
 
   return {
     ...values,
+    purchaseOrderNumber: values.purchaseOrderNumber ?? '',
     productCode: values.productCode || createDefaultFormValues().productCode,
     campaignMarkets: (values.campaignMarkets ?? []).map((market) => ({
       ...market,
@@ -1264,6 +1265,7 @@ export function QuoteBuilderScreen({
   const [submitting, setSubmitting] = useState(false);
   const [quoteResponseMessage, setQuoteResponseMessage] = useState('');
   const [quoteResponseStatus, setQuoteResponseStatus] = useState<'success' | 'error'>('success');
+  const [purchaseOrderNumberSubmitAttempted, setPurchaseOrderNumberSubmitAttempted] = useState(false);
   const [error, setError] = useState('');
   const [exportingTemplates, setExportingTemplates] = useState(false);
   const [visualsDownloadError, setVisualsDownloadError] = useState('');
@@ -1936,6 +1938,8 @@ export function QuoteBuilderScreen({
     );
   }, [values.campaignMarkets]);
   const hasUploadedPurchaseOrder = uploadedPurchaseOrderName.trim().length > 0;
+  const hasPurchaseOrderNumber = values.purchaseOrderNumber.trim().length > 0;
+  const showPurchaseOrderNumberRequired = purchaseOrderNumberSubmitAttempted && !hasPurchaseOrderNumber;
   const hasCampaignStartDate = values.campaignStartDate.trim().length > 0;
   const hasDeliveryDueDate = values.dueDate.trim().length > 0;
   const isCampaignStartDatePast = hasCampaignStartDate && isDateBeforeToday(values.campaignStartDate);
@@ -2091,20 +2095,25 @@ export function QuoteBuilderScreen({
     const hasMissingDueDateActionError =
       normalizedError.includes('add a due date before downloading visuals')
       || normalizedError.includes('add a due date before sending email to ads');
+    const hasMissingPurchaseOrderNumberActionError = normalizedError.includes('enter a purchase order number');
     if (hasPastDateError && !isCampaignStartDatePast && !isDeliveryDueDatePast) {
       setError('');
     }
     if (hasMissingDueDateActionError && hasDeliveryDueDate) {
       setError('');
     }
-  }, [error, hasDeliveryDueDate, isCampaignStartDatePast, isDeliveryDueDatePast]);
+    if (hasMissingPurchaseOrderNumberActionError && hasPurchaseOrderNumber) {
+      setError('');
+    }
+  }, [error, hasDeliveryDueDate, hasPurchaseOrderNumber, isCampaignStartDatePast, isDeliveryDueDatePast]);
 
   useEffect(() => {
     if (!hasDeliveryDueDate && reviewActionNeedsDueDate) return;
+    if (reviewActionError.toLowerCase().includes('purchase order number') && !hasPurchaseOrderNumber) return;
     if (!reviewActionError) return;
     setReviewActionError('');
     setReviewActionNeedsDueDate(false);
-  }, [hasDeliveryDueDate, reviewActionError, reviewActionNeedsDueDate]);
+  }, [hasDeliveryDueDate, hasPurchaseOrderNumber, reviewActionError, reviewActionNeedsDueDate]);
 
   const setReviewValidationError = (message: string, options?: { dueDate?: boolean }) => {
     setError(message);
@@ -3295,6 +3304,13 @@ export function QuoteBuilderScreen({
   }
 
   async function handleSubmitQuote() {
+    if (!hasPurchaseOrderNumber) {
+      setPurchaseOrderNumberSubmitAttempted(true);
+      setQuoteResponseStatus('error');
+      setQuoteResponseMessage('Enter a purchase order number before submitting.');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
     setQuoteResponseMessage('');
@@ -5391,6 +5407,11 @@ export function QuoteBuilderScreen({
       setReviewValidationError('Upload a purchase order file before sending email to ADS');
       return false;
     }
+    if (!hasPurchaseOrderNumber) {
+      setPurchaseOrderNumberSubmitAttempted(true);
+      setReviewValidationError('Enter a purchase order number before sending email to ADS');
+      return false;
+    }
     if (!hasMappedCreatives) {
       setReviewValidationError('Map at least one creative to a market asset before sending email to ADS');
       return false;
@@ -5733,7 +5754,7 @@ export function QuoteBuilderScreen({
                 </div>
               </div>
                 </div>
-                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,210px)_minmax(0,210px)_minmax(0,210px)_minmax(0,136px)] xl:items-center">
+                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,260px)_minmax(0,210px)_minmax(0,210px)_minmax(0,210px)_minmax(0,136px)] xl:items-center">
                   <div className="flex h-11 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
                     <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Purchase Order</span>
                     <button
@@ -5767,6 +5788,30 @@ export function QuoteBuilderScreen({
                         }
                       }}
                       type="file"
+                    />
+                  </div>
+                  <div
+                    className={cn(
+                      'flex h-11 w-full overflow-hidden rounded-lg border bg-slate-900/90 focus-within:ring-1',
+                      showPurchaseOrderNumberRequired
+                        ? 'border-amber-300/70 focus-within:border-amber-300 focus-within:ring-amber-300/35'
+                        : 'border-white/10 focus-within:border-violet-300/60 focus-within:ring-violet-300/40',
+                    )}
+                  >
+                    <span className="inline-flex w-36 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Purchase Order No</span>
+                    <Input
+                      aria-label="Purchase order no"
+                      className="h-11 min-w-0 flex-1 rounded-none border-0 bg-slate-800/60 px-3 text-sm font-semibold text-slate-100 placeholder:text-slate-400 focus-visible:ring-0"
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        updateField('purchaseOrderNumber', nextValue);
+                        if (nextValue.trim()) {
+                          setPurchaseOrderNumberSubmitAttempted(false);
+                        }
+                      }}
+                      placeholder={showPurchaseOrderNumberRequired ? 'Required' : 'PO number'}
+                      type="text"
+                      value={values.purchaseOrderNumber}
                     />
                   </div>
                   <Button

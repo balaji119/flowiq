@@ -17,6 +17,11 @@ type SheetRow = {
   label: string;
 };
 
+type MappingDraft = {
+  productCode: string;
+  sheetCode: string;
+};
+
 const ASSET_MAPPING_PREFIX = 'asset:';
 
 function mappingKey(market: string, sheetKey: string) {
@@ -34,11 +39,18 @@ function quantityForSheetKey(mapping: CalculatorMappingRecord, sheetKey: string)
   return matchingKey ? quantities[matchingKey] ?? 0 : 0;
 }
 
-function buildDraftSnapshot(drafts: Record<string, string>) {
+function emptyMappingDraft(): MappingDraft {
+  return {
+    productCode: '',
+    sheetCode: '',
+  };
+}
+
+function buildDraftSnapshot(drafts: Record<string, MappingDraft>) {
   return JSON.stringify(
     Object.entries(drafts)
       .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
-      .map(([key, value]) => [key, value.trim()]),
+      .map(([key, value]) => [key, value.productCode.trim(), value.sheetCode.trim()]),
   );
 }
 
@@ -69,8 +81,8 @@ export function MaterialMappingScreen({
   const [markets, setMarkets] = useState<string[]>([]);
   const [selectedMarket, setSelectedMarket] = useState('');
   const [sheetRowsByMarket, setSheetRowsByMarket] = useState<Record<string, SheetRow[]>>({});
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [savedDrafts, setSavedDrafts] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, MappingDraft>>({});
+  const [savedDrafts, setSavedDrafts] = useState<Record<string, MappingDraft>>({});
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [pendingNavigationAction, setPendingNavigationAction] = useState<(() => void) | null>(null);
 
@@ -167,12 +179,17 @@ export function MaterialMappingScreen({
             .sort((left, right) => left.label.localeCompare(right.label));
           nextSheetRowsByMarket[market] = [...standardSheetRows, ...customAssetRows];
         });
-        const savedByKey = new Map(materialResponse.mappings.map((record) => [savedMappingKey(record), record.productCode]));
+        const savedByKey = new Map(materialResponse.mappings.map((record) => [savedMappingKey(record), record]));
         const legacyProductCodes = sheetResponse.settings.productCodes ?? {};
-        const nextDrafts: Record<string, string> = {};
+        const nextDrafts: Record<string, MappingDraft> = {};
         nextMarkets.forEach((market) => {
           (nextSheetRowsByMarket[market] ?? []).forEach((row) => {
-            nextDrafts[mappingKey(market, row.key)] = savedByKey.get(mappingKey(market, row.key)) ?? legacyProductCodes[row.key] ?? '';
+            const key = mappingKey(market, row.key);
+            const saved = savedByKey.get(key);
+            nextDrafts[key] = {
+              productCode: saved?.productCode ?? legacyProductCodes[row.key] ?? '',
+              sheetCode: saved?.sheetCode ?? '',
+            };
           });
         });
 
@@ -214,11 +231,15 @@ export function MaterialMappingScreen({
     setDiscardDialogOpen(true);
   }
 
-  function updateDraft(sheetKey: string, value: string) {
+  function updateDraft(sheetKey: string, field: keyof MappingDraft, value: string) {
     if (!selectedMarket) return;
     setDrafts((current) => ({
       ...current,
-      [mappingKey(selectedMarket, sheetKey)]: value,
+      [mappingKey(selectedMarket, sheetKey)]: {
+        ...emptyMappingDraft(),
+        ...current[mappingKey(selectedMarket, sheetKey)],
+        [field]: value,
+      },
     }));
   }
 
@@ -236,21 +257,32 @@ export function MaterialMappingScreen({
         mappings: selectedSheetRows.map((row) => ({
           market: selectedMarket,
           sheetKey: row.key,
-          productCode: (drafts[mappingKey(selectedMarket, row.key)] || '').trim(),
+          productCode: (drafts[mappingKey(selectedMarket, row.key)]?.productCode || '').trim(),
+          sheetCode: (drafts[mappingKey(selectedMarket, row.key)]?.sheetCode || '').trim(),
         })),
       }, effectiveTenantId);
-      const updatedByKey = new Map(response.mappings.map((record) => [savedMappingKey(record), record.productCode]));
+      const updatedByKey = new Map(response.mappings.map((record) => [savedMappingKey(record), record]));
       setDrafts((current) => {
         const next = { ...current };
         selectedSheetRows.forEach((row) => {
-          next[mappingKey(selectedMarket, row.key)] = updatedByKey.get(mappingKey(selectedMarket, row.key)) ?? '';
+          const key = mappingKey(selectedMarket, row.key);
+          const updated = updatedByKey.get(key);
+          next[key] = {
+            productCode: updated?.productCode ?? '',
+            sheetCode: updated?.sheetCode ?? '',
+          };
         });
         return next;
       });
       setSavedDrafts((current) => {
         const next = { ...current };
         selectedSheetRows.forEach((row) => {
-          next[mappingKey(selectedMarket, row.key)] = updatedByKey.get(mappingKey(selectedMarket, row.key)) ?? '';
+          const key = mappingKey(selectedMarket, row.key);
+          const updated = updatedByKey.get(key);
+          next[key] = {
+            productCode: updated?.productCode ?? '',
+            sheetCode: updated?.sheetCode ?? '',
+          };
         });
         return next;
       });
@@ -341,7 +373,7 @@ export function MaterialMappingScreen({
           </div>
         </section>
 
-        <section className="w-full max-w-4xl space-y-5">
+        <section className="w-full max-w-5xl space-y-5">
           {loading ? (
             <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
               <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
@@ -356,31 +388,45 @@ export function MaterialMappingScreen({
               <table className="w-full table-fixed border-collapse text-sm">
                 <colgroup>
                   <col className="w-[280px]" />
-                  <col />
+                  <col className="w-[360px]" />
+                  <col className="w-[360px]" />
                 </colgroup>
                 <thead>
                   <tr className="bg-slate-950 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-300">
                     <th className="border border-slate-700 px-4 py-2 text-left">Sheet Name</th>
                     <th className="border border-slate-700 px-4 py-2 text-left">Product Code</th>
+                    <th className="border border-slate-700 px-4 py-2 text-left">Sheet Code</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedSheetRows.map((row, rowIndex) => (
-                    <tr
-                      key={row.key}
-                      className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}`}
-                    >
-                      <td className="border border-slate-700 px-4 py-2 font-semibold text-white">{row.label}</td>
-                      <td className="border border-slate-700 px-4 py-2">
-                        <Input
-                          className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-violet-400 focus-visible:ring-0 focus-visible:ring-offset-0"
-                          onChange={(event) => updateDraft(row.key, event.target.value)}
-                          placeholder={`Product code for ${row.label}`}
-                          value={drafts[mappingKey(selectedMarket, row.key)] || ''}
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                  {selectedSheetRows.map((row, rowIndex) => {
+                    const draftKey = mappingKey(selectedMarket, row.key);
+                    const draft = drafts[draftKey] ?? emptyMappingDraft();
+                    return (
+                      <tr
+                        key={row.key}
+                        className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}`}
+                      >
+                        <td className="border border-slate-700 px-4 py-2 font-semibold text-white">{row.label}</td>
+                        <td className="border border-slate-700 px-4 py-2">
+                          <Input
+                            className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-violet-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+                            onChange={(event) => updateDraft(row.key, 'productCode', event.target.value)}
+                            placeholder={`Product code for ${row.label}`}
+                            value={draft.productCode}
+                          />
+                        </td>
+                        <td className="border border-slate-700 px-4 py-2">
+                          <Input
+                            className="h-8 rounded-none border-0 border-b border-slate-600 bg-transparent px-0 text-white shadow-none focus-visible:border-violet-400 focus-visible:ring-0 focus-visible:ring-offset-0"
+                            onChange={(event) => updateDraft(row.key, 'sheetCode', event.target.value)}
+                            placeholder={`Sheet code for ${row.label}`}
+                            value={draft.sheetCode}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -69,6 +69,7 @@ export type MaterialMappingInput = {
   market: string;
   sheetKey: string;
   productCode: string;
+  sheetCode: string;
 };
 
 export type MaterialMappingRecord = MaterialMappingInput & {
@@ -333,6 +334,7 @@ export type CampaignSupportingDocument = {
 export type OrderFormValues = {
   customerCode: string;
   customerReference: string;
+  purchaseOrderNumber: string;
   campaignName: string;
   jobDescription: string;
   notes: string;
