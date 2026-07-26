@@ -43,7 +43,7 @@ export async function apiFetchJson<T>(path: string, init: RequestInit = {}): Pro
       typeof body === 'object' && body && 'error' in body
         ? String(body.error)
         : isPrintIQSubmit && response.status === 502
-          ? 'Unable to finish the PrintIQ submission. The quote may already exist in PrintIQ, so check PrintIQ before retrying.'
+          ? 'Unable to finish the PrintIQ submission. Check with ADS before retrying.'
         : `Request failed with status ${response.status}`;
     throw new Error(message);
   }

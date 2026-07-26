@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -444,12 +442,20 @@ func (a *app) ensurePrintIQArtworkPDF(ctx context.Context, image campaignPrintIm
 		return "", errors.New("Source PDF is required to submit artwork to PrintIQ")
 	}
 	pageNumber := resolveArtworkSourcePageNumber(image)
-	sourcePDFBytes, err := a.readCampaignImage(ctx, sourcePDFStoredName)
+
+	tempDir, err := os.MkdirTemp("", "flowiq-printiq-artwork-*")
 	if err != nil {
 		return "", err
 	}
+	defer os.RemoveAll(tempDir)
+
+	sourcePDFPath := filepath.Join(tempDir, "source.pdf")
+	if err := a.copyCampaignImageToFile(ctx, sourcePDFStoredName, sourcePDFPath); err != nil {
+		return "", err
+	}
+
 	if pageNumber <= 0 {
-		pageCount, err := api.PageCount(bytes.NewReader(sourcePDFBytes), model.NewDefaultConfiguration())
+		pageCount, err := api.PageCountFile(sourcePDFPath)
 		if err != nil {
 			return "", err
 		}
@@ -461,47 +467,45 @@ func (a *app) ensurePrintIQArtworkPDF(ctx context.Context, image campaignPrintIm
 		return "", fmt.Errorf("Source PDF page number is required for artwork %s", strings.TrimSpace(image.Name))
 	}
 	pdfStoredName := printIQSourcePagePDFStoredName(sourcePDFStoredName, pageNumber)
-	if _, err := a.readCampaignImage(ctx, pdfStoredName); err == nil {
-		return pdfStoredName, nil
-	} else if !errors.Is(err, os.ErrNotExist) {
+	if exists, err := a.campaignImageExists(ctx, pdfStoredName); err != nil {
 		return "", err
+	} else if exists {
+		return pdfStoredName, nil
 	}
 
-	pdfBytes, err := extractSinglePDFPage(sourcePDFBytes, pageNumber)
+	pdfPath, err := extractSinglePDFPageFile(sourcePDFPath, tempDir, pageNumber)
 	if err != nil {
 		return "", err
 	}
-	if err := a.storeCampaignImage(ctx, pdfStoredName, "application/pdf", pdfBytes); err != nil {
+	pdfFile, err := os.Open(pdfPath)
+	if err != nil {
+		return "", err
+	}
+	defer pdfFile.Close()
+	pdfInfo, err := pdfFile.Stat()
+	if err != nil {
+		return "", err
+	}
+	if err := a.storeCampaignImageReader(ctx, pdfStoredName, "application/pdf", pdfFile, pdfInfo.Size()); err != nil {
 		return "", err
 	}
 	return pdfStoredName, nil
 }
 
-func extractSinglePDFPage(sourcePDFBytes []byte, pageNumber int) ([]byte, error) {
+func extractSinglePDFPageFile(sourcePDFPath, outputDir string, pageNumber int) (string, error) {
 	if pageNumber <= 0 {
-		return nil, errors.New("PDF page number must be greater than 0")
+		return "", errors.New("PDF page number must be greater than 0")
 	}
-	var output []byte
-	err := api.ExtractPages(
-		bytes.NewReader(sourcePDFBytes),
-		[]string{strconv.Itoa(pageNumber)},
-		func(reader io.Reader, _ int) error {
-			extracted, err := io.ReadAll(reader)
-			if err != nil {
-				return err
-			}
-			output = extracted
-			return nil
-		},
-		model.NewDefaultConfiguration(),
-	)
-	if err != nil {
-		return nil, err
+	if err := api.ExtractPagesFile(sourcePDFPath, outputDir, []string{strconv.Itoa(pageNumber)}, model.NewDefaultConfiguration()); err != nil {
+		return "", err
 	}
-	if len(output) == 0 {
-		return nil, fmt.Errorf("PDF page %d could not be extracted", pageNumber)
+	outputPath := filepath.Join(outputDir, fmt.Sprintf("%s_page_%d.pdf", strings.TrimSuffix(filepath.Base(sourcePDFPath), ".pdf"), pageNumber))
+	if info, err := os.Stat(outputPath); err != nil {
+		return "", err
+	} else if info.Size() == 0 {
+		return "", fmt.Errorf("PDF page %d could not be extracted", pageNumber)
 	}
-	return output, nil
+	return outputPath, nil
 }
 
 func buildPrintIQUploadArtworkPayload(jobNo string, qstKey any, artwork printIQArtworkUpload, index, total int) map[string]any {

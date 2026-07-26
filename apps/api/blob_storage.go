@@ -131,6 +131,65 @@ func (a *app) readCampaignImage(ctx context.Context, storedName string) ([]byte,
 	return content, nil
 }
 
+func (a *app) campaignImageExists(ctx context.Context, storedName string) (bool, error) {
+	if a.objectStorage != nil {
+		if _, err := a.objectStorage.client.HeadObject(ctx, &s3.HeadObjectInput{
+			Bucket: aws.String(a.objectStorage.bucket),
+			Key:    aws.String(storedName),
+		}); err != nil {
+			if isMissingObjectStorageObject(err) {
+				return false, nil
+			}
+			return false, fmt.Errorf("get DigitalOcean Spaces object metadata: %w", err)
+		}
+		return true, nil
+	}
+
+	if _, err := os.Stat(filepath.Join(a.campaignImageDir, storedName)); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func (a *app) copyCampaignImageToFile(ctx context.Context, storedName, targetPath string) error {
+	target, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("create temporary artwork file: %w", err)
+	}
+	defer target.Close()
+
+	if a.objectStorage != nil {
+		response, err := a.objectStorage.client.GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(a.objectStorage.bucket),
+			Key:    aws.String(storedName),
+		})
+		if err != nil {
+			if isMissingObjectStorageObject(err) {
+				return os.ErrNotExist
+			}
+			return fmt.Errorf("read DigitalOcean Spaces object: %w", err)
+		}
+		defer response.Body.Close()
+		if _, err := io.Copy(target, response.Body); err != nil {
+			return fmt.Errorf("copy DigitalOcean Spaces object: %w", err)
+		}
+		return nil
+	}
+
+	source, err := os.Open(filepath.Join(a.campaignImageDir, storedName))
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	if _, err := io.Copy(target, source); err != nil {
+		return fmt.Errorf("copy local artwork file: %w", err)
+	}
+	return nil
+}
+
 func (a *app) campaignImageReadURL(ctx context.Context, storedName, contentDisposition string) (string, bool, error) {
 	if a.objectStorage == nil {
 		return "", false, nil

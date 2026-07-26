@@ -1068,10 +1068,10 @@ func printIQStepFailureMessage(step string, status int, parsed any, err error) s
 		return fmt.Sprintf("Unable to %s. PrintIQ said: %s", printIQStepLabel(step), message)
 	}
 	if status == http.StatusBadGateway {
-		return fmt.Sprintf("Unable to %s. PrintIQ returned a bad gateway response. The quote may already exist in PrintIQ, so check PrintIQ before retrying.", printIQStepLabel(step))
+		return fmt.Sprintf("Unable to %s. PrintIQ returned a bad gateway response. Check with ADS before retrying.", printIQStepLabel(step))
 	}
 	if status >= 500 {
-		return fmt.Sprintf("Unable to %s. PrintIQ returned status %d. The quote may already exist in PrintIQ, so check PrintIQ before retrying.", printIQStepLabel(step), status)
+		return fmt.Sprintf("Unable to %s. PrintIQ returned status %d. Check with ADS before retrying.", printIQStepLabel(step), status)
 	}
 	return fmt.Sprintf("Unable to %s. PrintIQ returned status %d.", printIQStepLabel(step), status)
 }
