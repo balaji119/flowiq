@@ -114,6 +114,22 @@ func assetProductCodeKey(assetID string) string {
 	return "asset:" + strings.TrimSpace(assetID)
 }
 
+func printIQFrameQuantity(formatKey string, posterQuantity int) int {
+	if posterQuantity <= 0 {
+		return 0
+	}
+	switch formatKey {
+	case "8-sheet", "QA0":
+		return (posterQuantity + 3) / 4
+	case "6-sheet":
+		return (posterQuantity + 2) / 3
+	case "4-sheet":
+		return (posterQuantity + 1) / 2
+	default:
+		return posterQuantity
+	}
+}
+
 func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummary, productMappingsByMarket map[string]map[string]materialProductMapping, fallbackProductCodes map[string]string, customSheetSizeFormats map[string]bool) ([]printIQSheetProduct, error) {
 	if summary == nil {
 		return nil, errors.New("Campaign calculation summary is required")
@@ -127,10 +143,11 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 	products := make([]printIQSheetProduct, 0)
 	for _, format := range printIQSheetFormatOrder {
 		for _, summaryLine := range summary.Lines {
-			quantity := summaryLine.Breakdown[format.breakdownKey]
-			if quantity <= 0 {
+			posterQuantity := summaryLine.Breakdown[format.breakdownKey]
+			if posterQuantity <= 0 {
 				continue
 			}
+			printIQQuantity := printIQFrameQuantity(format.breakdownKey, posterQuantity)
 			marketProductMappings := productMappingsByMarket[strings.TrimSpace(summaryLine.Market)]
 			productCodeKey := format.settingsKey
 			useCustomSheetSize := customSheetSizeFormats[format.settingsKey]
@@ -153,21 +170,17 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 				if artworkImageID == "" && format.breakdownKey == "8-sheet" {
 					artworkImageID = asset.CreativeImageID
 				}
-				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: quantity, ArtworkImageID: artworkImageID})
+				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: printIQQuantity, ArtworkImageID: artworkImageID})
 				continue
 			}
 
-			divisor := map[string]int{"8-sheet": 4, "QA0": 4, "6-sheet": 3, "4-sheet": 2}[format.breakdownKey]
-			if divisor == 0 {
-				divisor = 1
-			}
-			remaining := quantity
+			remaining := printIQQuantity
 			firstProductIndex := len(products)
 			for _, assignment := range assignments {
 				if assignment.FrameCount <= 0 || remaining <= 0 {
 					continue
 				}
-				assignedQuantity := assignment.FrameCount * divisor
+				assignedQuantity := assignment.FrameCount
 				if assignedQuantity > remaining {
 					assignedQuantity = remaining
 				}

@@ -19,7 +19,7 @@ func testMaterialProductMapping(productCode string, sheetCode ...string) materia
 	return mapping
 }
 
-func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndQuantities(t *testing.T) {
+func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndFrameQuantities(t *testing.T) {
 	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}
 	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
@@ -37,10 +37,10 @@ func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndQuantities(t *testing.
 	if len(products) != 2 {
 		t.Fatalf("expected 2 products, got %d", len(products))
 	}
-	if products[0].ProductCode != "NSW Quad Product" || products[0].SheetCode != "SHT-QUAD" || products[0].Quantity != 40 {
+	if products[0].ProductCode != "NSW Quad Product" || products[0].SheetCode != "SHT-QUAD" || products[0].Quantity != 10 {
 		t.Fatalf("unexpected first product: %#v", products[0])
 	}
-	if products[1].ProductCode != "NSW Double Product" || products[1].Quantity != 10 {
+	if products[1].ProductCode != "NSW Double Product" || products[1].Quantity != 5 {
 		t.Fatalf("unexpected second product: %#v", products[1])
 	}
 }
@@ -57,7 +57,7 @@ func TestResolvePrintIQSheetProductsRequiresEveryActiveProductCode(t *testing.T)
 	}
 }
 
-func TestResolvePrintIQSheetProductsSplitsQuantityByArtwork(t *testing.T) {
+func TestResolvePrintIQSheetProductsSplitsFrameQuantityByArtwork(t *testing.T) {
 	values := orderFormValues{
 		CampaignMarkets: []campaignMarket{
 			{
@@ -80,7 +80,7 @@ func TestResolvePrintIQSheetProductsSplitsQuantityByArtwork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve products: %v", err)
 	}
-	if len(products) != 2 || products[0].Quantity != 60 || products[0].ArtworkImageID != "artwork-a" || products[1].Quantity != 40 || products[1].ArtworkImageID != "artwork-b" {
+	if len(products) != 2 || products[0].Quantity != 15 || products[0].ArtworkImageID != "artwork-a" || products[1].Quantity != 10 || products[1].ArtworkImageID != "artwork-b" {
 		t.Fatalf("unexpected split products: %#v", products)
 	}
 }
@@ -102,7 +102,7 @@ func TestResolvePrintIQSheetProductsUsesAssetCodeForCustomSheetSize(t *testing.T
 	if len(products) != 2 {
 		t.Fatalf("expected 2 products, got %d", len(products))
 	}
-	if products[0].ProductCode != "NSW Quad Product" || products[0].Quantity != 40 {
+	if products[0].ProductCode != "NSW Quad Product" || products[0].Quantity != 10 {
 		t.Fatalf("unexpected non-custom product: %#v", products[0])
 	}
 	if products[1].ProductCode != "Asset Mega Product" || products[1].Quantity != 1 {
