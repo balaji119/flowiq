@@ -893,6 +893,7 @@ function SearchableSelect({
   actionLabel,
   onAction,
   actionDisabled = false,
+  disabled = false,
   triggerClassName,
   menuItemClassName,
   menuClassName,
@@ -909,6 +910,7 @@ function SearchableSelect({
   actionLabel?: string;
   onAction?: () => void;
   actionDisabled?: boolean;
+  disabled?: boolean;
   triggerClassName?: string;
   menuItemClassName?: string;
   menuClassName?: string;
@@ -946,7 +948,8 @@ function SearchableSelect({
 
   const trigger = (
     <button
-      className={cn('flex h-10 w-full items-center justify-between rounded-md border border-slate-600 bg-slate-800 px-3 text-left text-sm text-slate-100 transition hover:border-slate-500', triggerClassName)}
+      className={cn('flex h-10 w-full items-center justify-between rounded-md border border-slate-600 bg-slate-800 px-3 text-left text-sm text-slate-100 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-slate-600', triggerClassName)}
+      disabled={disabled}
       onClick={() => setOpen((current) => !current)}
       type="button"
     >
@@ -960,7 +963,7 @@ function SearchableSelect({
       {label ? <Label>{label}</Label> : null}
       {trigger}
       {pickerMode === 'dialog' ? (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open && !disabled} onOpenChange={(nextOpen) => setOpen(disabled ? false : nextOpen)}>
           <DialogContent
             className={cn('flex flex-col gap-0 p-0', useWideDialogGrid ? 'max-h-[96vh] overflow-visible' : 'max-h-[88vh] overflow-hidden')}
             style={{ width: useWideDialogGrid ? 'min(calc(100vw - 2rem), 76rem)' : 'min(calc(100vw - 2rem), 54rem)' }}
@@ -1355,6 +1358,7 @@ export function QuoteBuilderScreen({
   const queuedArtworkFileNames = queuedArtworkUploadJobs.map((job) => job.fileName);
   const pendingArtworkUploadCount = queuedArtworkUploadJobs.length;
   const uploadingArtworkPages = campaignArtworkUploadJobs.some((job) => job.status === 'queued' || job.status === 'uploading');
+  const isSubmittedCampaign = campaignStatus === 'submitted';
 
   function reportQuoteAutomationResult(action: AutomatedQuoteAction, status: AutomatedQuoteActionStatus, message?: string) {
     if (typeof window === 'undefined') return;
@@ -2307,10 +2311,12 @@ export function QuoteBuilderScreen({
   }, [addMarketDialogOpen, draftMarket, editingMarketId, effectiveTenantId, loadingCampaign, loadingMetadata, metadataError, values.campaignMarkets]);
 
   function updateField<K extends keyof OrderFormValues>(field: K, value: OrderFormValues[K]) {
+    if (isSubmittedCampaign) return;
     setValues((current) => ({ ...current, [field]: value }));
   }
 
   function updateCampaignStartDate(value: string) {
+    if (isSubmittedCampaign) return;
     const automaticDueDate = previousWednesday(value);
     setValues((current) => ({
       ...current,
@@ -2325,6 +2331,7 @@ export function QuoteBuilderScreen({
   }
 
   function openDatePicker(ref: React.RefObject<HTMLInputElement | null>) {
+    if (isSubmittedCampaign) return;
     const input = ref.current;
     if (!input) return;
     if (typeof input.showPicker === 'function') {
@@ -2335,10 +2342,12 @@ export function QuoteBuilderScreen({
   }
 
   function updateCampaignMarket(marketId: string, updater: (market: CampaignMarket) => CampaignMarket) {
+    if (isSubmittedCampaign) return;
     setValues((current) => ({ ...current, campaignMarkets: current.campaignMarkets.map((market) => (market.id === marketId ? updater(market) : market)) }));
   }
 
   function openAddMarketDialog() {
+    if (isSubmittedCampaign) return;
     if (!canAddMarket) return;
     const nextMarketName = remainingMarketNames[0] || '';
     const nextMarket = createCampaignMarket(`market-draft-${Date.now()}`);
@@ -2359,6 +2368,7 @@ export function QuoteBuilderScreen({
   }
 
   function openEditMarketDialog(marketId: string) {
+    if (isSubmittedCampaign) return;
     const targetMarket = values.campaignMarkets.find((market) => market.id === marketId);
     if (!targetMarket) return;
     setDraftMarket({
@@ -2382,6 +2392,7 @@ export function QuoteBuilderScreen({
   }
 
   function handleSaveAddMarket() {
+    if (isSubmittedCampaign) return;
     if (!draftMarket) return;
     const savedDraftMarketId = draftMarket.id;
     setValues((current) => {
@@ -2421,6 +2432,7 @@ export function QuoteBuilderScreen({
   }
 
   function handleDeleteMarket(marketId: string) {
+    if (isSubmittedCampaign) return;
     const remainingRealMarketsCount = values.campaignMarkets.filter((market) => !isDefaultPlaceholderMarket(market) && market.id !== marketId).length;
     setValues((current) => ({
       ...current,
@@ -2440,10 +2452,12 @@ export function QuoteBuilderScreen({
   }
 
   function updateDraftMarket(updater: (market: CampaignMarket) => CampaignMarket) {
+    if (isSubmittedCampaign) return;
     setDraftMarket((current) => (current ? updater(current) : current));
   }
 
   function updateDraftAssetFrameOverride(assetId: string, key: string, rawValue: string) {
+    if (isSubmittedCampaign) return;
     const parsedValue = Number.parseInt(rawValue || '0', 10);
     const frameValue = Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
     const divisor = isKnownFormatKey(key) ? (formatToFrameDivisor[toCreativeFormatKey(key)] ?? 1) : 1;
@@ -2529,6 +2543,7 @@ export function QuoteBuilderScreen({
   }
 
   function removeCampaignMarket(marketId: string) {
+    if (isSubmittedCampaign) return;
     setValues((current) => ({
       ...current,
       campaignMarkets: current.campaignMarkets.length === 1 ? current.campaignMarkets : current.campaignMarkets.filter((market) => market.id !== marketId),
@@ -2536,6 +2551,7 @@ export function QuoteBuilderScreen({
   }
 
   function addCampaignAsset(marketId: string) {
+    if (isSubmittedCampaign) return;
     updateCampaignMarket(marketId, (market) => {
       const availableAssets = assetsForMarket(market.market);
       const nextAsset = availableAssets[0];
@@ -2559,14 +2575,17 @@ export function QuoteBuilderScreen({
   }
 
   function removeCampaignAsset(marketId: string, assetId: string) {
+    if (isSubmittedCampaign) return;
     updateCampaignMarket(marketId, (market) => ({ ...market, assets: market.assets.length === 1 ? market.assets : market.assets.filter((asset) => asset.id !== assetId) }));
   }
 
   function updateCampaignAsset(marketId: string, assetId: string, updater: (asset: CampaignAsset) => CampaignAsset) {
+    if (isSubmittedCampaign) return;
     updateCampaignMarket(marketId, (market) => ({ ...market, assets: market.assets.map((asset) => (asset.id === assetId ? updater(asset) : asset)) }));
   }
 
   function toggleCampaignAssetWeek(marketId: string, assetId: string, week: number) {
+    if (isSubmittedCampaign) return;
     updateCampaignAsset(marketId, assetId, (asset) => {
       const selectedWeekSet = new Set(asset.selectedWeeks);
       if (selectedWeekSet.has(week)) selectedWeekSet.delete(week);
@@ -2577,12 +2596,14 @@ export function QuoteBuilderScreen({
   }
 
   function openAssignArtworkDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey, slotIndex?: number) {
+    if (isSubmittedCampaign) return;
     setAssignArtworkTarget({ marketId, assetId, formatKey, slotIndex });
     setArtworkDialogError('');
     setAssignArtworkDialogOpen(true);
   }
 
   function openMaterialDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey, totalFrames: number) {
+    if (isSubmittedCampaign) return;
     const safeTotalFrames = Math.max(1, totalFrames);
     const targetAsset = values.campaignMarkets.find((market) => market.id === marketId)?.assets.find((asset) => asset.id === assetId);
     const assignments = targetAsset ? artworkMaterialAssignmentsForFormat(targetAsset, formatKey) : [];
@@ -2609,6 +2630,7 @@ export function QuoteBuilderScreen({
   }
 
   function syncMultiMaterialRecordsToAsset(records: MultiMaterialRecord[]) {
+    if (isSubmittedCampaign) return;
     if (!materialTarget) return;
     updateCampaignAsset(materialTarget.marketId, materialTarget.assetId, (current) => {
       const existingAssignments = artworkMaterialAssignmentsForFormat(current, materialTarget.formatKey);
@@ -2626,6 +2648,7 @@ export function QuoteBuilderScreen({
   }
 
   function updateMultiMaterialRecord(recordIndex: number, updates: Partial<Pick<MultiMaterialRecord, 'materialId' | 'frameCount'>>) {
+    if (isSubmittedCampaign) return;
     setMultiMaterialRecords((current) => {
       if (!materialTarget || recordIndex < 0 || recordIndex >= current.length) return current;
       const usedByOthers = current.reduce((sum, record, index) => sum + (index === recordIndex ? 0 : Math.max(0, Math.floor(record.frameCount || 0))), 0);
@@ -2639,6 +2662,7 @@ export function QuoteBuilderScreen({
   }
 
   function selectMaterialForRecord(materialId: string) {
+    if (isSubmittedCampaign) return;
     if (materialSelectionRecordIndex === null) return;
     updateMultiMaterialRecord(materialSelectionRecordIndex, { materialId });
     setMaterialDialogMode('manage');
@@ -2647,6 +2671,7 @@ export function QuoteBuilderScreen({
   }
 
   function addMultiMaterialRecord() {
+    if (isSubmittedCampaign) return;
     setMultiMaterialRecords((current) => {
       const used = current.reduce((sum, record) => sum + Math.max(0, Math.floor(record.frameCount || 0)), 0);
       const remaining = Math.max(0, (materialTarget?.totalFrames ?? 0) - used);
@@ -2657,6 +2682,7 @@ export function QuoteBuilderScreen({
   }
 
   function removeMultiMaterialRecord(recordIndex: number) {
+    if (isSubmittedCampaign) return;
     setMultiMaterialRecords((current) => {
       if (current.length <= 1) {
         const next = current.map((record) => ({ ...record, materialId: '' }));
@@ -2670,6 +2696,7 @@ export function QuoteBuilderScreen({
   }
 
   function openMultiArtworkDialog(marketId: string, assetId: string, formatKey: CreativeFormatKey, totalFrames: number) {
+    if (isSubmittedCampaign) return;
     const safeTotalFrames = Math.max(1, totalFrames);
     const targetMarket = values.campaignMarkets.find((market) => market.id === marketId);
     const targetAsset = targetMarket?.assets.find((asset) => asset.id === assetId);
@@ -2712,12 +2739,14 @@ export function QuoteBuilderScreen({
   }
 
   function openArtworkManagerDialog() {
+    if (isSubmittedCampaign) return;
     setAssignArtworkTarget(null);
     setArtworkDialogError('');
     setAssignArtworkDialogOpen(true);
   }
 
   function removeArtworkFromPreview() {
+    if (isSubmittedCampaign) return;
     if (!previewArtworkTarget) return;
     const { marketId, assetId, formatKey } = previewArtworkTarget;
     assignArtworkToFormat(marketId, assetId, formatKey, '');
@@ -2753,6 +2782,7 @@ export function QuoteBuilderScreen({
   }
 
   function reorderCreativeAssignments(sourceCreativeName: string, targetCreativeName: string, position: 'above' | 'below') {
+    if (isSubmittedCampaign) return;
     if (sourceCreativeName === targetCreativeName) return;
     const orderedImageIds = creativeNames.map((creativeName) => resolvedCreativeNameAssignments[creativeName] || '');
     const sourceIndex = creativeNames.indexOf(sourceCreativeName);
@@ -2803,6 +2833,7 @@ export function QuoteBuilderScreen({
   }
 
   function assignArtworkImageToTarget(imageId: string) {
+    if (isSubmittedCampaign) return;
     if (!assignArtworkTarget) return;
     const { marketId, assetId, formatKey, slotIndex } = assignArtworkTarget;
     if (
@@ -2828,6 +2859,7 @@ export function QuoteBuilderScreen({
   }
 
   function assignArtworkToFormatSlot(marketId: string, assetId: string, formatKey: CreativeFormatKey, slotIndex: number, imageId: string) {
+    if (isSubmittedCampaign) return;
     updateCampaignAsset(marketId, assetId, (current) => {
       const nextAssignments = [...artworkMaterialAssignmentsForFormat(current, formatKey)];
       while (nextAssignments.length <= slotIndex) {
@@ -2845,6 +2877,7 @@ export function QuoteBuilderScreen({
   }
 
   function syncMultiArtworkRecordsToAsset(records: MultiArtworkRecord[]) {
+    if (isSubmittedCampaign) return;
     if (!multiArtworkTarget) return;
     updateCampaignAsset(multiArtworkTarget.marketId, multiArtworkTarget.assetId, (current) => {
       const nextArtworkMaterialAssignments = {
@@ -2865,6 +2898,7 @@ export function QuoteBuilderScreen({
   }
 
   function updateMultiArtworkRecordImage(recordIndex: number, imageId: string) {
+    if (isSubmittedCampaign) return;
     setMultiArtworkRecords((current) => {
       if (recordIndex < 0 || recordIndex >= current.length) return current;
       const next = current.map((record, index) => (index === recordIndex ? { ...record, imageId } : record));
@@ -2874,6 +2908,7 @@ export function QuoteBuilderScreen({
   }
 
   function updateMultiArtworkRecordMaterial(recordIndex: number, materialId: string) {
+    if (isSubmittedCampaign) return;
     setMultiArtworkRecords((current) => {
       if (recordIndex < 0 || recordIndex >= current.length) return current;
       const next = current.map((record, index) => (index === recordIndex ? { ...record, materialId } : record));
@@ -2883,6 +2918,7 @@ export function QuoteBuilderScreen({
   }
 
   function updateMultiArtworkRecordFrameCount(recordIndex: number, requestedFrameCount: number) {
+    if (isSubmittedCampaign) return;
     setMultiArtworkRecords((current) => {
       if (!multiArtworkTarget || recordIndex < 0 || recordIndex >= current.length) return current;
       const sanitized = Math.max(0, Math.floor(Number.isFinite(requestedFrameCount) ? requestedFrameCount : 0));
@@ -2896,6 +2932,7 @@ export function QuoteBuilderScreen({
   }
 
   function addMultiArtworkRecord() {
+    if (isSubmittedCampaign) return;
     setMultiArtworkRecords((current) => {
       const usedFrames = current.reduce((sum, record) => sum + Math.max(0, Math.floor(record.frameCount || 0)), 0);
       const remainingFrames = Math.max(0, (multiArtworkTarget?.totalFrames ?? 0) - usedFrames);
@@ -2910,6 +2947,7 @@ export function QuoteBuilderScreen({
   }
 
   function removeMultiArtworkRecord(recordIndex: number) {
+    if (isSubmittedCampaign) return;
     setMultiArtworkRecords((current) => {
       if (recordIndex < 0 || recordIndex >= current.length) return current;
       const next = current.filter((_, index) => index !== recordIndex);
@@ -2919,6 +2957,7 @@ export function QuoteBuilderScreen({
   }
 
   function assignArtworkToFormat(marketId: string, assetId: string, formatKey: CreativeFormatKey, imageId: string) {
+    if (isSubmittedCampaign) return;
     updateCampaignAsset(marketId, assetId, (current) => {
       const nextCreativeImageIds = {
         ...normalizeCreativeImageIds(current),
@@ -2962,6 +3001,7 @@ export function QuoteBuilderScreen({
   }
 
   function handleDeleteArtwork(image: CampaignPrintImage) {
+    if (isSubmittedCampaign) return;
     if (isSubCampaign) {
       setArtworkDialogError('Artwork deletion is disabled for sub campaigns because files may be referenced by the parent campaign.');
       return;
@@ -2982,6 +3022,10 @@ export function QuoteBuilderScreen({
   async function confirmDeleteArtwork() {
     const image = deleteArtworkCandidate;
     if (!image) return;
+    if (isSubmittedCampaign) {
+      setDeleteArtworkCandidate(null);
+      return;
+    }
     if (isSubCampaign) {
       setArtworkDialogError('Artwork deletion is disabled for sub campaigns because files may be referenced by the parent campaign.');
       setDeleteArtworkCandidate(null);
@@ -3032,6 +3076,7 @@ export function QuoteBuilderScreen({
   }
 
   async function handleArtworkPickerFiles(fileList: FileList | null) {
+    if (isSubmittedCampaign) return;
     const nextFiles = Array.from(fileList ?? []);
     if (!nextFiles.length) return;
     const validFiles = nextFiles.filter((file) => isPdfFile(file));
@@ -3065,6 +3110,7 @@ export function QuoteBuilderScreen({
 
   function handleArtworkDragOver(event: DragEvent<HTMLButtonElement>) {
     event.preventDefault();
+    if (isSubmittedCampaign) return;
     event.dataTransfer.dropEffect = 'copy';
     setIsDraggingArtworkFiles(true);
   }
@@ -3077,6 +3123,7 @@ export function QuoteBuilderScreen({
   function handleArtworkDrop(event: DragEvent<HTMLButtonElement>) {
     event.preventDefault();
     setIsDraggingArtworkFiles(false);
+    if (isSubmittedCampaign) return;
     void handleArtworkPickerFiles(event.dataTransfer.files);
   }
 
@@ -3086,10 +3133,12 @@ export function QuoteBuilderScreen({
   }
 
   function openUploadManagerDialog() {
+    if (isSubmittedCampaign) return;
     setUploadManagerOpen(true);
   }
 
   async function ensureCampaignReadyForArtworkUpload() {
+    if (isSubmittedCampaign) return false;
     const savedCampaignId = await saveCampaignDraft();
     if (savedCampaignId) return true;
     const message = 'Save the campaign before uploading artwork.';
@@ -3105,6 +3154,7 @@ export function QuoteBuilderScreen({
   }
 
   async function handleOneDriveImport(selections: OneDriveSelection[], accessToken: string) {
+    if (isSubmittedCampaign) throw new Error('Submitted campaigns cannot be edited');
     const savedCampaignId = campaignId || await saveCampaignDraft();
     if (!savedCampaignId) throw new Error('Save the campaign before importing artwork.');
     setHasChosenArtworkInSession(true);
@@ -3112,6 +3162,7 @@ export function QuoteBuilderScreen({
   }
 
   async function handleArtworkActionButtonClick() {
+    if (isSubmittedCampaign) return;
     const canUploadArtwork = await ensureCampaignReadyForArtworkUpload();
     if (!canUploadArtwork) return;
 
@@ -3212,6 +3263,9 @@ export function QuoteBuilderScreen({
   }
 
   async function saveCampaignDraft(options?: { fromAutoSave?: boolean }) {
+    if (isSubmittedCampaign) {
+      return campaignId;
+    }
     const fromAutoSave = options?.fromAutoSave ?? false;
     const currentValuesSerialized = stableSerialize(values);
     if (fromAutoSave && lastAutoSaveFailedValuesRef.current === currentValuesSerialized) {
@@ -3251,7 +3305,7 @@ export function QuoteBuilderScreen({
   }
 
   useEffect(() => {
-    if (loadingCampaign || savingCampaign || !hasUnsavedChanges) return;
+    if (isSubmittedCampaign || loadingCampaign || savingCampaign || !hasUnsavedChanges) return;
 
     const timeoutId = window.setTimeout(() => {
       void saveCampaignDraft({ fromAutoSave: true });
@@ -3260,7 +3314,7 @@ export function QuoteBuilderScreen({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [campaignId, effectiveTenantId, hasUnsavedChanges, loadingCampaign, savingCampaign, values]);
+  }, [campaignId, effectiveTenantId, hasUnsavedChanges, isSubmittedCampaign, loadingCampaign, savingCampaign, values]);
 
   async function handleBackToDashboard() {
     if (!onBack) return;
@@ -3304,6 +3358,11 @@ export function QuoteBuilderScreen({
   }
 
   async function handleSubmitQuote() {
+    if (isSubmittedCampaign) {
+      setQuoteResponseStatus('success');
+      setQuoteResponseMessage('This campaign has already been submitted.');
+      return;
+    }
     if (!hasUploadedPurchaseOrder) {
       setQuoteResponseStatus('error');
       setQuoteResponseMessage('Upload a purchase order file before submitting.');
@@ -3344,6 +3403,7 @@ export function QuoteBuilderScreen({
   }
 
   async function handleUploadPurchaseOrder(fileToUpload?: File | null) {
+    if (isSubmittedCampaign) return;
     const purchaseOrderFile = fileToUpload ?? selectedPurchaseOrderFile;
     if (!purchaseOrderFile) {
       setError('Please choose a purchase order file to upload');
@@ -3367,10 +3427,12 @@ export function QuoteBuilderScreen({
   }
 
   function openSupportingDocumentPicker() {
+    if (isSubmittedCampaign) return;
     supportingDocumentInputRef.current?.click();
   }
 
   async function handleUploadSupportingDocuments(fileList: FileList | null) {
+    if (isSubmittedCampaign) return;
     const files = Array.from(fileList ?? []);
     if (files.length === 0 || uploadingSupportingDocuments) return;
 
@@ -5568,10 +5630,12 @@ export function QuoteBuilderScreen({
   }
 
   function openPurchaseOrderPicker() {
+    if (isSubmittedCampaign) return;
     purchaseOrderInputRef.current?.click();
   }
 
   function openArtworkPdfPicker() {
+    if (isSubmittedCampaign) return;
     artworkPdfInputRef.current?.click();
   }
 
@@ -5611,6 +5675,7 @@ export function QuoteBuilderScreen({
                   id="campaign-name"
                   type="text"
                   value={values.campaignName}
+                  disabled={isSubmittedCampaign}
                   onChange={(event) => updateField('campaignName', event.target.value)}
                 />
               </div>
@@ -5624,6 +5689,7 @@ export function QuoteBuilderScreen({
                     placeholder="dd/mm/yyyy"
                     type="text"
                     value={campaignStartDateInput}
+                    disabled={isSubmittedCampaign}
                     onBlur={() => {
                       if (!campaignStartDateInput.trim()) {
                         updateCampaignStartDate('');
@@ -5657,11 +5723,13 @@ export function QuoteBuilderScreen({
                     tabIndex={-1}
                     type="date"
                     value={values.campaignStartDate}
+                    disabled={isSubmittedCampaign}
                   />
                   <button
                     aria-label="Open start date picker"
                     className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-800 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300/70"
                     onClick={() => openDatePicker(campaignStartPickerRef)}
+                    disabled={isSubmittedCampaign}
                     type="button"
                   >
                     <CalendarDays className="h-4 w-4" />
@@ -5678,6 +5746,7 @@ export function QuoteBuilderScreen({
                     placeholder="dd/mm/yyyy"
                     type="text"
                     value={dueDateInput}
+                    disabled={isSubmittedCampaign}
                     onBlur={() => {
                       if (!dueDateInput.trim()) {
                         updateField('dueDate', '');
@@ -5711,11 +5780,13 @@ export function QuoteBuilderScreen({
                     tabIndex={-1}
                     type="date"
                     value={values.dueDate}
+                    disabled={isSubmittedCampaign}
                   />
                   <button
                     aria-label="Open due date picker"
                     className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-800 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300/70"
                     onClick={() => openDatePicker(dueDatePickerRef)}
+                    disabled={isSubmittedCampaign}
                     type="button"
                   >
                     <CalendarDays className="h-4 w-4" />
@@ -5737,11 +5808,13 @@ export function QuoteBuilderScreen({
                   }}
                   type="number"
                   value={numberOfWeeks}
+                  disabled={isSubmittedCampaign}
                 />
                 <div className="flex h-11 w-8 flex-col border-l border-white/10">
                   <Button
                     className="h-[22px] w-8 rounded-none border-b border-white/10 px-0"
                     onClick={() => updateWeekCount(numberOfWeeks + 1)}
+                    disabled={isSubmittedCampaign}
                     type="button"
                     variant="ghost"
                   >
@@ -5749,7 +5822,7 @@ export function QuoteBuilderScreen({
                   </Button>
                   <Button
                     className="h-[22px] w-8 rounded-none px-0"
-                    disabled={numberOfWeeks <= 1}
+                    disabled={isSubmittedCampaign || numberOfWeeks <= 1}
                     onClick={() => updateWeekCount(numberOfWeeks - 1)}
                     type="button"
                     variant="ghost"
@@ -5767,7 +5840,7 @@ export function QuoteBuilderScreen({
                         'h-11 min-w-0 flex-1 truncate border-0 bg-transparent px-3 text-left text-sm font-medium transition hover:bg-slate-700/30',
                         uploadedPurchaseOrderName ? 'text-slate-200' : uploadingPurchaseOrder ? 'text-slate-300' : 'text-slate-400',
                       )}
-                      disabled={uploadingPurchaseOrder}
+                      disabled={isSubmittedCampaign || uploadingPurchaseOrder}
                       onClick={openPurchaseOrderPicker}
                       type="button"
                     >
@@ -5817,11 +5890,12 @@ export function QuoteBuilderScreen({
                       placeholder={showPurchaseOrderNumberRequired ? 'Required' : 'PO number'}
                       type="text"
                       value={values.purchaseOrderNumber}
+                      disabled={isSubmittedCampaign}
                     />
                   </div>
                   <Button
                     className="h-10 min-w-0 rounded-lg border-white/15 px-4 text-sm font-semibold"
-                    disabled={uploadingSupportingDocuments}
+                    disabled={isSubmittedCampaign || uploadingSupportingDocuments}
                     onClick={openSupportingDocumentPicker}
                     title={(values.supportingDocuments?.length ?? 0) > 0
                       ? `${values.supportingDocuments?.length} supporting document${values.supportingDocuments?.length === 1 ? '' : 's'} for Installs`
@@ -5846,6 +5920,7 @@ export function QuoteBuilderScreen({
                   <Button
                     className="h-10 min-w-0 rounded-lg border-white/15 px-4 text-sm font-semibold"
                     onClick={openUploadManagerDialog}
+                    disabled={isSubmittedCampaign}
                     type="button"
                     variant="outline"
                   >
@@ -5859,6 +5934,7 @@ export function QuoteBuilderScreen({
                   <Button
                     className="h-10 min-w-0 rounded-lg border-white/15 px-4 text-sm font-semibold"
                     onClick={openArtworkManagerDialog}
+                    disabled={isSubmittedCampaign}
                     type="button"
                     variant="outline"
                   >
@@ -5867,7 +5943,7 @@ export function QuoteBuilderScreen({
                   <div title={canAddMarketInPlanning ? 'Add another market' : addMarketDisabledReason}>
                     <Button
                       className="h-10 w-full min-w-0 rounded-lg border border-violet-300/40 bg-violet-600 px-4 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(105,53,228,0.2)] transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-violet-600"
-                      disabled={!canAddMarketInPlanning}
+                      disabled={isSubmittedCampaign || !canAddMarketInPlanning}
                       onClick={openAddMarketDialog}
                       type="button"
                       variant="secondary"
@@ -5943,10 +6019,11 @@ export function QuoteBuilderScreen({
                                           }
                               placeholder="Choose a market"
                               selectedValue={market.market}
+                              disabled={isSubmittedCampaign}
                             />
                           </div>
                           {canRemoveMarket ? (
-                            <Button onClick={() => removeCampaignMarket(market.id)} size="icon" type="button" variant="ghost">
+                            <Button disabled={isSubmittedCampaign} onClick={() => removeCampaignMarket(market.id)} size="icon" type="button" variant="ghost">
                               <X className="h-4 w-4" />
                             </Button>
                           ) : null}
@@ -5996,6 +6073,7 @@ export function QuoteBuilderScreen({
                                           placeholder={availableAssets.length ? 'Choose an asset' : 'No assets available'}
                                           selectedLabel={asset.assetSearch}
                                           selectedValue={asset.assetId}
+                                          disabled={isSubmittedCampaign}
                                         />
                                       </td>
                                       <td className="px-2 py-3">
@@ -6005,13 +6083,14 @@ export function QuoteBuilderScreen({
                                             weekCount={numberOfWeeks}
                                             startDate={values.campaignStartDate}
                                             onToggleWeek={(week) => toggleCampaignAssetWeek(market.id, asset.id, week)}
+                                            readOnly={isSubmittedCampaign}
                                             selectedWeeks={asset.selectedWeeks}
                                           />
                                         </div>
                                       </td>
                                       <td className="px-1 py-3 text-center">
                                         {canRemoveAsset ? (
-                                          <Button className="h-7 w-7" onClick={() => removeCampaignAsset(market.id, asset.id)} size="icon" type="button" variant="ghost">
+                                          <Button className="h-7 w-7" disabled={isSubmittedCampaign} onClick={() => removeCampaignAsset(market.id, asset.id)} size="icon" type="button" variant="ghost">
                                             <X className="h-3.5 w-3.5 text-rose-300" />
                                           </Button>
                                         ) : null}
@@ -6025,7 +6104,7 @@ export function QuoteBuilderScreen({
                           </div>
 
                           <div title={canAddAssetForMarket(market) ? 'Add another asset' : addAssetDisabledReasonForMarket(market)}>
-                            <Button className="h-10 min-w-[132px] px-4 text-[15px]" disabled={!canAddAssetForMarket(market)} onClick={() => addCampaignAsset(market.id)} type="button" variant="secondary">
+                            <Button className="h-10 min-w-[132px] px-4 text-[15px]" disabled={isSubmittedCampaign || !canAddAssetForMarket(market)} onClick={() => addCampaignAsset(market.id)} type="button" variant="secondary">
                               <Plus className="h-4 w-4" />
                               Add Asset
                             </Button>
@@ -6497,7 +6576,7 @@ export function QuoteBuilderScreen({
                     </Button>
                     <Button
                       className="h-9 min-w-0 rounded-xl border border-violet-300/35 bg-gradient-to-r from-violet-600 to-violet-500 px-1.5 text-[11px] font-semibold text-white shadow-[0_10px_24px_rgba(105,53,228,0.26)] transition hover:brightness-105"
-                      disabled={submitting || exportingTemplates || sendingAdsEmail}
+                      disabled={isSubmittedCampaign || submitting || exportingTemplates || sendingAdsEmail}
                       onClick={() => void handleSubmitQuote()}
                       type="button"
                       variant="secondary"

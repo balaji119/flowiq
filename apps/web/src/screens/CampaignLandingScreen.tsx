@@ -173,9 +173,14 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
     setViewError('');
     setCampaignForView(null);
     try {
-      await calculatePersistedCampaign(campaignId, selectedTenantId);
       const response = await fetchCampaign(campaignId, selectedTenantId);
-      setCampaignForView(response.campaign);
+      if (response.campaign.status === 'submitted') {
+        setCampaignForView(response.campaign);
+        return;
+      }
+      await calculatePersistedCampaign(campaignId, selectedTenantId);
+      const refreshedResponse = await fetchCampaign(campaignId, selectedTenantId);
+      setCampaignForView(refreshedResponse.campaign);
     } catch (loadError) {
       setViewError(loadError instanceof Error ? loadError.message : 'Unable to load campaign details');
     } finally {

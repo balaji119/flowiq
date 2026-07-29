@@ -520,6 +520,30 @@ func (s *campaignStore) getCampaign(ctx context.Context, user AuthUser, campaign
 	return decodeCampaignRow(row)
 }
 
+func (s *campaignStore) submittedCampaignEditError(ctx context.Context, user AuthUser, campaignID string) error {
+	if user.TenantID == nil {
+		return errors.New("current user is not assigned to a tenant")
+	}
+
+	var status string
+	err := s.pool.QueryRow(ctx, `
+		SELECT status
+		FROM campaigns
+		WHERE id = $1 AND tenant_id = $2
+		LIMIT 1
+	`, campaignID, *user.TenantID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errors.New("Campaign not found")
+	}
+	if err != nil {
+		return err
+	}
+	if strings.EqualFold(strings.TrimSpace(status), "submitted") {
+		return errors.New("Submitted campaigns cannot be edited")
+	}
+	return errors.New("Campaign not found")
+}
+
 func (s *campaignStore) updateCampaign(ctx context.Context, user AuthUser, campaignID string, values orderFormValues) (*campaignRecord, error) {
 	if user.TenantID == nil {
 		return nil, errors.New("current user is not assigned to a tenant")
@@ -551,13 +575,13 @@ func (s *campaignStore) updateCampaign(ctx context.Context, user AuthUser, campa
 			submitted_at = NULL,
 			updated_by_user_id = $8,
 			updated_at = NOW()
-		WHERE id = $1 AND tenant_id = $2
+		WHERE id = $1 AND tenant_id = $2 AND status <> 'submitted'
 	`, campaignID, *user.TenantID, strings.TrimSpace(values.CampaignName), parseDateOrNil(values.CampaignStartDate), parseDateOrNil(values.DueDate), parseWeeks(values.NumberOfWeeks), string(formData), user.ID)
 	if err != nil {
 		return nil, err
 	}
 	if commandTag.RowsAffected() == 0 {
-		return nil, errors.New("Campaign not found")
+		return nil, s.submittedCampaignEditError(ctx, user, campaignID)
 	}
 
 	if err := s.replaceCampaignLines(ctx, tx, campaignID, *user.TenantID, values); err != nil {
@@ -589,17 +613,21 @@ func (s *campaignStore) appendCampaignPrintImages(ctx context.Context, user Auth
 	defer tx.Rollback(ctx)
 
 	var formData []byte
+	var status string
 	err = tx.QueryRow(ctx, `
-		SELECT form_data
+		SELECT form_data, status
 		FROM campaigns
 		WHERE id = $1 AND tenant_id = $2
 		FOR UPDATE
-	`, campaignID, *user.TenantID).Scan(&formData)
+	`, campaignID, *user.TenantID).Scan(&formData, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errors.New("Campaign not found")
 	}
 	if err != nil {
 		return nil, err
+	}
+	if strings.EqualFold(strings.TrimSpace(status), "submitted") {
+		return nil, errors.New("Submitted campaigns cannot be edited")
 	}
 
 	values := orderFormValues{}
@@ -660,17 +688,21 @@ func (s *campaignStore) appendCampaignSupportingDocuments(ctx context.Context, u
 	defer tx.Rollback(ctx)
 
 	var formData []byte
+	var status string
 	err = tx.QueryRow(ctx, `
-		SELECT form_data
+		SELECT form_data, status
 		FROM campaigns
 		WHERE id = $1 AND tenant_id = $2
 		FOR UPDATE
-	`, campaignID, *user.TenantID).Scan(&formData)
+	`, campaignID, *user.TenantID).Scan(&formData, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errors.New("Campaign not found")
 	}
 	if err != nil {
 		return nil, err
+	}
+	if strings.EqualFold(strings.TrimSpace(status), "submitted") {
+		return nil, errors.New("Submitted campaigns cannot be edited")
 	}
 
 	values := orderFormValues{}
@@ -733,13 +765,13 @@ func (s *campaignStore) setPurchaseOrder(ctx context.Context, user AuthUser, cam
 		SET purchase_order = $3::jsonb,
 			updated_by_user_id = $4,
 			updated_at = NOW()
-		WHERE id = $1 AND tenant_id = $2
+		WHERE id = $1 AND tenant_id = $2 AND status <> 'submitted'
 	`, campaignID, *user.TenantID, string(payload), user.ID)
 	if err != nil {
 		return nil, err
 	}
 	if commandTag.RowsAffected() == 0 {
-		return nil, errors.New("Campaign not found")
+		return nil, s.submittedCampaignEditError(ctx, user, campaignID)
 	}
 	return s.getCampaign(ctx, user, campaignID)
 }
@@ -748,6 +780,9 @@ func (s *campaignStore) calculateCampaign(ctx context.Context, user AuthUser, ca
 	campaign, err := s.getCampaign(ctx, user, campaignID)
 	if err != nil {
 		return nil, campaignSummary{}, err
+	}
+	if strings.EqualFold(strings.TrimSpace(campaign.Status), "submitted") {
+		return nil, campaignSummary{}, errors.New("Submitted campaigns cannot be edited")
 	}
 
 	lines := normalizeCampaignLines(campaign.Values)
@@ -766,16 +801,20 @@ func (s *campaignStore) calculateCampaign(ctx context.Context, user AuthUser, ca
 		return nil, campaignSummary{}, err
 	}
 
-	if _, err := s.pool.Exec(ctx, `
+	commandTag, err := s.pool.Exec(ctx, `
 		UPDATE campaigns
 		SET status = 'calculated',
 			form_data = $3::jsonb,
 			calculation_summary = $4::jsonb,
 			updated_by_user_id = $5,
 			updated_at = NOW()
-		WHERE id = $1 AND tenant_id = $2
-	`, campaignID, campaign.TenantID, string(formData), string(summaryData), user.ID); err != nil {
+		WHERE id = $1 AND tenant_id = $2 AND status <> 'submitted'
+	`, campaignID, campaign.TenantID, string(formData), string(summaryData), user.ID)
+	if err != nil {
 		return nil, campaignSummary{}, err
+	}
+	if commandTag.RowsAffected() == 0 {
+		return nil, campaignSummary{}, s.submittedCampaignEditError(ctx, user, campaignID)
 	}
 
 	updatedCampaign, err := s.getCampaign(ctx, user, campaignID)
@@ -789,6 +828,9 @@ func (s *campaignStore) recordSubmission(ctx context.Context, user AuthUser, cam
 	campaign, err := s.getCampaign(ctx, user, campaignID)
 	if err != nil {
 		return nil, err
+	}
+	if strings.EqualFold(strings.TrimSpace(campaign.Status), "submitted") {
+		return nil, errors.New("Campaign has already been submitted")
 	}
 
 	requestPayloadJSON, err := marshalJSON(requestPayload)

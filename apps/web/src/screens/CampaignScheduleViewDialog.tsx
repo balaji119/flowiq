@@ -650,7 +650,7 @@ export function CampaignScheduleViewDialog({
   }
 
   async function handleSubmitOrder() {
-    if (!campaign || submittingOrder || downloadingVisuals || sendingAdsEmail) return;
+    if (!campaign || isSubmittedCampaign || submittingOrder || downloadingVisuals || sendingAdsEmail) return;
     setActionError('');
     setActionSuccess('');
     if (!hasUploadedPurchaseOrder) {
@@ -662,6 +662,7 @@ export function CampaignScheduleViewDialog({
       const response = await submitCampaignToPrintIQ(campaign.id, tenantId);
       const jobNumbers = response.jobNos?.length ? response.jobNos.join(', ') : response.jobNo;
       const printIQNumbers = [response.quoteNo ? `Quote: ${response.quoteNo}` : '', jobNumbers ? `Jobs: ${jobNumbers}` : ''].filter(Boolean).join(', ');
+      if (response.campaign.status === 'submitted') setEmailSubmitted(true);
       setActionSuccess(printIQNumbers ? `Order submitted to PrintIQ. ${printIQNumbers}` : 'Order submitted to PrintIQ.');
     } catch (submitError) {
       setActionError(submitError instanceof Error ? submitError.message : 'Unable to submit order to PrintIQ.');
@@ -946,7 +947,7 @@ export function CampaignScheduleViewDialog({
                 </Button>
                 <Button
                   className="h-9 px-4 btn-theme-primary"
-                  disabled={downloadingVisuals || sendingAdsEmail || submittingOrder}
+                  disabled={isSubmittedCampaign || downloadingVisuals || sendingAdsEmail || submittingOrder}
                   onClick={() => void handleSubmitOrder()}
                   title="Submit order to PrintIQ"
                   type="button"

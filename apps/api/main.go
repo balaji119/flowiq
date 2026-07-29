@@ -1254,6 +1254,10 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
+	if strings.EqualFold(strings.TrimSpace(campaign.Status), "submitted") {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Campaign has already been submitted"})
+		return
+	}
 	if strings.TrimSpace(campaign.Values.PurchaseOrderNumber) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Enter a purchase order number before submitting."})
 		return
