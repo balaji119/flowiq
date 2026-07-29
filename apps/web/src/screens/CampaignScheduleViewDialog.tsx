@@ -770,7 +770,7 @@ export function CampaignScheduleViewDialog({
               <Button className="h-9 rounded-md border border-white/10 bg-slate-900/50 px-4 text-xs text-slate-100 hover:bg-slate-800/70" onClick={onClose} type="button" variant="ghost">
                 Close
               </Button>
-              <Button className="h-9 px-4 btn-theme-primary" onClick={onEdit} title="Edit schedule" type="button">
+              <Button className="h-9 px-4 btn-theme-primary" disabled={isSubmittedCampaign} onClick={onEdit} title={isSubmittedCampaign ? 'Submitted campaigns cannot be edited' : 'Edit schedule'} type="button">
                 Edit Schedule
               </Button>
             </div>

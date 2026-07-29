@@ -52,18 +52,20 @@ func (s *campaignStore) acquireCampaignEditLock(ctx context.Context, user AuthUs
 	}
 	defer tx.Rollback(ctx)
 
-	var campaignExists bool
+	var campaignStatus string
 	if err := tx.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1
-			FROM campaigns
-			WHERE id = $1 AND tenant_id = $2
-		)
-	`, campaignID, tenantID).Scan(&campaignExists); err != nil {
+		SELECT status
+		FROM campaigns
+		WHERE id = $1 AND tenant_id = $2
+		LIMIT 1
+	`, campaignID, tenantID).Scan(&campaignStatus); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("Campaign not found")
+		}
 		return nil, err
 	}
-	if !campaignExists {
-		return nil, errors.New("Campaign not found")
+	if strings.EqualFold(strings.TrimSpace(campaignStatus), "submitted") {
+		return nil, errors.New("Submitted campaigns cannot be edited")
 	}
 
 	if _, err := tx.Exec(ctx, `

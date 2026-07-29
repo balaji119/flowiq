@@ -605,6 +605,17 @@ func (a *app) writeCampaignLockError(w http.ResponseWriter, err error) bool {
 	return false
 }
 
+func campaignMutationErrorStatus(err error) int {
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "not found") {
+		return http.StatusNotFound
+	}
+	if strings.Contains(message, "submitted") {
+		return http.StatusConflict
+	}
+	return http.StatusBadRequest
+}
+
 func (a *app) handleAcquireCampaignEditLock(w http.ResponseWriter, r *http.Request) {
 	user, resolveErr := a.userWithManagedTenant(r)
 	if resolveErr != nil {
@@ -616,11 +627,7 @@ func (a *app) handleAcquireCampaignEditLock(w http.ResponseWriter, r *http.Reque
 		if a.writeCampaignLockError(w, err) {
 			return
 		}
-		status := http.StatusBadRequest
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			status = http.StatusNotFound
-		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
+		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -744,11 +751,7 @@ func (a *app) handleCreateSubCampaign(w http.ResponseWriter, r *http.Request) {
 	}
 	campaign, err := a.campaignStore.createSubCampaign(r.Context(), *user, r.PathValue("campaignId"))
 	if err != nil {
-		status := http.StatusBadRequest
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			status = http.StatusNotFound
-		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
+		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"campaign": campaign})
@@ -774,17 +777,6 @@ func (a *app) handleGetCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
 		return
 	}
-	if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, r.PathValue("campaignId")); err != nil {
-		if a.writeCampaignLockError(w, err) {
-			return
-		}
-		status := http.StatusBadRequest
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			status = http.StatusNotFound
-		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
-		return
-	}
 
 	campaign, err := a.campaignStore.getCampaign(r.Context(), *user, r.PathValue("campaignId"))
 	if err != nil {
@@ -808,11 +800,7 @@ func (a *app) handleUpdateCampaign(w http.ResponseWriter, r *http.Request) {
 		if a.writeCampaignLockError(w, err) {
 			return
 		}
-		status := http.StatusBadRequest
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			status = http.StatusNotFound
-		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
+		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -826,11 +814,7 @@ func (a *app) handleUpdateCampaign(w http.ResponseWriter, r *http.Request) {
 
 	campaign, err := a.campaignStore.updateCampaign(r.Context(), *user, r.PathValue("campaignId"), payload.Values)
 	if err != nil {
-		status := http.StatusBadRequest
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			status = http.StatusNotFound
-		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
+		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"campaign": campaign})
@@ -857,11 +841,7 @@ func (a *app) handleAppendCampaignPrintImages(w http.ResponseWriter, r *http.Req
 
 	campaign, err := a.campaignStore.appendCampaignPrintImages(r.Context(), *user, r.PathValue("campaignId"), payload.Images)
 	if err != nil {
-		status := http.StatusBadRequest
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			status = http.StatusNotFound
-		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
+		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"campaign": campaign})
@@ -888,11 +868,7 @@ func (a *app) handleAppendCampaignSupportingDocuments(w http.ResponseWriter, r *
 
 	campaign, err := a.campaignStore.appendCampaignSupportingDocuments(r.Context(), *user, r.PathValue("campaignId"), payload.Documents)
 	if err != nil {
-		status := http.StatusBadRequest
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			status = http.StatusNotFound
-		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
+		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"campaign": campaign})
@@ -917,11 +893,7 @@ func (a *app) handleDeleteCampaign(w http.ResponseWriter, r *http.Request) {
 	storedNames := collectCampaignImageStoredNames(campaign)
 	err = a.campaignStore.deleteCampaign(r.Context(), *user, r.PathValue("campaignId"))
 	if err != nil {
-		status := http.StatusBadRequest
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			status = http.StatusNotFound
-		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
+		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -943,11 +915,7 @@ func (a *app) handleCalculatePersistedCampaign(w http.ResponseWriter, r *http.Re
 		if a.writeCampaignLockError(w, err) {
 			return
 		}
-		status := http.StatusBadRequest
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			status = http.StatusNotFound
-		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
+		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -1091,7 +1059,12 @@ func summarizePrintIQPayload(step string, payload any) map[string]any {
 	copyStringField(summary, payloadMap, "Quantity")
 	copyStringField(summary, payloadMap, "JobNo")
 	copyStringField(summary, payloadMap, "OverrideFileName")
-	if _, ok := payloadMap["ArtworkUrl"]; ok {
+	isSupportingDocument, _ := payloadMap["IsSupportingDocument"].(bool)
+	if isSupportingDocument && step == "UploadArtworkURL" {
+		copyStringField(summary, payloadMap, "ArtworkUrl")
+		copyBoolField(summary, payloadMap, "IsSupportingDocument")
+		copyBoolField(summary, payloadMap, "IsLastArtworkFile")
+	} else if _, ok := payloadMap["ArtworkUrl"]; ok {
 		summary["hasArtworkUrl"] = true
 	}
 	if _, ok := payloadMap["QSTKey"]; ok {
@@ -1137,6 +1110,12 @@ func summarizePrintIQResponse(step string, parsed any) map[string]any {
 
 func copyStringField(target map[string]any, source map[string]any, key string) {
 	if value := printIQStringValue(source[key]); value != "" {
+		target[key] = value
+	}
+}
+
+func copyBoolField(target map[string]any, source map[string]any, key string) {
+	if value, ok := source[key].(bool); ok {
 		target[key] = value
 	}
 }
@@ -1237,11 +1216,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		if a.writeCampaignLockError(w, err) {
 			return
 		}
-		status := http.StatusBadRequest
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			status = http.StatusNotFound
-		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
+		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -1618,11 +1593,11 @@ func (a *app) handlePurchaseOrderUpload(w http.ResponseWriter, r *http.Request) 
 			if a.writeCampaignLockError(w, err) {
 				return
 			}
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
 			return
 		}
 		if _, err := a.campaignStore.setPurchaseOrder(r.Context(), *effectiveUser, campaignID, response); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
 			return
 		}
 	}

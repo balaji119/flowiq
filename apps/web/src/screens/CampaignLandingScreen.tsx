@@ -156,8 +156,12 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
     onOpenCampaign(null);
   }
 
-  async function handleOpenCampaign(campaignId: string) {
+  async function handleOpenCampaign(campaignId: string, status: CampaignListItem['status']) {
     setError('');
+    if (status === 'submitted') {
+      setError('Submitted campaigns cannot be edited');
+      return;
+    }
     try {
       await acquireCampaignEditLock(campaignId, selectedTenantId);
       onOpenCampaign(campaignId);
@@ -189,11 +193,15 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
   }
 
   async function handleEditFromView() {
-    if (!viewCampaignId) return;
+    if (!viewCampaignId || !campaignForView) return;
+    if (campaignForView.status === 'submitted') {
+      setError('Submitted campaigns cannot be edited');
+      return;
+    }
     setViewDialogOpen(false);
     setCampaignForView(null);
     setViewError('');
-    await handleOpenCampaign(viewCampaignId);
+    await handleOpenCampaign(viewCampaignId, campaignForView.status);
   }
 
   function campaignDisplayName(campaign: Pick<CampaignListItem, 'campaignName' | 'id'>) {
@@ -450,9 +458,9 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
                         <Button
                           aria-label="Add Sub Campaign"
                           className="h-7 w-7 rounded-md border border-white/10 p-0 text-emerald-200"
-                          disabled={creatingSubCampaignId === campaign.id}
+                          disabled={campaign.status === 'submitted' || creatingSubCampaignId === campaign.id}
                           onClick={() => void handleCreateSubCampaign(campaign)}
-                          title="Add Sub Campaign"
+                          title={campaign.status === 'submitted' ? 'Submitted campaigns cannot be edited' : 'Add Sub Campaign'}
                           type="button"
                           variant="ghost"
                         >
@@ -462,8 +470,9 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
                       <Button
                         aria-label="Edit campaign"
                         className="h-7 w-7 rounded-md border border-white/10 p-0 text-slate-200"
-                        onClick={() => void handleOpenCampaign(campaign.id)}
-                        title="Edit campaign"
+                        disabled={campaign.status === 'submitted'}
+                        onClick={() => void handleOpenCampaign(campaign.id, campaign.status)}
+                        title={campaign.status === 'submitted' ? 'Submitted campaigns cannot be edited' : 'Edit campaign'}
                         type="button"
                         variant="ghost"
                       >
@@ -472,8 +481,9 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
                       <Button
                         aria-label="Delete campaign"
                         className="h-7 w-7 rounded-md border border-white/10 p-0 text-rose-300"
+                        disabled={campaign.status === 'submitted'}
                         onClick={() => openDeleteDialog(campaign)}
-                        title="Delete campaign"
+                        title={campaign.status === 'submitted' ? 'Submitted campaigns cannot be edited' : 'Delete campaign'}
                         type="button"
                         variant="ghost"
                       >

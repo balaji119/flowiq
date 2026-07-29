@@ -358,6 +358,9 @@ func (s *campaignStore) createSubCampaign(ctx context.Context, user AuthUser, pa
 	if err != nil {
 		return nil, err
 	}
+	if strings.EqualFold(strings.TrimSpace(parent.Status), "submitted") {
+		return nil, errors.New("Submitted campaigns cannot be edited")
+	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -901,13 +904,13 @@ func (s *campaignStore) deleteCampaign(ctx context.Context, user AuthUser, campa
 
 	commandTag, err := s.pool.Exec(ctx, `
 		DELETE FROM campaigns
-		WHERE id = $1 AND tenant_id = $2
+		WHERE id = $1 AND tenant_id = $2 AND status <> 'submitted'
 	`, campaignID, *user.TenantID)
 	if err != nil {
 		return err
 	}
 	if commandTag.RowsAffected() == 0 {
-		return errors.New("Campaign not found")
+		return s.submittedCampaignEditError(ctx, user, campaignID)
 	}
 	return nil
 }

@@ -301,6 +301,27 @@ func TestBuildPrintIQUploadArtworkPayloadUsesExplicitSupportingDocumentFlags(t *
 	}
 }
 
+func TestSummarizePrintIQPayloadIncludesPurchaseOrderArtworkURL(t *testing.T) {
+	payload := buildPrintIQUploadArtworkPayload("J29328-01", float64(1), printIQArtworkUpload{
+		ArtworkURL:       "https://app.example.com/api/purchase-orders/po.pdf/download",
+		OverrideFileName: "PO-1001",
+	}, true, true)
+
+	summary := summarizePrintIQPayload("UploadArtworkURL", payload)
+	if summary["ArtworkUrl"] != "https://app.example.com/api/purchase-orders/po.pdf/download" {
+		t.Fatalf("expected PO artwork URL in summary, got %#v", summary["ArtworkUrl"])
+	}
+	if _, exists := summary["hasArtworkUrl"]; exists {
+		t.Fatalf("did not expect hasArtworkUrl placeholder for PO payload: %#v", summary)
+	}
+	if summary["IsSupportingDocument"] != true {
+		t.Fatalf("expected supporting document flag, got %#v", summary["IsSupportingDocument"])
+	}
+	if summary["IsLastArtworkFile"] != true {
+		t.Fatalf("expected last artwork file flag, got %#v", summary["IsLastArtworkFile"])
+	}
+}
+
 func TestExtractAcceptedProductsPreservesProductOrder(t *testing.T) {
 	response := map[string]any{
 		"AcceptanceDetails": map[string]any{
