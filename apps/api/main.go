@@ -1246,13 +1246,19 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	}
 	if campaign.Summary == nil {
 		if isSubmittedCampaign {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Submitted campaign cannot be recalculated for test resubmission."})
-			return
-		}
-		campaign, _, err = a.campaignStore.calculateCampaign(r.Context(), *user, campaign.ID, a.calculator)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
+			summary, err := a.calculator.calculateCampaign(campaign.TenantID, normalizeCampaignLines(campaign.Values))
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+			campaign.Summary = &summary
+			campaign.Values.Quantity = strconv.Itoa(summary.GrandTotal.TotalUnits)
+		} else {
+			campaign, _, err = a.campaignStore.calculateCampaign(r.Context(), *user, campaign.ID, a.calculator)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
 		}
 	}
 
