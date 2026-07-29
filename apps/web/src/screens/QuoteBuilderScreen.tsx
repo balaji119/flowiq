@@ -41,7 +41,6 @@ import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
 import { fetchTenant } from '../services/tenantApi';
 import { canonicalKeyForFormat, resolveFormatName, resolveSheetName, sanitizeSheetNameOverrides, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 import ExcelJS from 'exceljs';
-import JSZip from 'jszip';
 import { Document as WordDocument, ExternalHyperlink, ImageRun, LineRuleType, Packer, Paragraph, TextRun, UnderlineType } from 'docx';
 import fontkit from '@pdf-lib/fontkit';
 import { PDFArray, PDFDocument, PDFName, PDFString, rgb } from 'pdf-lib';
@@ -5380,17 +5379,15 @@ export function QuoteBuilderScreen({
     setReviewActionNeedsDueDate(false);
     setInstallDownloadError('');
     setExportingTemplates(true);
-    setExportProgressMessage('Preparing Installs ZIP...');
+    setExportProgressMessage('Preparing Installs files...');
 
     try {
       const generatedFiles = await generateArtworkTemplates(false, 'pdf', 'installs');
       const installationSheet = generatedFiles[0];
       if (!installationSheet) throw new Error('Installation sheet generation did not produce a PDF');
 
-      const zip = new JSZip();
-      zip.file(installationSheet.fileName, installationSheet.blob);
-      const supportingDocumentsFolder = zip.folder('Supporting Documents');
-      const usedDocumentNames = new Set<string>();
+      downloadBlobWithFileName(installationSheet.blob, installationSheet.fileName);
+      const usedDocumentNames = new Set<string>([installationSheet.fileName.toLocaleLowerCase()]);
       const uniqueDocumentName = (originalName: string) => {
         const safeName = originalName
           .replace(/[\\/\u0000-\u001f\u007f]/g, '_')
@@ -5410,19 +5407,15 @@ export function QuoteBuilderScreen({
       };
 
       for (const document of values.supportingDocuments ?? []) {
-        setExportProgressMessage(`Adding supporting document: ${document.originalName}`);
+        setExportProgressMessage(`Downloading supporting document: ${document.originalName}`);
         const documentBlob = await downloadCampaignImage(document.storedName, document.originalName);
-        supportingDocumentsFolder?.file(uniqueDocumentName(document.originalName), documentBlob);
+        downloadBlobWithFileName(documentBlob, uniqueDocumentName(document.originalName));
       }
 
-      setExportProgressMessage('Creating Installs ZIP...');
-      const zipBlob = await zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
-      const baseName = sanitizeFileName((values.campaignName || 'Campaign').trim() || 'Campaign');
-      downloadBlobWithFileName(zipBlob, `${baseName} - Installs.zip`);
-      setExportProgressMessage('Installs ZIP download started. Check your browser download bar.');
+      setExportProgressMessage('Installs file downloads started. Check your browser download bar.');
       return true;
     } catch (exportError) {
-      const message = exportError instanceof Error ? exportError.message : 'Unable to download the Installs ZIP. Please try again.';
+      const message = exportError instanceof Error ? exportError.message : 'Unable to download the Installs files. Please try again.';
       setReviewValidationError(message);
       setInstallDownloadError(message);
       setExportProgressMessage('');
