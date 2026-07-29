@@ -260,6 +260,47 @@ func TestBuildPrintIQCreateQuotePayloadUsesFormattedJobTitle(t *testing.T) {
 	}
 }
 
+func TestExtractPurchaseOrderUploadBuildsAccessibleURL(t *testing.T) {
+	t.Setenv("APP_BASE_URL", "https://app.example.com")
+	tempDir := t.TempDir()
+	storedName := "1700000000000-purchase-order.pdf"
+	if err := os.WriteFile(filepath.Join(tempDir, storedName), []byte("%PDF-1.4"), 0o600); err != nil {
+		t.Fatalf("write purchase order: %v", err)
+	}
+
+	upload, err := (&app{uploadDir: tempDir}).extractPurchaseOrderUpload(&purchaseOrderDetails{
+		OriginalName: "Asahi PO.pdf",
+		StoredName:   storedName,
+		MimeType:     "application/pdf",
+	})
+	if err != nil {
+		t.Fatalf("extract purchase order upload: %v", err)
+	}
+	if upload == nil {
+		t.Fatal("expected purchase order upload")
+	}
+	if upload.ArtworkURL != "https://app.example.com/api/purchase-orders/1700000000000-purchase-order.pdf/download" {
+		t.Fatalf("unexpected purchase order URL: %s", upload.ArtworkURL)
+	}
+	if upload.OverrideFileName != "Asahi PO" {
+		t.Fatalf("unexpected override file name: %s", upload.OverrideFileName)
+	}
+}
+
+func TestBuildPrintIQUploadArtworkPayloadUsesExplicitSupportingDocumentFlags(t *testing.T) {
+	payload := buildPrintIQUploadArtworkPayload("J29328-01", float64(1), printIQArtworkUpload{
+		ArtworkURL:       "https://app.example.com/api/purchase-orders/po.pdf/download",
+		OverrideFileName: "PO-1001",
+	}, true, true)
+
+	if payload["IsSupportingDocument"] != true {
+		t.Fatalf("expected supporting document flag, got %#v", payload["IsSupportingDocument"])
+	}
+	if payload["IsLastArtworkFile"] != true {
+		t.Fatalf("expected last artwork file flag, got %#v", payload["IsLastArtworkFile"])
+	}
+}
+
 func TestExtractAcceptedProductsPreservesProductOrder(t *testing.T) {
 	response := map[string]any{
 		"AcceptanceDetails": map[string]any{

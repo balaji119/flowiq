@@ -397,6 +397,40 @@ func (a *app) extractCampaignArtworkUpload(ctx context.Context, values orderForm
 	return nil, fmt.Errorf("Assigned artwork %s was not found", trimmedImageID)
 }
 
+func (a *app) extractPurchaseOrderUpload(purchaseOrder *purchaseOrderDetails) (*printIQArtworkUpload, error) {
+	if purchaseOrder == nil {
+		return nil, nil
+	}
+	storedName := strings.TrimSpace(purchaseOrder.StoredName)
+	if storedName == "" {
+		return nil, nil
+	}
+	if !isSafeStoredName(storedName) {
+		return nil, fmt.Errorf("Purchase order file %s is not safe to submit to PrintIQ", storedName)
+	}
+	if _, err := os.Stat(filepath.Join(a.uploadDir, storedName)); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, errors.New("Purchase order file not found")
+		}
+		return nil, err
+	}
+
+	purchaseOrderURL := "/api/purchase-orders/" + url.PathEscape(storedName) + "/download"
+	appBaseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("APP_BASE_URL")), "/")
+	if appBaseURL != "" {
+		purchaseOrderURL = appBaseURL + "/" + strings.TrimLeft(purchaseOrderURL, "/")
+	}
+
+	overrideFileName := strings.TrimSpace(purchaseOrder.OriginalName)
+	if ext := filepath.Ext(overrideFileName); ext != "" {
+		overrideFileName = strings.TrimSuffix(overrideFileName, ext)
+	}
+	if overrideFileName == "" {
+		overrideFileName = "Purchase Order"
+	}
+	return &printIQArtworkUpload{ArtworkURL: purchaseOrderURL, OverrideFileName: overrideFileName}, nil
+}
+
 func (a *app) resolvePrintIQArtworkURL(ctx context.Context, image campaignPrintImage) (string, error) {
 	storedName := strings.TrimSpace(firstNonEmpty(image.StoredName, image.SourcePDFStoredName))
 	generatedArtworkPDF := false
@@ -568,14 +602,14 @@ func extractSinglePDFPageFile(ctx context.Context, sourcePDFPath, outputDir stri
 	return outputPath, nil
 }
 
-func buildPrintIQUploadArtworkPayload(jobNo string, qstKey any, artwork printIQArtworkUpload, index, total int) map[string]any {
+func buildPrintIQUploadArtworkPayload(jobNo string, qstKey any, artwork printIQArtworkUpload, isSupportingDocument, isLastArtworkFile bool) map[string]any {
 	return map[string]any{
 		"JobNo":                jobNo,
 		"ArtworkUrl":           artwork.ArtworkURL,
 		"QSTKey":               qstKey,
-		"IsSupportingDocument": index > 0,
+		"IsSupportingDocument": isSupportingDocument,
 		"OverrideFileName":     artwork.OverrideFileName,
-		"IsLastArtworkFile":    index == total-1,
+		"IsLastArtworkFile":    isLastArtworkFile,
 	}
 }
 

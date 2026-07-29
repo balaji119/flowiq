@@ -274,6 +274,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/printiq/options/processes", a.withAuth(http.HandlerFunc(a.handleSearchProcesses)))
 	mux.Handle("GET /api/printiq/token", a.withAuth(http.HandlerFunc(a.handlePrintIQToken)))
 	mux.Handle("POST /api/purchase-orders/upload", a.withAuth(http.HandlerFunc(a.handlePurchaseOrderUpload)))
+	mux.Handle("GET /api/purchase-orders/{storedName}/download", http.HandlerFunc(a.handlePurchaseOrderPublicDownload))
 	mux.Handle("POST /api/finalize/send-email-to-ads", a.withAuth(http.HandlerFunc(a.handleSendEmailToADS)))
 	mux.Handle("POST /api/campaign-images/upload", a.withAuth(http.HandlerFunc(a.handleCampaignImageUpload)))
 	mux.Handle("POST /api/campaign-image-uploads/init", a.withAuth(http.HandlerFunc(a.handleResumableCampaignImageInit)))
@@ -1343,15 +1344,12 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 
 	uploadArtworkPayloads := make([]any, 0, len(sheetProducts))
 	uploadArtworkResponses := make([]any, 0, len(sheetProducts))
+	purchaseOrderUpload, err := a.extractPurchaseOrderUpload(campaign.PurchaseOrder)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 	for index, product := range sheetProducts {
-		artwork, err := a.extractCampaignArtworkUpload(r.Context(), campaign.Values, product.ArtworkImageID)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		if artwork == nil {
-			continue
-		}
 		qstKey := acceptedProducts[index].QSTKey
 		if qstKey == nil {
 			qstKey = extractQSTKey(acceptQuoteResponse)
@@ -1363,13 +1361,32 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ accepted product %d did not include QSTKey for artwork upload", index+1), "details": acceptQuoteResponse})
 			return
 		}
-		uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, qstKey, *artwork, 0, 1)
-		uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
-		uploadResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
-		if !ok {
+
+		artwork, err := a.extractCampaignArtworkUpload(r.Context(), campaign.Values, product.ArtworkImageID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		uploadArtworkResponses = append(uploadArtworkResponses, uploadResponse)
+		if artwork != nil {
+			artworkIsLastFile := index != 0 || purchaseOrderUpload == nil
+			uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, qstKey, *artwork, false, artworkIsLastFile)
+			uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
+			uploadResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
+			if !ok {
+				return
+			}
+			uploadArtworkResponses = append(uploadArtworkResponses, uploadResponse)
+		}
+
+		if index == 0 && purchaseOrderUpload != nil {
+			uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, qstKey, *purchaseOrderUpload, true, true)
+			uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
+			uploadResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
+			if !ok {
+				return
+			}
+			uploadArtworkResponses = append(uploadArtworkResponses, uploadResponse)
+		}
 	}
 
 	requestPayload := map[string]any{
@@ -1682,6 +1699,56 @@ func (a *app) handlePurchaseOrderDownload(w http.ResponseWriter, r *http.Request
 
 	if _, err := io.Copy(w, file); err != nil {
 		log.Printf("purchase order download failed for campaign %s: %v", campaign.ID, err)
+	}
+}
+
+func (a *app) handlePurchaseOrderPublicDownload(w http.ResponseWriter, r *http.Request) {
+	storedName := strings.TrimSpace(r.PathValue("storedName"))
+	if !isSafeStoredName(storedName) {
+		http.NotFound(w, r)
+		return
+	}
+
+	targetPath := filepath.Join(a.uploadDir, storedName)
+	info, err := os.Stat(targetPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read purchase order file"})
+		return
+	}
+	if info.IsDir() {
+		http.NotFound(w, r)
+		return
+	}
+
+	file, err := os.Open(targetPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read purchase order file"})
+		return
+	}
+	defer file.Close()
+
+	contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(storedName)))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", storedName))
+	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+	w.Header().Set("Accept-Ranges", "none")
+	w.Header().Set("Cache-Control", "no-store, no-transform")
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := io.Copy(w, file); err != nil {
+		log.Printf("public purchase order download failed for %s: %v", storedName, err)
 	}
 }
 
