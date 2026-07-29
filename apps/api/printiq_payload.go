@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"mime"
 	"net/url"
 	"os"
 	"os/exec"
@@ -397,7 +398,7 @@ func (a *app) extractCampaignArtworkUpload(ctx context.Context, values orderForm
 	return nil, fmt.Errorf("Assigned artwork %s was not found", trimmedImageID)
 }
 
-func (a *app) extractPurchaseOrderUpload(purchaseOrder *purchaseOrderDetails) (*printIQArtworkUpload, error) {
+func (a *app) extractPurchaseOrderUpload(ctx context.Context, purchaseOrder *purchaseOrderDetails) (*printIQArtworkUpload, error) {
 	if purchaseOrder == nil {
 		return nil, nil
 	}
@@ -408,17 +409,17 @@ func (a *app) extractPurchaseOrderUpload(purchaseOrder *purchaseOrderDetails) (*
 	if !isSafeStoredName(storedName) {
 		return nil, fmt.Errorf("Purchase order file %s is not safe to submit to PrintIQ", storedName)
 	}
-	if _, err := os.Stat(filepath.Join(a.uploadDir, storedName)); err != nil {
+	info, err := os.Stat(filepath.Join(a.uploadDir, storedName))
+	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, errors.New("Purchase order file not found")
 		}
 		return nil, err
 	}
 
-	purchaseOrderURL := "/api/purchase-orders/" + url.PathEscape(storedName) + "/download"
-	appBaseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("APP_BASE_URL")), "/")
-	if appBaseURL != "" {
-		purchaseOrderURL = appBaseURL + "/" + strings.TrimLeft(purchaseOrderURL, "/")
+	purchaseOrderURL, err := a.resolvePurchaseOrderArtworkURL(ctx, storedName, purchaseOrder.MimeType, info.Size())
+	if err != nil {
+		return nil, err
 	}
 
 	overrideFileName := strings.TrimSpace(purchaseOrder.OriginalName)
@@ -429,6 +430,42 @@ func (a *app) extractPurchaseOrderUpload(purchaseOrder *purchaseOrderDetails) (*
 		overrideFileName = "Purchase Order"
 	}
 	return &printIQArtworkUpload{ArtworkURL: purchaseOrderURL, OverrideFileName: overrideFileName}, nil
+}
+
+func (a *app) resolvePurchaseOrderArtworkURL(ctx context.Context, storedName, contentType string, size int64) (string, error) {
+	if a.objectStorage != nil {
+		source, err := os.Open(filepath.Join(a.uploadDir, storedName))
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return "", errors.New("Purchase order file not found")
+			}
+			return "", err
+		}
+		defer source.Close()
+
+		uploadContentType := strings.TrimSpace(contentType)
+		if uploadContentType == "" {
+			uploadContentType = mime.TypeByExtension(strings.ToLower(filepath.Ext(storedName)))
+		}
+		if uploadContentType == "" {
+			uploadContentType = "application/octet-stream"
+		}
+		if err := a.storeCampaignImageReader(ctx, storedName, uploadContentType, source, size); err != nil {
+			return "", fmt.Errorf("upload purchase order to DigitalOcean Spaces: %w", err)
+		}
+		if publicURL, ok, err := a.campaignImagePublicURL(ctx, storedName); err != nil {
+			return "", err
+		} else if ok {
+			return publicURL, nil
+		}
+	}
+
+	purchaseOrderURL := "/api/purchase-orders/" + url.PathEscape(storedName) + "/download"
+	appBaseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("APP_BASE_URL")), "/")
+	if appBaseURL != "" {
+		purchaseOrderURL = appBaseURL + "/" + strings.TrimLeft(purchaseOrderURL, "/")
+	}
+	return purchaseOrderURL, nil
 }
 
 func (a *app) resolvePrintIQArtworkURL(ctx context.Context, image campaignPrintImage) (string, error) {

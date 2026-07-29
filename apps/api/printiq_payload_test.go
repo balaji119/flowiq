@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"image"
 	"image/color"
 	"image/png"
@@ -268,7 +269,7 @@ func TestExtractPurchaseOrderUploadBuildsAccessibleURL(t *testing.T) {
 		t.Fatalf("write purchase order: %v", err)
 	}
 
-	upload, err := (&app{uploadDir: tempDir}).extractPurchaseOrderUpload(&purchaseOrderDetails{
+	upload, err := (&app{uploadDir: tempDir}).extractPurchaseOrderUpload(context.Background(), &purchaseOrderDetails{
 		OriginalName: "Asahi PO.pdf",
 		StoredName:   storedName,
 		MimeType:     "application/pdf",
@@ -301,20 +302,20 @@ func TestBuildPrintIQUploadArtworkPayloadUsesExplicitSupportingDocumentFlags(t *
 	}
 }
 
-func TestSummarizePrintIQPayloadIncludesPurchaseOrderArtworkURL(t *testing.T) {
+func TestSummarizePrintIQPayloadIncludesUploadArtworkURLPayload(t *testing.T) {
 	payload := buildPrintIQUploadArtworkPayload("J29328-01", float64(1), printIQArtworkUpload{
-		ArtworkURL:       "https://app.example.com/api/purchase-orders/po.pdf/download",
-		OverrideFileName: "PO-1001",
-	}, true, true)
+		ArtworkURL:       "https://adsartwork.syd1.cdn.digitaloceanspaces.com/test_artwork.pdf",
+		OverrideFileName: "test_artwork",
+	}, false, true)
 
 	summary := summarizePrintIQPayload("UploadArtworkURL", payload)
-	if summary["ArtworkUrl"] != "https://app.example.com/api/purchase-orders/po.pdf/download" {
-		t.Fatalf("expected PO artwork URL in summary, got %#v", summary["ArtworkUrl"])
+	if summary["ArtworkUrl"] != "https://adsartwork.syd1.cdn.digitaloceanspaces.com/test_artwork.pdf" {
+		t.Fatalf("expected artwork URL in summary, got %#v", summary["ArtworkUrl"])
 	}
 	if _, exists := summary["hasArtworkUrl"]; exists {
-		t.Fatalf("did not expect hasArtworkUrl placeholder for PO payload: %#v", summary)
+		t.Fatalf("did not expect hasArtworkUrl placeholder for UploadArtworkURL payload: %#v", summary)
 	}
-	if summary["IsSupportingDocument"] != true {
+	if summary["IsSupportingDocument"] != false {
 		t.Fatalf("expected supporting document flag, got %#v", summary["IsSupportingDocument"])
 	}
 	if summary["IsLastArtworkFile"] != true {

@@ -3387,7 +3387,15 @@ export function QuoteBuilderScreen({
       const printIQNumbers = [response.quoteNo ? `Quote: ${response.quoteNo}` : '', jobNumbers ? `Jobs: ${jobNumbers}` : ''].filter(Boolean).join(', ');
       applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
       lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
-      setQuoteResponseMessage(printIQNumbers ? `Quote created successfully. ${printIQNumbers}` : 'Quote created successfully.');
+      const successMessage = printIQNumbers ? `Order submitted to PrintIQ. ${printIQNumbers}` : 'Order submitted to PrintIQ.';
+      setQuoteResponseMessage(successMessage);
+      try {
+        window.sessionStorage.setItem(LANDING_NOTICE_KEY, successMessage);
+      } catch {
+        // Ignore storage errors; navigation should still happen.
+      }
+      await releaseActiveCampaignLock(response.campaign.id);
+      onBack?.();
     } catch (submissionError) {
       const message = submissionError instanceof Error ? submissionError.message : 'Unable to create quote';
       setQuoteResponseStatus('error');

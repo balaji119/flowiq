@@ -1059,8 +1059,7 @@ func summarizePrintIQPayload(step string, payload any) map[string]any {
 	copyStringField(summary, payloadMap, "Quantity")
 	copyStringField(summary, payloadMap, "JobNo")
 	copyStringField(summary, payloadMap, "OverrideFileName")
-	isSupportingDocument, _ := payloadMap["IsSupportingDocument"].(bool)
-	if isSupportingDocument && step == "UploadArtworkURL" {
+	if step == "UploadArtworkURL" {
 		copyStringField(summary, payloadMap, "ArtworkUrl")
 		copyBoolField(summary, payloadMap, "IsSupportingDocument")
 		copyBoolField(summary, payloadMap, "IsLastArtworkFile")
@@ -1323,7 +1322,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 
 	uploadArtworkPayloads := make([]any, 0, len(sheetProducts))
 	uploadArtworkResponses := make([]any, 0, len(sheetProducts))
-	purchaseOrderUpload, err := a.extractPurchaseOrderUpload(campaign.PurchaseOrder)
+	purchaseOrderUpload, err := a.extractPurchaseOrderUpload(r.Context(), campaign.PurchaseOrder)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
