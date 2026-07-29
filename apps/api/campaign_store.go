@@ -190,23 +190,24 @@ func decodeCampaignRow(row campaignRow) (*campaignRecord, error) {
 }
 
 type campaignListItem struct {
-	ID                 string `json:"id"`
-	TenantID           string `json:"tenantId"`
-	ParentCampaignID   string `json:"parentCampaignId,omitempty"`
-	ParentCampaignName string `json:"parentCampaignName,omitempty"`
-	ChildCampaignCount int    `json:"childCampaignCount"`
-	Status             string `json:"status"`
-	CreatedBy          string `json:"createdBy"`
-	UpdatedBy          string `json:"updatedBy"`
-	CampaignName       string `json:"campaignName"`
-	CampaignStartDate  string `json:"campaignStartDate"`
-	DueDate            string `json:"dueDate"`
-	NumberOfWeeks      string `json:"numberOfWeeks"`
-	MarketCount        int    `json:"marketCount"`
-	AssetCount         int    `json:"assetCount"`
-	LatestQuoteAmount  any    `json:"latestQuoteAmount"`
-	UpdatedAt          string `json:"updatedAt"`
-	CreatedAt          string `json:"createdAt"`
+	ID                 string                `json:"id"`
+	TenantID           string                `json:"tenantId"`
+	ParentCampaignID   string                `json:"parentCampaignId,omitempty"`
+	ParentCampaignName string                `json:"parentCampaignName,omitempty"`
+	ChildCampaignCount int                   `json:"childCampaignCount"`
+	Status             string                `json:"status"`
+	CreatedBy          string                `json:"createdBy"`
+	UpdatedBy          string                `json:"updatedBy"`
+	CampaignName       string                `json:"campaignName"`
+	CampaignStartDate  string                `json:"campaignStartDate"`
+	DueDate            string                `json:"dueDate"`
+	NumberOfWeeks      string                `json:"numberOfWeeks"`
+	MarketCount        int                   `json:"marketCount"`
+	AssetCount         int                   `json:"assetCount"`
+	PurchaseOrder      *purchaseOrderDetails `json:"purchaseOrder"`
+	LatestQuoteAmount  any                   `json:"latestQuoteAmount"`
+	UpdatedAt          string                `json:"updatedAt"`
+	CreatedAt          string                `json:"createdAt"`
 }
 
 func scanCampaignRow(scanner interface {
@@ -407,7 +408,7 @@ func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]cam
 		SELECT c.id, c.tenant_id, c.parent_campaign_id::text,
 			COALESCE(NULLIF(TRIM(parent.name), ''), NULLIF(TRIM(parent.form_data->>'campaignName'), ''), '') AS parent_campaign_name,
 			COALESCE(child_counts.child_count, 0) AS child_campaign_count,
-			c.status, c.form_data, c.latest_quote_amount::text, c.updated_at, c.created_at,
+			c.status, c.form_data, c.purchase_order_data, c.latest_quote_amount::text, c.updated_at, c.created_at,
 			COALESCE(NULLIF(TRIM(uc.name), ''), uc.email) AS created_by,
 			COALESCE(NULLIF(TRIM(uu.name), ''), uu.email) AS updated_by
 		FROM campaigns c
@@ -438,12 +439,13 @@ func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]cam
 		var childCampaignCount int
 		var status string
 		var formData []byte
+		var purchaseOrderData []byte
 		var latestQuoteAmount *string
 		var updatedAt time.Time
 		var createdAt time.Time
 		var createdBy string
 		var updatedBy string
-		if err := rows.Scan(&id, &tenantID, &parentCampaignID, &parentCampaignName, &childCampaignCount, &status, &formData, &latestQuoteAmount, &updatedAt, &createdAt, &createdBy, &updatedBy); err != nil {
+		if err := rows.Scan(&id, &tenantID, &parentCampaignID, &parentCampaignName, &childCampaignCount, &status, &formData, &purchaseOrderData, &latestQuoteAmount, &updatedAt, &createdAt, &createdBy, &updatedBy); err != nil {
 			return nil, err
 		}
 
@@ -452,6 +454,14 @@ func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]cam
 			if err := json.Unmarshal(formData, &values); err != nil {
 				return nil, err
 			}
+		}
+		var purchaseOrder *purchaseOrderDetails
+		if len(purchaseOrderData) > 0 {
+			var decoded purchaseOrderDetails
+			if err := json.Unmarshal(purchaseOrderData, &decoded); err != nil {
+				return nil, err
+			}
+			purchaseOrder = &decoded
 		}
 
 		var quoteAmount any
@@ -480,6 +490,7 @@ func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]cam
 			NumberOfWeeks:      strings.TrimSpace(values.NumberOfWeeks),
 			MarketCount:        marketCount,
 			AssetCount:         assetCount,
+			PurchaseOrder:      purchaseOrder,
 			LatestQuoteAmount:  quoteAmount,
 			UpdatedAt:          updatedAt.UTC().Format(time.RFC3339),
 			CreatedAt:          createdAt.UTC().Format(time.RFC3339),

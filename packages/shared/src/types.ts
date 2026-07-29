@@ -387,6 +387,13 @@ export type CampaignListItem = {
   numberOfWeeks: string;
   marketCount: number;
   assetCount: number;
+  purchaseOrder: {
+    originalName: string;
+    storedName: string;
+    mimeType: string;
+    size: number;
+    uploadedAt: string;
+  } | null;
   latestQuoteAmount: number | string | null;
   updatedAt: string;
   createdAt: string;

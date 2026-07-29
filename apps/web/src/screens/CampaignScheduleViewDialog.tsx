@@ -653,6 +653,10 @@ export function CampaignScheduleViewDialog({
     if (!campaign || submittingOrder || downloadingVisuals || sendingAdsEmail) return;
     setActionError('');
     setActionSuccess('');
+    if (!hasUploadedPurchaseOrder) {
+      setActionError('Upload a purchase order file before submitting.');
+      return;
+    }
     setSubmittingOrder(true);
     try {
       const response = await submitCampaignToPrintIQ(campaign.id, tenantId);

@@ -3304,6 +3304,11 @@ export function QuoteBuilderScreen({
   }
 
   async function handleSubmitQuote() {
+    if (!hasUploadedPurchaseOrder) {
+      setQuoteResponseStatus('error');
+      setQuoteResponseMessage('Upload a purchase order file before submitting.');
+      return;
+    }
     if (!hasPurchaseOrderNumber) {
       setPurchaseOrderNumberSubmitAttempted(true);
       setQuoteResponseStatus('error');

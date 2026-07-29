@@ -8,7 +8,8 @@ import {
   CampaignSubmitResponse,
   CampaignUpsertPayload,
 } from '@flowiq/shared';
-import { apiFetchJson } from './apiClient';
+import { buildApiUrl } from './apiBase';
+import { apiFetchJson, getApiAuthToken } from './apiClient';
 
 function withTenant(path: string, tenantId?: string | null) {
   if (!tenantId) return path;
@@ -78,6 +79,28 @@ export async function submitCampaignToPrintIQ(campaignId: string, tenantId?: str
   return apiFetchJson<CampaignSubmitResponse>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/submit-to-printiq`, tenantId), {
     method: 'POST',
   });
+}
+
+export async function downloadCampaignPurchaseOrder(campaignId: string, tenantId?: string | null): Promise<Blob> {
+  const headers = new Headers();
+  const token = getApiAuthToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  const response = await fetch(buildApiUrl(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/purchase-order/download`, tenantId)), {
+    headers,
+  });
+  if (!response.ok) {
+    const responseText = await response.text();
+    let message = `Download failed (${response.status})`;
+    try {
+      const decoded = JSON.parse(responseText) as { error?: string };
+      if (decoded.error) message = decoded.error;
+    } catch {
+      // Keep the status-based error when the response is not JSON.
+    }
+    throw new Error(message);
+  }
+  return response.blob();
 }
 
 export async function markCampaignSubmitted(campaignId: string, tenantId?: string | null) {

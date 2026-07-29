@@ -1,9 +1,10 @@
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Eye, FolderKanban, LoaderCircle, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { CalendarDays, Download, Eye, FolderKanban, LoaderCircle, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { CampaignListItem, CampaignRecord, TenantRecord } from '@flowiq/shared';
 import { Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
-import { acquireCampaignEditLock, calculatePersistedCampaign, createSubCampaign, deleteCampaign, fetchCampaign, fetchCampaigns } from '../services/campaignApi';
+import { useAuth } from '../context/AuthContext';
+import { acquireCampaignEditLock, calculatePersistedCampaign, createSubCampaign, deleteCampaign, downloadCampaignPurchaseOrder, fetchCampaign, fetchCampaigns } from '../services/campaignApi';
 import { CampaignScheduleViewDialog } from './CampaignScheduleViewDialog';
 
 type CampaignLandingScreenProps = {
@@ -26,6 +27,17 @@ function formatCampaignDate(value: string) {
 
 function formatCampaignStatus(status: CampaignListItem['status']) {
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function WorkflowIllustration() {
@@ -71,6 +83,7 @@ function WorkflowIllustration() {
 }
 
 export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHero = false, tenantOptions = [], requiresTenantSelection = false, onTenantChange }: CampaignLandingScreenProps) {
+  const { session } = useAuth();
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -85,7 +98,9 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
   const [viewCampaignId, setViewCampaignId] = useState<string | null>(null);
   const [landingNotice, setLandingNotice] = useState('');
   const [creatingSubCampaignId, setCreatingSubCampaignId] = useState<string | null>(null);
+  const [downloadingPurchaseOrderId, setDownloadingPurchaseOrderId] = useState<string | null>(null);
   const [bottomBarHost, setBottomBarHost] = useState<HTMLElement | null>(null);
+  const isSuperAdmin = session?.user.role === 'super_admin';
 
   const loadCampaigns = useCallback(async () => {
     if (requiresTenantSelection && !selectedTenantId) {
@@ -212,6 +227,20 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete campaign');
     } finally {
       setDeletingCampaign(false);
+    }
+  }
+
+  async function handleDownloadPurchaseOrder(campaign: CampaignListItem) {
+    if (!campaign.purchaseOrder || downloadingPurchaseOrderId) return;
+    setDownloadingPurchaseOrderId(campaign.id);
+    setError('');
+    try {
+      const blob = await downloadCampaignPurchaseOrder(campaign.id, selectedTenantId);
+      downloadBlob(blob, campaign.purchaseOrder.originalName || `${campaignDisplayName(campaign)} - Purchase Order`);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : 'Unable to download purchase order');
+    } finally {
+      setDownloadingPurchaseOrderId(null);
     }
   }
 
@@ -399,6 +428,19 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
                       <Button aria-label="View campaign" className="h-7 w-7 rounded-md border border-white/10 p-0 text-slate-200" onClick={() => void handleOpenCampaignView(campaign.id)} title="View campaign" type="button" variant="ghost">
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
+                      {isSuperAdmin ? (
+                        <Button
+                          aria-label="Download purchase order"
+                          className="h-7 w-7 rounded-md border border-white/10 p-0 text-sky-200 disabled:text-slate-500"
+                          disabled={!campaign.purchaseOrder || downloadingPurchaseOrderId === campaign.id}
+                          onClick={() => void handleDownloadPurchaseOrder(campaign)}
+                          title={campaign.purchaseOrder ? 'Download purchase order' : 'No PO uploaded'}
+                          type="button"
+                          variant="ghost"
+                        >
+                          {downloadingPurchaseOrderId === campaign.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-sky-200" /> : <Download className="h-3.5 w-3.5" />}
+                        </Button>
+                      ) : null}
                       {!campaign.parentCampaignId ? (
                         <Button
                           aria-label="Add Sub Campaign"

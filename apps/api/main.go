@@ -259,6 +259,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("POST /api/campaigns/{campaignId}/calculate", a.withAuth(http.HandlerFunc(a.handleCalculatePersistedCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/submit-to-printiq", a.withAuth(http.HandlerFunc(a.handleSubmitCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/mark-submitted", a.withAuth(http.HandlerFunc(a.handleMarkCampaignSubmitted)))
+	mux.Handle("GET /api/campaigns/{campaignId}/purchase-order/download", a.withAuth(a.requireRoles(http.HandlerFunc(a.handlePurchaseOrderDownload), "super_admin")))
 	mux.Handle("GET /api/market-delivery-addresses", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketDeliveryAddresses)))
 	mux.Handle("PUT /api/market-delivery-addresses", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertCampaignMarketDeliveryAddress), "super_admin", "admin")))
 	mux.Handle("GET /api/market-shipping-rates", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketShippingRates)))
@@ -1256,6 +1257,10 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Enter a purchase order number before submitting."})
 		return
 	}
+	if campaign.PurchaseOrder == nil || strings.TrimSpace(campaign.PurchaseOrder.OriginalName) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Upload a purchase order file before submitting."})
+		return
+	}
 	if campaign.Summary == nil {
 		campaign, _, err = a.campaignStore.calculateCampaign(r.Context(), *user, campaign.ID, a.calculator)
 		if err != nil {
@@ -1602,6 +1607,82 @@ func (a *app) handlePurchaseOrderUpload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusCreated, response)
+}
+
+func (a *app) handlePurchaseOrderDownload(w http.ResponseWriter, r *http.Request) {
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
+	campaign, err := a.campaignStore.getCampaign(r.Context(), *user, r.PathValue("campaignId"))
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	if campaign.PurchaseOrder == nil || strings.TrimSpace(campaign.PurchaseOrder.StoredName) == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Purchase order file not found"})
+		return
+	}
+
+	storedName := strings.TrimSpace(campaign.PurchaseOrder.StoredName)
+	if !isSafeStoredName(storedName) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Purchase order file not found"})
+		return
+	}
+
+	targetPath := filepath.Join(a.uploadDir, storedName)
+	info, err := os.Stat(targetPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Purchase order file not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read purchase order file"})
+		return
+	}
+	if info.IsDir() {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Purchase order file not found"})
+		return
+	}
+
+	file, err := os.Open(targetPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Purchase order file not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to read purchase order file"})
+		return
+	}
+	defer file.Close()
+
+	downloadName := strings.TrimSpace(campaign.PurchaseOrder.OriginalName)
+	if downloadName == "" {
+		downloadName = storedName
+	}
+	contentType := strings.TrimSpace(campaign.PurchaseOrder.MimeType)
+	if contentType == "" {
+		contentType = mime.TypeByExtension(strings.ToLower(filepath.Ext(downloadName)))
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	safeDownloadName := strings.NewReplacer("\\", "_", "/", "_", "\"", "'").Replace(downloadName)
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", safeDownloadName))
+	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := io.Copy(w, file); err != nil {
+		log.Printf("purchase order download failed for campaign %s: %v", campaign.ID, err)
+	}
 }
 
 func (a *app) handleCampaignImageUpload(w http.ResponseWriter, r *http.Request) {
