@@ -832,7 +832,7 @@ func (s *campaignStore) recordSubmission(ctx context.Context, user AuthUser, cam
 	if err != nil {
 		return nil, err
 	}
-	if strings.EqualFold(strings.TrimSpace(campaign.Status), "submitted") {
+	if strings.EqualFold(strings.TrimSpace(campaign.Status), "submitted") && !canResubmitSubmittedCampaign(user) {
 		return nil, errors.New("Campaign has already been submitted")
 	}
 

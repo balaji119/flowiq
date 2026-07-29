@@ -1211,15 +1211,9 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
 		return
 	}
-	if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, r.PathValue("campaignId")); err != nil {
-		if a.writeCampaignLockError(w, err) {
-			return
-		}
-		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
-		return
-	}
 
-	campaign, err := a.campaignStore.getCampaign(r.Context(), *user, r.PathValue("campaignId"))
+	campaignID := r.PathValue("campaignId")
+	campaign, err := a.campaignStore.getCampaign(r.Context(), *user, campaignID)
 	if err != nil {
 		status := http.StatusBadRequest
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
@@ -1228,9 +1222,19 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
-	if strings.EqualFold(strings.TrimSpace(campaign.Status), "submitted") {
+	isSubmittedCampaign := strings.EqualFold(strings.TrimSpace(campaign.Status), "submitted")
+	if isSubmittedCampaign && !canResubmitSubmittedCampaign(*user) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "Campaign has already been submitted"})
 		return
+	}
+	if !isSubmittedCampaign {
+		if err := a.campaignStore.assertCampaignEditable(r.Context(), *user, campaignID); err != nil {
+			if a.writeCampaignLockError(w, err) {
+				return
+			}
+			writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
+			return
+		}
 	}
 	if strings.TrimSpace(campaign.Values.PurchaseOrderNumber) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Enter a purchase order number before submitting."})
@@ -1241,6 +1245,10 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if campaign.Summary == nil {
+		if isSubmittedCampaign {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Submitted campaign cannot be recalculated for test resubmission."})
+			return
+		}
 		campaign, _, err = a.campaignStore.calculateCampaign(r.Context(), *user, campaign.ID, a.calculator)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -2186,6 +2194,10 @@ func canManageTargetTenant(user *AuthUser, targetTenantID *string) bool {
 		return false
 	}
 	return *user.TenantID == *targetTenantID
+}
+
+func canResubmitSubmittedCampaign(user AuthUser) bool {
+	return strings.EqualFold(strings.TrimSpace(user.Role), "super_admin")
 }
 
 func canManageUser(actor *AuthUser, target *AuthUser) bool {

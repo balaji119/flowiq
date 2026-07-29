@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { LoaderCircle, ShoppingCart } from 'lucide-react';
 import { CampaignRecord, CustomPrintCostRecord, formatKeys, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketShippingRateRecord } from '@flowiq/shared';
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
+import { useAuth } from '../context/AuthContext';
 import { submitCampaignToPrintIQ } from '../services/campaignApi';
 import { fetchCampaignCustomPrintCosts, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
@@ -94,6 +95,7 @@ export function CampaignScheduleViewDialog({
   onClose,
   onEdit,
 }: CampaignScheduleViewDialogProps) {
+  const { session } = useAuth();
   type AttachedArtworkRow = {
     imageId: string;
     frameCount: number;
@@ -145,6 +147,7 @@ export function CampaignScheduleViewDialog({
   const hasUploadedPurchaseOrder = Boolean((campaign?.purchaseOrder?.originalName || '').trim());
   const hasDeliveryDueDate = Boolean((campaign?.values.dueDate || '').trim());
   const isSubmittedCampaign = (campaign?.status === 'submitted') || emailSubmitted;
+  const canSubmitSubmittedCampaign = session?.user.role === 'super_admin';
 
   function startQuoteAutomation(action: QuoteAutomationAction) {
     if (!campaign || typeof window === 'undefined') return;
@@ -650,7 +653,7 @@ export function CampaignScheduleViewDialog({
   }
 
   async function handleSubmitOrder() {
-    if (!campaign || isSubmittedCampaign || submittingOrder || downloadingVisuals || sendingAdsEmail) return;
+    if (!campaign || (isSubmittedCampaign && !canSubmitSubmittedCampaign) || submittingOrder || downloadingVisuals || sendingAdsEmail) return;
     setActionError('');
     setActionSuccess('');
     if (!hasUploadedPurchaseOrder) {
@@ -948,7 +951,7 @@ export function CampaignScheduleViewDialog({
                 </Button>
                 <Button
                   className="h-9 px-4 btn-theme-primary"
-                  disabled={isSubmittedCampaign || downloadingVisuals || sendingAdsEmail || submittingOrder}
+                  disabled={(isSubmittedCampaign && !canSubmitSubmittedCampaign) || downloadingVisuals || sendingAdsEmail || submittingOrder}
                   onClick={() => void handleSubmitOrder()}
                   title="Submit order to PrintIQ"
                   type="button"
