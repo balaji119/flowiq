@@ -408,7 +408,7 @@ func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]cam
 		SELECT c.id, c.tenant_id, c.parent_campaign_id::text,
 			COALESCE(NULLIF(TRIM(parent.name), ''), NULLIF(TRIM(parent.form_data->>'campaignName'), ''), '') AS parent_campaign_name,
 			COALESCE(child_counts.child_count, 0) AS child_campaign_count,
-			c.status, c.form_data, c.purchase_order_data, c.latest_quote_amount::text, c.updated_at, c.created_at,
+			c.status, c.form_data, c.purchase_order, c.latest_quote_amount::text, c.updated_at, c.created_at,
 			COALESCE(NULLIF(TRIM(uc.name), ''), uc.email) AS created_by,
 			COALESCE(NULLIF(TRIM(uu.name), ''), uu.email) AS updated_by
 		FROM campaigns c
