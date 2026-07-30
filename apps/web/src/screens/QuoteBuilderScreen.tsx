@@ -4806,6 +4806,18 @@ export function QuoteBuilderScreen({
           ];
           const tableFontSize = installFormatKeys.length > 8 ? 7 : 7.8;
           const rowHeight = 21;
+          const truncateToWidth = (text: string, available: number, useFont: typeof font) => {
+            if (useFont.widthOfTextAtSize(text, tableFontSize) <= available) return text;
+            const ellipsis = '...';
+            if (useFont.widthOfTextAtSize(ellipsis, tableFontSize) > available) return '';
+            let end = text.length;
+            while (end > 0) {
+              const candidate = `${text.slice(0, end)}${ellipsis}`;
+              if (useFont.widthOfTextAtSize(candidate, tableFontSize) <= available) return candidate;
+              end -= 1;
+            }
+            return ellipsis;
+          };
           const drawRow = (cells: string[], header = false, total = false) => {
             if (cursorY - rowHeight < marginBottom) {
               page = pdfDoc.addPage(pdfPageSize);
@@ -4827,10 +4839,7 @@ export function QuoteBuilderScreen({
               const useFont = header || total ? bold : font;
               const color = header ? rgb(1, 1, 1) : rgb(0.08, 0.12, 0.18);
               const available = column.width - 8;
-              let display = text;
-              while (display.length > 1 && useFont.widthOfTextAtSize(display, tableFontSize) > available) {
-                display = `${display.slice(0, -2)}...`;
-              }
+              const display = truncateToWidth(text, available, useFont);
               const textWidth = useFont.widthOfTextAtSize(display, tableFontSize);
               page.drawText(display, {
                 x: index >= 2 ? x + Math.max(4, (column.width - textWidth) / 2) : x + 4,
