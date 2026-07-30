@@ -1,5 +1,5 @@
 import { Fragment, type Dispatch, type DragEvent, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, CircleAlert, Eye, GripVertical, LayoutGrid, LoaderCircle, Maximize2, Pencil, Plus, Search, Table2, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, CircleAlert, Download, Eye, GripVertical, LayoutGrid, LoaderCircle, Maximize2, Pencil, Plus, Search, Table2, Trash2, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
   CampaignPrintImage,
@@ -31,7 +31,7 @@ import { useArtworkUploads } from '../context/ArtworkUploadContext';
 import { OneDriveArtworkImportDialog } from '../components/OneDriveArtworkImportDialog';
 import { OneDriveSelection } from '../services/oneDriveApi';
 import { buildApiUrl } from '../services/apiBase';
-import { acquireCampaignEditLock, appendCampaignSupportingDocuments, createCampaign, fetchCampaign, markCampaignSubmitted, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
+import { acquireCampaignEditLock, appendCampaignSupportingDocuments, createCampaign, downloadCampaignPurchaseOrder, fetchCampaign, markCampaignSubmitted, releaseCampaignEditLock, submitCampaignToPrintIQ, updateCampaign as updateStoredCampaign } from '../services/campaignApi';
 import { deleteCampaignImage, downloadCampaignImage, uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
@@ -64,6 +64,7 @@ type GeneratedVisualExportFile = {
 
 type AutomatedQuoteAction = 'download-visuals' | 'send-email-to-ads';
 type AutomatedQuoteActionStatus = 'success' | 'error';
+type UploadedPurchaseOrder = NonNullable<CampaignRecord['purchaseOrder']>;
 
 function parseVisualsExportMode(value: string | undefined): VisualsExportMode {
   const normalized = (value || '').trim().toLowerCase();
@@ -91,6 +92,7 @@ function applyCampaignToScreen(
   setValues: Dispatch<SetStateAction<OrderFormValues>>,
   setSummary: Dispatch<SetStateAction<CampaignCalculationSummary | null>>,
   setUploadedPurchaseOrderName: Dispatch<SetStateAction<string>>,
+  setUploadedPurchaseOrder: Dispatch<SetStateAction<UploadedPurchaseOrder | null>>,
   setCampaignId: Dispatch<SetStateAction<string | null>>,
   setCampaignStatus: Dispatch<SetStateAction<CampaignRecord['status']>>,
   setParentCampaignId: Dispatch<SetStateAction<string>>,
@@ -98,6 +100,7 @@ function applyCampaignToScreen(
   setValues(normalizeFormValues(campaign.values));
   setSummary(campaign.summary);
   setUploadedPurchaseOrderName(campaign.purchaseOrder?.originalName || '');
+  setUploadedPurchaseOrder(campaign.purchaseOrder);
   setCampaignId(campaign.id);
   setCampaignStatus(campaign.status);
   setParentCampaignId(campaign.parentCampaignId || '');
@@ -504,6 +507,20 @@ function formatDocumentDate(value: string) {
   const parsed = parseDateOnly(value);
   if (!parsed) return 'TBC';
   return parsed.toLocaleDateString('en-GB');
+}
+
+function formatUploadDate(value: string) {
+  if (!value) return '-';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('en-GB');
+}
+
+function formatFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '-';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
 function formatDateInputDisplay(value: string) {
@@ -1289,9 +1306,14 @@ export function QuoteBuilderScreen({
   const [selectedPurchaseOrderFile, setSelectedPurchaseOrderFile] = useState<File | null>(null);
   const [uploadingPurchaseOrder, setUploadingPurchaseOrder] = useState(false);
   const [uploadedPurchaseOrderName, setUploadedPurchaseOrderName] = useState('');
+  const [uploadedPurchaseOrder, setUploadedPurchaseOrder] = useState<UploadedPurchaseOrder | null>(null);
   const [uploadingSupportingDocuments, setUploadingSupportingDocuments] = useState(false);
   const [purchaseOrderUploadSuccessOpen, setPurchaseOrderUploadSuccessOpen] = useState(false);
   const [purchaseOrderUploadSuccessMessage, setPurchaseOrderUploadSuccessMessage] = useState('');
+  const [manageUploadsOpen, setManageUploadsOpen] = useState(false);
+  const [manageUploadsError, setManageUploadsError] = useState('');
+  const [downloadingPurchaseOrder, setDownloadingPurchaseOrder] = useState(false);
+  const [downloadingSupportingDocumentName, setDownloadingSupportingDocumentName] = useState('');
   const [assignArtworkDialogOpen, setAssignArtworkDialogOpen] = useState(false);
   const [assignArtworkTarget, setAssignArtworkTarget] = useState<{ marketId: string; assetId: string; formatKey: CreativeFormatKey; slotIndex?: number } | null>(null);
   const [multiArtworkDialogOpen, setMultiArtworkDialogOpen] = useState(false);
@@ -1489,7 +1511,7 @@ export function QuoteBuilderScreen({
             if (!active) return;
             const response = await fetchCampaign(storedCampaignId, effectiveTenantId);
             if (!active) return;
-            applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
+            applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setUploadedPurchaseOrder, setCampaignId, setCampaignStatus, setParentCampaignId);
             setTreatDefaultMarketAsPlaceholder(false);
             setMarketPopupManagedFlow(false);
             setHasSavedMarketViaPopup(true);
@@ -1522,6 +1544,7 @@ export function QuoteBuilderScreen({
         setValues(tenantDefaultValues);
         setSummary(null);
         setUploadedPurchaseOrderName('');
+        setUploadedPurchaseOrder(null);
         setCampaignId(null);
         setCampaignStatus('draft');
         setParentCampaignId('');
@@ -3289,7 +3312,7 @@ export function QuoteBuilderScreen({
     try {
       if (!campaignId) {
         const response = await createCampaign({ values }, effectiveTenantId);
-        applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
+        applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setUploadedPurchaseOrder, setCampaignId, setCampaignStatus, setParentCampaignId);
         campaignIdRef.current = response.campaign.id;
             lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
         lastAutoSaveFailedValuesRef.current = null;
@@ -3301,6 +3324,7 @@ export function QuoteBuilderScreen({
       setCampaignStatus(response.campaign.status);
       setParentCampaignId(response.campaign.parentCampaignId || '');
       setUploadedPurchaseOrderName(response.campaign.purchaseOrder?.originalName || '');
+      setUploadedPurchaseOrder(response.campaign.purchaseOrder);
         lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
       lastAutoSaveFailedValuesRef.current = null;
       return campaignId;
@@ -3397,7 +3421,7 @@ export function QuoteBuilderScreen({
       const response = await submitCampaignToPrintIQ(savedCampaignId, effectiveTenantId);
       const jobNumbers = response.jobNos?.length ? response.jobNos.join(', ') : response.jobNo;
       const printIQNumbers = [response.quoteNo ? `Quote: ${response.quoteNo}` : '', jobNumbers ? `Jobs: ${jobNumbers}` : ''].filter(Boolean).join(', ');
-      applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setCampaignId, setCampaignStatus, setParentCampaignId);
+      applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setUploadedPurchaseOrder, setCampaignId, setCampaignStatus, setParentCampaignId);
       lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
       const successMessage = printIQNumbers ? `Order submitted to PrintIQ. ${printIQNumbers}` : 'Order submitted to PrintIQ.';
       setQuoteResponseMessage(successMessage);
@@ -3436,6 +3460,7 @@ export function QuoteBuilderScreen({
       if (!savedCampaignId) return;
       const response = await uploadPurchaseOrderFile(purchaseOrderFile, savedCampaignId, effectiveTenantId);
       setUploadedPurchaseOrderName(response.originalName);
+      setUploadedPurchaseOrder(response);
       setPurchaseOrderUploadSuccessMessage(`Purchase order file uploaded successfully: ${response.originalName}`);
       setPurchaseOrderUploadSuccessOpen(true);
     } catch (uploadError) {
@@ -3486,6 +3511,39 @@ export function QuoteBuilderScreen({
     } finally {
       setUploadingSupportingDocuments(false);
       if (supportingDocumentInputRef.current) supportingDocumentInputRef.current.value = '';
+    }
+  }
+
+  function openManageUploadsDialog() {
+    setManageUploadsError('');
+    setManageUploadsOpen(true);
+  }
+
+  async function handleDownloadUploadedPurchaseOrder() {
+    if (!campaignId || !uploadedPurchaseOrder || downloadingPurchaseOrder) return;
+    setDownloadingPurchaseOrder(true);
+    setManageUploadsError('');
+    try {
+      const blob = await downloadCampaignPurchaseOrder(campaignId, effectiveTenantId);
+      downloadBlobWithFileName(blob, uploadedPurchaseOrder.originalName || `${values.campaignName || 'Campaign'} - Purchase Order`);
+    } catch (downloadError) {
+      setManageUploadsError(downloadError instanceof Error ? downloadError.message : 'Unable to download purchase order');
+    } finally {
+      setDownloadingPurchaseOrder(false);
+    }
+  }
+
+  async function handleDownloadSupportingDocument(document: CampaignSupportingDocument) {
+    if (downloadingSupportingDocumentName) return;
+    setDownloadingSupportingDocumentName(document.storedName);
+    setManageUploadsError('');
+    try {
+      const blob = await downloadCampaignImage(document.storedName, document.originalName);
+      downloadBlobWithFileName(blob, document.originalName || document.storedName);
+    } catch (downloadError) {
+      setManageUploadsError(downloadError instanceof Error ? downloadError.message : 'Unable to download supporting document');
+    } finally {
+      setDownloadingSupportingDocumentName('');
     }
   }
 
@@ -3669,9 +3727,24 @@ export function QuoteBuilderScreen({
     downloadFiles: boolean,
     exportMode: VisualsExportMode,
     purpose: ArtworkExportPurpose = 'visuals',
+    diagnosticId = '',
   ): Promise<GeneratedVisualExportFile[]> {
     try {
       const ExcelJSRuntime = ExcelJS as any;
+      const generationStartedAt = performance.now();
+      const logInstallGeneration = (stage: string, details?: Record<string, unknown>) => {
+        if (purpose !== 'installs') return;
+        console.info('[FlowIQ Installs Generation]', diagnosticId || 'manual', stage, {
+          elapsedMs: Math.round(performance.now() - generationStartedAt),
+          ...details,
+        });
+      };
+      logInstallGeneration('started', {
+        exportMode,
+        downloadFiles,
+        marketCount: values.campaignMarkets.length,
+        printImageCount: values.printImages.length,
+      });
       const baseName = sanitizeFileName((values.campaignName || 'Campaign').trim() || 'Campaign');
       const campaignNumber = values.customerReference.trim() || campaignId || '';
       const weekCommencing = parseDateOnly(values.campaignStartDate);
@@ -3763,6 +3836,10 @@ export function QuoteBuilderScreen({
             });
           });
         });
+      });
+      logInstallGeneration('install rows prepared', {
+        installWeekRowCount: installWeekRows.length,
+        installWeekCount: allInstallWeeks.length,
       });
       const printRows = new Map<
         string,
@@ -4064,6 +4141,12 @@ export function QuoteBuilderScreen({
         });
       });
 
+      logInstallGeneration('print rows prepared', {
+        printRowCount: printRows.size,
+        deliveryRowCount: deliveryRows.size,
+        pdfPrintQuantityRowCount: pdfPrintQuantityRows.size,
+      });
+
       const creativeSummaryText = Array.from(creativeSummary.entries())
         .sort((a, b) => a[0] - b[0])
         .map(([creativeNumber, breakdown]) => {
@@ -4189,6 +4272,7 @@ export function QuoteBuilderScreen({
       }
       const fillWordDocument = async (): Promise<GeneratedVisualExportFile> => {
         setExportProgressMessage('Generating PDF document...');
+        logInstallGeneration('pdf document setup started');
 
         const printRowsSorted = Array.from(printRows.values()).sort(
           (a, b) => a.creativeNumber - b.creativeNumber || a.fileName.localeCompare(b.fileName) || a.state.localeCompare(b.state),
@@ -4375,6 +4459,7 @@ export function QuoteBuilderScreen({
         pdfDoc.registerFontkit(fontkit);
         const pdfPageSize: [number, number] = purpose === 'installs' ? [841.89, 595.28] : [595.28, 841.89];
         let page = pdfDoc.addPage(pdfPageSize);
+        logInstallGeneration('pdf document created', { pageSize: pdfPageSize.join('x') });
         const [regularFontResponse, boldFontResponse] = await Promise.all([
           fetch('/fonts/NotoSans-Regular.ttf'),
           fetch('/fonts/NotoSans-Bold.ttf'),
@@ -4388,6 +4473,7 @@ export function QuoteBuilderScreen({
         ]);
         const font = await pdfDoc.embedFont(regularFontBytes, { subset: true });
         const bold = await pdfDoc.embedFont(boldFontBytes, { subset: true });
+        logInstallGeneration('fonts embedded');
         let adsLogoPngBytes: Uint8Array | null = null;
         try {
           const logoResponse = await fetch('/ads-logo.webp');
@@ -4412,6 +4498,7 @@ export function QuoteBuilderScreen({
           adsLogoPngBytes = null;
         }
         const adsLogoImage = adsLogoPngBytes ? await pdfDoc.embedPng(adsLogoPngBytes) : null;
+        logInstallGeneration('logo processed', { hasLogo: Boolean(adsLogoImage) });
         const linkColor = rgb(0.05, 0.35, 0.78);
         const brandBlue = rgb(0.05, 0.13, 0.25);
         const brandOrange = rgb(0.95, 0.45, 0.12);
@@ -4792,6 +4879,7 @@ export function QuoteBuilderScreen({
             ? `Weekly installation schedule${campaignNumber ? ` - ${campaignNumber}` : ''}`
             : `Creative Mix: ${creativeHeadline}`,
         );
+        logInstallGeneration('title block drawn');
         if (purpose === 'installs') {
           drawSectionHeader('Job Details');
           drawWrappedSegments([
@@ -4810,9 +4898,15 @@ export function QuoteBuilderScreen({
               { text: values.notes.trim() },
             ], 16);
           }
+          logInstallGeneration('job details drawn');
           cursorY -= 4;
           const hasInstallSchedule = installWeekRows.some((row) =>
             Object.values(row.breakdown).some((quantity) => quantity > 0));
+          logInstallGeneration('install schedule drawing started', {
+            hasInstallSchedule,
+            installWeekCount: allInstallWeeks.length,
+            installWeekRowCount: installWeekRows.length,
+          });
           if (hasInstallSchedule) {
             allInstallWeeks.forEach((week) => {
               const rows = installWeekRows.filter((row) => row.week === week);
@@ -4821,6 +4915,7 @@ export function QuoteBuilderScreen({
           } else {
             drawWrappedLine('No scheduled installs are available for this campaign.', false, undefined, 16);
           }
+          logInstallGeneration('install schedule drawn', { pageCount: pdfDoc.getPageCount() });
         } else {
         if (artworkFolderUrl) {
           drawSectionHeader('Resources');
@@ -4906,6 +5001,7 @@ export function QuoteBuilderScreen({
         });
         const allPages = pdfDoc.getPages();
         const totalPages = allPages.length;
+        logInstallGeneration('footer drawing started', { pageCount: totalPages });
         allPages.forEach((pdfPage, index) => {
           const footerY = 20;
           const pageWidth = pdfPage.getWidth();
@@ -4932,8 +5028,11 @@ export function QuoteBuilderScreen({
             color: brandBlue,
           });
         });
+        logInstallGeneration('footer drawn', { pageCount: totalPages });
 
+        logInstallGeneration('pdf save started', { pageCount: totalPages });
         const pdfBytes = await pdfDoc.save();
+        logInstallGeneration('pdf save completed', { byteLength: pdfBytes.byteLength });
         const pdfArrayBuffer = new ArrayBuffer(pdfBytes.byteLength);
         new Uint8Array(pdfArrayBuffer).set(pdfBytes);
         const blob = new Blob([pdfArrayBuffer], { type: 'application/pdf' });
@@ -4941,6 +5040,7 @@ export function QuoteBuilderScreen({
         if (downloadFiles) {
           downloadBlobWithFileName(blob, fileName);
         }
+        logInstallGeneration('blob prepared', { fileName, size: blob.size });
         return {
           fileName,
           blob,
@@ -5381,11 +5481,15 @@ export function QuoteBuilderScreen({
 
   async function downloadInstallationSheet() {
     if (exportingTemplates || sendingAdsEmail) return false;
+    const installDownloadRequestId = `installs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const installDownloadStartedAt = performance.now();
     if (!hasDeliveryDueDate) {
+      console.warn('[FlowIQ Installs Download]', installDownloadRequestId, 'blocked: missing due date', { campaignId, tenantId: effectiveTenantId });
       setReviewValidationError('Add a due date before downloading the installation sheet.', { dueDate: true });
       return false;
     }
     if (!hasMappedCreatives) {
+      console.warn('[FlowIQ Installs Download]', installDownloadRequestId, 'blocked: no mapped creatives', { campaignId, tenantId: effectiveTenantId });
       setReviewValidationError('Map at least one creative to a market asset before downloading the installation sheet');
       return false;
     }
@@ -5398,11 +5502,29 @@ export function QuoteBuilderScreen({
     setExportProgressMessage('Preparing Installs files...');
 
     try {
-      const generatedFiles = await generateArtworkTemplates(false, 'pdf', 'installs');
+      console.info('[FlowIQ Installs Download]', installDownloadRequestId, 'started', {
+        campaignId,
+        tenantId: effectiveTenantId,
+        campaignName: values.campaignName,
+        printImageCount: values.printImages.length,
+        supportingDocumentCount: values.supportingDocuments?.length ?? 0,
+        marketCount: values.campaignMarkets.length,
+      });
+      const pdfGenerationStartedAt = performance.now();
+      const generatedFiles = await generateArtworkTemplates(false, 'pdf', 'installs', installDownloadRequestId);
+      console.info('[FlowIQ Installs Download]', installDownloadRequestId, 'installation PDF generated', {
+        elapsedMs: Math.round(performance.now() - pdfGenerationStartedAt),
+        fileCount: generatedFiles.length,
+        files: generatedFiles.map((file) => ({ fileName: file.fileName, size: file.blob.size, type: file.mimeType })),
+      });
       const installationSheet = generatedFiles[0];
       if (!installationSheet) throw new Error('Installation sheet generation did not produce a PDF');
 
       downloadBlobWithFileName(installationSheet.blob, installationSheet.fileName);
+      console.info('[FlowIQ Installs Download]', installDownloadRequestId, 'installation PDF download triggered', {
+        fileName: installationSheet.fileName,
+        size: installationSheet.blob.size,
+      });
       const usedDocumentNames = new Set<string>([installationSheet.fileName.toLocaleLowerCase()]);
       const uniqueDocumentName = (originalName: string) => {
         const safeName = originalName
@@ -5422,16 +5544,43 @@ export function QuoteBuilderScreen({
         return candidate;
       };
 
-      for (const document of values.supportingDocuments ?? []) {
+      const supportingDocuments = values.supportingDocuments ?? [];
+      for (const [documentIndex, document] of supportingDocuments.entries()) {
+        const documentStartedAt = performance.now();
         setExportProgressMessage(`Downloading supporting document: ${document.originalName}`);
+        console.info('[FlowIQ Installs Download]', installDownloadRequestId, 'supporting document fetch started', {
+          index: documentIndex + 1,
+          total: supportingDocuments.length,
+          originalName: document.originalName,
+          storedName: document.storedName,
+          size: document.size,
+          mimeType: document.mimeType,
+        });
         const documentBlob = await downloadCampaignImage(document.storedName, document.originalName);
-        downloadBlobWithFileName(documentBlob, uniqueDocumentName(document.originalName));
+        const fileName = uniqueDocumentName(document.originalName);
+        console.info('[FlowIQ Installs Download]', installDownloadRequestId, 'supporting document fetched', {
+          index: documentIndex + 1,
+          originalName: document.originalName,
+          storedName: document.storedName,
+          downloadName: fileName,
+          blobSize: documentBlob.size,
+          elapsedMs: Math.round(performance.now() - documentStartedAt),
+        });
+        downloadBlobWithFileName(documentBlob, fileName);
       }
 
       setExportProgressMessage('Installs file downloads started. Check your browser download bar.');
+      console.info('[FlowIQ Installs Download]', installDownloadRequestId, 'completed', {
+        elapsedMs: Math.round(performance.now() - installDownloadStartedAt),
+      });
       return true;
     } catch (exportError) {
       const message = exportError instanceof Error ? exportError.message : 'Unable to download the Installs files. Please try again.';
+      console.error('[FlowIQ Installs Download]', installDownloadRequestId, 'failed', {
+        elapsedMs: Math.round(performance.now() - installDownloadStartedAt),
+        error: exportError,
+        message,
+      });
       setReviewValidationError(message);
       setInstallDownloadError(message);
       setExportProgressMessage('');
@@ -5841,7 +5990,7 @@ export function QuoteBuilderScreen({
                 </div>
               </div>
                 </div>
-                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,260px)_minmax(0,210px)_minmax(0,210px)_minmax(0,210px)_minmax(0,136px)] xl:items-center">
+                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,240px)_minmax(0,190px)_minmax(0,190px)_minmax(0,190px)_minmax(0,190px)_minmax(0,136px)] xl:items-center">
                   <div className="flex h-11 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
                     <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Purchase Order</span>
                     <button
@@ -5948,6 +6097,14 @@ export function QuoteBuilderScreen({
                     variant="outline"
                   >
                     Manage Artwork
+                  </Button>
+                  <Button
+                    className="h-10 min-w-0 rounded-lg border-white/15 px-4 text-sm font-semibold"
+                    onClick={openManageUploadsDialog}
+                    type="button"
+                    variant="outline"
+                  >
+                    Manage Uploads
                   </Button>
                   <div title={canAddMarketInPlanning ? 'Add another market' : addMarketDisabledReason}>
                     <Button
@@ -7810,6 +7967,131 @@ export function QuoteBuilderScreen({
         onOpenChange={setOneDriveImportOpen}
         open={oneDriveImportOpen}
       />
+
+      <Dialog
+        open={manageUploadsOpen}
+        onOpenChange={(open) => {
+          setManageUploadsOpen(open);
+          if (!open) setManageUploadsError('');
+        }}
+      >
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 54rem)', maxHeight: '90vh' }}>
+          <DialogHeader>
+            <DialogTitle>Manage Uploads</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {manageUploadsError ? (
+              <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200">
+                {manageUploadsError}
+              </div>
+            ) : null}
+
+            <section className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-100">Purchase Order</h3>
+              </div>
+              {uploadedPurchaseOrder ? (
+                <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-900/65">
+                  <table className="w-full table-fixed text-sm">
+                    <colgroup>
+                      <col />
+                      <col className="w-[110px]" />
+                      <col className="w-[180px]" />
+                      <col className="w-[90px]" />
+                    </colgroup>
+                    <thead>
+                      <tr className="bg-slate-950/90 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-300">
+                        <th className="border-b border-slate-700 px-3 py-2 text-left">File</th>
+                        <th className="border-b border-slate-700 px-3 py-2 text-left">Size</th>
+                        <th className="border-b border-slate-700 px-3 py-2 text-left">Uploaded</th>
+                        <th className="border-b border-slate-700 px-3 py-2 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-t border-slate-800">
+                        <td className="px-3 py-3">
+                          <p className="truncate font-semibold text-slate-100" title={uploadedPurchaseOrder.originalName}>{uploadedPurchaseOrder.originalName}</p>
+                          <p className="truncate text-xs text-slate-500" title={uploadedPurchaseOrder.mimeType}>{uploadedPurchaseOrder.mimeType || 'application/octet-stream'}</p>
+                        </td>
+                        <td className="px-3 py-3 text-slate-300">{formatFileSize(uploadedPurchaseOrder.size)}</td>
+                        <td className="px-3 py-3 text-slate-300">{formatUploadDate(uploadedPurchaseOrder.uploadedAt)}</td>
+                        <td className="px-3 py-3 text-center">
+                          <Button
+                            aria-label="Download purchase order"
+                            className="h-8 w-8 p-0"
+                            disabled={downloadingPurchaseOrder}
+                            onClick={() => void handleDownloadUploadedPurchaseOrder()}
+                            type="button"
+                            variant="outline"
+                          >
+                            {downloadingPurchaseOrder ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                          </Button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="rounded-md border border-slate-700 bg-slate-900 px-4 py-5 text-center text-sm text-slate-400">
+                  No purchase order uploaded yet.
+                </div>
+              )}
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-slate-100">Supporting Documents</h3>
+              {(values.supportingDocuments?.length ?? 0) > 0 ? (
+                <div className="max-h-[38vh] overflow-auto rounded-md border border-slate-700 bg-slate-900/65">
+                  <table className="w-full table-fixed text-sm">
+                    <colgroup>
+                      <col />
+                      <col className="w-[110px]" />
+                      <col className="w-[180px]" />
+                      <col className="w-[90px]" />
+                    </colgroup>
+                    <thead>
+                      <tr className="bg-slate-950/90 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-300">
+                        <th className="border-b border-slate-700 px-3 py-2 text-left">File</th>
+                        <th className="border-b border-slate-700 px-3 py-2 text-left">Size</th>
+                        <th className="border-b border-slate-700 px-3 py-2 text-left">Uploaded</th>
+                        <th className="border-b border-slate-700 px-3 py-2 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(values.supportingDocuments ?? []).map((document) => (
+                        <tr className="border-t border-slate-800" key={document.storedName}>
+                          <td className="px-3 py-3">
+                            <p className="truncate font-semibold text-slate-100" title={document.originalName}>{document.originalName}</p>
+                            <p className="truncate text-xs text-slate-500" title={document.mimeType}>{document.mimeType || 'application/octet-stream'}</p>
+                          </td>
+                          <td className="px-3 py-3 text-slate-300">{formatFileSize(document.size)}</td>
+                          <td className="px-3 py-3 text-slate-300">{formatUploadDate(document.uploadedAt)}</td>
+                          <td className="px-3 py-3 text-center">
+                            <Button
+                              aria-label={`Download ${document.originalName}`}
+                              className="h-8 w-8 p-0"
+                              disabled={Boolean(downloadingSupportingDocumentName)}
+                              onClick={() => void handleDownloadSupportingDocument(document)}
+                              type="button"
+                              variant="outline"
+                            >
+                              {downloadingSupportingDocumentName === document.storedName ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="rounded-md border border-slate-700 bg-slate-900 px-4 py-5 text-center text-sm text-slate-400">
+                  No supporting documents uploaded yet.
+                </div>
+              )}
+            </section>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={unsavedDialogOpen}
