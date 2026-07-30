@@ -1376,6 +1376,7 @@ export function QuoteBuilderScreen({
   const artworkPdfInputRef = useRef<HTMLInputElement | null>(null);
   const artworkEnqueuePromiseRef = useRef<Promise<void> | null>(null);
   const campaignIdRef = useRef<string | null>(campaignId);
+  const editLockHeldRef = useRef(false);
   const campaignHydratedRef = useRef(false);
   const autoDownloadTriggeredRef = useRef(false);
   const autoSendEmailTriggeredRef = useRef(false);
@@ -1392,6 +1393,7 @@ export function QuoteBuilderScreen({
   const pendingArtworkUploadCount = queuedArtworkUploadJobs.length;
   const uploadingArtworkPages = campaignArtworkUploadJobs.some((job) => job.status === 'queued' || job.status === 'uploading');
   const isSubmittedCampaign = campaignStatus === 'submitted';
+  const isReadOnlyVisualDownload = autoDownloadVisuals;
 
   function reportQuoteAutomationResult(action: AutomatedQuoteAction, status: AutomatedQuoteActionStatus, message?: string) {
     if (typeof window === 'undefined') return;
@@ -1489,9 +1491,10 @@ export function QuoteBuilderScreen({
 
   async function releaseActiveCampaignLock(targetCampaignId?: string | null) {
     const id = targetCampaignId ?? campaignIdRef.current;
-    if (!id) return;
+    if (!id || !editLockHeldRef.current) return;
     try {
       await releaseCampaignEditLock(id, effectiveTenantId);
+      editLockHeldRef.current = false;
     } catch {
       // Best-effort cleanup only; lock will also expire automatically.
     }
@@ -1507,7 +1510,10 @@ export function QuoteBuilderScreen({
 
         if (storedCampaignId) {
           try {
-            await acquireCampaignEditLock(storedCampaignId, effectiveTenantId);
+            if (!isReadOnlyVisualDownload) {
+              await acquireCampaignEditLock(storedCampaignId, effectiveTenantId);
+              editLockHeldRef.current = true;
+            }
             if (!active) return;
             const response = await fetchCampaign(storedCampaignId, effectiveTenantId);
             if (!active) return;
@@ -1517,7 +1523,9 @@ export function QuoteBuilderScreen({
             setHasSavedMarketViaPopup(true);
             lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
             campaignHydratedRef.current = true;
-            await setStoredCampaignId(response.campaign.id, effectiveTenantId);
+            if (!isReadOnlyVisualDownload) {
+              await setStoredCampaignId(response.campaign.id, effectiveTenantId);
+            }
             return;
           } catch (loadError) {
             if (!active) return;
@@ -1565,15 +1573,16 @@ export function QuoteBuilderScreen({
     return () => {
       active = false;
     };
-  }, [effectiveTenantId, onBack, selectedCampaignId, startFresh]);
+  }, [effectiveTenantId, isReadOnlyVisualDownload, onBack, selectedCampaignId, startFresh]);
 
   useEffect(() => {
-    if (!campaignId) return;
+    if (!campaignId || isReadOnlyVisualDownload || !editLockHeldRef.current) return;
 
     let active = true;
     const intervalId = window.setInterval(async () => {
       try {
         await acquireCampaignEditLock(campaignId, effectiveTenantId);
+        editLockHeldRef.current = true;
       } catch (lockError) {
         if (!active) return;
         setError(lockError instanceof Error ? lockError.message : 'Campaign lock expired');
@@ -1584,16 +1593,14 @@ export function QuoteBuilderScreen({
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [campaignId, effectiveTenantId]);
+  }, [campaignId, effectiveTenantId, isReadOnlyVisualDownload]);
 
   useEffect(() => {
-    if (!campaignId) return;
+    if (!campaignId || isReadOnlyVisualDownload) return;
     return () => {
-      void releaseCampaignEditLock(campaignId, effectiveTenantId).catch(() => {
-        // Best-effort cleanup only; lock will also expire automatically.
-      });
+      void releaseActiveCampaignLock(campaignId);
     };
-  }, [campaignId, effectiveTenantId]);
+  }, [campaignId, effectiveTenantId, isReadOnlyVisualDownload]);
 
   useEffect(() => {
     let active = true;
