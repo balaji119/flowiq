@@ -767,6 +767,18 @@ function toAbsoluteUrl(url: string) {
   return trimmed;
 }
 
+function buildArtworkFolderUrl(campaignId: string | null | undefined, tenantId: string | null | undefined) {
+  const cleanedCampaignId = (campaignId || '').trim();
+  if (!cleanedCampaignId) return '';
+  const params = new URLSearchParams({
+    view: 'artwork',
+    campaignId: cleanedCampaignId,
+  });
+  const cleanedTenantId = (tenantId || '').trim();
+  if (cleanedTenantId) params.set('tenantId', cleanedTenantId);
+  return toAbsoluteUrl(`/?${params.toString()}`);
+}
+
 function withCampaignImageProxy(url: string) {
   const trimmed = url.trim();
   if (!trimmed) return trimmed;
@@ -4413,9 +4425,7 @@ export function QuoteBuilderScreen({
         const lineHeight = 14;
         const maxWidth = page.getWidth() - marginX * 2;
         let cursorY = page.getHeight() - marginTop;
-        const artworkFolderUrl = campaignId
-          ? toAbsoluteUrl(`/?view=artwork&campaignId=${encodeURIComponent(campaignId)}`)
-          : '';
+        const artworkFolderUrl = buildArtworkFolderUrl(campaignId, effectiveTenantId);
 
         const addLinkAnnotation = (x: number, y: number, width: number, height: number, url: string) => {
           if (!url) return;
@@ -4976,9 +4986,7 @@ export function QuoteBuilderScreen({
         sheet.getCell('C7').value = creativeSummaryText;
         const masterArtworkFolderCell = sheet.getCell('B8');
         const masterArtworkFolderLabel = (masterArtworkFolderCell.text || '').trim() || 'MASTER ARTWORK FOLDER';
-        const artworkFolderUrl = campaignId
-          ? toAbsoluteUrl(`/?view=artwork&campaignId=${encodeURIComponent(campaignId)}`)
-          : '';
+        const artworkFolderUrl = buildArtworkFolderUrl(campaignId, effectiveTenantId);
         // Keep template styling while wiring the campaign artwork-folder link when campaign id is available.
         masterArtworkFolderCell.value = artworkFolderUrl
           ? { text: masterArtworkFolderLabel, hyperlink: artworkFolderUrl }
