@@ -86,6 +86,38 @@ func TestResolvePrintIQSheetProductsSplitsFrameQuantityByArtwork(t *testing.T) {
 	}
 }
 
+func TestResolvePrintIQSheetProductsMergesSameMarketArtworkAndSheetType(t *testing.T) {
+	values := orderFormValues{
+		CampaignMarkets: []campaignMarket{
+			{
+				Market: "NSW",
+				Assets: []campaignAsset{
+					{ID: "asset-1", CreativeImageIDs: map[string]string{"8-sheet": "artwork-a"}},
+					{ID: "asset-2", CreativeImageIDs: map[string]string{"8-sheet": "artwork-a"}},
+				},
+			},
+		},
+	}
+	summary := &campaignSummary{Lines: []campaignLineResult{
+		{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40}},
+		{ID: "asset-2", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 20}},
+	}}
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
+		"NSW": {
+			"8-sheet": testMaterialProductMapping("NSW Quad Product", "SHT-QUAD"),
+		},
+	}, map[string]string{}, map[string]bool{})
+	if err != nil {
+		t.Fatalf("resolve products: %v", err)
+	}
+	if len(products) != 1 {
+		t.Fatalf("expected 1 merged product, got %d: %#v", len(products), products)
+	}
+	if products[0].Market != "NSW" || products[0].FormatKey != "8-sheet" || products[0].ProductCode != "NSW Quad Product" || products[0].SheetCode != "SHT-QUAD" || products[0].Quantity != 15 || products[0].ArtworkImageID != "artwork-a" {
+		t.Fatalf("unexpected merged product: %#v", products[0])
+	}
+}
+
 func TestResolvePrintIQSheetProductsUsesAssetCodeForCustomSheetSize(t *testing.T) {
 	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"Mega": 1, "8-sheet": 40}}}}

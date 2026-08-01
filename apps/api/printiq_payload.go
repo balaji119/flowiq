@@ -35,10 +35,19 @@ type printIQArtworkUpload struct {
 }
 
 type printIQSheetProduct struct {
+	Market         string
 	FormatKey      string
 	ProductCode    string
 	SheetCode      string
 	Quantity       int
+	ArtworkImageID string
+}
+
+type printIQSheetProductMergeKey struct {
+	Market         string
+	FormatKey      string
+	ProductCode    string
+	SheetCode      string
 	ArtworkImageID string
 }
 
@@ -131,6 +140,22 @@ func printIQFrameQuantity(formatKey string, posterQuantity int) int {
 	}
 }
 
+func appendPrintIQSheetProduct(products []printIQSheetProduct, indexes map[printIQSheetProductMergeKey]int, product printIQSheetProduct) ([]printIQSheetProduct, int) {
+	key := printIQSheetProductMergeKey{
+		Market:         strings.TrimSpace(product.Market),
+		FormatKey:      strings.TrimSpace(product.FormatKey),
+		ProductCode:    strings.TrimSpace(product.ProductCode),
+		SheetCode:      strings.TrimSpace(product.SheetCode),
+		ArtworkImageID: strings.TrimSpace(product.ArtworkImageID),
+	}
+	if index, exists := indexes[key]; exists {
+		products[index].Quantity += product.Quantity
+		return products, index
+	}
+	indexes[key] = len(products)
+	return append(products, product), indexes[key]
+}
+
 func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummary, productMappingsByMarket map[string]map[string]materialProductMapping, fallbackProductCodes map[string]string, customSheetSizeFormats map[string]bool) ([]printIQSheetProduct, error) {
 	if summary == nil {
 		return nil, errors.New("Campaign calculation summary is required")
@@ -142,14 +167,16 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 		}
 	}
 	products := make([]printIQSheetProduct, 0)
+	productIndexes := map[printIQSheetProductMergeKey]int{}
 	for _, format := range printIQSheetFormatOrder {
 		for _, summaryLine := range summary.Lines {
 			posterQuantity := summaryLine.Breakdown[format.breakdownKey]
 			if posterQuantity <= 0 {
 				continue
 			}
+			market := strings.TrimSpace(summaryLine.Market)
 			printIQQuantity := printIQFrameQuantity(format.breakdownKey, posterQuantity)
-			marketProductMappings := productMappingsByMarket[strings.TrimSpace(summaryLine.Market)]
+			marketProductMappings := productMappingsByMarket[market]
 			productCodeKey := format.settingsKey
 			useCustomSheetSize := customSheetSizeFormats[format.settingsKey]
 			if useCustomSheetSize {
@@ -171,12 +198,12 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 				if artworkImageID == "" && format.breakdownKey == "8-sheet" {
 					artworkImageID = asset.CreativeImageID
 				}
-				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: printIQQuantity, ArtworkImageID: artworkImageID})
+				products, _ = appendPrintIQSheetProduct(products, productIndexes, printIQSheetProduct{Market: market, FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: printIQQuantity, ArtworkImageID: artworkImageID})
 				continue
 			}
 
 			remaining := printIQQuantity
-			firstProductIndex := len(products)
+			lastAssignedProductIndex := -1
 			for _, assignment := range assignments {
 				if assignment.FrameCount <= 0 || remaining <= 0 {
 					continue
@@ -185,13 +212,15 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 				if assignedQuantity > remaining {
 					assignedQuantity = remaining
 				}
-				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: assignedQuantity, ArtworkImageID: assignment.ArtworkImageID})
+				var productIndex int
+				products, productIndex = appendPrintIQSheetProduct(products, productIndexes, printIQSheetProduct{Market: market, FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: assignedQuantity, ArtworkImageID: assignment.ArtworkImageID})
+				lastAssignedProductIndex = productIndex
 				remaining -= assignedQuantity
 			}
-			if remaining > 0 && len(products) > firstProductIndex {
-				products[len(products)-1].Quantity += remaining
+			if remaining > 0 && lastAssignedProductIndex >= 0 {
+				products[lastAssignedProductIndex].Quantity += remaining
 			} else if remaining > 0 {
-				products = append(products, printIQSheetProduct{FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: remaining})
+				products, _ = appendPrintIQSheetProduct(products, productIndexes, printIQSheetProduct{Market: market, FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: remaining})
 			}
 		}
 	}
