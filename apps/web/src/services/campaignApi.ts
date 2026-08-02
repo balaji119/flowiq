@@ -34,6 +34,12 @@ export async function createSubCampaign(campaignId: string, tenantId?: string | 
   });
 }
 
+export async function cloneCampaign(campaignId: string, tenantId?: string | null) {
+  return apiFetchJson<{ campaign: CampaignRecord }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/clone`, tenantId), {
+    method: 'POST',
+  });
+}
+
 export async function fetchCampaign(campaignId: string, tenantId?: string | null) {
   return apiFetchJson<{ campaign: CampaignRecord }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}`, tenantId));
 }

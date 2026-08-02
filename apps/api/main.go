@@ -249,6 +249,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/campaigns", a.withAuth(http.HandlerFunc(a.handleListCampaigns)))
 	mux.Handle("POST /api/campaigns", a.withAuth(http.HandlerFunc(a.handleCreateCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/sub-campaigns", a.withAuth(http.HandlerFunc(a.handleCreateSubCampaign)))
+	mux.Handle("POST /api/campaigns/{campaignId}/clone", a.withAuth(http.HandlerFunc(a.handleCloneCampaign)))
 	mux.Handle("GET /api/campaigns/{campaignId}", a.withAuth(http.HandlerFunc(a.handleGetCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/edit-lock", a.withAuth(http.HandlerFunc(a.handleAcquireCampaignEditLock)))
 	mux.Handle("DELETE /api/campaigns/{campaignId}/edit-lock", a.withAuth(http.HandlerFunc(a.handleReleaseCampaignEditLock)))
@@ -750,6 +751,33 @@ func (a *app) handleCreateSubCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	campaign, err := a.campaignStore.createSubCampaign(r.Context(), *user, r.PathValue("campaignId"))
+	if err != nil {
+		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"campaign": campaign})
+}
+
+func (a *app) handleCloneCampaign(w http.ResponseWriter, r *http.Request) {
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
+
+	sourceCampaign, err := a.campaignStore.getCampaign(r.Context(), *user, r.PathValue("campaignId"))
+	if err != nil {
+		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
+		return
+	}
+
+	values, purchaseOrder, err := a.cloneCampaignPayload(r.Context(), sourceCampaign)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	campaign, err := a.campaignStore.createCampaignClone(r.Context(), *user, sourceCampaign, values, purchaseOrder)
 	if err != nil {
 		writeJSON(w, campaignMutationErrorStatus(err), map[string]string{"error": err.Error()})
 		return
@@ -2083,6 +2111,265 @@ func (a *app) streamCampaignImageFromObjectStorage(
 		return true, err
 	}
 	return true, nil
+}
+
+func cloneCampaignDisplayName(campaign *campaignRecord) string {
+	sourceName := strings.TrimSpace(campaign.Values.CampaignName)
+	if sourceName == "" {
+		sourceName = "Untitled Campaign " + campaign.ID[:6]
+	}
+	if strings.HasPrefix(strings.ToLower(sourceName), "copy of ") {
+		return sourceName
+	}
+	return "Copy of " + sourceName
+}
+
+func buildClonedStoredName(sourceStoredName string) string {
+	extension := filepath.Ext(sourceStoredName)
+	baseName := strings.TrimSuffix(filepath.Base(sourceStoredName), extension)
+	safeBaseName := unsafeFilenamePattern.ReplaceAllString(baseName, "_")
+	safeBaseName = strings.TrimSpace(safeBaseName)
+	if safeBaseName == "" {
+		safeBaseName = "campaign-upload"
+	}
+	if len(safeBaseName) > 56 {
+		safeBaseName = safeBaseName[:56]
+	}
+	return fmt.Sprintf("%d-%s-%s%s", time.Now().UnixMilli(), uuid.NewString()[:8], safeBaseName, extension)
+}
+
+func (a *app) cloneCampaignImageObject(ctx context.Context, sourceStoredName, contentType string) (string, error) {
+	sourceStoredName = strings.TrimSpace(sourceStoredName)
+	if sourceStoredName == "" {
+		return "", nil
+	}
+	if !isSafeStoredName(sourceStoredName) {
+		return "", fmt.Errorf("Unable to clone unsafe campaign upload reference")
+	}
+
+	nextStoredName := buildClonedStoredName(sourceStoredName)
+	if contentType = strings.TrimSpace(contentType); contentType == "" {
+		contentType = mime.TypeByExtension(strings.ToLower(filepath.Ext(sourceStoredName)))
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	tempFile, err := os.CreateTemp("", "flowiq-clone-*"+filepath.Ext(sourceStoredName))
+	if err != nil {
+		return "", err
+	}
+	tempPath := tempFile.Name()
+	tempFile.Close()
+	defer os.Remove(tempPath)
+
+	if err := a.copyCampaignImageToFile(ctx, sourceStoredName, tempPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("Unable to clone campaign because an uploaded file is missing")
+		}
+		return "", err
+	}
+	sourceFile, err := os.Open(tempPath)
+	if err != nil {
+		return "", err
+	}
+	defer sourceFile.Close()
+	info, err := sourceFile.Stat()
+	if err != nil {
+		return "", err
+	}
+	if err := a.storeCampaignImageReader(ctx, nextStoredName, contentType, sourceFile, info.Size()); err != nil {
+		return "", err
+	}
+	return nextStoredName, nil
+}
+
+func (a *app) cloneCampaignImageStoredName(ctx context.Context, sourceStoredName, contentType string, storedNameMap map[string]string) (string, error) {
+	sourceStoredName = strings.TrimSpace(sourceStoredName)
+	if sourceStoredName == "" {
+		return "", nil
+	}
+	if clonedStoredName, exists := storedNameMap[sourceStoredName]; exists {
+		return clonedStoredName, nil
+	}
+	clonedStoredName, err := a.cloneCampaignImageObject(ctx, sourceStoredName, contentType)
+	if err != nil {
+		return "", err
+	}
+	storedNameMap[sourceStoredName] = clonedStoredName
+	return clonedStoredName, nil
+}
+
+func campaignImageURLForStoredName(storedName string) string {
+	if strings.TrimSpace(storedName) == "" {
+		return ""
+	}
+	return "/api/campaign-images/" + storedName
+}
+
+func remapCreativeImageID(value string, imageIDMap map[string]string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	if nextValue, exists := imageIDMap[trimmed]; exists {
+		return nextValue
+	}
+	return value
+}
+
+func remapCreativeImageIDs(values map[string]string, imageIDMap map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	remapped := make(map[string]string, len(values))
+	for key, value := range values {
+		remapped[key] = remapCreativeImageID(value, imageIDMap)
+	}
+	return remapped
+}
+
+func remapCreativeNameAssignments(values map[string]string, imageIDMap map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	remapped := make(map[string]string, len(values))
+	for key, value := range values {
+		nextKey := key
+		if mappedKey, exists := imageIDMap[strings.TrimSpace(key)]; exists {
+			nextKey = mappedKey
+		}
+		remapped[nextKey] = value
+	}
+	return remapped
+}
+
+func remapArtworkMaterialAssignments(values map[string][]artworkMaterialAssignment, imageIDMap map[string]string) map[string][]artworkMaterialAssignment {
+	if values == nil {
+		return nil
+	}
+	remapped := make(map[string][]artworkMaterialAssignment, len(values))
+	for key, assignments := range values {
+		remappedAssignments := append([]artworkMaterialAssignment(nil), assignments...)
+		for index := range remappedAssignments {
+			remappedAssignments[index].ArtworkImageID = remapCreativeImageID(remappedAssignments[index].ArtworkImageID, imageIDMap)
+		}
+		remapped[key] = remappedAssignments
+	}
+	return remapped
+}
+
+func (a *app) cloneCampaignPayload(ctx context.Context, source *campaignRecord) (orderFormValues, *purchaseOrderDetails, error) {
+	values := cloneOrderFormValues(source.Values)
+	values.CampaignName = cloneCampaignDisplayName(source)
+
+	storedNameMap := map[string]string{}
+	imageIDMap := map[string]string{}
+	for index := range values.PrintImages {
+		image := &values.PrintImages[index]
+		sourceID := strings.TrimSpace(image.ID)
+		image.ID = uuid.NewString()
+		if sourceID != "" {
+			imageIDMap[sourceID] = image.ID
+		}
+
+		storedName, err := a.cloneCampaignImageStoredName(ctx, image.StoredName, image.MimeType, storedNameMap)
+		if err != nil {
+			return orderFormValues{}, nil, err
+		}
+		image.StoredName = storedName
+		image.ImageURL = campaignImageURLForStoredName(storedName)
+
+		thumbnailStoredName, err := a.cloneCampaignImageStoredName(ctx, image.ThumbnailStoredName, "image/jpeg", storedNameMap)
+		if err != nil {
+			return orderFormValues{}, nil, err
+		}
+		image.ThumbnailStoredName = thumbnailStoredName
+		image.ThumbnailURL = campaignImageURLForStoredName(thumbnailStoredName)
+
+		previewStoredName, err := a.cloneCampaignImageStoredName(ctx, image.PreviewStoredName, "image/jpeg", storedNameMap)
+		if err != nil {
+			return orderFormValues{}, nil, err
+		}
+		image.PreviewStoredName = previewStoredName
+		image.PreviewURL = campaignImageURLForStoredName(previewStoredName)
+
+		sourcePDFStoredName, err := a.cloneCampaignImageStoredName(ctx, image.SourcePDFStoredName, "application/pdf", storedNameMap)
+		if err != nil {
+			return orderFormValues{}, nil, err
+		}
+		image.SourcePDFStoredName = sourcePDFStoredName
+		image.SourcePDFURL = campaignImageURLForStoredName(sourcePDFStoredName)
+	}
+
+	for index := range values.SupportingDocuments {
+		document := &values.SupportingDocuments[index]
+		storedName, err := a.cloneCampaignImageStoredName(ctx, document.StoredName, document.MimeType, storedNameMap)
+		if err != nil {
+			return orderFormValues{}, nil, err
+		}
+		document.StoredName = storedName
+		document.UploadedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	values.CreativeNameAssignments = remapCreativeNameAssignments(values.CreativeNameAssignments, imageIDMap)
+	for marketIndex := range values.CampaignMarkets {
+		values.CampaignMarkets[marketIndex].ID = uuid.NewString()
+		for assetIndex := range values.CampaignMarkets[marketIndex].Assets {
+			asset := &values.CampaignMarkets[marketIndex].Assets[assetIndex]
+			asset.ID = uuid.NewString()
+			asset.CreativeImageID = remapCreativeImageID(asset.CreativeImageID, imageIDMap)
+			asset.CreativeImageIDs = remapCreativeImageIDs(asset.CreativeImageIDs, imageIDMap)
+			asset.ArtworkMaterialAssignments = remapArtworkMaterialAssignments(asset.ArtworkMaterialAssignments, imageIDMap)
+		}
+	}
+
+	var purchaseOrder *purchaseOrderDetails
+	if source.PurchaseOrder != nil && strings.TrimSpace(source.PurchaseOrder.StoredName) != "" {
+		clonedPurchaseOrder, err := a.clonePurchaseOrder(source.PurchaseOrder)
+		if err != nil {
+			return orderFormValues{}, nil, err
+		}
+		purchaseOrder = clonedPurchaseOrder
+	}
+
+	return values, purchaseOrder, nil
+}
+
+func (a *app) clonePurchaseOrder(source *purchaseOrderDetails) (*purchaseOrderDetails, error) {
+	sourceStoredName := strings.TrimSpace(source.StoredName)
+	if !isSafeStoredName(sourceStoredName) {
+		return nil, fmt.Errorf("Unable to clone unsafe purchase order reference")
+	}
+
+	nextStoredName := buildClonedStoredName(sourceStoredName)
+	sourcePath := filepath.Join(a.uploadDir, sourceStoredName)
+	targetPath := filepath.Join(a.uploadDir, nextStoredName)
+
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("Unable to clone campaign because the purchase order file is missing")
+		}
+		return nil, err
+	}
+	defer sourceFile.Close()
+
+	targetFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	defer targetFile.Close()
+	size, err := io.Copy(targetFile, sourceFile)
+	if err != nil {
+		return nil, err
+	}
+
+	cloned := *source
+	cloned.StoredName = nextStoredName
+	cloned.Size = size
+	cloned.UploadedAt = time.Now().UTC().Format(time.RFC3339)
+	return &cloned, nil
 }
 
 func collectCampaignImageStoredNames(campaign *campaignRecord) []string {

@@ -402,6 +402,53 @@ func (s *campaignStore) createSubCampaign(ctx context.Context, user AuthUser, pa
 	return s.getCampaign(ctx, user, campaignID)
 }
 
+func (s *campaignStore) createCampaignClone(ctx context.Context, user AuthUser, source *campaignRecord, values orderFormValues, purchaseOrder *purchaseOrderDetails) (*campaignRecord, error) {
+	if user.TenantID == nil {
+		return nil, errors.New("current user is not assigned to a tenant")
+	}
+	if source == nil {
+		return nil, errors.New("Campaign not found")
+	}
+
+	formData, err := marshalJSON(values)
+	if err != nil {
+		return nil, err
+	}
+
+	var purchaseOrderData any
+	if purchaseOrder != nil {
+		payload, err := marshalJSON(purchaseOrder)
+		if err != nil {
+			return nil, err
+		}
+		purchaseOrderData = string(payload)
+	}
+
+	campaignID := uuid.NewString()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO campaigns (
+			id, tenant_id, name, start_date, due_date, weeks, status, form_data, purchase_order, created_by_user_id, updated_by_user_id, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7::jsonb, $8::jsonb, $9, $9, NOW(), NOW())
+	`, campaignID, source.TenantID, strings.TrimSpace(values.CampaignName), parseDateOrNil(values.CampaignStartDate), parseDateOrNil(values.DueDate), parseWeeks(values.NumberOfWeeks), string(formData), purchaseOrderData, user.ID); err != nil {
+		return nil, err
+	}
+
+	if err := s.replaceCampaignLines(ctx, tx, campaignID, source.TenantID, values); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return s.getCampaign(ctx, user, campaignID)
+}
+
 func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]campaignListItem, error) {
 	if user.TenantID == nil {
 		return nil, errors.New("current user is not assigned to a tenant")

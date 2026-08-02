@@ -1,10 +1,10 @@
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Download, Eye, FolderKanban, LoaderCircle, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { CopyPlus, Download, Eye, FolderKanban, LoaderCircle, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { CampaignListItem, CampaignRecord, TenantRecord } from '@flowiq/shared';
 import { Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
-import { acquireCampaignEditLock, calculatePersistedCampaign, createSubCampaign, deleteCampaign, downloadCampaignPurchaseOrder, fetchCampaign, fetchCampaigns } from '../services/campaignApi';
+import { acquireCampaignEditLock, calculatePersistedCampaign, cloneCampaign, createSubCampaign, deleteCampaign, downloadCampaignPurchaseOrder, fetchCampaign, fetchCampaigns } from '../services/campaignApi';
 import { CampaignScheduleViewDialog } from './CampaignScheduleViewDialog';
 
 type CampaignLandingScreenProps = {
@@ -98,6 +98,7 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
   const [viewCampaignId, setViewCampaignId] = useState<string | null>(null);
   const [landingNotice, setLandingNotice] = useState('');
   const [creatingSubCampaignId, setCreatingSubCampaignId] = useState<string | null>(null);
+  const [cloningCampaignId, setCloningCampaignId] = useState<string | null>(null);
   const [downloadingPurchaseOrderId, setDownloadingPurchaseOrderId] = useState<string | null>(null);
   const [bottomBarHost, setBottomBarHost] = useState<HTMLElement | null>(null);
   const isSuperAdmin = session?.user.role === 'super_admin';
@@ -219,6 +220,30 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
       setError(createError instanceof Error ? createError.message : 'Unable to create sub campaign');
     } finally {
       setCreatingSubCampaignId(null);
+    }
+  }
+
+  async function handleCloneCampaign(campaignId: string) {
+    if (cloningCampaignId) return;
+    setError('');
+    setViewError('');
+    setCloningCampaignId(campaignId);
+    try {
+      const response = await cloneCampaign(campaignId, selectedTenantId);
+      await acquireCampaignEditLock(response.campaign.id, selectedTenantId);
+      setViewDialogOpen(false);
+      setCampaignForView(null);
+      setViewCampaignId(null);
+      onOpenCampaign(response.campaign.id);
+    } catch (cloneError) {
+      const message = cloneError instanceof Error ? cloneError.message : 'Unable to clone campaign';
+      if (viewDialogOpen) {
+        setViewError(message);
+      } else {
+        setError(message);
+      }
+    } finally {
+      setCloningCampaignId(null);
     }
   }
 
@@ -454,6 +479,17 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
                           {downloadingPurchaseOrderId === campaign.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-sky-200" /> : <Download className="h-3.5 w-3.5" />}
                         </Button>
                       ) : null}
+                      <Button
+                        aria-label="Clone campaign"
+                        className="h-7 w-7 rounded-md border border-white/10 p-0 text-violet-200"
+                        disabled={cloningCampaignId === campaign.id}
+                        onClick={() => void handleCloneCampaign(campaign.id)}
+                        title="Clone campaign"
+                        type="button"
+                        variant="ghost"
+                      >
+                        {cloningCampaignId === campaign.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-violet-200" /> : <CopyPlus className="h-3.5 w-3.5" />}
+                      </Button>
                       {!campaign.parentCampaignId ? (
                         <Button
                           aria-label="Add Sub Campaign"
@@ -504,6 +540,10 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
         loading={viewLoading}
         tenantId={selectedTenantId}
         onClose={() => setViewDialogOpen(false)}
+        onClone={() => {
+          if (viewCampaignId) void handleCloneCampaign(viewCampaignId);
+        }}
+        cloning={Boolean(viewCampaignId && cloningCampaignId === viewCampaignId)}
         onEdit={() => void handleEditFromView()}
         onOpenChange={(open) => {
           setViewDialogOpen(open);

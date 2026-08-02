@@ -390,55 +390,6 @@ function isPdfFile(file: File) {
   return file.type === 'application/pdf' || lowerName.endsWith('.pdf');
 }
 
-function ArtworkThumbnailWithHoverPreview({
-  alt,
-  previewSrc,
-  thumbnailSrc,
-}: {
-  alt: string;
-  previewSrc: string;
-  thumbnailSrc: string;
-}) {
-  const [previewPosition, setPreviewPosition] = useState<{ left: number; top: number } | null>(null);
-
-  function updatePreviewPosition(clientX: number, clientY: number) {
-    const previewWidth = Math.min(640, window.innerWidth - 32);
-    const previewHeightEstimate = Math.min(840, window.innerHeight - 32);
-    const left = clientX + 18 + previewWidth <= window.innerWidth
-      ? clientX + 18
-      : Math.max(16, clientX - previewWidth - 18);
-    const top = Math.min(
-      Math.max(16, clientY - previewHeightEstimate / 2),
-      Math.max(16, window.innerHeight - previewHeightEstimate - 16),
-    );
-    setPreviewPosition({ left, top });
-  }
-
-  return (
-    <span
-      className="block h-full w-full"
-      onMouseEnter={(event) => updatePreviewPosition(event.clientX, event.clientY)}
-      onMouseLeave={() => setPreviewPosition(null)}
-      onMouseMove={(event) => updatePreviewPosition(event.clientX, event.clientY)}
-    >
-      <img alt={alt} className="h-full w-full object-cover" loading="lazy" src={thumbnailSrc} />
-      {previewPosition && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              aria-hidden="true"
-              className="pointer-events-none fixed w-[40rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-violet-400/60 bg-slate-950 p-2 shadow-2xl shadow-black/70"
-              style={{ left: previewPosition.left, top: previewPosition.top, zIndex: 2147483647 }}
-            >
-              <img alt="" className="max-h-[60vh] w-full rounded object-contain" src={previewSrc} />
-              <p className="mt-2 truncate px-1 text-xs font-medium text-slate-200">{alt}</p>
-            </div>,
-            document.body,
-          )
-        : null}
-    </span>
-  );
-}
-
 function normalizeCreativeNameAssignments(input?: Record<string, string>) {
   const normalized: Record<string, string> = {};
   Object.entries(input ?? {}).forEach(([creativeName, imageId]) => {
@@ -1343,6 +1294,7 @@ export function QuoteBuilderScreen({
   const [confirmingArtworkDelete, setConfirmingArtworkDelete] = useState(false);
   const [artworkDialogError, setArtworkDialogError] = useState('');
   const [creativeNameAssignments, setCreativeNameAssignments] = useState<Record<string, string>>({});
+  const [editingCreativeFileName, setEditingCreativeFileName] = useState<string | null>(null);
   const [draggingCreativeName, setDraggingCreativeName] = useState<string | null>(null);
   const [creativeDropTarget, setCreativeDropTarget] = useState<{ name: string; position: 'above' | 'below' } | null>(null);
   const [recentCreativeSwap, setRecentCreativeSwap] = useState<{ source: string; target: string } | null>(null);
@@ -2799,6 +2751,7 @@ export function QuoteBuilderScreen({
     setAssignArtworkTarget(null);
     setArtworkDialogError('');
     setArtworkSearchQuery('');
+    setEditingCreativeFileName(null);
     setDraggingCreativeName(null);
     setCreativeDropTarget(null);
     setRecentCreativeSwap(null);
@@ -2871,6 +2824,42 @@ export function QuoteBuilderScreen({
       };
     });
     showCreativeSwapFeedback(sourceCreativeName, targetCreativeName);
+  }
+
+  function changeCreativeArtworkFile(creativeName: string, nextImageId: string) {
+    if (isSubmittedCampaign) return;
+    const safeCreativeName = (creativeName || '').trim();
+    const safeNextImageId = (nextImageId || '').trim();
+    if (!safeCreativeName || !safeNextImageId) return;
+
+    const currentImageId = resolvedCreativeNameAssignments[safeCreativeName] || '';
+    if (currentImageId === safeNextImageId) {
+      setEditingCreativeFileName(null);
+      return;
+    }
+
+    const nextAssignments = { ...resolvedCreativeNameAssignments, [safeCreativeName]: safeNextImageId };
+    const swappedCreativeName = creativeNames.find((entry) => entry !== safeCreativeName && resolvedCreativeNameAssignments[entry] === safeNextImageId);
+    if (swappedCreativeName && currentImageId) {
+      nextAssignments[swappedCreativeName] = currentImageId;
+    }
+
+    setCreativeNameAssignments(nextAssignments);
+    setValues((current) => {
+      const normalizedCurrentAssignments = normalizeCreativeNameAssignments(current.creativeNameAssignments);
+      const isSameAssignments = stableSerialize(normalizedCurrentAssignments) === stableSerialize(nextAssignments);
+      if (isSameAssignments) return current;
+      return {
+        ...current,
+        creativeNameAssignments: nextAssignments,
+      };
+    });
+    if (swappedCreativeName) {
+      showCreativeSwapFeedback(safeCreativeName, swappedCreativeName);
+    } else {
+      showCreativeSwapFeedback(safeCreativeName, safeCreativeName);
+    }
+    setEditingCreativeFileName(null);
   }
 
   function assignArtworkImageToTarget(imageId: string) {
@@ -7727,7 +7716,7 @@ export function QuoteBuilderScreen({
           closeAssignArtworkDialog();
         }}
       >
-        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 64rem)', maxHeight: '90vh' }}>
+        <DialogContent style={{ width: '95vw', maxWidth: '95vw', maxHeight: '95vh' }}>
           <DialogHeader>
             <DialogTitle>Artwork</DialogTitle>
           </DialogHeader>
@@ -7754,117 +7743,155 @@ export function QuoteBuilderScreen({
               </div>
             ) : null}
             {values.printImages.length > 0 ? (
-              <div className="max-h-[56vh] overflow-auto rounded-md border border-slate-700 bg-slate-900/65 p-3">
-                <div className="overflow-hidden rounded-md border border-slate-700 bg-slate-950/70">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-slate-900/90 text-slate-300">
-                        <th className="border-b border-slate-700 px-3 py-2 text-left font-semibold">Name</th>
-                        <th className="border-b border-slate-700 px-3 py-2 text-left font-semibold">Artwork</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {creativeNames.map((creativeName) => {
-                        const mappedImageId = resolvedCreativeNameAssignments[creativeName] || '';
-                        const mappedImage = mappedImageId ? artworkImageById.get(mappedImageId) ?? null : null;
-                        const isSwapFeedbackRow = recentCreativeSwap?.source === creativeName || recentCreativeSwap?.target === creativeName;
-                        return (
-                          <tr
-                            key={`creative-name-row-${creativeName}`}
-                            className={cn(
-                              'border-b border-slate-800 transition-colors duration-500 ease-out last:border-b-0',
-                              isSwapFeedbackRow ? 'bg-violet-500/10' : '',
-                              creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'above' ? 'border-t-2 border-t-violet-400' : '',
-                              creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'below' ? 'border-b-2 border-b-violet-400' : '',
-                            )}
-                            onDragOver={(event) => {
-                              if (!draggingCreativeName || draggingCreativeName === creativeName) return;
-                              event.preventDefault();
-                              event.dataTransfer.dropEffect = 'move';
-                              const rect = event.currentTarget.getBoundingClientRect();
-                              const position = event.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
-                              if (creativeDropTarget?.name !== creativeName || creativeDropTarget.position !== position) {
-                                setCreativeDropTarget({ name: creativeName, position });
-                              }
-                            }}
-                            onDrop={(event) => {
-                              event.preventDefault();
-                              const sourceCreativeName = event.dataTransfer.getData('text/plain');
-                              if (!sourceCreativeName || sourceCreativeName === creativeName) return;
-                              const rect = event.currentTarget.getBoundingClientRect();
-                              const position = event.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
-                              reorderCreativeAssignments(sourceCreativeName, creativeName, position);
-                              setDraggingCreativeName(null);
-                              setCreativeDropTarget(null);
-                            }}
-                          >
-                            <td className={cn('px-3 py-2 font-medium text-slate-100 transition-colors duration-500', isSwapFeedbackRow ? 'bg-violet-500/10' : '')}>{creativeName}</td>
-                            <td className={cn('px-3 py-2 transition', draggingCreativeName ? 'bg-slate-900/80' : '')}>
-                              <div className="flex min-h-10 items-center justify-between gap-2 rounded border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-                                <button
-                                  className={cn(
-                                    'flex min-w-0 flex-1 items-center gap-3 text-left',
-                                    assignArtworkTarget !== null ? 'cursor-pointer' : '',
-                                  )}
-                                  draggable={Boolean(mappedImageId)}
-                                  onClick={() => {
-                                    if (assignArtworkTarget !== null && mappedImageId) {
-                                      assignArtworkImageToTarget(mappedImageId);
-                                    }
-                                  }}
-                                  onDragEnd={() => {
-                                    setDraggingCreativeName(null);
-                                    setCreativeDropTarget(null);
-                                  }}
-                                  onDragStart={(event) => {
-                                    if (!mappedImageId) return;
-                                    event.dataTransfer.setData('text/plain', creativeName);
-                                    event.dataTransfer.effectAllowed = 'move';
-                                    setDraggingCreativeName(creativeName);
-                                  }}
-                                  type="button"
-                                >
-                                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded border border-slate-700 bg-slate-900">
-                                    {mappedImage?.thumbnailUrl || mappedImage?.imageUrl ? (
-                                      <ArtworkThumbnailWithHoverPreview
-                                        alt={mappedImage.name || mappedImage.fileName}
-                                        previewSrc={buildApiUrl(mappedImage.imageUrl || mappedImage.thumbnailUrl || '')}
-                                        thumbnailSrc={buildApiUrl(mappedImage.thumbnailUrl || mappedImage.imageUrl || '')}
-                                      />
-                                    ) : (
-                                      <div className="flex h-full items-center justify-center px-1 text-center text-[10px] text-slate-400">N/A</div>
-                                    )}
-                                  </div>
-                                  <p className="min-w-0 truncate text-slate-200">
-                                    {mappedImage ? mappedImage.name || mappedImage.fileName : 'No artwork mapped'}
-                                  </p>
-                                </button>
-                                {mappedImage && !isSubCampaign ? (
+              <div className="max-h-[calc(95vh-9rem)] overflow-auto rounded-lg border border-slate-700 bg-slate-950/70 p-3">
+                <div className="space-y-3">
+                  {creativeNames.map((creativeName) => {
+                    const mappedImageId = resolvedCreativeNameAssignments[creativeName] || '';
+                    const mappedImage = mappedImageId ? artworkImageById.get(mappedImageId) ?? null : null;
+                    const artworkSrc = mappedImage?.imageUrl || mappedImage?.thumbnailUrl ? buildApiUrl(mappedImage.imageUrl || mappedImage.thumbnailUrl || '') : '';
+                    const isSwapFeedbackRow = recentCreativeSwap?.source === creativeName || recentCreativeSwap?.target === creativeName;
+                    return (
+                      <div
+                        key={`creative-name-row-${creativeName}`}
+                        className={cn(
+                          'grid gap-4 rounded-lg border border-slate-700/80 bg-slate-900/70 p-3 transition-colors duration-500 ease-out lg:grid-cols-[13rem_minmax(0,1fr)]',
+                          isSwapFeedbackRow ? 'border-violet-400/50 bg-violet-500/10' : '',
+                          creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'above' ? 'border-t-2 border-t-violet-400' : '',
+                          creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'below' ? 'border-b-2 border-b-violet-400' : '',
+                          draggingCreativeName ? 'bg-slate-900/85' : '',
+                        )}
+                        onDragOver={(event) => {
+                          if (!draggingCreativeName || draggingCreativeName === creativeName) return;
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = 'move';
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          const position = event.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
+                          if (creativeDropTarget?.name !== creativeName || creativeDropTarget.position !== position) {
+                            setCreativeDropTarget({ name: creativeName, position });
+                          }
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          const sourceCreativeName = event.dataTransfer.getData('text/plain');
+                          if (!sourceCreativeName || sourceCreativeName === creativeName) return;
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          const position = event.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
+                          reorderCreativeAssignments(sourceCreativeName, creativeName, position);
+                          setDraggingCreativeName(null);
+                          setCreativeDropTarget(null);
+                        }}
+                      >
+                        <div className="flex min-w-0 flex-col justify-between gap-3 rounded-md border border-slate-700/70 bg-slate-950/55 p-3">
+                          <div className="min-w-0 space-y-3">
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Name</p>
+                              <p className="mt-1 break-words text-sm font-semibold text-slate-100">{creativeName}</p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">File</p>
+                              {editingCreativeFileName === creativeName ? (
+                                <div className="mt-2 space-y-2">
+                                  <select
+                                    aria-label={`Change artwork file for ${creativeName}`}
+                                    className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs font-medium text-slate-100 outline-none transition focus:border-violet-300/70 focus:ring-1 focus:ring-violet-300/35"
+                                    onChange={(event) => changeCreativeArtworkFile(creativeName, event.target.value)}
+                                    value={mappedImageId}
+                                  >
+                                    {values.printImages.map((image) => (
+                                      <option className="bg-slate-950 text-slate-100" key={`creative-file-option-${creativeName}-${image.id}`} value={image.id}>
+                                        {image.name || image.fileName || `Artwork ${image.id.slice(0, 6)}`}
+                                      </option>
+                                    ))}
+                                  </select>
                                   <Button
-                                    className={cn(
-                                      'h-7 w-7 rounded-full border p-0',
-                                      assignedArtworkIdSet.has(mappedImage.id)
-                                        ? 'cursor-not-allowed border-slate-800 bg-slate-900/70 text-slate-600 hover:bg-slate-900/70 hover:text-slate-600'
-                                        : 'border-slate-700 bg-slate-950/90 text-rose-200 hover:bg-rose-500/20 hover:text-rose-100',
-                                    )}
-                                    disabled={deletingArtworkIds.includes(mappedImage.id) || assignedArtworkIdSet.has(mappedImage.id)}
-                                    onClick={() => void handleDeleteArtwork(mappedImage)}
-                                    size="icon"
+                                    className="h-7 rounded-md border border-white/10 px-2 text-xs text-slate-300"
+                                    onClick={() => setEditingCreativeFileName(null)}
                                     type="button"
                                     variant="ghost"
                                   >
-                                    {deletingArtworkIds.includes(mappedImage.id)
-                                      ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-violet-300" />
-                                      : <Trash2 className="h-3.5 w-3.5" />}
+                                    Cancel
                                   </Button>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                                </div>
+                              ) : (
+                                <div className="mt-1 flex items-start justify-between gap-2">
+                                  <p className="min-w-0 break-words text-xs leading-5 text-slate-300">
+                                    {mappedImage ? mappedImage.name || mappedImage.fileName : 'No artwork mapped'}
+                                  </p>
+                                  <Button
+                                    aria-label={`Change artwork file for ${creativeName}`}
+                                    className="h-7 w-7 shrink-0 rounded-md border border-white/10 p-0 text-slate-200"
+                                    disabled={values.printImages.length <= 1}
+                                    onClick={() => setEditingCreativeFileName(creativeName)}
+                                    title={values.printImages.length > 1 ? 'Change file' : 'Upload another artwork file to change'}
+                                    type="button"
+                                    variant="ghost"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {mappedImage && !isSubCampaign ? (
+                            <Button
+                              className={cn(
+                                'h-8 w-8 self-start rounded-md border p-0',
+                                assignedArtworkIdSet.has(mappedImage.id)
+                                  ? 'cursor-not-allowed border-slate-800 bg-slate-900/70 text-slate-600 hover:bg-slate-900/70 hover:text-slate-600'
+                                  : 'border-slate-700 bg-slate-950/90 text-rose-200 hover:bg-rose-500/20 hover:text-rose-100',
+                              )}
+                              disabled={deletingArtworkIds.includes(mappedImage.id) || assignedArtworkIdSet.has(mappedImage.id)}
+                              onClick={() => void handleDeleteArtwork(mappedImage)}
+                              size="icon"
+                              title="Delete artwork"
+                              type="button"
+                              variant="ghost"
+                            >
+                              {deletingArtworkIds.includes(mappedImage.id)
+                                ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-violet-300" />
+                                : <Trash2 className="h-3.5 w-3.5" />}
+                            </Button>
+                          ) : null}
+                        </div>
+                        <button
+                          className={cn(
+                            'flex min-w-0 items-center justify-center rounded-md border border-slate-700 bg-slate-950/45 p-3 text-left transition hover:border-violet-300/45 hover:bg-slate-950/70',
+                            assignArtworkTarget !== null ? 'cursor-pointer' : '',
+                          )}
+                          draggable={Boolean(mappedImageId)}
+                          onClick={() => {
+                            if (assignArtworkTarget !== null && mappedImageId) {
+                              assignArtworkImageToTarget(mappedImageId);
+                            }
+                          }}
+                          onDragEnd={() => {
+                            setDraggingCreativeName(null);
+                            setCreativeDropTarget(null);
+                          }}
+                          onDragStart={(event) => {
+                            if (!mappedImageId) return;
+                            event.dataTransfer.setData('text/plain', creativeName);
+                            event.dataTransfer.effectAllowed = 'move';
+                            setDraggingCreativeName(creativeName);
+                          }}
+                          type="button"
+                        >
+                          <div className="w-[40rem] max-w-full overflow-hidden rounded-lg border border-violet-400/60 bg-slate-950 p-2 shadow-[0_16px_42px_rgba(2,6,23,0.28)]">
+                            {artworkSrc ? (
+                              <img
+                                alt={mappedImage?.name || mappedImage?.fileName || creativeName}
+                                className="max-h-[60vh] w-full rounded object-contain"
+                                loading="lazy"
+                                src={artworkSrc}
+                              />
+                            ) : (
+                              <div className="flex min-h-[18rem] items-center justify-center rounded border border-dashed border-slate-700 px-4 text-center text-sm text-slate-400">No artwork mapped</div>
+                            )}
+                          </div>
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : (

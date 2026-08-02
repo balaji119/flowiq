@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LoaderCircle, ShoppingCart } from 'lucide-react';
+import { CopyPlus, LoaderCircle, ShoppingCart } from 'lucide-react';
 import { CampaignRecord, CustomPrintCostRecord, formatKeys, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketShippingRateRecord } from '@flowiq/shared';
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
@@ -18,6 +18,8 @@ type CampaignScheduleViewDialogProps = {
   tenantId?: string | null;
   onOpenChange: (open: boolean) => void;
   onClose: () => void;
+  onClone: () => void;
+  cloning?: boolean;
   onEdit: () => void;
 };
 
@@ -93,6 +95,8 @@ export function CampaignScheduleViewDialog({
   tenantId,
   onOpenChange,
   onClose,
+  onClone,
+  cloning = false,
   onEdit,
 }: CampaignScheduleViewDialogProps) {
   const { session } = useAuth();
@@ -774,6 +778,17 @@ export function CampaignScheduleViewDialog({
               <Button className="h-9 rounded-md border border-white/10 bg-slate-900/50 px-4 text-xs text-slate-100 hover:bg-slate-800/70" onClick={onClose} type="button" variant="ghost">
                 Close
               </Button>
+              <Button
+                className="h-9 rounded-md border border-violet-300/25 bg-violet-500/10 px-4 text-xs text-violet-100 hover:bg-violet-500/20"
+                disabled={!campaign || cloning}
+                onClick={onClone}
+                title="Clone campaign"
+                type="button"
+                variant="ghost"
+              >
+                {cloning ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-200" /> : <CopyPlus className="h-4 w-4" />}
+                {cloning ? 'Cloning...' : 'Clone'}
+              </Button>
               <Button className="h-9 px-4 btn-theme-primary" disabled={isSubmittedCampaign} onClick={onEdit} title={isSubmittedCampaign ? 'Submitted campaigns cannot be edited' : 'Edit schedule'} type="button">
                 Edit Schedule
               </Button>
@@ -941,6 +956,17 @@ export function CampaignScheduleViewDialog({
                   ) : null}
                 </div>
                 <div className="flex items-center justify-end gap-2.5">
+                <Button
+                  className="h-9 rounded-md border border-violet-300/25 bg-violet-500/10 px-4 text-xs text-violet-100 hover:bg-violet-500/20"
+                  disabled={cloning || downloadingVisuals || sendingAdsEmail || submittingOrder}
+                  onClick={onClone}
+                  title="Clone campaign"
+                  type="button"
+                  variant="ghost"
+                >
+                  {cloning ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-200" /> : <CopyPlus className="h-4 w-4" />}
+                  {cloning ? 'Cloning...' : 'Clone'}
+                </Button>
                 <Button
                   className="h-9 rounded-md border border-white/10 bg-slate-900/50 px-4 text-xs text-slate-100 hover:bg-slate-800/70"
                   disabled={downloadingVisuals || sendingAdsEmail || submittingOrder}
