@@ -1998,6 +1998,20 @@ export function QuoteBuilderScreen({
     });
     return resolved;
   }, [artworkImageById, creativeNameAssignments, creativeNames, values.printImages]);
+  const filteredCreativeNames = useMemo(() => {
+    const query = artworkSearchQuery.trim().toLowerCase();
+    if (!query) return creativeNames;
+    return creativeNames.filter((creativeName) => {
+      const imageId = resolvedCreativeNameAssignments[creativeName] || '';
+      const image = imageId ? artworkImageById.get(imageId) ?? null : null;
+      const searchable = [
+        creativeName,
+        image?.name || '',
+        image?.fileName || '',
+      ].join(' ').toLowerCase();
+      return searchable.includes(query);
+    });
+  }, [artworkImageById, artworkSearchQuery, creativeNames, resolvedCreativeNameAssignments]);
   const creativeNumberByImageId = useMemo(() => {
     const next = new Map<string, number>();
     values.printImages.forEach((image, index) => {
@@ -7721,17 +7735,15 @@ export function QuoteBuilderScreen({
             <DialogTitle>Artwork</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {assignArtworkTarget !== null ? (
             <div className="relative min-w-[220px] flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
                 className="h-9 border-slate-600 bg-slate-900 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:border-violet-400 focus-visible:ring-violet-400/70"
                 onChange={(event) => setArtworkSearchQuery(event.target.value)}
-                placeholder="Search by file name"
+                placeholder={assignArtworkTarget !== null ? 'Search by file name' : 'Search by creative or file name'}
                 value={artworkSearchQuery}
               />
             </div>
-            ) : null}
             {artworkDialogError ? (
               <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200">
                 {artworkDialogError}
@@ -7743,9 +7755,9 @@ export function QuoteBuilderScreen({
               </div>
             ) : null}
             {values.printImages.length > 0 ? (
-              <div className="max-h-[calc(95vh-9rem)] overflow-auto rounded-lg border border-slate-700 bg-slate-950/70 p-3">
-                <div className="space-y-3">
-                  {creativeNames.map((creativeName) => {
+              <div className="min-h-[calc(95vh-9rem)] max-h-[calc(95vh-9rem)] overflow-auto rounded-lg border border-slate-700 bg-slate-950/70 p-3">
+                <div className="min-h-full space-y-3">
+                  {filteredCreativeNames.map((creativeName) => {
                     const mappedImageId = resolvedCreativeNameAssignments[creativeName] || '';
                     const mappedImage = mappedImageId ? artworkImageById.get(mappedImageId) ?? null : null;
                     const artworkSrc = mappedImage?.imageUrl || mappedImage?.thumbnailUrl ? buildApiUrl(mappedImage.imageUrl || mappedImage.thumbnailUrl || '') : '';
@@ -7892,6 +7904,11 @@ export function QuoteBuilderScreen({
                       </div>
                     );
                   })}
+                  {filteredCreativeNames.length === 0 ? (
+                    <div className="flex min-h-[calc(95vh-11rem)] items-center justify-center rounded-md border border-dashed border-slate-700 bg-slate-900/70 px-4 py-8 text-center text-sm text-slate-400">
+                      No artwork matches this search.
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : (
