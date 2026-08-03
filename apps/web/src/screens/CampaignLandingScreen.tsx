@@ -91,6 +91,8 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [campaignPendingDelete, setCampaignPendingDelete] = useState<CampaignListItem | null>(null);
   const [deletingCampaign, setDeletingCampaign] = useState(false);
+  const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+  const [campaignPendingClone, setCampaignPendingClone] = useState<{ id: string; campaignName: string } | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [viewLoading, setViewLoading] = useState(false);
   const [viewError, setViewError] = useState('');
@@ -209,6 +211,15 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
     return campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}`;
   }
 
+  function openCloneDialog(campaign: { id: string; campaignName?: string; status?: CampaignListItem['status'] }) {
+    if (cloningCampaignId) return;
+    if (campaign.status !== 'submitted') return;
+    setError('');
+    setViewError('');
+    setCampaignPendingClone({ id: campaign.id, campaignName: campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}` });
+    setCloneDialogOpen(true);
+  }
+
   async function handleCreateSubCampaign(campaign: CampaignListItem) {
     setError('');
     setCreatingSubCampaignId(campaign.id);
@@ -245,6 +256,14 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
     } finally {
       setCloningCampaignId(null);
     }
+  }
+
+  async function handleConfirmCloneCampaign() {
+    if (!campaignPendingClone) return;
+    const campaignId = campaignPendingClone.id;
+    setCloneDialogOpen(false);
+    setCampaignPendingClone(null);
+    await handleCloneCampaign(campaignId);
   }
 
   function openDeleteDialog(campaign: CampaignListItem) {
@@ -482,9 +501,9 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
                       <Button
                         aria-label="Clone campaign"
                         className="h-7 w-7 rounded-md border border-white/10 p-0 text-violet-200"
-                        disabled={cloningCampaignId === campaign.id}
-                        onClick={() => void handleCloneCampaign(campaign.id)}
-                        title="Clone campaign"
+                        disabled={campaign.status !== 'submitted' || cloningCampaignId === campaign.id}
+                        onClick={() => openCloneDialog(campaign)}
+                        title={campaign.status === 'submitted' ? 'Clone campaign' : 'Only submitted campaigns can be cloned'}
                         type="button"
                         variant="ghost"
                       >
@@ -541,7 +560,7 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
         tenantId={selectedTenantId}
         onClose={() => setViewDialogOpen(false)}
         onClone={() => {
-          if (viewCampaignId) void handleCloneCampaign(viewCampaignId);
+          if (viewCampaignId) openCloneDialog({ id: viewCampaignId, campaignName: campaignForView?.values.campaignName, status: campaignForView?.status });
         }}
         cloning={Boolean(viewCampaignId && cloningCampaignId === viewCampaignId)}
         onEdit={() => void handleEditFromView()}
@@ -570,6 +589,45 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
               )
             : null)
         : null}
+
+      <Dialog
+        open={cloneDialogOpen}
+        onOpenChange={(open) => {
+          if (cloningCampaignId) return;
+          setCloneDialogOpen(open);
+          if (!open) setCampaignPendingClone(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader className="pb-2">
+            <DialogTitle>Clone Campaign</DialogTitle>
+            <DialogDescription className="pt-1 leading-6">
+              {campaignPendingClone
+                ? `Clone "${campaignPendingClone.campaignName}" and open the new editable copy?`
+                : 'Clone this campaign and open the new editable copy?'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="pt-2">
+            <div className="flex justify-end gap-3">
+              <Button
+                disabled={Boolean(cloningCampaignId)}
+                onClick={() => {
+                  setCloneDialogOpen(false);
+                  setCampaignPendingClone(null);
+                }}
+                type="button"
+                variant="ghost"
+              >
+                Cancel
+              </Button>
+              <Button disabled={Boolean(cloningCampaignId)} onClick={() => void handleConfirmCloneCampaign()}>
+                {cloningCampaignId ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : <CopyPlus className="h-4 w-4" />}
+                {cloningCampaignId ? 'Cloning...' : 'Clone Campaign'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={deleteDialogOpen}

@@ -151,6 +151,7 @@ export function CampaignScheduleViewDialog({
   const hasUploadedPurchaseOrder = Boolean((campaign?.purchaseOrder?.originalName || '').trim());
   const hasDeliveryDueDate = Boolean((campaign?.values.dueDate || '').trim());
   const isSubmittedCampaign = (campaign?.status === 'submitted') || emailSubmitted;
+  const canCloneCampaign = campaign?.status === 'submitted';
   const canSubmitSubmittedCampaign = session?.user.role === 'super_admin';
 
   function startQuoteAutomation(action: QuoteAutomationAction) {
@@ -780,9 +781,9 @@ export function CampaignScheduleViewDialog({
               </Button>
               <Button
                 className="h-9 rounded-md border border-violet-300/25 bg-violet-500/10 px-4 text-xs text-violet-100 hover:bg-violet-500/20"
-                disabled={!campaign || cloning}
+                disabled={!canCloneCampaign || cloning}
                 onClick={onClone}
-                title="Clone campaign"
+                title={canCloneCampaign ? 'Clone campaign' : 'Only submitted campaigns can be cloned'}
                 type="button"
                 variant="ghost"
               >
@@ -958,9 +959,9 @@ export function CampaignScheduleViewDialog({
                 <div className="flex items-center justify-end gap-2.5">
                 <Button
                   className="h-9 rounded-md border border-violet-300/25 bg-violet-500/10 px-4 text-xs text-violet-100 hover:bg-violet-500/20"
-                  disabled={cloning || downloadingVisuals || sendingAdsEmail || submittingOrder}
+                  disabled={!canCloneCampaign || cloning || downloadingVisuals || sendingAdsEmail || submittingOrder}
                   onClick={onClone}
-                  title="Clone campaign"
+                  title={canCloneCampaign ? 'Clone campaign' : 'Only submitted campaigns can be cloned'}
                   type="button"
                   variant="ghost"
                 >
