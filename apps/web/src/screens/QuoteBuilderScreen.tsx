@@ -7876,7 +7876,7 @@ export function QuoteBuilderScreen({
                       <div
                         key={`creative-name-row-${creativeName}`}
                         className={cn(
-                          'grid gap-4 rounded-lg border border-slate-700/80 bg-slate-900/70 p-3 transition-colors duration-500 ease-out lg:grid-cols-[18rem_minmax(0,1fr)]',
+                          'grid gap-4 rounded-lg border border-slate-700/80 bg-slate-900/70 p-3 transition-colors duration-500 ease-out lg:grid-cols-[16rem_minmax(24rem,1fr)_24rem]',
                           isSwapFeedbackRow ? 'border-violet-400/50 bg-violet-500/10' : '',
                           creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'above' ? 'border-t-2 border-t-violet-400' : '',
                           creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'below' ? 'border-b-2 border-b-violet-400' : '',
@@ -7953,56 +7953,6 @@ export function QuoteBuilderScreen({
                                 </div>
                               )}
                             </div>
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Assign To Assets</p>
-                              {values.campaignMarkets.length > 0 ? (
-                                <div className="mt-2 space-y-2">
-                                  <select
-                                    aria-label={`Choose market for ${creativeName}`}
-                                    className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs font-medium text-slate-100 outline-none transition focus:border-violet-300/70 focus:ring-1 focus:ring-violet-300/35"
-                                    onChange={(event) =>
-                                      setArtworkAssignmentMarketByCreativeName((current) => ({
-                                        ...current,
-                                        [creativeName]: event.target.value,
-                                      }))
-                                    }
-                                    value={selectedAssignmentMarket?.id || ''}
-                                  >
-                                    {values.campaignMarkets.map((market) => (
-                                      <option className="bg-slate-950 text-slate-100" key={`artwork-assignment-market-${creativeName}-${market.id}`} value={market.id}>
-                                        {market.market || 'Unnamed market'}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  {selectedAssignmentMarket && selectedAssignmentMarket.assets.length > 0 ? (
-                                    <div className="max-h-44 space-y-1 overflow-auto rounded-md border border-slate-800 bg-slate-900/60 p-2">
-                                      {selectedAssignmentMarket.assets.map((asset) => {
-                                        const assetKey = `${selectedAssignmentMarket.id}\x00${asset.id}`;
-                                        return (
-                                          <label
-                                            className="flex items-start gap-2 rounded px-2 py-1.5 text-xs text-slate-200 hover:bg-slate-800/70"
-                                            key={`artwork-assignment-asset-${creativeName}-${selectedAssignmentMarket.id}-${asset.id}`}
-                                          >
-                                            <input
-                                              checked={selectedArtworkAssetKeys.has(assetKey)}
-                                              className="mt-0.5 h-3.5 w-3.5 accent-violet-400"
-                                              disabled={!mappedImageId}
-                                              onChange={(event) => setArtworkAssetAssignment(selectedAssignmentMarket.id, asset.id, mappedImageId, event.target.checked)}
-                                              type="checkbox"
-                                            />
-                                            <span className="min-w-0 break-words">{asset.assetSearch || asset.assetId || 'Asset not selected'}</span>
-                                          </label>
-                                        );
-                                      })}
-                                    </div>
-                                  ) : (
-                                    <p className="rounded-md border border-dashed border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-500">No assets in this market.</p>
-                                  )}
-                                </div>
-                              ) : (
-                                <p className="mt-1 text-xs leading-5 text-slate-500">Add a market before assigning artwork.</p>
-                              )}
-                            </div>
                           </div>
                           {mappedImage && !isSubCampaign ? (
                             <Button
@@ -8061,6 +8011,56 @@ export function QuoteBuilderScreen({
                             )}
                           </div>
                         </button>
+                        <div className="flex min-h-[18rem] min-w-0 flex-col rounded-md border border-slate-700/70 bg-slate-950/55 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Assign To Assets</p>
+                          {values.campaignMarkets.length > 0 ? (
+                            <div className="mt-2 flex min-h-0 flex-1 flex-col gap-2">
+                              <select
+                                aria-label={`Choose market for ${creativeName}`}
+                                className="h-9 w-full shrink-0 rounded-md border border-slate-700 bg-slate-900 px-2 text-xs font-medium text-slate-100 outline-none transition focus:border-violet-300/70 focus:ring-1 focus:ring-violet-300/35"
+                                onChange={(event) =>
+                                  setArtworkAssignmentMarketByCreativeName((current) => ({
+                                    ...current,
+                                    [creativeName]: event.target.value,
+                                  }))
+                                }
+                                value={selectedAssignmentMarket?.id || ''}
+                              >
+                                {values.campaignMarkets.map((market) => (
+                                  <option className="bg-slate-950 text-slate-100" key={`artwork-assignment-market-${creativeName}-${market.id}`} value={market.id}>
+                                    {market.market || 'Unnamed market'}
+                                  </option>
+                                ))}
+                              </select>
+                              {selectedAssignmentMarket && selectedAssignmentMarket.assets.length > 0 ? (
+                                <div className="min-h-0 flex-1 space-y-1 overflow-auto rounded-md border border-slate-800 bg-slate-900/60 p-2 lg:max-h-[60vh]">
+                                  {selectedAssignmentMarket.assets.map((asset) => {
+                                    const assetKey = `${selectedAssignmentMarket.id}\x00${asset.id}`;
+                                    return (
+                                      <label
+                                        className="flex items-start gap-2 rounded px-2 py-1.5 text-xs text-slate-200 hover:bg-slate-800/70"
+                                        key={`artwork-assignment-asset-${creativeName}-${selectedAssignmentMarket.id}-${asset.id}`}
+                                      >
+                                        <input
+                                          checked={selectedArtworkAssetKeys.has(assetKey)}
+                                          className="mt-0.5 h-3.5 w-3.5 accent-violet-400"
+                                          disabled={!mappedImageId}
+                                          onChange={(event) => setArtworkAssetAssignment(selectedAssignmentMarket.id, asset.id, mappedImageId, event.target.checked)}
+                                          type="checkbox"
+                                        />
+                                        <span className="min-w-0 break-words">{asset.assetSearch || asset.assetId || 'Asset not selected'}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <p className="rounded-md border border-dashed border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-500">No assets in this market.</p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="mt-1 text-xs leading-5 text-slate-500">Add a market before assigning artwork.</p>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
