@@ -1295,6 +1295,7 @@ export function QuoteBuilderScreen({
   const [artworkDialogError, setArtworkDialogError] = useState('');
   const [creativeNameAssignments, setCreativeNameAssignments] = useState<Record<string, string>>({});
   const [editingCreativeFileName, setEditingCreativeFileName] = useState<string | null>(null);
+  const [artworkAssignmentMarketByCreativeName, setArtworkAssignmentMarketByCreativeName] = useState<Record<string, string>>({});
   const [draggingCreativeName, setDraggingCreativeName] = useState<string | null>(null);
   const [creativeDropTarget, setCreativeDropTarget] = useState<{ name: string; position: 'above' | 'below' } | null>(null);
   const [recentCreativeSwap, setRecentCreativeSwap] = useState<{ source: string; target: string } | null>(null);
@@ -2012,6 +2013,45 @@ export function QuoteBuilderScreen({
       return searchable.includes(query);
     });
   }, [artworkImageById, artworkSearchQuery, creativeNames, resolvedCreativeNameAssignments]);
+  const assignedAssetRefsByArtworkImageId = useMemo(() => {
+    const refsByImageId = new Map<string, Array<{ marketId: string; assetId: string }>>();
+    const pushRef = (imageId: string, marketId: string, assetId: string) => {
+      const trimmedImageId = (imageId || '').trim();
+      if (!trimmedImageId) return;
+      const currentRefs = refsByImageId.get(trimmedImageId) ?? [];
+      if (!currentRefs.some((ref) => ref.marketId === marketId && ref.assetId === assetId)) {
+        currentRefs.push({ marketId, assetId });
+      }
+      refsByImageId.set(trimmedImageId, currentRefs);
+    };
+
+    values.campaignMarkets.forEach((market) => {
+      market.assets.forEach((asset) => {
+        Object.values(normalizeCreativeImageIds(asset)).forEach((imageId) => pushRef(imageId, market.id, asset.id));
+        Object.values(normalizeArtworkMaterialAssignments(asset)).forEach((assignments) => {
+          assignments.forEach((assignment) => pushRef(assignment.artworkImageId, market.id, asset.id));
+        });
+        pushRef(asset.creativeImageId, market.id, asset.id);
+      });
+    });
+    return refsByImageId;
+  }, [values.campaignMarkets]);
+  const artworkAssignedAssetKeySetByImageId = useMemo(() => {
+    const index = new Map<string, Set<string>>();
+    assignedAssetRefsByArtworkImageId.forEach((refs, imageId) => {
+      index.set(imageId, new Set(refs.map((ref) => `${ref.marketId}\x00${ref.assetId}`)));
+    });
+    return index;
+  }, [assignedAssetRefsByArtworkImageId]);
+  const defaultArtworkAssignmentMarketByCreativeName = useMemo(() => {
+    const defaults: Record<string, string> = {};
+    creativeNames.forEach((creativeName) => {
+      const imageId = resolvedCreativeNameAssignments[creativeName] || '';
+      const firstAssignedRef = imageId ? assignedAssetRefsByArtworkImageId.get(imageId)?.[0] : null;
+      defaults[creativeName] = firstAssignedRef?.marketId || values.campaignMarkets[0]?.id || '';
+    });
+    return defaults;
+  }, [assignedAssetRefsByArtworkImageId, creativeNames, resolvedCreativeNameAssignments, values.campaignMarkets]);
   const creativeNumberByImageId = useMemo(() => {
     const next = new Map<string, number>();
     values.printImages.forEach((image, index) => {
@@ -2874,6 +2914,73 @@ export function QuoteBuilderScreen({
       showCreativeSwapFeedback(safeCreativeName, safeCreativeName);
     }
     setEditingCreativeFileName(null);
+  }
+
+  function artworkFormatsForAsset(asset: CampaignAsset) {
+    const summaryFormats = getCreativeFormatsForBreakdown(summaryLineByAssetId.get(asset.id)?.breakdown);
+    const explicitFormats = Array.from(new Set([
+      ...Object.keys(asset.creativeImageIds ?? {}),
+      ...Object.keys(asset.artworkMaterialAssignments ?? {}),
+    ])).filter((key): key is CreativeFormatKey => (creativeFormatKeys as readonly string[]).includes(key));
+    return summaryFormats.length > 0 ? summaryFormats : explicitFormats;
+  }
+
+  function nextLegacyCreativeImageIdForAsset(creativeImageIds: Record<string, string>) {
+    return creativeFormatKeys.map((key) => creativeImageIds[key]).find((imageId) => Boolean((imageId || '').trim())) || '';
+  }
+
+  function setArtworkAssetAssignment(marketId: string, assetId: string, imageId: string, checked: boolean) {
+    if (isSubmittedCampaign) return;
+    const safeImageId = (imageId || '').trim();
+    if (!safeImageId) return;
+
+    updateCampaignAsset(marketId, assetId, (current) => {
+      const formats = artworkFormatsForAsset(current);
+      const nextCreativeImageIds = { ...normalizeCreativeImageIds(current) };
+      const nextArtworkMaterialAssignments = normalizeArtworkMaterialAssignments(current);
+
+      if (formats.length === 0) {
+        if (checked) {
+          return { ...current, creativeImageId: safeImageId };
+        }
+        return current.creativeImageId === safeImageId ? { ...current, creativeImageId: '' } : current;
+      }
+
+      formats.forEach((formatKey) => {
+        if (checked) {
+          nextCreativeImageIds[formatKey] = safeImageId;
+          const existingAssignments = artworkMaterialAssignmentsForFormat(current, formatKey);
+          if (existingAssignments.length > 0) {
+            nextArtworkMaterialAssignments[formatKey] = existingAssignments.map((assignment, index) => ({
+              ...assignment,
+              artworkImageId: index === 0 || !assignment.artworkImageId ? safeImageId : assignment.artworkImageId,
+            }));
+          }
+          return;
+        }
+
+        if (nextCreativeImageIds[formatKey] === safeImageId) {
+          delete nextCreativeImageIds[formatKey];
+        }
+        const existingAssignments = artworkMaterialAssignmentsForFormat(current, formatKey);
+        if (existingAssignments.length > 0) {
+          nextArtworkMaterialAssignments[formatKey] = existingAssignments.map((assignment) => (
+            assignment.artworkImageId === safeImageId ? { ...assignment, artworkImageId: '' } : assignment
+          ));
+        }
+      });
+
+      return {
+        ...current,
+        creativeImageIds: nextCreativeImageIds,
+        creativeImageId: current.creativeImageId === safeImageId && !checked
+          ? nextLegacyCreativeImageIdForAsset(nextCreativeImageIds)
+          : checked
+            ? safeImageId
+            : current.creativeImageId,
+        artworkMaterialAssignments: nextArtworkMaterialAssignments,
+      };
+    });
   }
 
   function assignArtworkImageToTarget(imageId: string) {
@@ -7762,11 +7869,14 @@ export function QuoteBuilderScreen({
                     const mappedImage = mappedImageId ? artworkImageById.get(mappedImageId) ?? null : null;
                     const artworkSrc = mappedImage?.imageUrl || mappedImage?.thumbnailUrl ? buildApiUrl(mappedImage.imageUrl || mappedImage.thumbnailUrl || '') : '';
                     const isSwapFeedbackRow = recentCreativeSwap?.source === creativeName || recentCreativeSwap?.target === creativeName;
+                    const selectedAssignmentMarketId = artworkAssignmentMarketByCreativeName[creativeName] || defaultArtworkAssignmentMarketByCreativeName[creativeName] || '';
+                    const selectedAssignmentMarket = values.campaignMarkets.find((market) => market.id === selectedAssignmentMarketId) ?? values.campaignMarkets[0] ?? null;
+                    const selectedArtworkAssetKeys = mappedImageId ? artworkAssignedAssetKeySetByImageId.get(mappedImageId) ?? new Set<string>() : new Set<string>();
                     return (
                       <div
                         key={`creative-name-row-${creativeName}`}
                         className={cn(
-                          'grid gap-4 rounded-lg border border-slate-700/80 bg-slate-900/70 p-3 transition-colors duration-500 ease-out lg:grid-cols-[13rem_minmax(0,1fr)]',
+                          'grid gap-4 rounded-lg border border-slate-700/80 bg-slate-900/70 p-3 transition-colors duration-500 ease-out lg:grid-cols-[18rem_minmax(0,1fr)]',
                           isSwapFeedbackRow ? 'border-violet-400/50 bg-violet-500/10' : '',
                           creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'above' ? 'border-t-2 border-t-violet-400' : '',
                           creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'below' ? 'border-b-2 border-b-violet-400' : '',
@@ -7841,6 +7951,56 @@ export function QuoteBuilderScreen({
                                     <Pencil className="h-3.5 w-3.5" />
                                   </Button>
                                 </div>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Assign To Assets</p>
+                              {values.campaignMarkets.length > 0 ? (
+                                <div className="mt-2 space-y-2">
+                                  <select
+                                    aria-label={`Choose market for ${creativeName}`}
+                                    className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs font-medium text-slate-100 outline-none transition focus:border-violet-300/70 focus:ring-1 focus:ring-violet-300/35"
+                                    onChange={(event) =>
+                                      setArtworkAssignmentMarketByCreativeName((current) => ({
+                                        ...current,
+                                        [creativeName]: event.target.value,
+                                      }))
+                                    }
+                                    value={selectedAssignmentMarket?.id || ''}
+                                  >
+                                    {values.campaignMarkets.map((market) => (
+                                      <option className="bg-slate-950 text-slate-100" key={`artwork-assignment-market-${creativeName}-${market.id}`} value={market.id}>
+                                        {market.market || 'Unnamed market'}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {selectedAssignmentMarket && selectedAssignmentMarket.assets.length > 0 ? (
+                                    <div className="max-h-44 space-y-1 overflow-auto rounded-md border border-slate-800 bg-slate-900/60 p-2">
+                                      {selectedAssignmentMarket.assets.map((asset) => {
+                                        const assetKey = `${selectedAssignmentMarket.id}\x00${asset.id}`;
+                                        return (
+                                          <label
+                                            className="flex items-start gap-2 rounded px-2 py-1.5 text-xs text-slate-200 hover:bg-slate-800/70"
+                                            key={`artwork-assignment-asset-${creativeName}-${selectedAssignmentMarket.id}-${asset.id}`}
+                                          >
+                                            <input
+                                              checked={selectedArtworkAssetKeys.has(assetKey)}
+                                              className="mt-0.5 h-3.5 w-3.5 accent-violet-400"
+                                              disabled={!mappedImageId}
+                                              onChange={(event) => setArtworkAssetAssignment(selectedAssignmentMarket.id, asset.id, mappedImageId, event.target.checked)}
+                                              type="checkbox"
+                                            />
+                                            <span className="min-w-0 break-words">{asset.assetSearch || asset.assetId || 'Asset not selected'}</span>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <p className="rounded-md border border-dashed border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-500">No assets in this market.</p>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="mt-1 text-xs leading-5 text-slate-500">Add a market before assigning artwork.</p>
                               )}
                             </div>
                           </div>
