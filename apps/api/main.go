@@ -1239,6 +1239,11 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
 		return
 	}
+	testSubmission := parseBoolQuery(r.URL.Query().Get("test"))
+	if testSubmission && !strings.EqualFold(strings.TrimSpace(user.Role), "super_admin") {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Test submit is available only for super admin"})
+		return
+	}
 
 	campaignID := r.PathValue("campaignId")
 	campaign, err := a.campaignStore.getCampaign(r.Context(), *user, campaignID)
@@ -1424,13 +1429,13 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		"jobNos":                  jobNos,
 	}
 
-	updatedCampaign, err := a.campaignStore.recordSubmission(r.Context(), *user, campaign.ID, requestPayload, responsePayload, nil, jobNos)
+	updatedCampaign, err := a.campaignStore.recordSubmission(r.Context(), *user, campaign.ID, requestPayload, responsePayload, nil, jobNos, !testSubmission)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"campaign": updatedCampaign, "amount": nil, "quoteNo": quoteNo, "jobNo": jobNos[0], "jobNos": jobNos})
+	writeJSON(w, http.StatusOK, map[string]any{"campaign": updatedCampaign, "amount": nil, "quoteNo": quoteNo, "jobNo": jobNos[0], "jobNos": jobNos, "test": testSubmission})
 }
 
 func (a *app) handleMarkCampaignSubmitted(w http.ResponseWriter, r *http.Request) {
@@ -2491,6 +2496,11 @@ func canManageTargetTenant(user *AuthUser, targetTenantID *string) bool {
 
 func canResubmitSubmittedCampaign(user AuthUser) bool {
 	return strings.EqualFold(strings.TrimSpace(user.Role), "super_admin")
+}
+
+func parseBoolQuery(value string) bool {
+	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+	return err == nil && parsed
 }
 
 func canManageUser(actor *AuthUser, target *AuthUser) bool {

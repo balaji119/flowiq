@@ -81,8 +81,10 @@ export async function calculatePersistedCampaign(campaignId: string, tenantId?: 
   });
 }
 
-export async function submitCampaignToPrintIQ(campaignId: string, tenantId?: string | null) {
-  return apiFetchJson<CampaignSubmitResponse>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/submit-to-printiq`, tenantId), {
+export async function submitCampaignToPrintIQ(campaignId: string, tenantId?: string | null, options?: { test?: boolean }) {
+  const path = withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/submit-to-printiq`, tenantId);
+  const testPath = options?.test ? `${path}${path.includes('?') ? '&' : '?'}test=true` : path;
+  return apiFetchJson<CampaignSubmitResponse>(testPath, {
     method: 'POST',
   });
 }

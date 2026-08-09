@@ -874,7 +874,7 @@ func (s *campaignStore) calculateCampaign(ctx context.Context, user AuthUser, ca
 	return updatedCampaign, summary, nil
 }
 
-func (s *campaignStore) recordSubmission(ctx context.Context, user AuthUser, campaignID string, requestPayload, responsePayload any, amount any, externalJobIDs []string) (*campaignRecord, error) {
+func (s *campaignStore) recordSubmission(ctx context.Context, user AuthUser, campaignID string, requestPayload, responsePayload any, amount any, externalJobIDs []string, markSubmitted bool) (*campaignRecord, error) {
 	campaign, err := s.getCampaign(ctx, user, campaignID)
 	if err != nil {
 		return nil, err
@@ -925,16 +925,18 @@ func (s *campaignStore) recordSubmission(ctx context.Context, user AuthUser, cam
 		}
 	}
 
-	if _, err := tx.Exec(ctx, `
-		UPDATE campaigns
-		SET status = 'submitted',
-			latest_quote_amount = $3,
-			submitted_at = NOW(),
-			updated_by_user_id = $4,
-			updated_at = NOW()
-		WHERE id = $1 AND tenant_id = $2
-	`, campaign.ID, campaign.TenantID, amountText, user.ID); err != nil {
-		return nil, err
+	if markSubmitted {
+		if _, err := tx.Exec(ctx, `
+			UPDATE campaigns
+			SET status = 'submitted',
+				latest_quote_amount = $3,
+				submitted_at = NOW(),
+				updated_by_user_id = $4,
+				updated_at = NOW()
+			WHERE id = $1 AND tenant_id = $2
+		`, campaign.ID, campaign.TenantID, amountText, user.ID); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {

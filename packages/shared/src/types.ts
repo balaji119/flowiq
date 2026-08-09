@@ -414,6 +414,7 @@ export type CampaignSubmitResponse = {
   quoteNo?: string;
   jobNo?: string;
   jobNos?: string[];
+  test?: boolean;
 };
 
 export type LoginResponse = AuthSession;

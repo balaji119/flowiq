@@ -1245,6 +1245,7 @@ export function QuoteBuilderScreen({
   const [activeMarketId, setActiveMarketId] = useState<string | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [testSubmitting, setTestSubmitting] = useState(false);
   const [quoteResponseMessage, setQuoteResponseMessage] = useState('');
   const [quoteResponseStatus, setQuoteResponseStatus] = useState<'success' | 'error'>('success');
   const [purchaseOrderNumberSubmitAttempted, setPurchaseOrderNumberSubmitAttempted] = useState(false);
@@ -1330,11 +1331,13 @@ export function QuoteBuilderScreen({
   const artworkEnqueuePromiseRef = useRef<Promise<void> | null>(null);
   const campaignIdRef = useRef<string | null>(campaignId);
   const editLockHeldRef = useRef(false);
+  const leavingCampaignRef = useRef(false);
   const campaignHydratedRef = useRef(false);
   const autoDownloadTriggeredRef = useRef(false);
   const autoSendEmailTriggeredRef = useRef(false);
   const lastPersistedValuesRef = useRef('');
   const lastAutoSaveFailedValuesRef = useRef<string | null>(null);
+  const autoSaveTimeoutRef = useRef<number | null>(null);
   const creativeSwapFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSubCampaign = Boolean(parentCampaignId);
   const campaignArtworkUploadJobs = useMemo(
@@ -1347,6 +1350,7 @@ export function QuoteBuilderScreen({
   const uploadingArtworkPages = campaignArtworkUploadJobs.some((job) => job.status === 'queued' || job.status === 'uploading');
   const isSubmittedCampaign = campaignStatus === 'submitted';
   const isReadOnlyVisualDownload = autoDownloadVisuals;
+  const isSuperAdmin = session?.user.role === 'super_admin';
 
   function reportQuoteAutomationResult(action: AutomatedQuoteAction, status: AutomatedQuoteActionStatus, message?: string) {
     if (typeof window === 'undefined') return;
@@ -1445,9 +1449,9 @@ export function QuoteBuilderScreen({
   async function releaseActiveCampaignLock(targetCampaignId?: string | null) {
     const id = targetCampaignId ?? campaignIdRef.current;
     if (!id || !editLockHeldRef.current) return;
+    editLockHeldRef.current = false;
     try {
       await releaseCampaignEditLock(id, effectiveTenantId);
-      editLockHeldRef.current = false;
     } catch {
       // Best-effort cleanup only; lock will also expire automatically.
     }
@@ -1533,6 +1537,7 @@ export function QuoteBuilderScreen({
 
     let active = true;
     const intervalId = window.setInterval(async () => {
+      if (leavingCampaignRef.current) return;
       try {
         await acquireCampaignEditLock(campaignId, effectiveTenantId);
         editLockHeldRef.current = true;
@@ -3418,6 +3423,9 @@ export function QuoteBuilderScreen({
       return campaignId;
     }
     const fromAutoSave = options?.fromAutoSave ?? false;
+    if (fromAutoSave && leavingCampaignRef.current) {
+      return campaignId;
+    }
     const currentValuesSerialized = stableSerialize(values);
     if (fromAutoSave && lastAutoSaveFailedValuesRef.current === currentValuesSerialized) {
       return null;
@@ -3457,19 +3465,31 @@ export function QuoteBuilderScreen({
   }
 
   useEffect(() => {
-    if (isSubmittedCampaign || loadingCampaign || savingCampaign || !hasUnsavedChanges) return;
+    if (isSubmittedCampaign || loadingCampaign || savingCampaign || !hasUnsavedChanges || leavingCampaignRef.current) return;
 
     const timeoutId = window.setTimeout(() => {
       void saveCampaignDraft({ fromAutoSave: true });
     }, 900);
+    autoSaveTimeoutRef.current = timeoutId;
 
     return () => {
       window.clearTimeout(timeoutId);
+      if (autoSaveTimeoutRef.current === timeoutId) {
+        autoSaveTimeoutRef.current = null;
+      }
     };
   }, [campaignId, effectiveTenantId, hasUnsavedChanges, isSubmittedCampaign, loadingCampaign, savingCampaign, values]);
 
+  function clearPendingAutoSave() {
+    if (autoSaveTimeoutRef.current === null) return;
+    window.clearTimeout(autoSaveTimeoutRef.current);
+    autoSaveTimeoutRef.current = null;
+  }
+
   async function handleBackToDashboard() {
     if (!onBack) return;
+    leavingCampaignRef.current = true;
+    clearPendingAutoSave();
     if (artworkEnqueuePromiseRef.current) {
       await artworkEnqueuePromiseRef.current;
       await releaseActiveCampaignLock();
@@ -3492,27 +3512,41 @@ export function QuoteBuilderScreen({
       onBack();
       return;
     }
+    leavingCampaignRef.current = false;
     setUnsavedDialogOpen(true);
   }
 
   async function handleSaveAndLeave() {
+    leavingCampaignRef.current = true;
+    clearPendingAutoSave();
     const savedCampaignId = await saveCampaignDraft();
-    if (!savedCampaignId) return;
+    if (!savedCampaignId) {
+      leavingCampaignRef.current = false;
+      return;
+    }
     setUnsavedDialogOpen(false);
     await releaseActiveCampaignLock(savedCampaignId);
     onBack?.();
   }
 
   async function handleDiscardAndLeave() {
+    leavingCampaignRef.current = true;
+    clearPendingAutoSave();
     setUnsavedDialogOpen(false);
     await releaseActiveCampaignLock();
     onBack?.();
   }
 
-  async function handleSubmitQuote() {
-    if (isSubmittedCampaign) {
+  async function handleSubmitQuote(options?: { test?: boolean }) {
+    const isTestSubmission = options?.test === true;
+    if (isSubmittedCampaign && !(isTestSubmission && isSuperAdmin)) {
       setQuoteResponseStatus('success');
       setQuoteResponseMessage('This campaign has already been submitted.');
+      return;
+    }
+    if (isTestSubmission && !isSuperAdmin) {
+      setQuoteResponseStatus('error');
+      setQuoteResponseMessage('Test submit is available only for super admin.');
       return;
     }
     if (!hasUploadedPurchaseOrder) {
@@ -3527,19 +3561,28 @@ export function QuoteBuilderScreen({
       return;
     }
 
-    setSubmitting(true);
+    if (isTestSubmission) {
+      setTestSubmitting(true);
+    } else {
+      setSubmitting(true);
+    }
     setError('');
     setQuoteResponseMessage('');
     setQuoteResponseStatus('success');
 
     try {
-      const savedCampaignId = await saveCampaignDraft();
+      const savedCampaignId = isSubmittedCampaign ? campaignId : await saveCampaignDraft();
       if (!savedCampaignId) return;
-      const response = await submitCampaignToPrintIQ(savedCampaignId, effectiveTenantId);
+      const response = await submitCampaignToPrintIQ(savedCampaignId, effectiveTenantId, { test: isTestSubmission });
       const jobNumbers = response.jobNos?.length ? response.jobNos.join(', ') : response.jobNo;
       const printIQNumbers = [response.quoteNo ? `Quote: ${response.quoteNo}` : '', jobNumbers ? `Jobs: ${jobNumbers}` : ''].filter(Boolean).join(', ');
       applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setUploadedPurchaseOrder, setCampaignId, setCampaignStatus, setParentCampaignId);
       lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
+      if (isTestSubmission) {
+        const successMessage = printIQNumbers ? `Test order submitted to PrintIQ. ${printIQNumbers}` : 'Test order submitted to PrintIQ.';
+        setQuoteResponseMessage(successMessage);
+        return;
+      }
       const successMessage = printIQNumbers ? `Order submitted to PrintIQ. ${printIQNumbers}` : 'Order submitted to PrintIQ.';
       setQuoteResponseMessage(successMessage);
       try {
@@ -3558,7 +3601,11 @@ export function QuoteBuilderScreen({
           : message,
       );
     } finally {
-      setSubmitting(false);
+      if (isTestSubmission) {
+        setTestSubmitting(false);
+      } else {
+        setSubmitting(false);
+      }
     }
   }
 
@@ -6847,10 +6894,10 @@ export function QuoteBuilderScreen({
                   <p className="mt-1 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-[30px] font-extrabold leading-none text-transparent drop-shadow-[0_0_18px_rgba(255,255,255,0.12)]">
                     {formatCurrency(totalEstimateCost)}
                   </p>
-                  <div className="mt-5 grid grid-cols-3 gap-1.5">
+                  <div className={cn('mt-5 grid gap-1.5', isSuperAdmin ? 'grid-cols-4' : 'grid-cols-3')}>
                     <Button
                       className="h-9 min-w-0 rounded-xl border-white/10 bg-slate-800/65 px-1.5 text-[11px] font-semibold text-slate-100 transition hover:bg-slate-700/75"
-                      disabled={exportingTemplates || sendingAdsEmail}
+                      disabled={exportingTemplates || sendingAdsEmail || submitting || testSubmitting}
                       onClick={() => void downloadArtworkVisuals()}
                       type="button"
                       variant="outline"
@@ -6859,7 +6906,7 @@ export function QuoteBuilderScreen({
                     </Button>
                     <Button
                       className="h-9 min-w-0 rounded-xl border-white/10 bg-slate-800/65 px-1.5 text-[11px] font-semibold text-slate-100 transition hover:bg-slate-700/75"
-                      disabled={exportingTemplates || sendingAdsEmail || uploadingSupportingDocuments}
+                      disabled={exportingTemplates || sendingAdsEmail || uploadingSupportingDocuments || submitting || testSubmitting}
                       onClick={() => void downloadInstallationSheet()}
                       type="button"
                       variant="outline"
@@ -6868,13 +6915,25 @@ export function QuoteBuilderScreen({
                     </Button>
                     <Button
                       className="h-9 min-w-0 rounded-xl border border-violet-300/35 bg-gradient-to-r from-violet-600 to-violet-500 px-1.5 text-[11px] font-semibold text-white shadow-[0_10px_24px_rgba(105,53,228,0.26)] transition hover:brightness-105"
-                      disabled={isSubmittedCampaign || submitting || exportingTemplates || sendingAdsEmail}
+                      disabled={isSubmittedCampaign || submitting || testSubmitting || exportingTemplates || sendingAdsEmail}
                       onClick={() => void handleSubmitQuote()}
                       type="button"
                       variant="secondary"
                     >
                       {submitting ? 'Submitting...' : 'Submit'}
                     </Button>
+                    {isSuperAdmin ? (
+                      <Button
+                        className="h-9 min-w-0 rounded-xl border border-amber-300/35 bg-amber-500/15 px-1.5 text-[11px] font-semibold text-amber-100 transition hover:bg-amber-500/25"
+                        disabled={submitting || testSubmitting || exportingTemplates || sendingAdsEmail}
+                        onClick={() => void handleSubmitQuote({ test: true })}
+                        title="Submit a test order to PrintIQ without marking the campaign submitted"
+                        type="button"
+                        variant="outline"
+                      >
+                        {testSubmitting ? 'Testing...' : 'test'}
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               </div>
