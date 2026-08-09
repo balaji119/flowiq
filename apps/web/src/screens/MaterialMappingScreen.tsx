@@ -187,7 +187,7 @@ export function MaterialMappingScreen({
                 const sheetLabel = sheetLabelByKey.get(sheetKey) ?? sheetKey;
                 return {
                   key: assetSheetMappingKey(mapping.id, sheetKey),
-                  label: `${assetLabel} - ${sheetLabel}`,
+                  label: `${assetLabel} | ${sheetLabel}`,
                 };
               }))
             .sort((left, right) => left.label.localeCompare(right.label));
@@ -388,7 +388,7 @@ export function MaterialMappingScreen({
           </div>
         </section>
 
-        <section className="w-full max-w-5xl space-y-5">
+        <section className="w-full max-w-7xl space-y-5">
           {loading ? (
             <div className="flex items-center justify-center rounded-md border border-slate-700 bg-slate-800/60 px-6 py-14">
               <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
@@ -402,7 +402,7 @@ export function MaterialMappingScreen({
             <div className="overflow-x-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
               <table className="w-full table-fixed border-collapse text-sm">
                 <colgroup>
-                  <col className="w-[280px]" />
+                  <col className="w-[420px]" />
                   <col className="w-[360px]" />
                   <col className="w-[360px]" />
                 </colgroup>
