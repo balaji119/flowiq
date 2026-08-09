@@ -202,10 +202,15 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 			market := strings.TrimSpace(summaryLine.Market)
 			printIQQuantity := printIQFrameQuantity(format.breakdownKey, posterQuantity)
 			marketProductMappings := productMappingsByMarket[market]
+			asset := assets[summaryLine.ID]
 			productCodeKey := format.settingsKey
 			useCustomSheetSize := customSheetSizeFormats[format.settingsKey]
 			if useCustomSheetSize {
-				productCodeKey = assetProductCodeKey(summaryLine.ID)
+				customAssetID := strings.TrimSpace(asset.AssetID)
+				if customAssetID == "" {
+					customAssetID = summaryLine.ID
+				}
+				productCodeKey = assetProductCodeKey(customAssetID)
 			}
 			productMapping := marketProductMappings[productCodeKey]
 			productCode := strings.TrimSpace(productMapping.ProductCode)
@@ -216,7 +221,6 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 			if productCode == "" {
 				return nil, missingPrintIQProductCodeError(market, format.breakdownKey, summaryLine.AssetLabel, summaryLine.ID, useCustomSheetSize)
 			}
-			asset := assets[summaryLine.ID]
 			assignments := asset.ArtworkMaterialAssignments[format.breakdownKey]
 			if len(assignments) == 0 {
 				artworkImageID := asset.CreativeImageIDs[format.breakdownKey]

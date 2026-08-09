@@ -156,6 +156,25 @@ func TestResolvePrintIQSheetProductsUsesAssetCodeForCustomSheetSize(t *testing.T
 	}
 }
 
+func TestResolvePrintIQSheetProductsUsesSelectedAssetIDForCustomSheetSize(t *testing.T) {
+	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "Sydney", Assets: []campaignAsset{{ID: "campaign-row-1", AssetID: "Sydney-56"}}}}}
+	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "campaign-row-1", Market: "Sydney", AssetLabel: "MEGASITE - Anzac Pde", Breakdown: quantityBreakdown{"Mega": 1}}}}
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
+		"Sydney": {
+			"asset:Sydney-56": testMaterialProductMapping("Mega Anzac Pde 8400x2900mm"),
+		},
+	}, map[string]string{}, map[string]bool{"mega": true})
+	if err != nil {
+		t.Fatalf("resolve products: %v", err)
+	}
+	if len(products) != 1 {
+		t.Fatalf("expected 1 product, got %d", len(products))
+	}
+	if products[0].ProductCode != "Mega Anzac Pde 8400x2900mm" || products[0].Quantity != 1 {
+		t.Fatalf("unexpected custom product: %#v", products[0])
+	}
+}
+
 func TestResolvePrintIQArtworkURLExtractsSourcePDFPage(t *testing.T) {
 	tempDir := t.TempDir()
 	sourcePDF := gofpdf.New("P", "pt", "A4", "")
