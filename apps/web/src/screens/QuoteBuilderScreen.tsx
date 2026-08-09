@@ -3594,9 +3594,12 @@ export function QuoteBuilderScreen({
       onBack?.();
     } catch (submissionError) {
       const message = submissionError instanceof Error ? submissionError.message : 'Unable to create quote';
+      const normalizedMessage = message.toLowerCase();
       setQuoteResponseStatus('error');
       setQuoteResponseMessage(
-        message.toLowerCase().includes('product code')
+        normalizedMessage.includes('product code configured is not correct')
+          ? message
+          : normalizedMessage.includes('product code')
           ? 'Product code configured is not correct. Contact Support'
           : message,
       );

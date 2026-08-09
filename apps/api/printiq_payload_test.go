@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jung-kurt/gofpdf"
@@ -55,6 +56,18 @@ func TestResolvePrintIQSheetProductsRequiresEveryActiveProductCode(t *testing.T)
 		},
 	}, map[string]string{}, map[string]bool{}); err == nil {
 		t.Fatal("expected missing product code error")
+	} else if !strings.Contains(err.Error(), "market NSW") || !strings.Contains(err.Error(), "format 4-sheet") {
+		t.Fatalf("expected market and format in error, got %q", err.Error())
+	}
+}
+
+func TestResolvePrintIQSheetProductsMissingCustomProductCodeIncludesAsset(t *testing.T) {
+	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
+	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", AssetLabel: "Central Station", Breakdown: quantityBreakdown{"Mega": 1}}}}
+	if _, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{}, map[string]string{"mega": "Legacy Mega Product"}, map[string]bool{"mega": true}); err == nil {
+		t.Fatal("expected missing custom product code error")
+	} else if !strings.Contains(err.Error(), "market NSW") || !strings.Contains(err.Error(), "format Mega") || !strings.Contains(err.Error(), "asset Central Station") {
+		t.Fatalf("expected market, format, and asset in error, got %q", err.Error())
 	}
 }
 

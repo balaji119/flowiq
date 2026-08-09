@@ -120,6 +120,31 @@ var printIQSheetFormatOrder = []struct {
 	{"FF", "ff"},
 }
 
+func missingPrintIQProductCodeError(market string, formatKey string, assetLabel string, assetID string, customSheetSize bool) error {
+	market = strings.TrimSpace(market)
+	formatKey = strings.TrimSpace(formatKey)
+	assetLabel = strings.TrimSpace(assetLabel)
+	assetID = strings.TrimSpace(assetID)
+	details := []string{}
+	if market != "" {
+		details = append(details, "market "+market)
+	}
+	if formatKey != "" {
+		details = append(details, "format "+formatKey)
+	}
+	if customSheetSize {
+		if assetLabel != "" {
+			details = append(details, "asset "+assetLabel)
+		} else if assetID != "" {
+			details = append(details, "asset "+assetID)
+		}
+	}
+	if len(details) == 0 {
+		return errors.New("Product code configured is not correct. Contact Support")
+	}
+	return fmt.Errorf("Product code configured is not correct for %s. Contact Support", strings.Join(details, ", "))
+}
+
 func assetProductCodeKey(assetID string) string {
 	return "asset:" + strings.TrimSpace(assetID)
 }
@@ -189,7 +214,7 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 				productCode = strings.TrimSpace(fallbackProductCodes[productCodeKey])
 			}
 			if productCode == "" {
-				return nil, errors.New("Product code configured is not correct. Contact Support")
+				return nil, missingPrintIQProductCodeError(market, format.breakdownKey, summaryLine.AssetLabel, summaryLine.ID, useCustomSheetSize)
 			}
 			asset := assets[summaryLine.ID]
 			assignments := asset.ArtworkMaterialAssignments[format.breakdownKey]
