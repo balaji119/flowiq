@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -35,6 +36,110 @@ func loadSMTPAdsToEmail() (string, error) {
 		return "", err
 	}
 	return toEmail, nil
+}
+
+func loadProductMappingAlertEmails() ([]string, error) {
+	rawRecipients, err := requiredEnv("PRODUCT_MAPPING_ALERT_EMAILS")
+	if err != nil {
+		return nil, err
+	}
+	parts := strings.FieldsFunc(rawRecipients, func(value rune) bool {
+		return value == ',' || value == ';'
+	})
+	recipients := make([]string, 0, len(parts))
+	for _, part := range parts {
+		recipient := strings.TrimSpace(part)
+		if recipient != "" {
+			recipients = append(recipients, recipient)
+		}
+	}
+	if len(recipients) == 0 {
+		return nil, fmt.Errorf("PRODUCT_MAPPING_ALERT_EMAILS is not configured")
+	}
+	return recipients, nil
+}
+
+func sendProductMappingAlertEmail(cfg smtpConfig, recipients []string, tenantName string, mapping calculatorMappingRecord, missing []missingProductMapping, actor AuthUser) error {
+	if len(recipients) == 0 || len(missing) == 0 {
+		return nil
+	}
+
+	fromHeader := cfg.fromEmail
+	if strings.TrimSpace(cfg.fromName) != "" {
+		fromHeader = fmt.Sprintf("%s <%s>", cfg.fromName, cfg.fromEmail)
+	}
+
+	subject := "ADS Connect Product Mapping Required"
+	requestedBy := firstNonEmpty(strings.TrimSpace(actor.Name), strings.TrimSpace(actor.Email), "ADS Connect user")
+	bodyLines := []string{
+		"Hi Team,",
+		"",
+		"A Quantity Mapping record has active quantities without a matching Product Mapping.",
+		"",
+		fmt.Sprintf("Tenant: %s", firstNonEmpty(strings.TrimSpace(tenantName), strings.TrimSpace(mapping.TenantID))),
+		fmt.Sprintf("Market: %s", strings.TrimSpace(mapping.Market)),
+		fmt.Sprintf("Asset: %s", firstNonEmpty(strings.TrimSpace(mapping.Label), strings.TrimSpace(mapping.Asset))),
+		fmt.Sprintf("Asset ID: %s", strings.TrimSpace(mapping.ID)),
+		fmt.Sprintf("Updated by: %s", requestedBy),
+		fmt.Sprintf("Detected at: %s", time.Now().Format(time.RFC1123Z)),
+		"",
+		"Missing Product Mapping rows:",
+	}
+	for _, item := range missing {
+		bodyLines = append(bodyLines, fmt.Sprintf("- Format: %s, Sheet key: %s", item.FormatKey, item.SheetKey))
+	}
+	bodyLines = append(bodyLines, "", "Regards,", "ADS Connect")
+	bodyText := strings.Join(bodyLines, "\r\n")
+
+	messageHeaders := strings.Join([]string{
+		fmt.Sprintf("From: %s", fromHeader),
+		fmt.Sprintf("To: %s", strings.Join(recipients, ", ")),
+		fmt.Sprintf("Subject: %s", subject),
+		"MIME-Version: 1.0",
+		"Content-Type: text/plain; charset=UTF-8",
+		"Content-Transfer-Encoding: 7bit",
+		"",
+	}, "\r\n")
+	message := []byte(messageHeaders + bodyText)
+
+	address := fmt.Sprintf("%s:%s", cfg.host, cfg.port)
+	var auth smtp.Auth
+	if cfg.username != "" {
+		auth = smtp.PlainAuth("", cfg.username, cfg.password, cfg.host)
+	}
+	return smtp.SendMail(address, auth, cfg.fromEmail, recipients, message)
+}
+
+func (a *app) notifyMissingProductMappings(ctx context.Context, tenantID string, mapping calculatorMappingRecord, actor AuthUser) {
+	missing, err := a.mappingStore.missingProductMappingsForCalculatorMapping(ctx, tenantID, mapping)
+	if err != nil {
+		log.Printf("product mapping alert check failed: %v", err)
+		return
+	}
+	if len(missing) == 0 {
+		return
+	}
+
+	cfg, err := loadSMTPConfig()
+	if err != nil {
+		log.Printf("product mapping alert email skipped: SMTP is not configured: %v", err)
+		return
+	}
+	recipients, err := loadProductMappingAlertEmails()
+	if err != nil {
+		log.Printf("product mapping alert email skipped: %v", err)
+		return
+	}
+	tenant, err := a.authStore.getTenant(tenantID)
+	tenantName := tenantID
+	if err != nil {
+		log.Printf("product mapping alert tenant lookup failed: %v", err)
+	} else {
+		tenantName = tenant.Name
+	}
+	if err := sendProductMappingAlertEmail(cfg, recipients, tenantName, mapping, missing, actor); err != nil {
+		log.Printf("product mapping alert email failed: %v", err)
+	}
 }
 
 func sanitizeAttachmentFileName(value string) string {

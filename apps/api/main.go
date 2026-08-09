@@ -277,6 +277,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/market-asset-printing-costs", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketAssetPrintingCosts)))
 	mux.Handle("GET /api/custom-print-costs", a.withAuth(http.HandlerFunc(a.handleListCampaignCustomPrintCosts)))
 	mux.Handle("GET /api/materials", a.withAuth(http.HandlerFunc(a.handleListCampaignMaterials)))
+	mux.Handle("GET /api/material-mappings", a.withAuth(http.HandlerFunc(a.handleListCampaignMaterialMappings)))
 	mux.Handle("GET /api/sheet-name-overrides", a.withAuth(http.HandlerFunc(a.handleGetCampaignSheetNameOverrides)))
 	mux.Handle("GET /api/calculator/metadata", a.withAuth(http.HandlerFunc(a.handleCalculatorMetadata)))
 	mux.Handle("POST /api/calculator/calculate", a.withAuth(http.HandlerFunc(a.handleCalculateCampaign)))
@@ -1559,6 +1560,20 @@ func (a *app) handleListCampaignMaterials(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"materials": records})
 }
 
+func (a *app) handleListCampaignMaterialMappings(w http.ResponseWriter, r *http.Request) {
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
+	records, err := a.mappingStore.listMaterialMappings(r.Context(), *user.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mappings": records})
+}
+
 func (a *app) handleListCampaignMarketAssetShippingCosts(w http.ResponseWriter, r *http.Request) {
 	user, resolveErr := a.userWithManagedTenant(r)
 	if resolveErr != nil {
@@ -2732,6 +2747,16 @@ func (a *app) handleCreateCalculatorMapping(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	if user := currentUser(r.Context()); user != nil {
+		tenantIDValue := *tenantID
+		recordValue := *record
+		userValue := *user
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			a.notifyMissingProductMappings(ctx, tenantIDValue, recordValue, userValue)
+		}()
+	}
 	writeJSON(w, http.StatusCreated, map[string]any{"mapping": record})
 }
 
@@ -2756,6 +2781,16 @@ func (a *app) handleUpdateCalculatorMapping(w http.ResponseWriter, r *http.Reque
 		}
 		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
+	}
+	if user := currentUser(r.Context()); user != nil {
+		tenantIDValue := *tenantID
+		recordValue := *record
+		userValue := *user
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			a.notifyMissingProductMappings(ctx, tenantIDValue, recordValue, userValue)
+		}()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"mapping": record})
 }

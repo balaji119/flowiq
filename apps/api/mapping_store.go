@@ -131,6 +131,15 @@ type materialProductMapping struct {
 	SheetCode   string
 }
 
+type missingProductMapping struct {
+	Market    string
+	AssetID   string
+	Asset     string
+	Label     string
+	FormatKey string
+	SheetKey  string
+}
+
 func newMappingStore(pool *pgxpool.Pool) *mappingStore {
 	return &mappingStore{pool: pool}
 }
@@ -716,6 +725,54 @@ func (s *mappingStore) listMaterialProductMappingsByMarket(ctx context.Context, 
 		}
 	}
 	return productMappings, nil
+}
+
+func (s *mappingStore) missingProductMappingsForCalculatorMapping(ctx context.Context, tenantID string, mapping calculatorMappingRecord) ([]missingProductMapping, error) {
+	sheetSettings, err := s.listSheetNameOverrides(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	productMappingsByMarket, err := s.listMaterialProductMappingsByMarket(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+
+	market := strings.TrimSpace(mapping.Market)
+	marketProductMappings := productMappingsByMarket[market]
+	missing := make([]missingProductMapping, 0)
+	for _, format := range printIQSheetFormatOrder {
+		if mapping.Quantities[format.breakdownKey] <= 0 {
+			continue
+		}
+
+		sheetKey := format.settingsKey
+		productCode := ""
+		if sheetSettings.CustomSheetSizeFormats[format.settingsKey] {
+			sheetKey = assetSheetProductCodeKey(mapping.ID, format.settingsKey)
+			productCode = strings.TrimSpace(marketProductMappings[sheetKey].ProductCode)
+			if productCode == "" {
+				productCode = strings.TrimSpace(marketProductMappings[assetProductCodeKey(mapping.ID)].ProductCode)
+			}
+		} else {
+			productCode = strings.TrimSpace(marketProductMappings[sheetKey].ProductCode)
+			if productCode == "" {
+				productCode = strings.TrimSpace(sheetSettings.ProductCodes[sheetKey])
+			}
+		}
+		if productCode != "" {
+			continue
+		}
+
+		missing = append(missing, missingProductMapping{
+			Market:    market,
+			AssetID:   strings.TrimSpace(mapping.ID),
+			Asset:     strings.TrimSpace(mapping.Asset),
+			Label:     strings.TrimSpace(mapping.Label),
+			FormatKey: format.breakdownKey,
+			SheetKey:  sheetKey,
+		})
+	}
+	return missing, nil
 }
 
 func (s *mappingStore) listSheetNameOverrides(ctx context.Context, tenantID string) (*sheetNameOverrideRecord, error) {

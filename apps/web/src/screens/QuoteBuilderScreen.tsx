@@ -14,6 +14,7 @@ import {
   CampaignTotals,
   MarketMetadata,
   MarketDeliveryAddressRecord,
+  MaterialMappingRecord,
   MaterialRecord,
   MarketShippingRateRecord,
   OrderFormValues,
@@ -35,7 +36,7 @@ import { acquireCampaignEditLock, appendCampaignSupportingDocuments, createCampa
 import { deleteCampaignImage, downloadCampaignImage, uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
-import { fetchCampaignCustomPrintCosts, fetchCampaignMaterials, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
+import { fetchCampaignCustomPrintCosts, fetchCampaignMaterialMappings, fetchCampaignMaterials, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
 import { fetchTenant } from '../services/tenantApi';
@@ -51,6 +52,18 @@ const REVIEW_DRAWER_MODE_KEY = 'adsconnect-review-drawer-mode';
 const VISUALS_EXPORT_MODE = parseVisualsExportMode(process.env.EXPORT_EXCEL);
 const QUOTE_AUTOMATION_RESULT_EVENT = 'flowiq:quote-automation-result';
 const LANDING_NOTICE_KEY = 'flowiq:landing-notice';
+const PRODUCT_MAPPING_REQUIRED_FORMATS = [
+  { breakdownKey: '8-sheet', settingsKey: '8-sheet' },
+  { breakdownKey: 'QA0', settingsKey: '8-sheet-a0' },
+  { breakdownKey: '6-sheet', settingsKey: '6-sheet' },
+  { breakdownKey: '4-sheet', settingsKey: '4-sheet' },
+  { breakdownKey: '2-sheet', settingsKey: '2-sheet' },
+  { breakdownKey: 'Mega', settingsKey: 'mega' },
+  { breakdownKey: 'DOT M', settingsKey: 'dot-m' },
+  { breakdownKey: 'MP', settingsKey: 'mega-portrait' },
+  { breakdownKey: 'FF', settingsKey: 'ff' },
+];
+const PRODUCT_MAPPING_REQUIRED_MESSAGE = 'Product mapping is not done for this asset. Please contact ADS.';
 
 type VisualsExportMode = 'excel' | 'pdf';
 type ArtworkExportPurpose = 'visuals' | 'installs';
@@ -65,6 +78,14 @@ type GeneratedVisualExportFile = {
 type AutomatedQuoteAction = 'download-visuals' | 'send-email-to-ads';
 type AutomatedQuoteActionStatus = 'success' | 'error';
 type UploadedPurchaseOrder = NonNullable<CampaignRecord['purchaseOrder']>;
+
+function assetProductMappingKey(assetId: string) {
+  return `asset:${assetId.trim()}`;
+}
+
+function assetSheetProductMappingKey(assetId: string, sheetKey: string) {
+  return `${assetProductMappingKey(assetId)}|sheet:${sheetKey.trim()}`;
+}
 
 function parseVisualsExportMode(value: string | undefined): VisualsExportMode {
   const normalized = (value || '').trim().toLowerCase();
@@ -1233,9 +1254,12 @@ export function QuoteBuilderScreen({
   const [marketAssetPrintingCosts, setMarketAssetPrintingCosts] = useState<MarketAssetPrintingCostRecord[]>([]);
   const [customPrintCosts, setCustomPrintCosts] = useState<CustomPrintCostRecord[]>([]);
   const [materials, setMaterials] = useState<MaterialRecord[]>([]);
+  const [materialMappings, setMaterialMappings] = useState<MaterialMappingRecord[]>([]);
   const [sheetNameOverrides, setSheetNameOverrides] = useState<SheetNameOverrides>({});
   const [multipleArtworkFormats, setMultipleArtworkFormats] = useState<Record<string, boolean>>({});
   const [customPrintCostFormats, setCustomPrintCostFormats] = useState<Record<string, boolean>>({});
+  const [customSheetSizeFormats, setCustomSheetSizeFormats] = useState<Record<string, boolean>>({});
+  const [legacyProductCodes, setLegacyProductCodes] = useState<Record<string, string>>({});
   const [marketAssetShippingCosts, setMarketAssetShippingCosts] = useState<MarketAssetShippingCostRecord[]>([]);
   const [metadataError, setMetadataError] = useState('');
   const [loadingMetadata, setLoadingMetadata] = useState(true);
@@ -1611,6 +1635,20 @@ export function QuoteBuilderScreen({
 
   useEffect(() => {
     let active = true;
+    async function loadMaterialMappings() {
+      try {
+        const response = await fetchCampaignMaterialMappings(effectiveTenantId);
+        if (active) setMaterialMappings(response.mappings);
+      } catch {
+        if (active) setMaterialMappings([]);
+      }
+    }
+    void loadMaterialMappings();
+    return () => { active = false; };
+  }, [effectiveTenantId]);
+
+  useEffect(() => {
+    let active = true;
     async function loadMarketAssetShippingCosts() {
       try {
         const response = await fetchCampaignMarketAssetShippingCosts(effectiveTenantId);
@@ -1690,11 +1728,15 @@ export function QuoteBuilderScreen({
         setSheetNameOverrides(sanitizeSheetNameOverrides(response.settings.overrides));
         setMultipleArtworkFormats(response.settings.multipleArtworkFormats ?? {});
         setCustomPrintCostFormats(response.settings.customPrintCostFormats ?? {});
+        setCustomSheetSizeFormats(response.settings.customSheetSizeFormats ?? {});
+        setLegacyProductCodes(response.settings.productCodes ?? {});
       } catch {
         if (!active) return;
         setSheetNameOverrides({});
         setMultipleArtworkFormats({});
         setCustomPrintCostFormats({});
+        setCustomSheetSizeFormats({});
+        setLegacyProductCodes({});
       }
     }
     void loadSheetNameOverrides();
@@ -1850,6 +1892,14 @@ export function QuoteBuilderScreen({
     () => new Map(customPrintCosts.map((entry) => [toCanonicalSheetNameKey(entry.sheetKey), entry])),
     [customPrintCosts],
   );
+  const productMappingByMarketSheetKey = useMemo(() => {
+    const byKey = new Map<string, MaterialMappingRecord>();
+    materialMappings.forEach((mapping) => {
+      if (!mapping.productCode.trim()) return;
+      byKey.set(`${mapping.market.trim()}\x00${mapping.sheetKey.trim()}`, mapping);
+    });
+    return byKey;
+  }, [materialMappings]);
   const selectedAssetByLineId = useMemo(() => {
     const byLineId = new Map<string, { market: string; assetId: string }>();
     values.campaignMarkets.forEach((market) => {
@@ -2554,6 +2604,10 @@ export function QuoteBuilderScreen({
       const availableAssets = assetsForMarket(market.market);
       const nextAsset = availableAssets[0];
       if (!nextAsset) return market;
+      if (missingProductMappingForAsset(market.market, nextAsset.id)) {
+        showMissingProductMappingMessage();
+        return market;
+      }
       const preferredAddress = preferredDeliveryAddressByMarket.get(market.market) || '';
       return {
         ...market,
@@ -2608,6 +2662,10 @@ export function QuoteBuilderScreen({
       const availableAssets = assetsForMarket(market.market);
       const nextAsset = availableAssets[0];
       if (!nextAsset) return market;
+      if (missingProductMappingForAsset(market.market, nextAsset.id)) {
+        showMissingProductMappingMessage();
+        return market;
+      }
       const preferredAddress = preferredDeliveryAddressByMarket.get(market.market) || '';
 
       return {
@@ -3335,6 +3393,28 @@ export function QuoteBuilderScreen({
 
   function assetsForMarket(marketName: string) {
     return (markets.find((market) => market.name === marketName)?.assets ?? []).filter((asset) => !asset.isMaintenance);
+  }
+
+  function missingProductMappingForAsset(marketName: string, assetId: string) {
+    const asset = markets.find((market) => market.name === marketName)?.assets.find((entry) => entry.id === assetId);
+    if (!asset) return false;
+    const quantities = asset.quantities as Record<string, number>;
+    return PRODUCT_MAPPING_REQUIRED_FORMATS.some((format) => {
+      if ((quantities[format.breakdownKey] ?? 0) <= 0) return false;
+      const customSheetSize = Boolean(customSheetSizeFormats[format.settingsKey]);
+      if (customSheetSize) {
+        const sheetKey = assetSheetProductMappingKey(asset.id, format.settingsKey);
+        const legacySheetKey = assetProductMappingKey(asset.id);
+        return !productMappingByMarketSheetKey.has(`${marketName.trim()}\x00${sheetKey}`)
+          && !productMappingByMarketSheetKey.has(`${marketName.trim()}\x00${legacySheetKey}`);
+      }
+      return !productMappingByMarketSheetKey.has(`${marketName.trim()}\x00${format.settingsKey}`)
+        && !String(legacyProductCodes[format.settingsKey] ?? '').trim();
+    });
+  }
+
+  function showMissingProductMappingMessage() {
+    setError(PRODUCT_MAPPING_REQUIRED_MESSAGE);
   }
 
   function assetOptionsFor(market: CampaignMarket, assetId: string, selectedAssetId: string) {
@@ -6404,14 +6484,18 @@ export function QuoteBuilderScreen({
                                           emptyMessage={availableAssets.length ? 'No assets available for this row.' : 'No assets available for this market.'}
                                           items={availableAssetOptions}
                                           label=""
-                                          onValueChange={(value) =>
+                                          onValueChange={(value) => {
+                                            if (missingProductMappingForAsset(market.market, value)) {
+                                              showMissingProductMappingMessage();
+                                              return;
+                                            }
                                             updateCampaignAsset(market.id, asset.id, (current) => ({
                                               ...current,
                                               assetId: value,
                                               assetSearch: availableAssets.find((entry) => entry.id === value)?.label ?? '',
                                               quantityOverrides: undefined,
-                                            }))
-                                          }
+                                            }));
+                                          }}
                                           placeholder={availableAssets.length ? 'Choose an asset' : 'No assets available'}
                                           selectedLabel={asset.assetSearch}
                                           selectedValue={asset.assetId}
@@ -7301,14 +7385,18 @@ export function QuoteBuilderScreen({
                                     label=""
                                     menuClassName="p-3"
                                     menuItemClassName="text-[10px]"
-                                    onValueChange={(value) =>
+                                    onValueChange={(value) => {
+                                      if (missingProductMappingForAsset(draftMarket.market, value)) {
+                                        showMissingProductMappingMessage();
+                                        return;
+                                      }
                                       updateDraftAsset(asset.id, (current) => ({
                                         ...current,
                                         assetId: value,
                                         assetSearch: availableAssets.find((entry) => entry.id === value)?.label ?? '',
                                         quantityOverrides: undefined,
-                                      }))
-                                    }
+                                      }));
+                                    }}
                                     placeholder={availableAssets.length ? 'Choose an asset' : 'No assets available'}
                                     pickerMode="dialog"
                                     selectedLabel={asset.assetSearch}
