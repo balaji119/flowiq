@@ -235,3 +235,88 @@ func backfillMaintenanceRelations(ctx context.Context, pool *pgxpool.Pool) (int6
 	}
 	return commandTag.RowsAffected(), nil
 }
+
+func backfillCustomSheetProductMappings(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+	commandTag, err := pool.Exec(ctx, `
+		WITH custom_format_keys AS (
+			SELECT *
+			FROM (VALUES
+				('8-sheet'::text, '8-sheet'::text),
+				('8-sheet-a0'::text, 'QA0'::text),
+				('6-sheet'::text, '6-sheet'::text),
+				('4-sheet'::text, '4-sheet'::text),
+				('2-sheet'::text, '2-sheet'::text),
+				('mega'::text, 'Mega'::text),
+				('dot-m'::text, 'DOT M'::text),
+				('mega-portrait'::text, 'MP'::text),
+				('ff'::text, 'FF'::text)
+			) AS format_keys(settings_key, quantity_key)
+		),
+		enabled_custom_formats AS (
+			SELECT
+				sno.tenant_id,
+				custom_format_keys.settings_key,
+				custom_format_keys.quantity_key
+			FROM sheet_name_overrides sno
+			JOIN custom_format_keys
+			  ON COALESCE((sno.custom_sheet_size_formats ->> custom_format_keys.settings_key)::boolean, false)
+		),
+		unsubmitted_campaign_assets AS (
+			SELECT DISTINCT
+				c.tenant_id,
+				market_assets.market_id,
+				market_assets.id AS asset_id,
+				enabled_custom_formats.settings_key
+			FROM campaigns c
+			CROSS JOIN LATERAL jsonb_array_elements(
+				CASE
+					WHEN jsonb_typeof(c.form_data -> 'campaignMarkets') = 'array' THEN c.form_data -> 'campaignMarkets'
+					ELSE '[]'::jsonb
+				END
+			) AS campaign_market(value)
+			CROSS JOIN LATERAL jsonb_array_elements(
+				CASE
+					WHEN jsonb_typeof(campaign_market.value -> 'assets') = 'array' THEN campaign_market.value -> 'assets'
+					ELSE '[]'::jsonb
+				END
+			) AS campaign_asset(value)
+			JOIN market_assets
+			  ON market_assets.id::text = campaign_asset.value ->> 'assetId'
+			JOIN markets
+			  ON markets.id = market_assets.market_id
+			 AND markets.tenant_id = c.tenant_id
+			JOIN enabled_custom_formats
+			  ON enabled_custom_formats.tenant_id = c.tenant_id
+			WHERE c.status <> 'submitted'
+			  AND COALESCE(NULLIF(market_assets.quantities ->> enabled_custom_formats.quantity_key, '')::numeric, 0) > 0
+		)
+		INSERT INTO market_material_mappings (
+			tenant_id,
+			market_id,
+			sheet_key,
+			product_code,
+			sheet_code,
+			created_at,
+			updated_at
+		)
+		SELECT
+			source_mapping.tenant_id,
+			source_mapping.market_id,
+			source_mapping.sheet_key || '|sheet:' || unsubmitted_campaign_assets.settings_key,
+			source_mapping.product_code,
+			source_mapping.sheet_code,
+			NOW(),
+			NOW()
+		FROM unsubmitted_campaign_assets
+		JOIN market_material_mappings source_mapping
+		  ON source_mapping.tenant_id = unsubmitted_campaign_assets.tenant_id
+		 AND source_mapping.market_id = unsubmitted_campaign_assets.market_id
+		 AND source_mapping.sheet_key = 'asset:' || unsubmitted_campaign_assets.asset_id::text
+		WHERE btrim(source_mapping.product_code) <> ''
+		ON CONFLICT (tenant_id, market_id, sheet_key) DO NOTHING
+	`)
+	if err != nil {
+		return 0, err
+	}
+	return commandTag.RowsAffected(), nil
+}

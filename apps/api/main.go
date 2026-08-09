@@ -151,6 +151,15 @@ func runCLI(args []string) {
 			log.Fatalf("maintenance relation backfill failed: %v", err)
 		}
 		log.Printf("Maintenance relation backfill completed successfully (%d rows updated)", updatedRows)
+	case "backfill-custom-sheet-product-mappings":
+		if err := runMigrations(ctx, pool); err != nil {
+			log.Fatalf("database migration failed: %v", err)
+		}
+		insertedRows, err := backfillCustomSheetProductMappings(ctx, pool)
+		if err != nil {
+			log.Fatalf("custom sheet product mapping backfill failed: %v", err)
+		}
+		log.Printf("Custom sheet product mapping backfill completed successfully (%d rows inserted)", insertedRows)
 	default:
 		log.Fatalf("unsupported command: %s", args[0])
 	}

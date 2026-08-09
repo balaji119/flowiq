@@ -149,6 +149,10 @@ func assetProductCodeKey(assetID string) string {
 	return "asset:" + strings.TrimSpace(assetID)
 }
 
+func assetSheetProductCodeKey(assetID string, sheetKey string) string {
+	return assetProductCodeKey(assetID) + "|sheet:" + strings.TrimSpace(sheetKey)
+}
+
 func printIQFrameQuantity(formatKey string, posterQuantity int) int {
 	if posterQuantity <= 0 {
 		return 0
@@ -204,17 +208,23 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 			marketProductMappings := productMappingsByMarket[market]
 			asset := assets[summaryLine.ID]
 			productCodeKey := format.settingsKey
+			customAssetID := ""
 			useCustomSheetSize := customSheetSizeFormats[format.settingsKey]
 			if useCustomSheetSize {
-				customAssetID := strings.TrimSpace(asset.AssetID)
+				customAssetID = strings.TrimSpace(asset.AssetID)
 				if customAssetID == "" {
 					customAssetID = summaryLine.ID
 				}
-				productCodeKey = assetProductCodeKey(customAssetID)
+				productCodeKey = assetSheetProductCodeKey(customAssetID, format.settingsKey)
 			}
 			productMapping := marketProductMappings[productCodeKey]
 			productCode := strings.TrimSpace(productMapping.ProductCode)
 			sheetCode := strings.TrimSpace(productMapping.SheetCode)
+			if productCode == "" && useCustomSheetSize {
+				fallbackMapping := marketProductMappings[assetProductCodeKey(customAssetID)]
+				productCode = strings.TrimSpace(fallbackMapping.ProductCode)
+				sheetCode = strings.TrimSpace(fallbackMapping.SheetCode)
+			}
 			if productCode == "" && !useCustomSheetSize {
 				productCode = strings.TrimSpace(fallbackProductCodes[productCodeKey])
 			}

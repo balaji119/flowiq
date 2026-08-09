@@ -32,6 +32,14 @@ function assetMappingKey(mappingId: string) {
   return `${ASSET_MAPPING_PREFIX}${mappingId}`;
 }
 
+function assetSheetMappingKey(mappingId: string, sheetKey: string) {
+  return `${assetMappingKey(mappingId)}|sheet:${sheetKey}`;
+}
+
+function legacyAssetMappingKey(sheetKey: string) {
+  return sheetKey.startsWith(ASSET_MAPPING_PREFIX) ? sheetKey.split('|sheet:')[0] : sheetKey;
+}
+
 function quantityForSheetKey(mapping: CalculatorMappingRecord, sheetKey: string) {
   const quantities = mapping.quantities as Record<string, number>;
   if (typeof quantities[sheetKey] === 'number') return quantities[sheetKey];
@@ -162,6 +170,7 @@ export function MaterialMappingScreen({
         ];
         const customSheetKeys = new Set(Object.entries(customSheetSizeFormats).filter(([, enabled]) => enabled).map(([key]) => key));
         const standardSheetRows = baseSheetRows.filter((row) => !customSheetKeys.has(row.key));
+        const sheetLabelByKey = new Map(baseSheetRows.map((row) => [row.key, row.label]));
         const mappingsByMarket = new Map<string, CalculatorMappingRecord[]>();
         mappingResponse.mappings.forEach((mapping) => {
           const marketMappings = mappingsByMarket.get(mapping.market) ?? [];
@@ -171,11 +180,16 @@ export function MaterialMappingScreen({
         const nextSheetRowsByMarket: Record<string, SheetRow[]> = {};
         nextMarkets.forEach((market) => {
           const customAssetRows = (mappingsByMarket.get(market) ?? [])
-            .filter((mapping) => [...customSheetKeys].some((sheetKey) => quantityForSheetKey(mapping, sheetKey) > 0))
-            .map((mapping) => ({
-              key: assetMappingKey(mapping.id),
-              label: mapping.asset || mapping.label,
-            }))
+            .flatMap((mapping) => [...customSheetKeys]
+              .filter((sheetKey) => quantityForSheetKey(mapping, sheetKey) > 0)
+              .map((sheetKey) => {
+                const assetLabel = mapping.asset || mapping.label;
+                const sheetLabel = sheetLabelByKey.get(sheetKey) ?? sheetKey;
+                return {
+                  key: assetSheetMappingKey(mapping.id, sheetKey),
+                  label: `${assetLabel} - ${sheetLabel}`,
+                };
+              }))
             .sort((left, right) => left.label.localeCompare(right.label));
           nextSheetRowsByMarket[market] = [...standardSheetRows, ...customAssetRows];
         });
@@ -186,9 +200,10 @@ export function MaterialMappingScreen({
           (nextSheetRowsByMarket[market] ?? []).forEach((row) => {
             const key = mappingKey(market, row.key);
             const saved = savedByKey.get(key);
+            const legacySaved = savedByKey.get(mappingKey(market, legacyAssetMappingKey(row.key)));
             nextDrafts[key] = {
-              productCode: saved?.productCode ?? legacyProductCodes[row.key] ?? '',
-              sheetCode: saved?.sheetCode ?? '',
+              productCode: saved?.productCode ?? legacySaved?.productCode ?? legacyProductCodes[row.key] ?? '',
+              sheetCode: saved?.sheetCode ?? legacySaved?.sheetCode ?? '',
             };
           });
         });
