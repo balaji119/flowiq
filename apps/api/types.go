@@ -364,24 +364,26 @@ type marketSheetSizeRecord struct {
 }
 
 type marketAssetShippingCostInput struct {
-	Market           string  `json:"market"`
-	AssetID          string  `json:"assetId"`
-	MegaShippingRate float64 `json:"megaShippingRate"`
-	DotMShippingRate float64 `json:"dotMShippingRate"`
-	MpShippingRate   float64 `json:"mpShippingRate"`
+	Market           string                `json:"market"`
+	AssetID          string                `json:"assetId"`
+	MegaShippingRate float64               `json:"megaShippingRate"`
+	DotMShippingRate float64               `json:"dotMShippingRate"`
+	MpShippingRate   float64               `json:"mpShippingRate"`
+	Costs            printingCostBreakdown `json:"costs,omitempty"`
 }
 
 type marketAssetShippingCostRecord struct {
-	TenantID         string  `json:"tenantId"`
-	Market           string  `json:"market"`
-	AssetID          string  `json:"assetId"`
-	Asset            string  `json:"asset"`
-	Label            string  `json:"label"`
-	MegaShippingRate float64 `json:"megaShippingRate"`
-	DotMShippingRate float64 `json:"dotMShippingRate"`
-	MpShippingRate   float64 `json:"mpShippingRate"`
-	CreatedAt        string  `json:"createdAt"`
-	UpdatedAt        string  `json:"updatedAt"`
+	TenantID         string                `json:"tenantId"`
+	Market           string                `json:"market"`
+	AssetID          string                `json:"assetId"`
+	Asset            string                `json:"asset"`
+	Label            string                `json:"label"`
+	MegaShippingRate float64               `json:"megaShippingRate"`
+	DotMShippingRate float64               `json:"dotMShippingRate"`
+	MpShippingRate   float64               `json:"mpShippingRate"`
+	Costs            printingCostBreakdown `json:"costs"`
+	CreatedAt        string                `json:"createdAt"`
+	UpdatedAt        string                `json:"updatedAt"`
 }
 
 type campaignLine struct {

@@ -246,6 +246,7 @@ export type MarketAssetShippingCostInput = {
   megaShippingRate: number;
   dotMShippingRate: number;
   mpShippingRate: number;
+  costs?: Record<FormatKey, number>;
 };
 
 export type MarketAssetShippingCostRecord = MarketAssetShippingCostInput & {

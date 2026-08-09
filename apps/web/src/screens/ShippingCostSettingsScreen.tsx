@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, Shield } from 'lucide-react';
-import { CalculatorMappingRecord, MarketAssetShippingCostInput, MarketAssetShippingCostRecord, MarketShippingRateRecord, TenantRecord } from '@flowiq/shared';
+import { CalculatorMappingRecord, formatKeys, FormatKey, MarketAssetShippingCostInput, MarketAssetShippingCostRecord, MarketShippingRateRecord, SheetNameOverrides, TenantRecord } from '@flowiq/shared';
 import { Card, CardDescription, CardHeader, CardTitle, Input } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import {
+  fetchAdminSheetNameOverrides,
   fetchCalculatorMappings,
   fetchMarketAssetShippingCosts,
   fetchMarketShippingRates,
@@ -11,14 +12,24 @@ import {
   upsertMarketAssetShippingCosts,
   upsertMarketShippingRate,
 } from '../services/adminApi';
+import { resolveCanonicalSheetName } from '../services/sheetNameOverrides';
 
 type ShippingCostSettingsScreenProps = {
   tenantId?: string | null;
 };
 
-type AssetShippingDraft = {
-  megaShippingRate: string;
-};
+type AssetShippingDraft = Record<FormatKey, string>;
+const customSheetFormatKeys: Array<{ formatKey: FormatKey; settingsKey: string }> = [
+  { formatKey: '8-sheet', settingsKey: '8-sheet' },
+  { formatKey: 'QA0', settingsKey: '8-sheet-a0' },
+  { formatKey: '6-sheet', settingsKey: '6-sheet' },
+  { formatKey: '4-sheet', settingsKey: '4-sheet' },
+  { formatKey: '2-sheet', settingsKey: '2-sheet' },
+  { formatKey: 'Mega', settingsKey: 'mega' },
+  { formatKey: 'DOT M', settingsKey: 'dot-m' },
+  { formatKey: 'MP', settingsKey: 'mega-portrait' },
+  { formatKey: 'FF', settingsKey: 'ff' },
+];
 
 function costKey(market: string, assetId: string) {
   return `${market}\x00${assetId}`;
@@ -26,14 +37,36 @@ function costKey(market: string, assetId: string) {
 
 function emptyAssetShippingDraft(): AssetShippingDraft {
   return {
-    megaShippingRate: '0',
+    '8-sheet': '0',
+    '6-sheet': '0',
+    '4-sheet': '0',
+    '2-sheet': '0',
+    QA0: '0',
+    Mega: '0',
+    'DOT M': '0',
+    MP: '0',
+    FF: '0',
   };
 }
 
-function hasMegaFamilyQuantity(mapping: CalculatorMappingRecord): boolean {
-  return (mapping.quantities.Mega ?? 0) > 0
-    || (mapping.quantities['DOT M'] ?? 0) > 0
-    || (mapping.quantities.MP ?? 0) > 0;
+function toDraft(cost?: MarketAssetShippingCostRecord): AssetShippingDraft {
+  const next = emptyAssetShippingDraft();
+  if (!cost) return next;
+  for (const key of formatKeys) {
+    next[key] = String(cost.costs?.[key] ?? 0);
+  }
+  next.Mega = String(cost.costs?.Mega ?? cost.megaShippingRate ?? 0);
+  next['DOT M'] = String(cost.costs?.['DOT M'] ?? cost.dotMShippingRate ?? 0);
+  next.MP = String(cost.costs?.MP ?? cost.mpShippingRate ?? 0);
+  return next;
+}
+
+function toShippingCosts(draft: AssetShippingDraft): Record<FormatKey, number> {
+  const next = {} as Record<FormatKey, number>;
+  for (const key of formatKeys) {
+    next[key] = Math.max(0, Number(draft[key]) || 0);
+  }
+  return next;
 }
 
 export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScreenProps) {
@@ -46,7 +79,8 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
   const [marketFilter, setMarketFilter] = useState('');
   const [mappings, setMappings] = useState<CalculatorMappingRecord[]>([]);
   const [rates, setRates] = useState<MarketShippingRateRecord[]>([]);
-  const [assetCosts, setAssetCosts] = useState<MarketAssetShippingCostRecord[]>([]);
+  const [sheetNameOverrides, setSheetNameOverrides] = useState<SheetNameOverrides>({});
+  const [customSheetSizeFormats, setCustomSheetSizeFormats] = useState<Record<string, boolean>>({});
   const [marketTwoSheeterPrice, setMarketTwoSheeterPrice] = useState('0');
   const [marketFourSheeterPrice, setMarketFourSheeterPrice] = useState('0');
   const [marketSixSheeterPrice, setMarketSixSheeterPrice] = useState('0');
@@ -86,9 +120,18 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
     });
     return map;
   }, [mappings]);
-  const visibleMappings = useMemo(
-    () => filteredMappings.filter((mapping) => !maintenanceAssetIds.has(mapping.id) && hasMegaFamilyQuantity(mapping)),
-    [filteredMappings, maintenanceAssetIds],
+  const customSheetRows = useMemo(
+    () => filteredMappings
+      .filter((mapping) => !maintenanceAssetIds.has(mapping.id))
+      .flatMap((mapping) => customSheetFormatKeys
+        .filter(({ formatKey, settingsKey }) => customSheetSizeFormats[settingsKey] && ((mapping.quantities as Record<string, number>)[formatKey] ?? 0) > 0)
+        .map(({ formatKey, settingsKey }) => ({
+          mapping,
+          formatKey,
+          settingsKey,
+          label: `${mapping.label || mapping.asset} | ${resolveCanonicalSheetName(settingsKey, sheetNameOverrides)}`,
+        }))),
+    [customSheetSizeFormats, filteredMappings, maintenanceAssetIds, sheetNameOverrides],
   );
   const dirtyRowKeys = useMemo(
     () => Object.keys(dirtyRows).filter((key) => dirtyRows[key]),
@@ -142,10 +185,11 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
       try {
         setLoading(true);
         setError('');
-        const [mappingResponse, rateResponse, assetCostResponse] = await Promise.all([
+        const [mappingResponse, rateResponse, assetCostResponse, sheetResponse] = await Promise.all([
           fetchCalculatorMappings(tenant),
           fetchMarketShippingRates(tenant),
           fetchMarketAssetShippingCosts(tenant),
+          fetchAdminSheetNameOverrides(tenant),
         ]);
         if (!active) return;
 
@@ -158,16 +202,15 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
         });
         setMappings(sortedMappings);
         setRates(rateResponse.rates);
-        setAssetCosts(assetCostResponse.costs);
+        setSheetNameOverrides(sheetResponse.settings.overrides);
+        setCustomSheetSizeFormats(sheetResponse.settings.customSheetSizeFormats ?? {});
         setMarketRateDirty(false);
 
         const byAssetKey = new Map(assetCostResponse.costs.map((entry) => [costKey(entry.market, entry.assetId), entry]));
         const nextDrafts: Record<string, AssetShippingDraft> = {};
         sortedMappings.forEach((mapping) => {
           const existing = byAssetKey.get(costKey(mapping.market, mapping.id));
-          nextDrafts[costKey(mapping.market, mapping.id)] = {
-            megaShippingRate: String(existing?.megaShippingRate ?? 0),
-          };
+          nextDrafts[costKey(mapping.market, mapping.id)] = toDraft(existing);
         });
         setDraftsByAsset(nextDrafts);
         setDirtyRows({});
@@ -211,13 +254,13 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
     setMarketRateDirty(false);
   }, [selectedMarketRate]);
 
-  function updateAssetDraft(market: string, assetId: string, value: string) {
+  function updateAssetDraft(market: string, assetId: string, formatKey: FormatKey, value: string) {
     const rowKey = costKey(market, assetId);
     setDraftsByAsset((current) => ({
       ...current,
       [rowKey]: {
         ...(current[rowKey] || emptyAssetShippingDraft()),
-        megaShippingRate: value,
+        [formatKey]: value,
       },
     }));
     setDirtyRows((current) => ({
@@ -271,7 +314,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
       throw new Error('8 Sheeter sets per shipping box must be a whole number greater than 0.');
     }
     if (!marketUseFlatRateMegas && (!Number.isFinite(parsedMegasPerBox) || normalizedMegasPerBox <= 0)) {
-      throw new Error('Mega units per shipping box must be a whole number greater than 0.');
+      throw new Error('Custom sheet units per shipping box must be a whole number greater than 0.');
     }
     const existing = rateByMarket.get(marketFilter);
     const response = await upsertMarketShippingRate({
@@ -322,15 +365,15 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
         return {
           market: mapping.market,
           assetId: mapping.id,
-          megaShippingRate: Math.max(0, Number(sourceDraft.megaShippingRate) || 0),
-          dotMShippingRate: Math.max(0, Number(sourceDraft.megaShippingRate) || 0),
-          mpShippingRate: Math.max(0, Number(sourceDraft.megaShippingRate) || 0),
+          megaShippingRate: Math.max(0, Number(sourceDraft.Mega) || 0),
+          dotMShippingRate: Math.max(0, Number(sourceDraft['DOT M']) || 0),
+          mpShippingRate: Math.max(0, Number(sourceDraft.MP) || 0),
+          costs: toShippingCosts(sourceDraft),
         };
       });
 
     if (payload.length === 0) return;
-    const response = await upsertMarketAssetShippingCosts({ costs: payload }, selectedTenantId);
-    setAssetCosts(response.costs);
+    await upsertMarketAssetShippingCosts({ costs: payload }, selectedTenantId);
     setDirtyRows((current) => {
       const next = { ...current };
       dirtyRowKeys.forEach((rowKey) => {
@@ -422,10 +465,6 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
           <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
             <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
             Loading shipping costs...
-          </div>
-        ) : visibleMappings.length === 0 ? (
-          <div className="rounded-md border border-slate-700 bg-slate-900/60 px-4 py-6 text-sm text-slate-400">
-            No assets found for the selected scope.
           </div>
         ) : (
           <>
@@ -637,7 +676,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
             </div>
               <div className="rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
                 <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
-                  <p className="text-sm font-semibold text-slate-100">Megas</p>
+                  <p className="text-sm font-semibold text-slate-100">Custom Sheets</p>
                   <div className="inline-flex h-9 overflow-hidden rounded-md border border-slate-600 bg-slate-800">
                     <span className="inline-flex items-center border-r border-slate-600 bg-slate-700/60 px-3 text-xs font-medium text-slate-100">Flat rate</span>
                     <div className="inline-flex h-full items-center gap-1 bg-slate-800 p-1">
@@ -674,57 +713,63 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                     </div>
                   </div>
                 </div>
-                <table className="dense-table w-full table-fixed border-collapse text-xs sm:text-sm">
-                  <thead>
-                    <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
-                      <th className={marketUseFlatRateMegas ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Market</th>
-                      <th className={marketUseFlatRateMegas ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Asset</th>
-                      <th className={marketUseFlatRateMegas ? 'w-1/3 border border-slate-700 px-2 py-2 text-center sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3'}>MEGA SITES - FREIGHT ($)</th>
-                      {!marketUseFlatRateMegas ? (
-                        <th className="w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3">Megas / Shipping Box</th>
-                      ) : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleMappings.map((mapping, rowIndex) => {
-                      const rowKey = costKey(mapping.market, mapping.id);
-                      const draft = draftsByAsset[rowKey] || emptyAssetShippingDraft();
-                      return (
-                        <tr
-                          key={`shipping-asset-row-${mapping.id}`}
-                          className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}`}
-                        >
-                          <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{mapping.market}</td>
-                          <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">
-                            <p className="truncate font-semibold">{mapping.label || mapping.asset}</p>
-                          </td>
-                          <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-slate-300">$</span>
-                              <Input className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm" type="number" min={0} step="0.01" value={draft.megaShippingRate} onChange={(event) => updateAssetDraft(mapping.market, mapping.id, event.target.value)} />
-                            </div>
-                          </td>
-                          {!marketUseFlatRateMegas ? (
-                            <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
-                              <Input
-                                className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
-                                inputMode="numeric"
-                                type="number"
-                                min={1}
-                                step="1"
-                                value={marketMegasPerBox}
-                                onChange={(event) => {
-                                  setMarketMegasPerBox(event.target.value);
-                                  setMarketRateDirty(true);
-                                }}
-                              />
+                {customSheetRows.length === 0 ? (
+                  <div className="px-4 py-6 text-sm text-slate-400">
+                    No custom sheet assets found for the selected scope.
+                  </div>
+                ) : (
+                  <table className="dense-table w-full table-fixed border-collapse text-xs sm:text-sm">
+                    <thead>
+                      <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
+                        <th className={marketUseFlatRateMegas ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Market</th>
+                        <th className={marketUseFlatRateMegas ? 'w-1/3 border border-slate-700 px-2 py-2 text-left sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-left sm:px-3'}>Asset | Sheet Type</th>
+                        <th className={marketUseFlatRateMegas ? 'w-1/3 border border-slate-700 px-2 py-2 text-center sm:px-3' : 'w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3'}>Custom Sheet - Freight ($)</th>
+                        {!marketUseFlatRateMegas ? (
+                          <th className="w-1/4 border border-slate-700 px-2 py-2 text-center sm:px-3">Custom Sheets / Shipping Box</th>
+                        ) : null}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customSheetRows.map(({ mapping, formatKey, label }, rowIndex) => {
+                        const rowKey = costKey(mapping.market, mapping.id);
+                        const draft = draftsByAsset[rowKey] || emptyAssetShippingDraft();
+                        return (
+                          <tr
+                            key={`shipping-asset-row-${mapping.id}-${formatKey}`}
+                            className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}`}
+                          >
+                            <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{mapping.market}</td>
+                            <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">
+                              <p className="truncate font-semibold">{label}</p>
                             </td>
-                          ) : null}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                            <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-slate-300">$</span>
+                                <Input className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm" type="number" min={0} step="0.01" value={draft[formatKey]} onChange={(event) => updateAssetDraft(mapping.market, mapping.id, formatKey, event.target.value)} />
+                              </div>
+                            </td>
+                            {!marketUseFlatRateMegas ? (
+                              <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
+                                <Input
+                                  className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                                  inputMode="numeric"
+                                  type="number"
+                                  min={1}
+                                  step="1"
+                                  value={marketMegasPerBox}
+                                  onChange={(event) => {
+                                    setMarketMegasPerBox(event.target.value);
+                                    setMarketRateDirty(true);
+                                  }}
+                                />
+                              </td>
+                            ) : null}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
           </>
         )}

@@ -23,6 +23,7 @@ import {
   createCampaignAsset,
   createCampaignMarket,
   createDefaultFormValues,
+  FormatKey,
   formatKeys,
 } from '@flowiq/shared';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Input, Label, Textarea, cn } from '@flowiq/ui';
@@ -3859,14 +3860,46 @@ export function QuoteBuilderScreen({
         return lineTotal + Math.max(0, Number(rawQuantity) || 0);
       }, 0)
     ), 0);
+    const shippingRateForFormat = (assetShippingCosts: MarketAssetShippingCostRecord | undefined, key: FormatKey) => {
+      if (key === '2-sheet') return assetShippingCosts?.costs?.['2-sheet'] ?? twoSheeterPrice;
+      if (key === '4-sheet') return assetShippingCosts?.costs?.['4-sheet'] ?? fourSheeterPrice;
+      if (key === '6-sheet') return assetShippingCosts?.costs?.['6-sheet'] ?? sixSheeterPrice;
+      if (key === '8-sheet') return assetShippingCosts?.costs?.['8-sheet'] ?? eightSheeterPrice;
+      if (key === 'QA0') return assetShippingCosts?.costs?.QA0 ?? eightSheeterPrice;
+      if (key === 'Mega') return assetShippingCosts?.costs?.Mega ?? assetShippingCosts?.megaShippingRate ?? (megaShippingRateByMarket.get(marketName) ?? 0);
+      if (key === 'DOT M') return assetShippingCosts?.costs?.['DOT M'] ?? assetShippingCosts?.dotMShippingRate ?? (dotMShippingRateByMarket.get(marketName) ?? 0);
+      if (key === 'MP') return assetShippingCosts?.costs?.MP ?? assetShippingCosts?.mpShippingRate ?? (mpShippingRateByMarket.get(marketName) ?? 0);
+      return assetShippingCosts?.costs?.[key] ?? 0;
+    };
+    const shippingBoxSizeForFormat = (key: FormatKey) => {
+      if (key === '2-sheet') return twoSheeterSetsPerBox;
+      if (key === '4-sheet') return fourSheeterSetsPerBox;
+      if (key === '6-sheet') return sixSheeterSetsPerBox;
+      if (key === '8-sheet' || key === 'QA0') return eightSheeterSetsPerBox;
+      return megasPerBox;
+    };
+    const isCustomSheetFormat = (key: FormatKey) => Boolean(customSheetSizeFormats[canonicalKeyForFormat(key)]);
+    const customSheetShipping = marketLines.reduce((total, line) => {
+      const selectedAsset = selectedAssetByLineId.get(line.id);
+      if (!selectedAsset) return total;
+      const assetShippingCosts = shippingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`);
+      return total + formatKeys.reduce((lineTotal, key) => {
+        if (!isCustomSheetFormat(key)) return lineTotal;
+        const quantity = Math.max(0, Number(line.breakdown[key]) || 0);
+        if (quantity === 0) return lineTotal;
+        const rate = shippingRateForFormat(assetShippingCosts, key);
+        return lineTotal + (useFlatRateMegas ? rate : calculateShippingCost(quantity, rate, shippingBoxSizeForFormat(key)));
+      }, 0);
+    }, 0);
 
     const posterShipping = useFlatRateSheeters
       ? (() => {
-      const hasTwoSheet = marketLines.some((line) => (line.breakdown['2-sheet'] ?? 0) > 0);
-      const hasFourSheet = marketLines.some((line) => (line.breakdown['4-sheet'] ?? 0) > 0);
-      const hasSixSheet = marketLines.some((line) => (line.breakdown['6-sheet'] ?? 0) > 0);
+      const hasTwoSheet = !isCustomSheetFormat('2-sheet') && marketLines.some((line) => (line.breakdown['2-sheet'] ?? 0) > 0);
+      const hasFourSheet = !isCustomSheetFormat('4-sheet') && marketLines.some((line) => (line.breakdown['4-sheet'] ?? 0) > 0);
+      const hasSixSheet = !isCustomSheetFormat('6-sheet') && marketLines.some((line) => (line.breakdown['6-sheet'] ?? 0) > 0);
       const hasEightSheet = customSheetTotal > 0
-        || marketLines.some((line) => ((line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0)) > 0);
+        || ((!isCustomSheetFormat('8-sheet') || !isCustomSheetFormat('QA0'))
+          && marketLines.some((line) => (isCustomSheetFormat('8-sheet') ? 0 : (line.breakdown['8-sheet'] ?? 0)) + (isCustomSheetFormat('QA0') ? 0 : (line.breakdown.QA0 ?? 0)) > 0));
 
       return (hasTwoSheet ? twoSheeterPrice : 0)
         + (hasFourSheet ? fourSheeterPrice : 0)
@@ -3874,48 +3907,18 @@ export function QuoteBuilderScreen({
         + (hasEightSheet ? eightSheeterPrice : 0);
       })()
       : (() => {
-        const totalTwoSheet = marketLines.reduce((total, line) => total + (line.breakdown['2-sheet'] ?? 0), 0);
-        const totalFourSheet = marketLines.reduce((total, line) => total + (line.breakdown['4-sheet'] ?? 0), 0);
-        const totalSixSheet = marketLines.reduce((total, line) => total + (line.breakdown['6-sheet'] ?? 0), 0);
+        const totalTwoSheet = isCustomSheetFormat('2-sheet') ? 0 : marketLines.reduce((total, line) => total + (line.breakdown['2-sheet'] ?? 0), 0);
+        const totalFourSheet = isCustomSheetFormat('4-sheet') ? 0 : marketLines.reduce((total, line) => total + (line.breakdown['4-sheet'] ?? 0), 0);
+        const totalSixSheet = isCustomSheetFormat('6-sheet') ? 0 : marketLines.reduce((total, line) => total + (line.breakdown['6-sheet'] ?? 0), 0);
         const totalEightAndQa0 = customSheetTotal
-          + marketLines.reduce((total, line) => total + (line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0), 0);
+          + marketLines.reduce((total, line) => total + (isCustomSheetFormat('8-sheet') ? 0 : (line.breakdown['8-sheet'] ?? 0)) + (isCustomSheetFormat('QA0') ? 0 : (line.breakdown.QA0 ?? 0)), 0);
         return calculatePosterShippingForSheeter(totalEightAndQa0, eightSheeterPrice, 4, eightSheeterSetsPerBox)
           + calculatePosterShippingForSheeter(totalSixSheet, sixSheeterPrice, 3, sixSheeterSetsPerBox)
           + calculatePosterShippingForSheeter(totalFourSheet, fourSheeterPrice, 2, fourSheeterSetsPerBox)
           + calculatePosterShippingForSheeter(totalTwoSheet, twoSheeterPrice, 1, twoSheeterSetsPerBox);
       })();
 
-    const megaShipping = useFlatRateMegas
-      ? marketLines.reduce((total, line) => {
-        const selectedAsset = selectedAssetByLineId.get(line.id);
-        if (!selectedAsset) return total;
-
-        const assetShippingCosts = shippingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`);
-        const megaRate = assetShippingCosts?.megaShippingRate ?? (megaShippingRateByMarket.get(marketName) ?? 0);
-        const dotMRate = assetShippingCosts?.dotMShippingRate ?? (dotMShippingRateByMarket.get(marketName) ?? 0);
-        const mpRate = assetShippingCosts?.mpShippingRate ?? (mpShippingRateByMarket.get(marketName) ?? 0);
-
-        return total
-          + ((line.breakdown.Mega ?? 0) > 0 ? megaRate : 0)
-          + ((line.breakdown['DOT M'] ?? 0) > 0 ? dotMRate : 0)
-          + ((line.breakdown.MP ?? 0) > 0 ? mpRate : 0);
-      }, 0)
-      : marketLines.reduce((total, line) => {
-        const selectedAsset = selectedAssetByLineId.get(line.id);
-        if (!selectedAsset) return total;
-
-        const assetShippingCosts = shippingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`);
-        const megaRate = assetShippingCosts?.megaShippingRate ?? (megaShippingRateByMarket.get(marketName) ?? 0);
-        const dotMRate = assetShippingCosts?.dotMShippingRate ?? (dotMShippingRateByMarket.get(marketName) ?? 0);
-        const mpRate = assetShippingCosts?.mpShippingRate ?? (mpShippingRateByMarket.get(marketName) ?? 0);
-
-        return total
-          + calculateShippingCost(line.breakdown.Mega ?? 0, megaRate, megasPerBox)
-          + calculateShippingCost(line.breakdown['DOT M'] ?? 0, dotMRate, megasPerBox)
-          + calculateShippingCost(line.breakdown.MP ?? 0, mpRate, megasPerBox);
-      }, 0);
-
-    return posterShipping + megaShipping;
+    return posterShipping + customSheetShipping;
   }
 
   function calculateLinePrintingCost(line: CampaignCalculationSummary['lines'][number]) {

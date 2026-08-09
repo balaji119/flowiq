@@ -86,6 +86,7 @@ type marketAssetShippingCostRow struct {
 	MegaShippingRate float64
 	DotMShippingRate float64
 	MpShippingRate   float64
+	Costs            []byte
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
@@ -389,6 +390,7 @@ func scanMarketAssetShippingCostRow(scanner interface {
 		&row.MegaShippingRate,
 		&row.DotMShippingRate,
 		&row.MpShippingRate,
+		&row.Costs,
 		&row.CreatedAt,
 		&row.UpdatedAt,
 	)
@@ -468,19 +470,35 @@ func decodeMarketAssetPrintingCostRow(row marketAssetPrintingCostRow) (marketAss
 	}, nil
 }
 
-func decodeMarketAssetShippingCostRow(row marketAssetShippingCostRow) marketAssetShippingCostRecord {
+func decodeMarketAssetShippingCostRow(row marketAssetShippingCostRow) (marketAssetShippingCostRecord, error) {
+	costs := createEmptyPrintingCostBreakdown()
+	costs["Mega"] = row.MegaShippingRate
+	costs["DOT M"] = row.DotMShippingRate
+	costs["MP"] = row.MpShippingRate
+	if len(row.Costs) > 0 {
+		if err := json.Unmarshal(row.Costs, &costs); err != nil {
+			return marketAssetShippingCostRecord{}, err
+		}
+	}
+
+	normalizedCosts, err := normalizePrintingCostBreakdown(costs)
+	if err != nil {
+		return marketAssetShippingCostRecord{}, err
+	}
+
 	return marketAssetShippingCostRecord{
 		TenantID:         row.TenantID,
 		Market:           row.Market,
 		AssetID:          row.AssetID,
 		Asset:            row.Asset,
 		Label:            row.Label,
-		MegaShippingRate: row.MegaShippingRate,
-		DotMShippingRate: row.DotMShippingRate,
-		MpShippingRate:   row.MpShippingRate,
+		MegaShippingRate: normalizedCosts["Mega"],
+		DotMShippingRate: normalizedCosts["DOT M"],
+		MpShippingRate:   normalizedCosts["MP"],
+		Costs:            normalizedCosts,
 		CreatedAt:        row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.UTC().Format(time.RFC3339),
-	}
+	}, nil
 }
 
 func decodeMarketSheetSizeRow(row marketSheetSizeRow) marketSheetSizeRecord {
@@ -2063,6 +2081,7 @@ func (s *mappingStore) listMarketAssetShippingCosts(ctx context.Context, tenantI
 			masc.mega_shipping_rate::float8,
 			masc.dot_m_shipping_rate::float8,
 			masc.mp_shipping_rate::float8,
+			COALESCE(masc.costs, '{}'::jsonb),
 			masc.created_at,
 			masc.updated_at
 		FROM market_asset_shipping_costs masc
@@ -2082,9 +2101,32 @@ func (s *mappingStore) listMarketAssetShippingCosts(ctx context.Context, tenantI
 		if err != nil {
 			return nil, err
 		}
-		records = append(records, decodeMarketAssetShippingCostRow(row))
+		record, err := decodeMarketAssetShippingCostRow(row)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
 	}
 	return records, rows.Err()
+}
+
+func encodeShippingCosts(item marketAssetShippingCostInput) (printingCostBreakdown, string, error) {
+	costs := createEmptyPrintingCostBreakdown()
+	costs["Mega"] = item.MegaShippingRate
+	costs["DOT M"] = item.DotMShippingRate
+	costs["MP"] = item.MpShippingRate
+	for key, value := range item.Costs {
+		costs[key] = value
+	}
+	normalized, err := normalizePrintingCostBreakdown(costs)
+	if err != nil {
+		return nil, "", err
+	}
+	bytes, err := json.Marshal(normalized)
+	if err != nil {
+		return nil, "", err
+	}
+	return normalized, string(bytes), nil
 }
 
 func (s *mappingStore) upsertMarketAssetShippingCosts(ctx context.Context, tenantID string, payload []marketAssetShippingCostInput) ([]marketAssetShippingCostRecord, error) {
@@ -2121,6 +2163,10 @@ func (s *mappingStore) upsertMarketAssetShippingCosts(ctx context.Context, tenan
 		if item.MpShippingRate < 0 {
 			return nil, errors.New("mpShippingRate must be greater than or equal to 0")
 		}
+		shippingCosts, costsJSON, err := encodeShippingCosts(item)
+		if err != nil {
+			return nil, err
+		}
 
 		var marketID string
 		var asset string
@@ -2148,34 +2194,41 @@ func (s *mappingStore) upsertMarketAssetShippingCosts(ctx context.Context, tenan
 				mega_shipping_rate,
 				dot_m_shipping_rate,
 				mp_shipping_rate,
+				costs,
 				created_at,
 				updated_at
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+			VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
 			ON CONFLICT (tenant_id, asset_id)
 			DO UPDATE SET
 				market_id = EXCLUDED.market_id,
 				mega_shipping_rate = EXCLUDED.mega_shipping_rate,
 				dot_m_shipping_rate = EXCLUDED.dot_m_shipping_rate,
 				mp_shipping_rate = EXCLUDED.mp_shipping_rate,
+				costs = EXCLUDED.costs,
 				updated_at = NOW()
 			RETURNING
 				tenant_id,
-				$7::text,
-				asset_id::text,
 				$8::text,
+				asset_id::text,
 				$9::text,
+				$10::text,
 				mega_shipping_rate::float8,
 				dot_m_shipping_rate::float8,
 				mp_shipping_rate::float8,
+				COALESCE(costs, '{}'::jsonb),
 				created_at,
 				updated_at
-		`, tenantID, marketID, assetID, item.MegaShippingRate, item.DotMShippingRate, item.MpShippingRate, market, asset, label))
+		`, tenantID, marketID, assetID, shippingCosts["Mega"], shippingCosts["DOT M"], shippingCosts["MP"], costsJSON, market, asset, label))
 		if err != nil {
 			return nil, err
 		}
 
-		records = append(records, decodeMarketAssetShippingCostRow(row))
+		record, err := decodeMarketAssetShippingCostRow(row)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

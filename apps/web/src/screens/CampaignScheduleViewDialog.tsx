@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { submitCampaignToPrintIQ } from '../services/campaignApi';
 import { fetchCampaignCustomPrintCosts, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
-import { toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
+import { canonicalKeyForFormat, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 
 const QUOTE_AUTOMATION_RESULT_EVENT = 'flowiq:quote-automation-result';
 
@@ -123,6 +123,7 @@ export function CampaignScheduleViewDialog({
   const [assetPrintingCosts, setAssetPrintingCosts] = useState<MarketAssetPrintingCostRecord[]>([]);
   const [customPrintCosts, setCustomPrintCosts] = useState<CustomPrintCostRecord[]>([]);
   const [customPrintCostFormats, setCustomPrintCostFormats] = useState<Record<string, boolean>>({});
+  const [customSheetSizeFormats, setCustomSheetSizeFormats] = useState<Record<string, boolean>>({});
   const [assetShippingCosts, setAssetShippingCosts] = useState<MarketAssetShippingCostRecord[]>([]);
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<Array<{ market: string; deliveryAddress: string }>>([]);
   const [downloadingVisuals, setDownloadingVisuals] = useState(false);
@@ -229,6 +230,7 @@ export function CampaignScheduleViewDialog({
         setMarketDeliveryAddresses(deliveryAddressesResponse.addresses);
         setCustomPrintCosts(customCostResponse.costs);
         setCustomPrintCostFormats(sheetResponse.settings.customPrintCostFormats ?? {});
+        setCustomSheetSizeFormats(sheetResponse.settings.customSheetSizeFormats ?? {});
       } catch {
         if (!active) return;
         setShippingRates([]);
@@ -237,6 +239,7 @@ export function CampaignScheduleViewDialog({
         setMarketDeliveryAddresses([]);
         setCustomPrintCosts([]);
         setCustomPrintCostFormats({});
+        setCustomSheetSizeFormats({});
       }
     }
 
@@ -580,59 +583,63 @@ export function CampaignScheduleViewDialog({
           return lineTotal + Math.max(0, toNumber(rawQuantity));
         }, 0)
       ), 0);
+      const shippingRateForFormat = (assetShipping: MarketAssetShippingCostRecord | null | undefined, key: (typeof formatKeys)[number]) => {
+        if (key === '2-sheet') return toNumber(assetShipping?.costs?.['2-sheet'] ?? twoPrice);
+        if (key === '4-sheet') return toNumber(assetShipping?.costs?.['4-sheet'] ?? fourPrice);
+        if (key === '6-sheet') return toNumber(assetShipping?.costs?.['6-sheet'] ?? sixPrice);
+        if (key === '8-sheet') return toNumber(assetShipping?.costs?.['8-sheet'] ?? eightPrice);
+        if (key === 'QA0') return toNumber(assetShipping?.costs?.QA0 ?? eightPrice);
+        if (key === 'Mega') return toNumber(assetShipping?.costs?.Mega ?? assetShipping?.megaShippingRate ?? marketRate.megaShippingRate ?? 0);
+        if (key === 'DOT M') return toNumber(assetShipping?.costs?.['DOT M'] ?? assetShipping?.dotMShippingRate ?? marketRate.dotMShippingRate ?? 0);
+        if (key === 'MP') return toNumber(assetShipping?.costs?.MP ?? assetShipping?.mpShippingRate ?? marketRate.mpShippingRate ?? 0);
+        return toNumber(assetShipping?.costs?.[key] ?? 0);
+      };
+      const shippingBoxSizeForFormat = (key: (typeof formatKeys)[number]) => {
+        if (key === '2-sheet') return twoSets;
+        if (key === '4-sheet') return fourSets;
+        if (key === '6-sheet') return sixSets;
+        if (key === '8-sheet' || key === 'QA0') return eightSets;
+        return megasPerBox;
+      };
+      const isCustomSheetFormat = (key: (typeof formatKeys)[number]) => Boolean(customSheetSizeFormats[canonicalKeyForFormat(key)]);
+      const customSheetShipping = marketLines.reduce((sum, line) => {
+        const selectedAsset = selectedAssetByLineId.get(line.id);
+        const assetShipping = selectedAsset
+          ? shippingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`)
+            ?? findShippingCostsForAsset(selectedAsset.market, [selectedAsset.assetId, selectedAsset.assetSearch, selectedAsset.id, line.assetLabel, line.id])
+          : null;
+        return sum + formatKeys.reduce((lineSum, key) => {
+          if (!isCustomSheetFormat(key)) return lineSum;
+          const quantity = Math.max(0, toNumber(line.breakdown[key]));
+          if (quantity === 0) return lineSum;
+          const rate = shippingRateForFormat(assetShipping, key);
+          return lineSum + (useFlatRateMegas ? rate : calculateShippingCost(quantity, rate, shippingBoxSizeForFormat(key)));
+        }, 0);
+      }, 0);
 
       const posterShipping = useFlatRateSheeters
         ? (() => {
-            const hasTwo = marketLines.some((line) => (line.breakdown['2-sheet'] ?? 0) > 0);
-            const hasFour = marketLines.some((line) => (line.breakdown['4-sheet'] ?? 0) > 0);
-            const hasSix = marketLines.some((line) => (line.breakdown['6-sheet'] ?? 0) > 0);
+            const hasTwo = !isCustomSheetFormat('2-sheet') && marketLines.some((line) => (line.breakdown['2-sheet'] ?? 0) > 0);
+            const hasFour = !isCustomSheetFormat('4-sheet') && marketLines.some((line) => (line.breakdown['4-sheet'] ?? 0) > 0);
+            const hasSix = !isCustomSheetFormat('6-sheet') && marketLines.some((line) => (line.breakdown['6-sheet'] ?? 0) > 0);
             const hasEight = customSheetTotal > 0
-              || marketLines.some((line) => ((line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0)) > 0);
+              || ((!isCustomSheetFormat('8-sheet') || !isCustomSheetFormat('QA0'))
+                && marketLines.some((line) => (isCustomSheetFormat('8-sheet') ? 0 : (line.breakdown['8-sheet'] ?? 0)) + (isCustomSheetFormat('QA0') ? 0 : (line.breakdown.QA0 ?? 0)) > 0));
             return (hasTwo ? twoPrice : 0) + (hasFour ? fourPrice : 0) + (hasSix ? sixPrice : 0) + (hasEight ? eightPrice : 0);
           })()
         : (() => {
-            const totalTwo = marketLines.reduce((sum, line) => sum + (line.breakdown['2-sheet'] ?? 0), 0);
-            const totalFour = marketLines.reduce((sum, line) => sum + (line.breakdown['4-sheet'] ?? 0), 0);
-            const totalSix = marketLines.reduce((sum, line) => sum + (line.breakdown['6-sheet'] ?? 0), 0);
+            const totalTwo = isCustomSheetFormat('2-sheet') ? 0 : marketLines.reduce((sum, line) => sum + (line.breakdown['2-sheet'] ?? 0), 0);
+            const totalFour = isCustomSheetFormat('4-sheet') ? 0 : marketLines.reduce((sum, line) => sum + (line.breakdown['4-sheet'] ?? 0), 0);
+            const totalSix = isCustomSheetFormat('6-sheet') ? 0 : marketLines.reduce((sum, line) => sum + (line.breakdown['6-sheet'] ?? 0), 0);
             const totalEightAndQa0 = customSheetTotal
-              + marketLines.reduce((sum, line) => sum + (line.breakdown['8-sheet'] ?? 0) + (line.breakdown.QA0 ?? 0), 0);
+              + marketLines.reduce((sum, line) => sum + (isCustomSheetFormat('8-sheet') ? 0 : (line.breakdown['8-sheet'] ?? 0)) + (isCustomSheetFormat('QA0') ? 0 : (line.breakdown.QA0 ?? 0)), 0);
             return calculatePosterShippingForSheeter(totalEightAndQa0, eightPrice, 4, eightSets)
               + calculatePosterShippingForSheeter(totalSix, sixPrice, 3, sixSets)
               + calculatePosterShippingForSheeter(totalFour, fourPrice, 2, fourSets)
               + calculatePosterShippingForSheeter(totalTwo, twoPrice, 1, twoSets);
           })();
 
-      const megaShipping = useFlatRateMegas
-        ? marketLines.reduce((sum, line) => {
-            const selectedAsset = selectedAssetByLineId.get(line.id);
-            const assetShipping = selectedAsset
-              ? shippingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`)
-                ?? findShippingCostsForAsset(selectedAsset.market, [selectedAsset.assetId, selectedAsset.assetSearch, selectedAsset.id, line.assetLabel, line.id])
-              : null;
-            const megaRate = toNumber(assetShipping?.megaShippingRate ?? marketRate.megaShippingRate ?? 0);
-            const dotMRate = toNumber(assetShipping?.dotMShippingRate ?? marketRate.dotMShippingRate ?? 0);
-            const mpRate = toNumber(assetShipping?.mpShippingRate ?? marketRate.mpShippingRate ?? 0);
-            return sum
-              + ((line.breakdown.Mega ?? 0) > 0 ? megaRate : 0)
-              + ((line.breakdown['DOT M'] ?? 0) > 0 ? dotMRate : 0)
-              + ((line.breakdown.MP ?? 0) > 0 ? mpRate : 0);
-          }, 0)
-        : marketLines.reduce((sum, line) => {
-            const selectedAsset = selectedAssetByLineId.get(line.id);
-            const assetShipping = selectedAsset
-              ? shippingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`)
-                ?? findShippingCostsForAsset(selectedAsset.market, [selectedAsset.assetId, selectedAsset.assetSearch, selectedAsset.id, line.assetLabel, line.id])
-              : null;
-            const megaRate = toNumber(assetShipping?.megaShippingRate ?? marketRate.megaShippingRate ?? 0);
-            const dotMRate = toNumber(assetShipping?.dotMShippingRate ?? marketRate.dotMShippingRate ?? 0);
-            const mpRate = toNumber(assetShipping?.mpShippingRate ?? marketRate.mpShippingRate ?? 0);
-            return sum
-              + calculateShippingCost(line.breakdown.Mega ?? 0, megaRate, megasPerBox)
-              + calculateShippingCost(line.breakdown['DOT M'] ?? 0, dotMRate, megasPerBox)
-              + calculateShippingCost(line.breakdown.MP ?? 0, mpRate, megasPerBox);
-          }, 0);
-
-      return marketTotal + posterShipping + megaShipping;
+      return marketTotal + posterShipping + customSheetShipping;
     }, 0);
   }, [campaign, marketShippingRateByMarket, marketShippingRateIndex, selectedAssetByLineId, shippingCostByMarketAsset, shippingCostIndex, globalShippingCostIndex]);
 
