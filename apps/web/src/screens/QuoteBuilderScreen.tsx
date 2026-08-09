@@ -1328,6 +1328,7 @@ export function QuoteBuilderScreen({
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
   const [newAddressDialogOpen, setNewAddressDialogOpen] = useState(false);
   const [addMarketDialogOpen, setAddMarketDialogOpen] = useState(false);
+  const [productMappingDialogOpen, setProductMappingDialogOpen] = useState(false);
   const [draftMarket, setDraftMarket] = useState<CampaignMarket | null>(null);
   const [draftMarketSummary, setDraftMarketSummary] = useState<CampaignCalculationSummary['perMarket'][number] | null>(null);
   const [draftMarketLines, setDraftMarketLines] = useState<CampaignCalculationSummary['lines']>([]);
@@ -3415,7 +3416,7 @@ export function QuoteBuilderScreen({
   }
 
   function showMissingProductMappingMessage() {
-    setError(PRODUCT_MAPPING_REQUIRED_MESSAGE);
+    setProductMappingDialogOpen(true);
   }
 
   function assetOptionsFor(market: CampaignMarket, assetId: string, selectedAssetId: string) {
@@ -7630,6 +7631,23 @@ export function QuoteBuilderScreen({
             </Button>
             <Button onClick={handleSaveNewAddress} type="button">
               Save Address
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={productMappingDialogOpen}
+        onOpenChange={(open) => setProductMappingDialogOpen(open)}
+      >
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 30rem)' }}>
+          <DialogHeader>
+            <DialogTitle>Product Mapping Required</DialogTitle>
+            <DialogDescription className="break-words text-left">{PRODUCT_MAPPING_REQUIRED_MESSAGE}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <Button onClick={() => setProductMappingDialogOpen(false)} type="button">
+              OK
             </Button>
           </div>
         </DialogContent>
