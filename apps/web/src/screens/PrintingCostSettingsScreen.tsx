@@ -4,27 +4,27 @@ import { CalculatorMappingRecord, CustomPrintCostInput, formatKeys, FormatKey, P
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import { fetchAdminSheetNameOverrides, fetchCalculatorMappings, fetchCustomPrintCosts, fetchMarketAssetPrintingCosts, fetchTenants, upsertCustomPrintCosts, upsertMarketAssetPrintingCosts } from '../services/adminApi';
-import { resolveCanonicalSheetName } from '../services/sheetNameOverrides';
+import { resolveCanonicalSheetName, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 
 type PrintingCostSettingsScreenProps = {
   onBack: () => void;
   tenantId?: string | null;
 };
 
-type AssetCostDraft = Record<FormatKey, string>;
+type AssetCostDraft = Record<string, string>;
 type CustomCostDraft = Record<'onePageCost' | 'twoPageCost' | 'fivePageCost' | 'tenPlusPageCost', string>;
 const posterFormatKeys: FormatKey[] = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0'];
-const customSheetFormatKeys: Array<{ formatKey: FormatKey; settingsKey: string }> = [
-  { formatKey: '8-sheet', settingsKey: '8-sheet' },
-  { formatKey: 'QA0', settingsKey: '8-sheet-a0' },
-  { formatKey: '6-sheet', settingsKey: '6-sheet' },
-  { formatKey: '4-sheet', settingsKey: '4-sheet' },
-  { formatKey: '2-sheet', settingsKey: '2-sheet' },
-  { formatKey: 'Mega', settingsKey: 'mega' },
-  { formatKey: 'DOT M', settingsKey: 'dot-m' },
-  { formatKey: 'MP', settingsKey: 'mega-portrait' },
-  { formatKey: 'FF', settingsKey: 'ff' },
-];
+const settingsKeyByFormatKey: Partial<Record<FormatKey, string>> = {
+  '8-sheet': '8-sheet',
+  QA0: '8-sheet-a0',
+  '6-sheet': '6-sheet',
+  '4-sheet': '4-sheet',
+  '2-sheet': '2-sheet',
+  Mega: 'mega',
+  'DOT M': 'dot-m',
+  MP: 'mega-portrait',
+  FF: 'ff',
+};
 
 function createEmptyCostDraft(): AssetCostDraft {
   return {
@@ -40,25 +40,37 @@ function createEmptyCostDraft(): AssetCostDraft {
   };
 }
 
+function quantityForSheetKey(mapping: CalculatorMappingRecord, sheetKey: string) {
+  const quantities = mapping.quantities as Record<string, number>;
+  if (typeof quantities[sheetKey] === 'number') return quantities[sheetKey];
+  const matchingKey = Object.keys(quantities).find((key) => toCanonicalSheetNameKey(key) === sheetKey);
+  return matchingKey ? quantities[matchingKey] ?? 0 : 0;
+}
+
+function draftValue(draft: Record<string, string>, sheetKey: string) {
+  const formatKey = formatKeys.find((key) => settingsKeyByFormatKey[key] === sheetKey);
+  return draft[sheetKey] ?? (formatKey ? draft[formatKey] : undefined) ?? '0';
+}
+
 function costKey(market: string, assetId: string) {
   return `${market}\x00${assetId}`;
 }
 
 function toDraft(costs?: PrintingCostBreakdown): AssetCostDraft {
-  const next = createEmptyCostDraft();
+  const next: AssetCostDraft = createEmptyCostDraft();
   if (!costs) return next;
-  for (const key of formatKeys) {
-    next[key] = String(costs[key] ?? 0);
-  }
+  Object.entries(costs).forEach(([key, value]) => {
+    next[key] = String(value ?? 0);
+  });
   return next;
 }
 
-function toBreakdown(draft: AssetCostDraft): PrintingCostBreakdown {
-  const next = {} as PrintingCostBreakdown;
-  for (const key of formatKeys) {
+function toBreakdown(draft: Record<string, string>): PrintingCostBreakdown {
+  const next: PrintingCostBreakdown = {};
+  Object.keys(draft).forEach((key) => {
     const parsed = Number.parseFloat((draft[key] || '').trim());
     next[key] = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-  }
+  });
   return next;
 }
 
@@ -99,7 +111,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(tenantId ?? session?.user.tenantId ?? null);
   const [mappings, setMappings] = useState<CalculatorMappingRecord[]>([]);
-  const [draftsByAsset, setDraftsByAsset] = useState<Record<string, AssetCostDraft>>({});
+  const [draftsByAsset, setDraftsByAsset] = useState<Record<string, Record<string, string>>>({});
   const [marketFilter, setMarketFilter] = useState<string>('');
   const [dirtyRows, setDirtyRows] = useState<Record<string, boolean>>({});
   const [sheetNameOverrides, setSheetNameOverrides] = useState<SheetNameOverrides>({});
@@ -236,13 +248,12 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
   const customSheetRows = useMemo(
     () => selectedMarketMappings
       .filter((mapping) => !maintenanceAssetIds.has(mapping.id))
-      .flatMap((mapping) => customSheetFormatKeys
-        .filter(({ formatKey, settingsKey }) => customSheetSizeFormats[settingsKey] && ((mapping.quantities as Record<string, number>)[formatKey] ?? 0) > 0)
-        .map(({ formatKey, settingsKey }) => ({
+      .flatMap((mapping) => Object.keys(customSheetSizeFormats)
+        .filter((sheetKey) => customSheetSizeFormats[sheetKey] && quantityForSheetKey(mapping, sheetKey) > 0)
+        .map((sheetKey) => ({
           mapping,
-          formatKey,
-          settingsKey,
-          label: `${mapping.label || mapping.asset} | ${resolveCanonicalSheetName(settingsKey, sheetNameOverrides)}`,
+          sheetKey,
+          label: `${mapping.label || mapping.asset} | ${resolveCanonicalSheetName(sheetKey, sheetNameOverrides)}`,
         }))),
     [customSheetSizeFormats, maintenanceAssetIds, selectedMarketMappings, sheetNameOverrides],
   );
@@ -279,13 +290,13 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     }
   }, [marketFilter, marketOptions]);
 
-  function updateCustomSheetDraft(market: string, assetId: string, formatKey: FormatKey, value: string) {
+  function updateCustomSheetDraft(market: string, assetId: string, sheetKey: string, value: string) {
     const rowKey = costKey(market, assetId);
     setDraftsByAsset((current) => ({
       ...current,
       [rowKey]: {
         ...(current[rowKey] || createEmptyCostDraft()),
-        [formatKey]: value,
+        [sheetKey]: value,
       },
     }));
     setDirtyRows((current) => ({
@@ -549,12 +560,12 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
                   </tr>
                 </thead>
                 <tbody>
-                  {customSheetRows.map(({ mapping, formatKey, label }, rowIndex) => {
+                  {customSheetRows.map(({ mapping, sheetKey, label }, rowIndex) => {
                     const rowKey = costKey(mapping.market, mapping.id);
                     const draft = draftsByAsset[rowKey] || createEmptyCostDraft();
                     return (
                       <tr
-                        key={`cost-row-${mapping.id}-${formatKey}`}
+                        key={`cost-row-${mapping.id}-${sheetKey}`}
                         className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}`}
                       >
                         <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{mapping.market}</td>
@@ -570,8 +581,8 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
                               type="number"
                               min={0}
                               step="0.01"
-                              value={draft[formatKey]}
-                              onChange={(event) => updateCustomSheetDraft(mapping.market, mapping.id, formatKey, event.target.value)}
+                              value={draftValue(draft, sheetKey)}
+                              onChange={(event) => updateCustomSheetDraft(mapping.market, mapping.id, sheetKey, event.target.value)}
                             />
                           </div>
                         </td>

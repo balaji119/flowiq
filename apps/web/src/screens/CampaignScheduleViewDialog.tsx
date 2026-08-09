@@ -55,6 +55,12 @@ function calculatePosterShippingForSheeter(posters: number, pricePerBox: number,
   return boxes * pricePerBox;
 }
 
+function quantityForSheetKey(breakdown: Record<string, number>, sheetKey: string) {
+  if (typeof breakdown[sheetKey] === 'number') return breakdown[sheetKey];
+  const matchingKey = Object.keys(breakdown).find((key) => toCanonicalSheetNameKey(key) === sheetKey);
+  return matchingKey ? breakdown[matchingKey] ?? 0 : 0;
+}
+
 function resolveArtworkUrl(imageUrl?: string, thumbUrl?: string) {
   const candidate = thumbUrl || imageUrl || '';
   if (!candidate) return '';
@@ -528,6 +534,7 @@ export function CampaignScheduleViewDialog({
       const posterRate = toNumber(costs?.['8-sheet']);
       const customCost = Object.entries(line.breakdown as Record<string, number>).reduce((sum, [rawKey, rawPages]) => {
         const sheetKey = toCanonicalSheetNameKey(rawKey);
+        if (customSheetSizeFormats[sheetKey]) return sum;
         const usesCustomCost = Boolean(customPrintCostFormats[sheetKey]);
         const isStandardFormat = (formatKeys as readonly string[]).includes(rawKey);
         if (!usesCustomCost && isStandardFormat) return sum;
@@ -551,12 +558,18 @@ export function CampaignScheduleViewDialog({
       const eightSheetRate = toNumber(costs['8-sheet']);
       const lineCost =
         formatKeys.reduce((sum, key) => {
-          if (customPrintCostFormats[toCanonicalSheetNameKey(key)] || key === 'QA0') return sum;
+          if (customSheetSizeFormats[toCanonicalSheetNameKey(key)] || customPrintCostFormats[toCanonicalSheetNameKey(key)] || key === 'QA0') return sum;
           return sum + toNumber(line.breakdown[key]) * toNumber(costs[key]);
         }, 0) + (customPrintCostFormats[toCanonicalSheetNameKey('QA0')] ? 0 : qa0Units * eightSheetRate);
-      return total + lineCost + customCost;
+      const customSheetCost = Object.keys(customSheetSizeFormats).reduce((sum, sheetKey) => {
+        if (!customSheetSizeFormats[sheetKey]) return sum;
+        const pages = Math.max(0, quantityForSheetKey(line.breakdown as Record<string, number>, sheetKey));
+        if (pages === 0) return sum;
+        return sum + pages * toNumber(costs[sheetKey]);
+      }, 0);
+      return total + lineCost + customCost + customSheetCost;
     }, 0);
-  }, [campaign, customPrintCostBySheetKey, customPrintCostFormats, findPrintingCostsForAsset, printingCostByMarketAsset, selectedAssetByLineId]);
+  }, [campaign, customPrintCostBySheetKey, customPrintCostFormats, customSheetSizeFormats, findPrintingCostsForAsset, printingCostByMarketAsset, selectedAssetByLineId]);
 
   const totalShippingCost = useMemo(() => {
     if (!campaign?.summary) return 0;
@@ -577,43 +590,46 @@ export function CampaignScheduleViewDialog({
       const megasPerBox = marketRate.megasPerBox ?? 1;
       const useFlatRateSheeters = marketRate.useFlatRateSheeters ?? marketRate.useFlatRate ?? false;
       const useFlatRateMegas = marketRate.useFlatRateMegas ?? marketRate.useFlatRate ?? false;
+      const isCustomSheetFormat = (key: string) => Boolean(customSheetSizeFormats[toCanonicalSheetNameKey(key)]);
       const customSheetTotal = marketLines.reduce((total, line) => (
         total + Object.entries(line.breakdown as Record<string, number>).reduce((lineTotal, [rawKey, rawQuantity]) => {
+          if (isCustomSheetFormat(rawKey)) return lineTotal;
           if ((formatKeys as readonly string[]).includes(rawKey)) return lineTotal;
           return lineTotal + Math.max(0, toNumber(rawQuantity));
         }, 0)
       ), 0);
-      const shippingRateForFormat = (assetShipping: MarketAssetShippingCostRecord | null | undefined, key: (typeof formatKeys)[number]) => {
-        if (key === '2-sheet') return toNumber(assetShipping?.costs?.['2-sheet'] ?? twoPrice);
-        if (key === '4-sheet') return toNumber(assetShipping?.costs?.['4-sheet'] ?? fourPrice);
-        if (key === '6-sheet') return toNumber(assetShipping?.costs?.['6-sheet'] ?? sixPrice);
-        if (key === '8-sheet') return toNumber(assetShipping?.costs?.['8-sheet'] ?? eightPrice);
-        if (key === 'QA0') return toNumber(assetShipping?.costs?.QA0 ?? eightPrice);
-        if (key === 'Mega') return toNumber(assetShipping?.costs?.Mega ?? assetShipping?.megaShippingRate ?? marketRate.megaShippingRate ?? 0);
-        if (key === 'DOT M') return toNumber(assetShipping?.costs?.['DOT M'] ?? assetShipping?.dotMShippingRate ?? marketRate.dotMShippingRate ?? 0);
-        if (key === 'MP') return toNumber(assetShipping?.costs?.MP ?? assetShipping?.mpShippingRate ?? marketRate.mpShippingRate ?? 0);
-        return toNumber(assetShipping?.costs?.[key] ?? 0);
+      const shippingRateForSheetKey = (assetShipping: MarketAssetShippingCostRecord | null | undefined, sheetKey: string) => {
+        const formatKey = formatKeys.find((key) => canonicalKeyForFormat(key) === sheetKey);
+        if (formatKey === '2-sheet') return toNumber(assetShipping?.costs?.[sheetKey] ?? assetShipping?.costs?.['2-sheet'] ?? twoPrice);
+        if (formatKey === '4-sheet') return toNumber(assetShipping?.costs?.[sheetKey] ?? assetShipping?.costs?.['4-sheet'] ?? fourPrice);
+        if (formatKey === '6-sheet') return toNumber(assetShipping?.costs?.[sheetKey] ?? assetShipping?.costs?.['6-sheet'] ?? sixPrice);
+        if (formatKey === '8-sheet') return toNumber(assetShipping?.costs?.[sheetKey] ?? assetShipping?.costs?.['8-sheet'] ?? eightPrice);
+        if (formatKey === 'QA0') return toNumber(assetShipping?.costs?.[sheetKey] ?? assetShipping?.costs?.QA0 ?? eightPrice);
+        if (formatKey === 'Mega') return toNumber(assetShipping?.costs?.[sheetKey] ?? assetShipping?.costs?.Mega ?? assetShipping?.megaShippingRate ?? marketRate.megaShippingRate ?? 0);
+        if (formatKey === 'DOT M') return toNumber(assetShipping?.costs?.[sheetKey] ?? assetShipping?.costs?.['DOT M'] ?? assetShipping?.dotMShippingRate ?? marketRate.dotMShippingRate ?? 0);
+        if (formatKey === 'MP') return toNumber(assetShipping?.costs?.[sheetKey] ?? assetShipping?.costs?.MP ?? assetShipping?.mpShippingRate ?? marketRate.mpShippingRate ?? 0);
+        return toNumber(assetShipping?.costs?.[sheetKey] ?? 0);
       };
-      const shippingBoxSizeForFormat = (key: (typeof formatKeys)[number]) => {
-        if (key === '2-sheet') return twoSets;
-        if (key === '4-sheet') return fourSets;
-        if (key === '6-sheet') return sixSets;
-        if (key === '8-sheet' || key === 'QA0') return eightSets;
+      const shippingBoxSizeForSheetKey = (sheetKey: string) => {
+        const formatKey = formatKeys.find((key) => canonicalKeyForFormat(key) === sheetKey);
+        if (formatKey === '2-sheet') return twoSets;
+        if (formatKey === '4-sheet') return fourSets;
+        if (formatKey === '6-sheet') return sixSets;
+        if (formatKey === '8-sheet' || formatKey === 'QA0') return eightSets;
         return megasPerBox;
       };
-      const isCustomSheetFormat = (key: (typeof formatKeys)[number]) => Boolean(customSheetSizeFormats[canonicalKeyForFormat(key)]);
       const customSheetShipping = marketLines.reduce((sum, line) => {
         const selectedAsset = selectedAssetByLineId.get(line.id);
         const assetShipping = selectedAsset
           ? shippingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`)
             ?? findShippingCostsForAsset(selectedAsset.market, [selectedAsset.assetId, selectedAsset.assetSearch, selectedAsset.id, line.assetLabel, line.id])
           : null;
-        return sum + formatKeys.reduce((lineSum, key) => {
-          if (!isCustomSheetFormat(key)) return lineSum;
-          const quantity = Math.max(0, toNumber(line.breakdown[key]));
+        return sum + Object.keys(customSheetSizeFormats).reduce((lineSum, sheetKey) => {
+          if (!customSheetSizeFormats[sheetKey]) return lineSum;
+          const quantity = Math.max(0, quantityForSheetKey(line.breakdown as Record<string, number>, sheetKey));
           if (quantity === 0) return lineSum;
-          const rate = shippingRateForFormat(assetShipping, key);
-          return lineSum + (useFlatRateMegas ? rate : calculateShippingCost(quantity, rate, shippingBoxSizeForFormat(key)));
+          const rate = shippingRateForSheetKey(assetShipping, sheetKey);
+          return lineSum + (useFlatRateMegas ? rate : calculateShippingCost(quantity, rate, shippingBoxSizeForSheetKey(sheetKey)));
         }, 0);
       }, 0);
 
@@ -641,7 +657,7 @@ export function CampaignScheduleViewDialog({
 
       return marketTotal + posterShipping + customSheetShipping;
     }, 0);
-  }, [campaign, marketShippingRateByMarket, marketShippingRateIndex, selectedAssetByLineId, shippingCostByMarketAsset, shippingCostIndex, globalShippingCostIndex]);
+  }, [campaign, customSheetSizeFormats, marketShippingRateByMarket, marketShippingRateIndex, selectedAssetByLineId, shippingCostByMarketAsset, shippingCostIndex, globalShippingCostIndex]);
 
   const imageById = useMemo(() => new Map((campaign?.values.printImages ?? []).map((image) => [image.id, image])), [campaign?.values.printImages]);
 

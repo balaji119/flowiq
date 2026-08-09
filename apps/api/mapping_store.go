@@ -175,12 +175,20 @@ func createEmptyPrintingCostBreakdown() printingCostBreakdown {
 
 func normalizePrintingCostBreakdown(input printingCostBreakdown) (printingCostBreakdown, error) {
 	normalized := createEmptyPrintingCostBreakdown()
-	for _, key := range formatKeys {
-		value := input[key]
+	for rawKey, value := range input {
+		key := strings.TrimSpace(rawKey)
+		if key == "" {
+			continue
+		}
 		if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
 			return nil, fmt.Errorf("cost for %s must be greater than or equal to 0", key)
 		}
 		normalized[key] = value
+	}
+	for _, key := range formatKeys {
+		if _, exists := normalized[key]; !exists {
+			normalized[key] = 0
+		}
 	}
 	return normalized, nil
 }

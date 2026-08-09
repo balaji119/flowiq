@@ -12,24 +12,24 @@ import {
   upsertMarketAssetShippingCosts,
   upsertMarketShippingRate,
 } from '../services/adminApi';
-import { resolveCanonicalSheetName } from '../services/sheetNameOverrides';
+import { resolveCanonicalSheetName, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 
 type ShippingCostSettingsScreenProps = {
   tenantId?: string | null;
 };
 
-type AssetShippingDraft = Record<FormatKey, string>;
-const customSheetFormatKeys: Array<{ formatKey: FormatKey; settingsKey: string }> = [
-  { formatKey: '8-sheet', settingsKey: '8-sheet' },
-  { formatKey: 'QA0', settingsKey: '8-sheet-a0' },
-  { formatKey: '6-sheet', settingsKey: '6-sheet' },
-  { formatKey: '4-sheet', settingsKey: '4-sheet' },
-  { formatKey: '2-sheet', settingsKey: '2-sheet' },
-  { formatKey: 'Mega', settingsKey: 'mega' },
-  { formatKey: 'DOT M', settingsKey: 'dot-m' },
-  { formatKey: 'MP', settingsKey: 'mega-portrait' },
-  { formatKey: 'FF', settingsKey: 'ff' },
-];
+type AssetShippingDraft = Record<string, string>;
+const settingsKeyByFormatKey: Partial<Record<FormatKey, string>> = {
+  '8-sheet': '8-sheet',
+  QA0: '8-sheet-a0',
+  '6-sheet': '6-sheet',
+  '4-sheet': '4-sheet',
+  '2-sheet': '2-sheet',
+  Mega: 'mega',
+  'DOT M': 'dot-m',
+  MP: 'mega-portrait',
+  FF: 'ff',
+};
 
 function costKey(market: string, assetId: string) {
   return `${market}\x00${assetId}`;
@@ -49,23 +49,35 @@ function emptyAssetShippingDraft(): AssetShippingDraft {
   };
 }
 
+function quantityForSheetKey(mapping: CalculatorMappingRecord, sheetKey: string) {
+  const quantities = mapping.quantities as Record<string, number>;
+  if (typeof quantities[sheetKey] === 'number') return quantities[sheetKey];
+  const matchingKey = Object.keys(quantities).find((key) => toCanonicalSheetNameKey(key) === sheetKey);
+  return matchingKey ? quantities[matchingKey] ?? 0 : 0;
+}
+
+function draftValue(draft: Record<string, string>, sheetKey: string) {
+  const formatKey = formatKeys.find((key) => settingsKeyByFormatKey[key] === sheetKey);
+  return draft[sheetKey] ?? (formatKey ? draft[formatKey] : undefined) ?? '0';
+}
+
 function toDraft(cost?: MarketAssetShippingCostRecord): AssetShippingDraft {
   const next = emptyAssetShippingDraft();
   if (!cost) return next;
-  for (const key of formatKeys) {
-    next[key] = String(cost.costs?.[key] ?? 0);
-  }
+  Object.entries(cost.costs ?? {}).forEach(([key, value]) => {
+    next[key] = String(value ?? 0);
+  });
   next.Mega = String(cost.costs?.Mega ?? cost.megaShippingRate ?? 0);
   next['DOT M'] = String(cost.costs?.['DOT M'] ?? cost.dotMShippingRate ?? 0);
   next.MP = String(cost.costs?.MP ?? cost.mpShippingRate ?? 0);
   return next;
 }
 
-function toShippingCosts(draft: AssetShippingDraft): Record<FormatKey, number> {
-  const next = {} as Record<FormatKey, number>;
-  for (const key of formatKeys) {
+function toShippingCosts(draft: AssetShippingDraft): Record<string, number> {
+  const next: Record<string, number> = {};
+  Object.keys(draft).forEach((key) => {
     next[key] = Math.max(0, Number(draft[key]) || 0);
-  }
+  });
   return next;
 }
 
@@ -123,13 +135,12 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
   const customSheetRows = useMemo(
     () => filteredMappings
       .filter((mapping) => !maintenanceAssetIds.has(mapping.id))
-      .flatMap((mapping) => customSheetFormatKeys
-        .filter(({ formatKey, settingsKey }) => customSheetSizeFormats[settingsKey] && ((mapping.quantities as Record<string, number>)[formatKey] ?? 0) > 0)
-        .map(({ formatKey, settingsKey }) => ({
+      .flatMap((mapping) => Object.keys(customSheetSizeFormats)
+        .filter((sheetKey) => customSheetSizeFormats[sheetKey] && quantityForSheetKey(mapping, sheetKey) > 0)
+        .map((sheetKey) => ({
           mapping,
-          formatKey,
-          settingsKey,
-          label: `${mapping.label || mapping.asset} | ${resolveCanonicalSheetName(settingsKey, sheetNameOverrides)}`,
+          sheetKey,
+          label: `${mapping.label || mapping.asset} | ${resolveCanonicalSheetName(sheetKey, sheetNameOverrides)}`,
         }))),
     [customSheetSizeFormats, filteredMappings, maintenanceAssetIds, sheetNameOverrides],
   );
@@ -254,13 +265,13 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
     setMarketRateDirty(false);
   }, [selectedMarketRate]);
 
-  function updateAssetDraft(market: string, assetId: string, formatKey: FormatKey, value: string) {
+  function updateAssetDraft(market: string, assetId: string, sheetKey: string, value: string) {
     const rowKey = costKey(market, assetId);
     setDraftsByAsset((current) => ({
       ...current,
       [rowKey]: {
         ...(current[rowKey] || emptyAssetShippingDraft()),
-        [formatKey]: value,
+        [sheetKey]: value,
       },
     }));
     setDirtyRows((current) => ({
@@ -730,12 +741,12 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                       </tr>
                     </thead>
                     <tbody>
-                      {customSheetRows.map(({ mapping, formatKey, label }, rowIndex) => {
+                      {customSheetRows.map(({ mapping, sheetKey, label }, rowIndex) => {
                         const rowKey = costKey(mapping.market, mapping.id);
                         const draft = draftsByAsset[rowKey] || emptyAssetShippingDraft();
                         return (
                           <tr
-                            key={`shipping-asset-row-${mapping.id}-${formatKey}`}
+                            key={`shipping-asset-row-${mapping.id}-${sheetKey}`}
                             className={`border-t border-white/5 ${rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}`}
                           >
                             <td className="border border-slate-700 px-2 py-2 text-slate-200 sm:px-3">{mapping.market}</td>
@@ -745,7 +756,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
                             <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-slate-300">$</span>
-                                <Input className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm" type="number" min={0} step="0.01" value={draft[formatKey]} onChange={(event) => updateAssetDraft(mapping.market, mapping.id, formatKey, event.target.value)} />
+                                <Input className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm" type="number" min={0} step="0.01" value={draftValue(draft, sheetKey)} onChange={(event) => updateAssetDraft(mapping.market, mapping.id, sheetKey, event.target.value)} />
                               </div>
                             </td>
                             {!marketUseFlatRateMegas ? (

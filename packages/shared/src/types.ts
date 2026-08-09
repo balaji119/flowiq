@@ -2,7 +2,7 @@ export const formatKeys = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0', 'M
 
 export type FormatKey = (typeof formatKeys)[number];
 
-export type QuantityBreakdown = Record<FormatKey, number>;
+export type QuantityBreakdown = Record<string, number>;
 
 export type PrintIqStockOption = {
   value: string;
@@ -246,7 +246,7 @@ export type MarketAssetShippingCostInput = {
   megaShippingRate: number;
   dotMShippingRate: number;
   mpShippingRate: number;
-  costs?: Record<FormatKey, number>;
+  costs?: Record<string, number>;
 };
 
 export type MarketAssetShippingCostRecord = MarketAssetShippingCostInput & {
@@ -257,7 +257,7 @@ export type MarketAssetShippingCostRecord = MarketAssetShippingCostInput & {
   updatedAt: string;
 };
 
-export type PrintingCostBreakdown = Record<FormatKey, number>;
+export type PrintingCostBreakdown = Record<string, number>;
 
 export type MarketAssetPrintingCostInput = {
   market: string;
