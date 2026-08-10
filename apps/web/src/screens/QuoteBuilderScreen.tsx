@@ -5047,10 +5047,10 @@ export function QuoteBuilderScreen({
             ]));
         };
 
-        const installFormatKeys = Array.from(new Set([
+        const installFormatKeysForRows = (rows: InstallWeekRow[]) => Array.from(new Set([
           ...formatKeys,
-          ...installWeekRows.flatMap((row) => Object.keys(row.breakdown)),
-        ])).filter((key) => installWeekRows.some((row) => (row.breakdown[key] ?? 0) > 0));
+          ...rows.flatMap((row) => Object.keys(row.breakdown)),
+        ])).filter((key) => rows.some((row) => (row.breakdown[key] ?? 0) > 0));
         const installFrameDivisor = (key: string) => formatToFrameDivisor[key as CreativeFormatKey] ?? 1;
         const installFrameCount = (key: string, posters: number) => Math.ceil(posters / Math.max(1, installFrameDivisor(key)));
         const installDateForWeek = (week: number) => {
@@ -5063,6 +5063,7 @@ export function QuoteBuilderScreen({
           return `w/c ${formatDocumentDate(`${year}-${month}-${day}`)}`;
         };
         const drawInstallWeekTable = (week: number, rows: InstallWeekRow[]) => {
+          const installFormatKeys = installFormatKeysForRows(rows);
           const stateWidth = 44;
           const assetWidth = Math.max(155, maxWidth - stateWidth - installFormatKeys.length * 54);
           const quantityWidth = (maxWidth - stateWidth - assetWidth) / Math.max(1, installFormatKeys.length);
