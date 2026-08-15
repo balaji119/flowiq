@@ -535,6 +535,16 @@ func extractQQDKey(result any) any {
 	return findNonZeroField(result, "QQDKey")
 }
 
+func extractQQDKeyForProductIndex(result any, productIndex int) any {
+	rawProducts, ok := valueAtPath(result, "QuoteDetails", "Products").([]any)
+	if ok && productIndex >= 0 && productIndex < len(rawProducts) {
+		if qqdKey := findNonZeroField(rawProducts[productIndex], "QQDKey"); qqdKey != nil {
+			return qqdKey
+		}
+	}
+	return extractQQDKey(result)
+}
+
 func extractQQDPKey(result any) any {
 	return findNonZeroField(result, "QQDPKey")
 }

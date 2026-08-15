@@ -51,6 +51,11 @@ type printIQSheetProductMergeKey struct {
 	ArtworkImageID string
 }
 
+type printIQSheetFormat struct {
+	breakdownKey string
+	settingsKey  string
+}
+
 var creativeNamePattern = regexp.MustCompile(`(?i)^Creative(\d+)$`)
 
 func resolveCreativeNumber(values orderFormValues, artworkImageID string) int {
@@ -105,10 +110,7 @@ func buildPrintIQJobTitle(values orderFormValues, product printIQSheetProduct) s
 	return jobTitle
 }
 
-var printIQSheetFormatOrder = []struct {
-	breakdownKey string
-	settingsKey  string
-}{
+var printIQSheetFormatOrder = []printIQSheetFormat{
 	{"8-sheet", "8-sheet"},
 	{"QA0", "8-sheet-a0"},
 	{"6-sheet", "6-sheet"},
@@ -118,6 +120,69 @@ var printIQSheetFormatOrder = []struct {
 	{"DOT M", "dot-m"},
 	{"MP", "mega-portrait"},
 	{"FF", "ff"},
+}
+
+func canonicalPrintIQSheetKey(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(normalized, " ")
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" {
+		return ""
+	}
+	switch normalized {
+	case "8 sheet", "8sheet":
+		return "8-sheet"
+	case "8 sheet a0", "8sheet a0", "a0 8 sheet", "qa0", "qao", "8 sheet qa0", "a0 sized 8 sheet", "a0 sized 4 sheet":
+		return "8-sheet-a0"
+	case "6 sheet", "6sheet":
+		return "6-sheet"
+	case "4 sheet", "4sheet":
+		return "4-sheet"
+	case "2 sheet", "2sheet":
+		return "2-sheet"
+	case "mega":
+		return "mega"
+	case "dot m", "dotm", "dot mega", "dot megasite":
+		return "dot-m"
+	case "mega portrait", "mp":
+		return "mega-portrait"
+	case "ff", "ferro film", "ferrofilm":
+		return "ff"
+	default:
+		return strings.ReplaceAll(normalized, " ", "-")
+	}
+}
+
+func printIQSheetFormatsForSummary(summary *campaignSummary) []printIQSheetFormat {
+	formats := append([]printIQSheetFormat{}, printIQSheetFormatOrder...)
+	seen := map[string]bool{}
+	for _, format := range formats {
+		seen[format.breakdownKey] = true
+	}
+	for _, line := range summary.Lines {
+		for key, quantity := range line.Breakdown {
+			trimmedKey := strings.TrimSpace(key)
+			if trimmedKey == "" || quantity <= 0 || seen[trimmedKey] {
+				continue
+			}
+			settingsKey := canonicalPrintIQSheetKey(trimmedKey)
+			if settingsKey == "" {
+				continue
+			}
+			formats = append(formats, printIQSheetFormat{breakdownKey: trimmedKey, settingsKey: settingsKey})
+			seen[trimmedKey] = true
+		}
+	}
+	return formats
+}
+
+func isBuiltInPrintIQSheetFormat(key string) bool {
+	for _, format := range printIQSheetFormatOrder {
+		if format.breakdownKey == key {
+			return true
+		}
+	}
+	return false
 }
 
 func missingPrintIQProductCodeError(market string, formatKey string, assetLabel string, assetID string, customSheetSize bool) error {
@@ -151,6 +216,28 @@ func assetProductCodeKey(assetID string) string {
 
 func assetSheetProductCodeKey(assetID string, sheetKey string) string {
 	return assetProductCodeKey(assetID) + "|sheet:" + strings.TrimSpace(sheetKey)
+}
+
+func resolveCustomPrintIQProductMapping(marketProductMappings map[string]materialProductMapping, summaryLine campaignLineResult, asset campaignAsset, sheetKey string) materialProductMapping {
+	for _, assetID := range []string{summaryLine.ID, asset.AssetID} {
+		trimmedAssetID := strings.TrimSpace(assetID)
+		if trimmedAssetID == "" {
+			continue
+		}
+		if mapping := marketProductMappings[assetSheetProductCodeKey(trimmedAssetID, sheetKey)]; strings.TrimSpace(mapping.ProductCode) != "" {
+			return mapping
+		}
+	}
+	for _, assetID := range []string{summaryLine.ID, asset.AssetID} {
+		trimmedAssetID := strings.TrimSpace(assetID)
+		if trimmedAssetID == "" {
+			continue
+		}
+		if mapping := marketProductMappings[assetProductCodeKey(trimmedAssetID)]; strings.TrimSpace(mapping.ProductCode) != "" {
+			return mapping
+		}
+	}
+	return materialProductMapping{}
 }
 
 func printIQFrameQuantity(formatKey string, posterQuantity int) int {
@@ -197,7 +284,7 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 	}
 	products := make([]printIQSheetProduct, 0)
 	productIndexes := map[printIQSheetProductMergeKey]int{}
-	for _, format := range printIQSheetFormatOrder {
+	for _, format := range printIQSheetFormatsForSummary(summary) {
 		for _, summaryLine := range summary.Lines {
 			posterQuantity := summaryLine.Breakdown[format.breakdownKey]
 			if posterQuantity <= 0 {
@@ -208,25 +295,25 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 			marketProductMappings := productMappingsByMarket[market]
 			asset := assets[summaryLine.ID]
 			productCodeKey := format.settingsKey
-			customAssetID := ""
-			useCustomSheetSize := customSheetSizeFormats[format.settingsKey]
-			if useCustomSheetSize {
-				customAssetID = strings.TrimSpace(asset.AssetID)
-				if customAssetID == "" {
-					customAssetID = summaryLine.ID
-				}
-				productCodeKey = assetSheetProductCodeKey(customAssetID, format.settingsKey)
-			}
+			useCustomSheetSize := customSheetSizeFormats[format.settingsKey] || !isBuiltInPrintIQSheetFormat(format.breakdownKey)
 			productMapping := marketProductMappings[productCodeKey]
 			productCode := strings.TrimSpace(productMapping.ProductCode)
 			sheetCode := strings.TrimSpace(productMapping.SheetCode)
-			if productCode == "" && useCustomSheetSize {
-				fallbackMapping := marketProductMappings[assetProductCodeKey(customAssetID)]
-				productCode = strings.TrimSpace(fallbackMapping.ProductCode)
-				sheetCode = strings.TrimSpace(fallbackMapping.SheetCode)
+			if useCustomSheetSize {
+				productMapping = resolveCustomPrintIQProductMapping(marketProductMappings, summaryLine, asset, format.settingsKey)
+				productCode = strings.TrimSpace(productMapping.ProductCode)
+				sheetCode = strings.TrimSpace(productMapping.SheetCode)
+				if productCode == "" {
+					productCodeKey = assetSheetProductCodeKey(summaryLine.ID, format.settingsKey)
+				}
 			}
 			if productCode == "" && !useCustomSheetSize {
 				productCode = strings.TrimSpace(fallbackProductCodes[productCodeKey])
+			}
+			if productCode == "" && useCustomSheetSize {
+				fallbackMapping := marketProductMappings[assetProductCodeKey(summaryLine.ID)]
+				productCode = strings.TrimSpace(fallbackMapping.ProductCode)
+				sheetCode = strings.TrimSpace(fallbackMapping.SheetCode)
 			}
 			if productCode == "" {
 				return nil, missingPrintIQProductCodeError(market, format.breakdownKey, summaryLine.AssetLabel, summaryLine.ID, useCustomSheetSize)
@@ -237,6 +324,9 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 				if artworkImageID == "" && format.breakdownKey == "8-sheet" {
 					artworkImageID = asset.CreativeImageID
 				}
+				if strings.TrimSpace(artworkImageID) == "" {
+					continue
+				}
 				products, _ = appendPrintIQSheetProduct(products, productIndexes, printIQSheetProduct{Market: market, FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: printIQQuantity, ArtworkImageID: artworkImageID})
 				continue
 			}
@@ -245,6 +335,9 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 			lastAssignedProductIndex := -1
 			for _, assignment := range assignments {
 				if assignment.FrameCount <= 0 || remaining <= 0 {
+					continue
+				}
+				if strings.TrimSpace(assignment.ArtworkImageID) == "" {
 					continue
 				}
 				assignedQuantity := assignment.FrameCount
@@ -258,8 +351,6 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 			}
 			if remaining > 0 && lastAssignedProductIndex >= 0 {
 				products[lastAssignedProductIndex].Quantity += remaining
-			} else if remaining > 0 {
-				products, _ = appendPrintIQSheetProduct(products, productIndexes, printIQSheetProduct{Market: market, FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: remaining})
 			}
 		}
 	}

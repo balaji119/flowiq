@@ -22,7 +22,7 @@ func testMaterialProductMapping(productCode string, sheetCode ...string) materia
 }
 
 func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndFrameQuantities(t *testing.T) {
-	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
+	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1", CreativeImageIDs: map[string]string{"8-sheet": "artwork-a", "4-sheet": "artwork-b"}}}}}}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}
 	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
 		"NSW": {
@@ -131,8 +131,73 @@ func TestResolvePrintIQSheetProductsMergesSameMarketArtworkAndSheetType(t *testi
 	}
 }
 
+func TestResolvePrintIQSheetProductsIncludesDynamicCustomSheetKeys(t *testing.T) {
+	values := orderFormValues{
+		CampaignMarkets: []campaignMarket{
+			{
+				Market: "VIC",
+				Assets: []campaignAsset{
+					{ID: "asset-1", CreativeImageIDs: map[string]string{"Mini Mega": "artwork-8"}},
+					{ID: "asset-2", CreativeImageIDs: map[string]string{"Mini Mega": "artwork-8"}},
+				},
+			},
+		},
+	}
+	summary := &campaignSummary{Lines: []campaignLineResult{
+		{ID: "asset-1", Market: "VIC", AssetLabel: "DOM - Brunton Ave", Breakdown: quantityBreakdown{"Mini Mega": 4}},
+		{ID: "asset-2", Market: "VIC", AssetLabel: "DOM - Brunton Ave", Breakdown: quantityBreakdown{"Mini Mega": 2}},
+	}}
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
+		"VIC": {
+			"asset:asset-1|sheet:mini-mega": testMaterialProductMapping("Mini Mega Brunton", "SHT-MINI"),
+			"asset:asset-2|sheet:mini-mega": testMaterialProductMapping("Mini Mega Brunton", "SHT-MINI"),
+		},
+	}, map[string]string{}, map[string]bool{"mini-mega": true})
+	if err != nil {
+		t.Fatalf("resolve products: %v", err)
+	}
+	if len(products) != 1 {
+		t.Fatalf("expected 1 merged mini mega product, got %d: %#v", len(products), products)
+	}
+	if products[0].Market != "VIC" || products[0].FormatKey != "Mini Mega" || products[0].ProductCode != "Mini Mega Brunton" || products[0].SheetCode != "SHT-MINI" || products[0].Quantity != 6 || products[0].ArtworkImageID != "artwork-8" {
+		t.Fatalf("unexpected dynamic custom product: %#v", products[0])
+	}
+}
+
+func TestResolvePrintIQSheetProductsSkipsQuantitiesWithoutArtwork(t *testing.T) {
+	values := orderFormValues{
+		CampaignMarkets: []campaignMarket{
+			{
+				Market: "VIC",
+				Assets: []campaignAsset{
+					{ID: "asset-with-artwork", CreativeImageIDs: map[string]string{"8-sheet": "artwork-a"}},
+					{ID: "asset-without-artwork"},
+				},
+			},
+		},
+	}
+	summary := &campaignSummary{Lines: []campaignLineResult{
+		{ID: "asset-with-artwork", Market: "VIC", Breakdown: quantityBreakdown{"8-sheet": 8}},
+		{ID: "asset-without-artwork", Market: "VIC", Breakdown: quantityBreakdown{"8-sheet": 8}},
+	}}
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
+		"VIC": {
+			"8-sheet": testMaterialProductMapping("VIC Quad Product"),
+		},
+	}, map[string]string{}, map[string]bool{})
+	if err != nil {
+		t.Fatalf("resolve products: %v", err)
+	}
+	if len(products) != 1 {
+		t.Fatalf("expected only artwork-mapped product, got %d: %#v", len(products), products)
+	}
+	if products[0].Quantity != 2 || products[0].ArtworkImageID != "artwork-a" {
+		t.Fatalf("unexpected artwork-mapped product: %#v", products[0])
+	}
+}
+
 func TestResolvePrintIQSheetProductsUsesAssetCodeForCustomSheetSize(t *testing.T) {
-	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
+	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1", CreativeImageIDs: map[string]string{"8-sheet": "artwork-a", "Mega": "artwork-b"}}}}}}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"Mega": 1, "8-sheet": 40}}}}
 	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
 		"NSW": {
@@ -157,7 +222,7 @@ func TestResolvePrintIQSheetProductsUsesAssetCodeForCustomSheetSize(t *testing.T
 }
 
 func TestResolvePrintIQSheetProductsUsesSelectedAssetIDForCustomSheetSize(t *testing.T) {
-	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "Sydney", Assets: []campaignAsset{{ID: "campaign-row-1", AssetID: "Sydney-56"}}}}}
+	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "Sydney", Assets: []campaignAsset{{ID: "campaign-row-1", AssetID: "Sydney-56", CreativeImageIDs: map[string]string{"Mega": "artwork-a"}}}}}}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "campaign-row-1", Market: "Sydney", AssetLabel: "MEGASITE - Anzac Pde", Breakdown: quantityBreakdown{"Mega": 1}}}}
 	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
 		"Sydney": {
@@ -176,7 +241,7 @@ func TestResolvePrintIQSheetProductsUsesSelectedAssetIDForCustomSheetSize(t *tes
 }
 
 func TestResolvePrintIQSheetProductsFallsBackToLegacyAssetCodeForCustomSheetSize(t *testing.T) {
-	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "Sydney", Assets: []campaignAsset{{ID: "campaign-row-1", AssetID: "Sydney-56"}}}}}
+	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "Sydney", Assets: []campaignAsset{{ID: "campaign-row-1", AssetID: "Sydney-56", CreativeImageIDs: map[string]string{"Mega": "artwork-a"}}}}}}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "campaign-row-1", Market: "Sydney", AssetLabel: "MEGASITE - Anzac Pde", Breakdown: quantityBreakdown{"Mega": 1}}}}
 	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
 		"Sydney": {
@@ -437,6 +502,37 @@ func TestExtractQQDKeyFindsProductQuantityKey(t *testing.T) {
 
 	if key := printIQStringValue(extractQQDKey(response)); key != "137262" {
 		t.Fatalf("expected QQDKey 137262, got %#v", key)
+	}
+}
+
+func TestExtractQQDKeyForProductIndexUsesMatchingProduct(t *testing.T) {
+	response := map[string]any{
+		"QuoteDetails": map[string]any{
+			"Products": []any{
+				map[string]any{
+					"Quantities": []any{
+						map[string]any{"MiddlewareProductDetail": map[string]any{"QQDKey": float64(137263)}},
+					},
+				},
+				map[string]any{
+					"Quantities": []any{
+						map[string]any{"MiddlewareProductDetail": map[string]any{"QQDKey": float64(137264)}},
+					},
+				},
+				map[string]any{
+					"Quantities": []any{
+						map[string]any{"MiddlewareProductDetail": map[string]any{"QQDKey": float64(137265)}},
+					},
+				},
+			},
+		},
+	}
+
+	if key := printIQStringValue(extractQQDKeyForProductIndex(response, 1)); key != "137264" {
+		t.Fatalf("expected second product QQDKey 137264, got %#v", key)
+	}
+	if key := printIQStringValue(extractQQDKey(response)); key != "137263" {
+		t.Fatalf("expected generic extraction to keep first QQDKey behavior, got %#v", key)
 	}
 }
 

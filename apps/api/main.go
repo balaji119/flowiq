@@ -1370,11 +1370,12 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	quoteQuestionQQDKeys := make([]any, 0, len(sheetProducts))
-	quoteQuestionQQDKeys = append(quoteQuestionQQDKeys, extractQQDKey(createQuoteResponse))
+	quoteQuestionQQDKeys = append(quoteQuestionQQDKeys, extractQQDKeyForProductIndex(createQuoteResponse, 0))
 
 	getPricePayloads := make([]any, 0, len(sheetProducts)-1)
 	getPriceResponses := make([]any, 0, len(sheetProducts)-1)
-	for _, product := range sheetProducts[1:] {
+	for offset, product := range sheetProducts[1:] {
+		productIndex := offset + 1
 		getPricePayload := buildPrintIQGetPriceForProductPayload(campaign.Values, product, quoteNo, tenant.Code)
 		getPricePayloads = append(getPricePayloads, getPricePayload)
 		getPriceResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetPriceForProduct", getPricePayload, a.optionService.getPriceForProduct)
@@ -1382,7 +1383,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		getPriceResponses = append(getPriceResponses, getPriceResponse)
-		quoteQuestionQQDKeys = append(quoteQuestionQQDKeys, extractQQDKey(getPriceResponse))
+		quoteQuestionQQDKeys = append(quoteQuestionQQDKeys, extractQQDKeyForProductIndex(getPriceResponse, productIndex))
 	}
 
 	getQuoteQuestionsPayloads := make([]any, 0, len(quoteQuestionQQDKeys))
