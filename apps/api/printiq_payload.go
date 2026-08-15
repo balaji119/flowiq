@@ -284,6 +284,32 @@ func buildPrintIQGetPriceForProductPayload(values orderFormValues, product print
 	}
 }
 
+const printIQProofContactAnswer = "15205|ADS Prepress|CONTACT"
+
+func buildPrintIQGetQuoteQuestionsPayload(qqdKey any) map[string]any {
+	return map[string]any{
+		"QQDKey": qqdKey,
+	}
+}
+
+func buildPrintIQSaveProofContactQuestionsPayload(qqdpKeys []any) map[string]any {
+	answers := make([]map[string]any, 0, len(qqdpKeys))
+	for _, qqdpKey := range qqdpKeys {
+		answers = append(answers, map[string]any{
+			"QQDPKey":   qqdpKey,
+			"QQQAValue": printIQProofContactAnswer,
+			"QSTKey":    0,
+			"QSideKey":  0,
+			"QQDSKey":   0,
+			"QQADKey":   0,
+			"QQQxKey":   5,
+			"QQQLITKey": 6,
+			"QQQLIKey":  4,
+		})
+	}
+	return map[string]any{"Answers": answers}
+}
+
 func resolveQuantity(values orderFormValues, summary *campaignSummary) int {
 	explicitQuantity, err := strconv.Atoi(strings.TrimSpace(values.Quantity))
 	if err == nil && explicitQuantity > 0 {

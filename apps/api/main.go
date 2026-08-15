@@ -1059,6 +1059,10 @@ func printIQStepLabel(step string) string {
 		return "create the PrintIQ quote"
 	case "GetPriceForProduct":
 		return "add one of the product lines to the PrintIQ quote"
+	case "GetQuoteQuestions":
+		return "retrieve PrintIQ quote questions"
+	case "SaveQuoteQuestions":
+		return "set the PrintIQ proof contact"
 	case "AcceptQuote":
 		return "accept the PrintIQ quote and create jobs"
 	case "UploadArtworkURL":
@@ -1097,6 +1101,21 @@ func summarizePrintIQPayload(step string, payload any) map[string]any {
 	copyStringField(summary, payloadMap, "Quantity")
 	copyStringField(summary, payloadMap, "JobNo")
 	copyStringField(summary, payloadMap, "OverrideFileName")
+	copyStringField(summary, payloadMap, "QQDKey")
+	if step == "SaveQuoteQuestions" {
+		if answers, ok := payloadMap["Answers"].([]map[string]any); ok {
+			qqdpKeys := make([]string, 0, len(answers))
+			for _, answer := range answers {
+				if qqdpKey := printIQStringValue(answer["QQDPKey"]); qqdpKey != "" {
+					qqdpKeys = append(qqdpKeys, qqdpKey)
+				}
+			}
+			summary["answerCount"] = len(answers)
+			if len(qqdpKeys) > 0 {
+				summary["qqdpKeys"] = qqdpKeys
+			}
+		}
+	}
 	if step == "UploadArtworkURL" {
 		copyStringField(summary, payloadMap, "ArtworkUrl")
 		copyBoolField(summary, payloadMap, "IsSupportingDocument")
@@ -1114,6 +1133,12 @@ func summarizePrintIQResponse(step string, parsed any) map[string]any {
 	summary := map[string]any{"step": step}
 	if quoteNo := extractQuoteNo(parsed); quoteNo != "" {
 		summary["quoteNo"] = quoteNo
+	}
+	if qqdKey := printIQStringValue(extractQQDKey(parsed)); qqdKey != "" {
+		summary["qqdKey"] = qqdKey
+	}
+	if qqdpKey := printIQStringValue(extractQQDPKey(parsed)); qqdpKey != "" {
+		summary["qqdpKey"] = qqdpKey
 	}
 	acceptedProducts := extractAcceptedProducts(parsed)
 	if len(acceptedProducts) > 0 {
@@ -1344,6 +1369,8 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "PrintIQ create quote response did not include QuoteNo", "details": createQuoteResponse})
 		return
 	}
+	quoteQuestionQQDKeys := make([]any, 0, len(sheetProducts))
+	quoteQuestionQQDKeys = append(quoteQuestionQQDKeys, extractQQDKey(createQuoteResponse))
 
 	getPricePayloads := make([]any, 0, len(sheetProducts)-1)
 	getPriceResponses := make([]any, 0, len(sheetProducts)-1)
@@ -1355,6 +1382,36 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		getPriceResponses = append(getPriceResponses, getPriceResponse)
+		quoteQuestionQQDKeys = append(quoteQuestionQQDKeys, extractQQDKey(getPriceResponse))
+	}
+
+	getQuoteQuestionsPayloads := make([]any, 0, len(quoteQuestionQQDKeys))
+	getQuoteQuestionsResponses := make([]any, 0, len(quoteQuestionQQDKeys))
+	quoteQuestionQQDPKeys := make([]any, 0, len(quoteQuestionQQDKeys))
+	for index, qqdKey := range quoteQuestionQQDKeys {
+		if qqdKey == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ product %d did not include QQDKey for proof contact", index+1), "details": map[string]any{"createQuoteWithDelivery": createQuoteResponse, "getPriceForProduct": getPriceResponses}})
+			return
+		}
+		getQuoteQuestionsPayload := buildPrintIQGetQuoteQuestionsPayload(qqdKey)
+		getQuoteQuestionsPayloads = append(getQuoteQuestionsPayloads, getQuoteQuestionsPayload)
+		getQuoteQuestionsResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetQuoteQuestions", getQuoteQuestionsPayload, a.optionService.getQuoteQuestions)
+		if !ok {
+			return
+		}
+		getQuoteQuestionsResponses = append(getQuoteQuestionsResponses, getQuoteQuestionsResponse)
+		qqdpKey := extractQQDPKey(getQuoteQuestionsResponse)
+		if qqdpKey == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ quote questions for product %d did not include QQDPKey for proof contact", index+1), "details": getQuoteQuestionsResponse})
+			return
+		}
+		quoteQuestionQQDPKeys = append(quoteQuestionQQDPKeys, qqdpKey)
+	}
+
+	saveQuoteQuestionsPayload := buildPrintIQSaveProofContactQuestionsPayload(quoteQuestionQQDPKeys)
+	saveQuoteQuestionsResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "SaveQuoteQuestions", saveQuoteQuestionsPayload, a.optionService.saveQuoteQuestions)
+	if !ok {
+		return
 	}
 
 	acceptQuotePayload := map[string]any{"QuoteNo": quoteNo}
@@ -1427,12 +1484,16 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	requestPayload := map[string]any{
 		"createQuoteWithDelivery": createQuotePayload,
 		"getPriceForProduct":      getPricePayloads,
+		"getQuoteQuestions":       getQuoteQuestionsPayloads,
+		"saveQuoteQuestions":      saveQuoteQuestionsPayload,
 		"acceptQuote":             acceptQuotePayload,
 		"uploadArtworkURL":        uploadArtworkPayloads,
 	}
 	responsePayload := map[string]any{
 		"createQuoteWithDelivery": createQuoteResponse,
 		"getPriceForProduct":      getPriceResponses,
+		"getQuoteQuestions":       getQuoteQuestionsResponses,
+		"saveQuoteQuestions":      saveQuoteQuestionsResponse,
 		"acceptQuote":             acceptQuoteResponse,
 		"uploadArtworkURL":        uploadArtworkResponses,
 		"quoteNo":                 quoteNo,

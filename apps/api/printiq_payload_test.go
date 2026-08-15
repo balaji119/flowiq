@@ -417,3 +417,61 @@ func TestExtractAcceptedProductsPreservesProductOrder(t *testing.T) {
 		t.Fatalf("unexpected accepted products: %#v", products)
 	}
 }
+
+func TestExtractQQDKeyFindsProductQuantityKey(t *testing.T) {
+	response := map[string]any{
+		"QuoteDetails": map[string]any{
+			"Products": []any{
+				map[string]any{
+					"Quantities": []any{
+						map[string]any{
+							"MiddlewareProductDetail": map[string]any{
+								"QQDKey": float64(137262),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if key := printIQStringValue(extractQQDKey(response)); key != "137262" {
+		t.Fatalf("expected QQDKey 137262, got %#v", key)
+	}
+}
+
+func TestExtractQQDPKeyFindsQuestionProductKey(t *testing.T) {
+	response := map[string]any{
+		"QuoteQuestionSections": []any{},
+		"Product": map[string]any{
+			"QQDPKey": float64(105717),
+			"QQDKey":  float64(0),
+		},
+	}
+
+	if key := printIQStringValue(extractQQDPKey(response)); key != "105717" {
+		t.Fatalf("expected QQDPKey 105717, got %#v", key)
+	}
+}
+
+func TestBuildPrintIQSaveProofContactQuestionsPayloadUsesADSPrepressContact(t *testing.T) {
+	payload := buildPrintIQSaveProofContactQuestionsPayload([]any{float64(105717), float64(105718)})
+	answers, ok := payload["Answers"].([]map[string]any)
+	if !ok {
+		t.Fatalf("expected Answers payload, got %#v", payload["Answers"])
+	}
+	if len(answers) != 2 {
+		t.Fatalf("expected 2 answers, got %d", len(answers))
+	}
+	for index, answer := range answers {
+		if answer["QQQAValue"] != "15205|ADS Prepress|CONTACT" {
+			t.Fatalf("answer %d used unexpected proof contact: %#v", index, answer["QQQAValue"])
+		}
+		if answer["QSTKey"] != 0 || answer["QSideKey"] != 0 || answer["QQDSKey"] != 0 || answer["QQADKey"] != 0 {
+			t.Fatalf("answer %d used unexpected zero-key fields: %#v", index, answer)
+		}
+		if answer["QQQxKey"] != 5 || answer["QQQLITKey"] != 6 || answer["QQQLIKey"] != 4 {
+			t.Fatalf("answer %d used unexpected question identifiers: %#v", index, answer)
+		}
+	}
+}

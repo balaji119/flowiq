@@ -478,6 +478,14 @@ func (o *optionService) getPriceForProduct(payload any) (any, int, error) {
 	return o.postQuoteProcess("GetPriceForProduct", payload)
 }
 
+func (o *optionService) getQuoteQuestions(payload any) (any, int, error) {
+	return o.postQuoteProcess("GetQuoteQuestions", payload)
+}
+
+func (o *optionService) saveQuoteQuestions(payload any) (any, int, error) {
+	return o.postQuoteProcess("SaveQuoteQuestions", payload)
+}
+
 func (o *optionService) acceptQuote(payload any) (any, int, error) {
 	return o.postQuoteProcess("AcceptQuote", payload)
 }
@@ -521,6 +529,14 @@ func extractQuoteNo(result any) string {
 		return quoteNo
 	}
 	return printIQStringValue(valueAtPath(result, "QuoteNo"))
+}
+
+func extractQQDKey(result any) any {
+	return findNonZeroField(result, "QQDKey")
+}
+
+func extractQQDPKey(result any) any {
+	return findNonZeroField(result, "QQDPKey")
 }
 
 type printIQAcceptedProduct struct {
