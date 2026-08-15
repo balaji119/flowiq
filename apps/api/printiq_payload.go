@@ -513,6 +513,7 @@ func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSum
 	setStringIfPresent(payload, "CustomerReference", values.CustomerReference)
 	setStringIfPresent(payload, "SpecialInstructions", values.JobDescription)
 	setStringIfPresent(payload, "CustomerExpectedDate", values.DueDate)
+	setStringIfPresent(payload, "DueDate", values.DueDate)
 	setStringIfPresent(payload, "ExternalJobReference", firstNonEmpty(values.KindName, values.CustomerReference))
 
 	if quantity > 0 {

@@ -67,6 +67,15 @@ type AutomatedQuoteAction = 'download-visuals' | 'send-email-to-ads';
 type AutomatedQuoteActionStatus = 'success' | 'error';
 type UploadedPurchaseOrder = NonNullable<CampaignRecord['purchaseOrder']>;
 
+const submitProgressStages = [
+  { progress: 12, label: 'Saving campaign' },
+  { progress: 28, label: 'Creating PrintIQ quote' },
+  { progress: 46, label: 'Adding PrintIQ jobs' },
+  { progress: 62, label: 'Setting proof contact' },
+  { progress: 78, label: 'Accepting quote' },
+  { progress: 90, label: 'Uploading artwork' },
+] as const;
+
 function parseVisualsExportMode(value: string | undefined): VisualsExportMode {
   const normalized = (value || '').trim().toLowerCase();
   return ['1', 'true', 'yes', 'on'].includes(normalized) ? 'excel' : 'pdf';
@@ -1254,6 +1263,7 @@ export function QuoteBuilderScreen({
   const [calculating, setCalculating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [testSubmitting, setTestSubmitting] = useState(false);
+  const [submitProgress, setSubmitProgress] = useState({ progress: 0, label: '' });
   const [quoteResponseMessage, setQuoteResponseMessage] = useState('');
   const [quoteResponseStatus, setQuoteResponseStatus] = useState<'success' | 'error'>('success');
   const [purchaseOrderNumberSubmitAttempted, setPurchaseOrderNumberSubmitAttempted] = useState(false);
@@ -1359,6 +1369,32 @@ export function QuoteBuilderScreen({
   const isSubmittedCampaign = campaignStatus === 'submitted';
   const isReadOnlyVisualDownload = autoDownloadVisuals;
   const isSuperAdmin = session?.user.role === 'super_admin';
+  const isPrintIQSubmitting = submitting || testSubmitting;
+
+  useEffect(() => {
+    if (!isPrintIQSubmitting) {
+      setSubmitProgress({ progress: 0, label: '' });
+      return;
+    }
+
+    let stageIndex = 0;
+    setSubmitProgress(submitProgressStages[stageIndex]);
+    const timer = window.setInterval(() => {
+      stageIndex = Math.min(stageIndex + 1, submitProgressStages.length - 1);
+      setSubmitProgress((current) => {
+        const nextStage = submitProgressStages[stageIndex];
+        if (current.progress >= nextStage.progress) {
+          return {
+            progress: Math.min(96, current.progress + 1),
+            label: nextStage.label,
+          };
+        }
+        return nextStage;
+      });
+    }, 1800);
+
+    return () => window.clearInterval(timer);
+  }, [isPrintIQSubmitting]);
 
   function reportQuoteAutomationResult(action: AutomatedQuoteAction, status: AutomatedQuoteActionStatus, message?: string) {
     if (typeof window === 'undefined') return;
@@ -6923,6 +6959,21 @@ export function QuoteBuilderScreen({
                   <p className="mt-1 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-[30px] font-extrabold leading-none text-transparent drop-shadow-[0_0_18px_rgba(255,255,255,0.12)]">
                     {formatCurrency(totalEstimateCost)}
                   </p>
+                  {isPrintIQSubmitting ? (
+                    <div className="mt-4 rounded-lg border border-violet-300/25 bg-violet-500/10 px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3 text-[11px] font-semibold text-violet-100">
+                        <span>{testSubmitting ? 'Testing PrintIQ order' : 'Submitting PrintIQ order'}</span>
+                        <span>{Math.round(submitProgress.progress)}%</span>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-950/80 ring-1 ring-white/10">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-violet-400 via-fuchsia-400 to-amber-300 transition-[width] duration-700 ease-out"
+                          style={{ width: `${Math.max(8, submitProgress.progress)}%` }}
+                        />
+                      </div>
+                      <p className="mt-2 text-[11px] font-medium text-slate-300">{submitProgress.label || 'Preparing PrintIQ submission'}</p>
+                    </div>
+                  ) : null}
                   <div className={cn('mt-5 grid gap-1.5', isSuperAdmin ? 'grid-cols-4' : 'grid-cols-3')}>
                     <Button
                       className="h-9 min-w-0 rounded-xl border-white/10 bg-slate-800/65 px-1.5 text-[11px] font-semibold text-slate-100 transition hover:bg-slate-700/75"

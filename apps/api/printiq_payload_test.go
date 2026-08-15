@@ -406,6 +406,23 @@ func TestBuildPrintIQCreateQuotePayloadUsesFormattedJobTitle(t *testing.T) {
 	}
 }
 
+func TestBuildPrintIQCreateQuotePayloadSendsDueDateAliases(t *testing.T) {
+	values := orderFormValues{
+		DueDate: "2026-09-02",
+	}
+	payload := buildPrintIQCreateQuotePayload(
+		values,
+		nil,
+		printIQSheetProduct{ProductCode: "Quad Product", Quantity: 1},
+	)
+	if payload["CustomerExpectedDate"] != "2026-09-02" {
+		t.Fatalf("unexpected CustomerExpectedDate: %#v", payload["CustomerExpectedDate"])
+	}
+	if payload["DueDate"] != "2026-09-02" {
+		t.Fatalf("unexpected DueDate: %#v", payload["DueDate"])
+	}
+}
+
 func TestExtractPurchaseOrderUploadBuildsAccessibleURL(t *testing.T) {
 	t.Setenv("APP_BASE_URL", "https://app.example.com")
 	tempDir := t.TempDir()
