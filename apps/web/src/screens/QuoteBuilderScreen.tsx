@@ -3969,6 +3969,8 @@ export function QuoteBuilderScreen({
         breakdown: Record<string, number>;
         rowOrder: number;
       };
+      const hasInstallQuantity = (row: InstallWeekRow) =>
+        Object.values(row.breakdown).some((quantity) => quantity > 0);
       const installWeekRows: InstallWeekRow[] = [];
       const allInstallWeeks = Array.from(new Set([
         ...createAllWeeks(weekCount),
@@ -4985,7 +4987,9 @@ export function QuoteBuilderScreen({
           return `w/c ${formatDocumentDate(`${year}-${month}-${day}`)}`;
         };
         const drawInstallWeekTable = (week: number, rows: InstallWeekRow[]) => {
-          const installFormatKeys = installFormatKeysForRows(rows);
+          const visibleRows = rows.filter(hasInstallQuantity);
+          if (visibleRows.length === 0) return;
+          const installFormatKeys = installFormatKeysForRows(visibleRows);
           const stateWidth = 44;
           const assetWidth = Math.max(155, maxWidth - stateWidth - installFormatKeys.length * 54);
           const quantityWidth = (maxWidth - stateWidth - assetWidth) / Math.max(1, installFormatKeys.length);
@@ -5045,7 +5049,7 @@ export function QuoteBuilderScreen({
           drawSectionHeader(`Install Schedule - ${installDateForWeek(week)}`, 0);
           cursorY += 10;
           drawRow(columns.map((column) => column.label), true);
-          const orderedRows = [...rows].sort((left, right) => left.rowOrder - right.rowOrder);
+          const orderedRows = [...visibleRows].sort((left, right) => left.rowOrder - right.rowOrder);
           let lastState = '';
           orderedRows.forEach((row) => {
             const showState = row.state !== lastState;
@@ -5099,8 +5103,7 @@ export function QuoteBuilderScreen({
           }
           logInstallGeneration('job details drawn');
           cursorY -= 4;
-          const hasInstallSchedule = installWeekRows.some((row) =>
-            Object.values(row.breakdown).some((quantity) => quantity > 0));
+          const hasInstallSchedule = installWeekRows.some(hasInstallQuantity);
           logInstallGeneration('install schedule drawing started', {
             hasInstallSchedule,
             installWeekCount: allInstallWeeks.length,
