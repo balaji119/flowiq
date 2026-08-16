@@ -1213,6 +1213,14 @@ function stableSerialize(value: unknown) {
   return JSON.stringify(toStableValue(value));
 }
 
+function campaignLinesFromMarkets(markets: CampaignMarket[]): CampaignLine[] {
+  return markets.flatMap((market) => market.assets.map((asset) => ({
+    ...asset,
+    market: market.market,
+    marketQuantityOverrides: market.quantityOverrides,
+  })));
+}
+
 export function QuoteBuilderScreen({
   campaignId: selectedCampaignId,
   tenantId,
@@ -2347,11 +2355,7 @@ export function QuoteBuilderScreen({
     const timeoutId = setTimeout(async () => {
       try {
         setCalculating(true);
-        const flatLines: CampaignLine[] = values.campaignMarkets.flatMap((market) => market.assets.map((asset) => ({
-          ...asset,
-          market: market.market,
-          marketQuantityOverrides: market.quantityOverrides,
-        })));
+        const flatLines = campaignLinesFromMarkets(values.campaignMarkets);
         const result = await calculateCampaign(flatLines, effectiveTenantId);
         if (!active) return;
         setSummary(result);
@@ -2383,11 +2387,7 @@ export function QuoteBuilderScreen({
         const allMarkets = editingMarketId
           ? values.campaignMarkets.map((market) => (market.id === editingMarketId ? draftMarket : market))
           : [...values.campaignMarkets, draftMarket];
-        const flatLines: CampaignLine[] = allMarkets.flatMap((market) => market.assets.map((asset) => ({
-          ...asset,
-          market: market.market,
-          marketQuantityOverrides: market.quantityOverrides,
-        })));
+        const flatLines = campaignLinesFromMarkets(allMarkets);
         const result = await calculateCampaign(flatLines, effectiveTenantId);
         if (!active) return;
         const nextSummary = result.perMarket.find((entry) => entry.market === draftMarket.market) ?? null;
@@ -3955,6 +3955,7 @@ export function QuoteBuilderScreen({
     exportMode: VisualsExportMode,
     purpose: ArtworkExportPurpose = 'visuals',
     diagnosticId = '',
+    summaryOverride: CampaignCalculationSummary | null = null,
   ): Promise<GeneratedVisualExportFile[]> {
     try {
       const ExcelJSRuntime = ExcelJS as any;
@@ -3978,7 +3979,8 @@ export function QuoteBuilderScreen({
       const weekCount = Math.max(1, Number.parseInt(values.numberOfWeeks || '1', 10) || 1);
       const shouldGenerateExcel = exportMode === 'excel';
 
-      const lineByAssetId = new Map((summary?.lines ?? []).map((line) => [line.id, line]));
+      const exportSummary = summaryOverride ?? summary;
+      const lineByAssetId = new Map((exportSummary?.lines ?? []).map((line) => [line.id, line]));
       const defaultDeliveryAddressByMarket = new Map<string, string>();
       marketDeliveryAddresses.forEach((entry) => {
         if (!defaultDeliveryAddressByMarket.has(entry.market) || entry.isDefault) {
@@ -5702,7 +5704,9 @@ export function QuoteBuilderScreen({
     setExportProgressMessage('Preparing export...');
 
     try {
-      await generateArtworkTemplates(true, VISUALS_EXPORT_MODE);
+      const exportSummary = await ensureExportSummary();
+      if (exportSummary === false) return false;
+      await generateArtworkTemplates(true, VISUALS_EXPORT_MODE, 'visuals', '', exportSummary);
       setExportProgressMessage('Download started. Check your browser download bar.');
       setError('');
       setReviewActionError('');
@@ -5716,6 +5720,25 @@ export function QuoteBuilderScreen({
       return false;
     } finally {
       setExportingTemplates(false);
+    }
+  }
+
+  async function ensureExportSummary(): Promise<CampaignCalculationSummary | null | false> {
+    if (summary?.lines?.length) return summary;
+    if (values.campaignMarkets.length === 0) return null;
+
+    try {
+      setCalculating(true);
+      const result = await calculateCampaign(campaignLinesFromMarkets(values.campaignMarkets), effectiveTenantId);
+      setSummary(result);
+      setValues((current) => ({ ...current, quantity: String(result.grandTotal.totalUnits) }));
+      return result;
+    } catch (calculationError) {
+      const message = calculationError instanceof Error ? calculationError.message : 'Unable to calculate campaign';
+      setReviewValidationError(message);
+      return false;
+    } finally {
+      setCalculating(false);
     }
   }
 
@@ -5751,7 +5774,9 @@ export function QuoteBuilderScreen({
         marketCount: values.campaignMarkets.length,
       });
       const pdfGenerationStartedAt = performance.now();
-      const generatedFiles = await generateArtworkTemplates(false, 'pdf', 'installs', installDownloadRequestId);
+      const exportSummary = await ensureExportSummary();
+      if (exportSummary === false) return false;
+      const generatedFiles = await generateArtworkTemplates(false, 'pdf', 'installs', installDownloadRequestId, exportSummary);
       console.info('[FlowIQ Installs Download]', installDownloadRequestId, 'installation PDF generated', {
         elapsedMs: Math.round(performance.now() - pdfGenerationStartedAt),
         fileCount: generatedFiles.length,
