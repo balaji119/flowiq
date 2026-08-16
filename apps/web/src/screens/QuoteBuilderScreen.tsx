@@ -63,7 +63,7 @@ type GeneratedVisualExportFile = {
   mimeType: string;
 };
 
-type AutomatedQuoteAction = 'download-visuals' | 'send-email-to-ads';
+type AutomatedQuoteAction = 'download-visuals' | 'download-installs' | 'send-email-to-ads';
 type AutomatedQuoteActionStatus = 'success' | 'error';
 type UploadedPurchaseOrder = NonNullable<CampaignRecord['purchaseOrder']>;
 
@@ -1218,6 +1218,7 @@ export function QuoteBuilderScreen({
   tenantId,
   startFresh = false,
   autoDownloadVisuals = false,
+  autoDownloadInstalls = false,
   closeAfterVisualsDownload = false,
   autoSendEmailToAds = false,
   closeAfterEmailSend = false,
@@ -1228,6 +1229,7 @@ export function QuoteBuilderScreen({
   tenantId?: string | null;
   startFresh?: boolean;
   autoDownloadVisuals?: boolean;
+  autoDownloadInstalls?: boolean;
   closeAfterVisualsDownload?: boolean;
   autoSendEmailToAds?: boolean;
   closeAfterEmailSend?: boolean;
@@ -1367,7 +1369,7 @@ export function QuoteBuilderScreen({
   const pendingArtworkUploadCount = queuedArtworkUploadJobs.length;
   const uploadingArtworkPages = campaignArtworkUploadJobs.some((job) => job.status === 'queued' || job.status === 'uploading');
   const isSubmittedCampaign = campaignStatus === 'submitted';
-  const isReadOnlyVisualDownload = autoDownloadVisuals;
+  const isReadOnlyExportAutomation = autoDownloadVisuals || autoDownloadInstalls;
   const isSuperAdmin = session?.user.role === 'super_admin';
   const isPrintIQSubmitting = submitting || testSubmitting;
 
@@ -1511,7 +1513,7 @@ export function QuoteBuilderScreen({
 
         if (storedCampaignId) {
           try {
-            if (!isReadOnlyVisualDownload) {
+            if (!isReadOnlyExportAutomation) {
               await acquireCampaignEditLock(storedCampaignId, effectiveTenantId);
               editLockHeldRef.current = true;
             }
@@ -1524,7 +1526,7 @@ export function QuoteBuilderScreen({
             setHasSavedMarketViaPopup(true);
             lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
             campaignHydratedRef.current = true;
-            if (!isReadOnlyVisualDownload) {
+            if (!isReadOnlyExportAutomation) {
               await setStoredCampaignId(response.campaign.id, effectiveTenantId);
             }
             return;
@@ -1574,10 +1576,10 @@ export function QuoteBuilderScreen({
     return () => {
       active = false;
     };
-  }, [effectiveTenantId, isReadOnlyVisualDownload, onBack, selectedCampaignId, startFresh]);
+  }, [effectiveTenantId, isReadOnlyExportAutomation, onBack, selectedCampaignId, startFresh]);
 
   useEffect(() => {
-    if (!campaignId || isReadOnlyVisualDownload || !editLockHeldRef.current) return;
+    if (!campaignId || isReadOnlyExportAutomation || !editLockHeldRef.current) return;
 
     let active = true;
     const intervalId = window.setInterval(async () => {
@@ -1595,14 +1597,14 @@ export function QuoteBuilderScreen({
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [campaignId, effectiveTenantId, isReadOnlyVisualDownload]);
+  }, [campaignId, effectiveTenantId, isReadOnlyExportAutomation]);
 
   useEffect(() => {
-    if (!campaignId || isReadOnlyVisualDownload) return;
+    if (!campaignId || isReadOnlyExportAutomation) return;
     return () => {
       void releaseActiveCampaignLock(campaignId);
     };
-  }, [campaignId, effectiveTenantId, isReadOnlyVisualDownload]);
+  }, [campaignId, effectiveTenantId, isReadOnlyExportAutomation]);
 
   useEffect(() => {
     let active = true;
@@ -5846,6 +5848,25 @@ export function QuoteBuilderScreen({
       }, 1200);
     })();
   }, [autoDownloadVisuals, closeAfterVisualsDownload, loadingMetadata, loadingCampaign, campaignId]);
+
+  useEffect(() => {
+    if (!autoDownloadInstalls || autoDownloadTriggeredRef.current) return;
+    if (loadingMetadata || loadingCampaign) return;
+    if (!campaignHydratedRef.current) return;
+    if (!campaignId) return;
+    autoDownloadTriggeredRef.current = true;
+
+    void (async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 180));
+      const success = await downloadInstallationSheet();
+      reportQuoteAutomationResult('download-installs', success ? 'success' : 'error');
+      if (!success) return;
+      if (!closeAfterVisualsDownload) return;
+      window.setTimeout(() => {
+        window.close();
+      }, 1200);
+    })();
+  }, [autoDownloadInstalls, closeAfterVisualsDownload, loadingMetadata, loadingCampaign, campaignId]);
 
   useEffect(() => {
     if (!autoSendEmailToAds || autoSendEmailTriggeredRef.current) return;

@@ -14,6 +14,7 @@ type CampaignScheduleViewDialogProps = {
   open: boolean;
   loading: boolean;
   error: string;
+  editLockNotice?: string;
   campaign: CampaignRecord | null;
   tenantId?: string | null;
   onOpenChange: (open: boolean) => void;
@@ -88,7 +89,7 @@ function deliveryContactName(address: string) {
   return first;
 }
 
-type QuoteAutomationAction = 'download-visuals' | 'send-email-to-ads';
+type QuoteAutomationAction = 'download-visuals' | 'download-installs' | 'send-email-to-ads';
 type PendingQuoteAutomation = {
   action: QuoteAutomationAction;
 };
@@ -97,6 +98,7 @@ export function CampaignScheduleViewDialog({
   open,
   loading,
   error,
+  editLockNotice = '',
   campaign,
   tenantId,
   onOpenChange,
@@ -133,6 +135,7 @@ export function CampaignScheduleViewDialog({
   const [assetShippingCosts, setAssetShippingCosts] = useState<MarketAssetShippingCostRecord[]>([]);
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<Array<{ market: string; deliveryAddress: string }>>([]);
   const [downloadingVisuals, setDownloadingVisuals] = useState(false);
+  const [downloadingInstalls, setDownloadingInstalls] = useState(false);
   const [sendingAdsEmail, setSendingAdsEmail] = useState(false);
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [pendingAutomation, setPendingAutomation] = useState<PendingQuoteAutomation | null>(null);
@@ -158,22 +161,23 @@ export function CampaignScheduleViewDialog({
   const hasUploadedPurchaseOrder = Boolean((campaign?.purchaseOrder?.originalName || '').trim());
   const hasDeliveryDueDate = Boolean((campaign?.values.dueDate || '').trim());
   const isSubmittedCampaign = (campaign?.status === 'submitted') || emailSubmitted;
+  const isEditLockedByOtherUser = Boolean(editLockNotice.trim());
   const canCloneCampaign = campaign?.status === 'submitted';
   const canSubmitSubmittedCampaign = session?.user.role === 'super_admin';
 
   function startQuoteAutomation(action: QuoteAutomationAction) {
     if (!campaign || typeof window === 'undefined') return;
-    if (downloadingVisuals || sendingAdsEmail) return;
+    if (downloadingVisuals || downloadingInstalls || sendingAdsEmail) return;
 
-    if (action === 'download-visuals') {
+    if (action === 'download-visuals' || action === 'download-installs') {
       if (!hasDeliveryDueDate) {
         setActionSuccess('');
-        setActionError('Add a due date before downloading visuals.');
+        setActionError(action === 'download-installs' ? 'Add a due date before downloading the installation sheet.' : 'Add a due date before downloading visuals.');
         return;
       }
       if (!hasMappedCreatives) {
         setActionSuccess('');
-        setActionError('Map at least one creative to a market asset before downloading visuals');
+        setActionError(action === 'download-installs' ? 'Map at least one creative to a market asset before downloading the installation sheet' : 'Map at least one creative to a market asset before downloading visuals');
         return;
       }
     } else {
@@ -197,6 +201,7 @@ export function CampaignScheduleViewDialog({
     setActionError('');
     setActionSuccess('');
     setDownloadingVisuals(action === 'download-visuals');
+    setDownloadingInstalls(action === 'download-installs');
     setSendingAdsEmail(action === 'send-email-to-ads');
 
     const currentParams = new URLSearchParams(window.location.search);
@@ -207,6 +212,8 @@ export function CampaignScheduleViewDialog({
     if (currentTenantId) nextParams.set('tenantId', currentTenantId);
     if (action === 'download-visuals') {
       nextParams.set('downloadVisuals', '1');
+    } else if (action === 'download-installs') {
+      nextParams.set('downloadInstalls', '1');
     } else {
       nextParams.set('sendEmailToAds', '1');
     }
@@ -273,15 +280,16 @@ export function CampaignScheduleViewDialog({
 
       const failed = data.status !== 'success';
       setDownloadingVisuals(false);
+      setDownloadingInstalls(false);
       setSendingAdsEmail(false);
       setPendingAutomation(null);
       setAutomationFrameUrl('');
       if (failed) {
         setActionSuccess('');
-        setActionError(data.message || (data.action === 'download-visuals' ? 'Unable to download visuals. Open campaign in Edit and try again.' : 'Unable to send email. Open campaign in Edit and try again.'));
+        setActionError(data.message || (data.action === 'send-email-to-ads' ? 'Unable to send email. Open campaign in Edit and try again.' : 'Unable to download files. Please try again.'));
         return;
       }
-      if (data.action === 'download-visuals') {
+      if (data.action === 'download-visuals' || data.action === 'download-installs') {
         setActionError('');
         setActionSuccess('Downloaded');
       } else if (data.action === 'send-email-to-ads') {
@@ -305,6 +313,7 @@ export function CampaignScheduleViewDialog({
     if (!pendingAutomation) return undefined;
     const timeoutId = window.setTimeout(() => {
       setDownloadingVisuals(false);
+      setDownloadingInstalls(false);
       setSendingAdsEmail(false);
       setPendingAutomation(null);
       setAutomationFrameUrl('');
@@ -680,8 +689,12 @@ export function CampaignScheduleViewDialog({
     startQuoteAutomation('download-visuals');
   }
 
+  function downloadInstallsViaQuoteBuilder() {
+    startQuoteAutomation('download-installs');
+  }
+
   async function handleSubmitOrder() {
-    if (!campaign || (isSubmittedCampaign && !canSubmitSubmittedCampaign) || submittingOrder || downloadingVisuals || sendingAdsEmail) return;
+    if (!campaign || isEditLockedByOtherUser || (isSubmittedCampaign && !canSubmitSubmittedCampaign) || submittingOrder || downloadingVisuals || downloadingInstalls || sendingAdsEmail) return;
     setActionError('');
     setActionSuccess('');
     if (!hasUploadedPurchaseOrder) {
@@ -813,7 +826,13 @@ export function CampaignScheduleViewDialog({
                 {cloning ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-200" /> : <CopyPlus className="h-4 w-4" />}
                 {cloning ? 'Cloning...' : 'Clone'}
               </Button>
-              <Button className="h-9 px-4 btn-theme-primary" disabled={isSubmittedCampaign} onClick={onEdit} title={isSubmittedCampaign ? 'Submitted campaigns cannot be edited' : 'Edit schedule'} type="button">
+              <Button
+                className="h-9 px-4 btn-theme-primary"
+                disabled={isSubmittedCampaign || isEditLockedByOtherUser}
+                onClick={onEdit}
+                title={isEditLockedByOtherUser ? 'This campaign is currently being edited by another user' : (isSubmittedCampaign ? 'Submitted campaigns cannot be edited' : 'Edit schedule')}
+                type="button"
+              >
                 Edit Schedule
               </Button>
             </div>
@@ -829,6 +848,11 @@ export function CampaignScheduleViewDialog({
           <>
             <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
               <div className="grid gap-6">
+                {editLockNotice ? (
+                  <div className="rounded-md border border-rose-400/35 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-100">
+                    {editLockNotice}
+                  </div>
+                ) : null}
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-lg border border-white/10 bg-slate-900/45 p-4">
                     <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Start Date</p>
@@ -982,7 +1006,7 @@ export function CampaignScheduleViewDialog({
                 <div className="flex items-center justify-end gap-2.5">
                 <Button
                   className="h-9 rounded-md border border-violet-300/25 bg-violet-500/10 px-4 text-xs text-violet-100 hover:bg-violet-500/20"
-                  disabled={!canCloneCampaign || cloning || downloadingVisuals || sendingAdsEmail || submittingOrder}
+                  disabled={!canCloneCampaign || cloning || downloadingVisuals || downloadingInstalls || sendingAdsEmail || submittingOrder}
                   onClick={onClone}
                   title={canCloneCampaign ? 'Clone campaign' : 'Only submitted campaigns can be cloned'}
                   type="button"
@@ -993,17 +1017,25 @@ export function CampaignScheduleViewDialog({
                 </Button>
                 <Button
                   className="h-9 rounded-md border border-white/10 bg-slate-900/50 px-4 text-xs text-slate-100 hover:bg-slate-800/70"
-                  disabled={downloadingVisuals || sendingAdsEmail || submittingOrder}
+                  disabled={downloadingVisuals || downloadingInstalls || sendingAdsEmail || submittingOrder}
                   onClick={downloadVisualsViaQuoteBuilder}
                   type="button"
                 >
                   {downloadingVisuals ? 'Generating...' : 'Download Visuals'}
                 </Button>
                 <Button
+                  className="h-9 rounded-md border border-white/10 bg-slate-900/50 px-4 text-xs text-slate-100 hover:bg-slate-800/70"
+                  disabled={downloadingVisuals || downloadingInstalls || sendingAdsEmail || submittingOrder}
+                  onClick={downloadInstallsViaQuoteBuilder}
+                  type="button"
+                >
+                  {downloadingInstalls ? 'Generating...' : 'Download Installs'}
+                </Button>
+                <Button
                   className="h-9 px-4 btn-theme-primary"
-                  disabled={(isSubmittedCampaign && !canSubmitSubmittedCampaign) || downloadingVisuals || sendingAdsEmail || submittingOrder}
+                  disabled={isEditLockedByOtherUser || (isSubmittedCampaign && !canSubmitSubmittedCampaign) || downloadingVisuals || downloadingInstalls || sendingAdsEmail || submittingOrder}
                   onClick={() => void handleSubmitOrder()}
-                  title="Submit order to PrintIQ"
+                  title={isEditLockedByOtherUser ? 'This campaign is currently being edited by another user' : 'Submit order to PrintIQ'}
                   type="button"
                 >
                   {submittingOrder ? 'Submitting...' : 'Submit Order'}

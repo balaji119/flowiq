@@ -96,6 +96,7 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [viewLoading, setViewLoading] = useState(false);
   const [viewError, setViewError] = useState('');
+  const [viewEditLockNotice, setViewEditLockNotice] = useState('');
   const [campaignForView, setCampaignForView] = useState<CampaignRecord | null>(null);
   const [viewCampaignId, setViewCampaignId] = useState<string | null>(null);
   const [landingNotice, setLandingNotice] = useState('');
@@ -178,14 +179,24 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
     setViewCampaignId(campaignId);
     setViewLoading(true);
     setViewError('');
+    setViewEditLockNotice('');
     setCampaignForView(null);
     try {
       const response = await fetchCampaign(campaignId, selectedTenantId);
+      setCampaignForView(response.campaign);
       if (response.campaign.status === 'submitted') {
-        setCampaignForView(response.campaign);
         return;
       }
-      await calculatePersistedCampaign(campaignId, selectedTenantId);
+      try {
+        await calculatePersistedCampaign(campaignId, selectedTenantId);
+      } catch (calculateError) {
+        const message = calculateError instanceof Error ? calculateError.message : 'Unable to calculate campaign details';
+        if (message.toLowerCase().includes('currently being edited')) {
+          setViewEditLockNotice(message);
+          return;
+        }
+        throw calculateError;
+      }
       const refreshedResponse = await fetchCampaign(campaignId, selectedTenantId);
       setCampaignForView(refreshedResponse.campaign);
     } catch (loadError) {
@@ -197,6 +208,7 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
 
   async function handleEditFromView() {
     if (!viewCampaignId || !campaignForView) return;
+    if (viewEditLockNotice.trim()) return;
     if (campaignForView.status === 'submitted') {
       setError('Submitted campaigns cannot be edited');
       return;
@@ -204,6 +216,7 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
     setViewDialogOpen(false);
     setCampaignForView(null);
     setViewError('');
+    setViewEditLockNotice('');
     await handleOpenCampaign(viewCampaignId, campaignForView.status);
   }
 
@@ -216,6 +229,7 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
     if (campaign.status !== 'submitted') return;
     setError('');
     setViewError('');
+    setViewEditLockNotice('');
     setCampaignPendingClone({ id: campaign.id, campaignName: campaign.campaignName || `Untitled Campaign ${campaign.id.slice(0, 6)}` });
     setCloneDialogOpen(true);
   }
@@ -238,12 +252,14 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
     if (cloningCampaignId) return;
     setError('');
     setViewError('');
+    setViewEditLockNotice('');
     setCloningCampaignId(campaignId);
     try {
       const response = await cloneCampaign(campaignId, selectedTenantId);
       await acquireCampaignEditLock(response.campaign.id, selectedTenantId);
       setViewDialogOpen(false);
       setCampaignForView(null);
+      setViewEditLockNotice('');
       setViewCampaignId(null);
       onOpenCampaign(response.campaign.id);
     } catch (cloneError) {
@@ -556,6 +572,7 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
       <CampaignScheduleViewDialog
         campaign={campaignForView}
         error={viewError}
+        editLockNotice={viewEditLockNotice}
         loading={viewLoading}
         tenantId={selectedTenantId}
         onClose={() => setViewDialogOpen(false)}
@@ -570,6 +587,7 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
             void loadCampaigns();
             setViewLoading(false);
             setViewError('');
+            setViewEditLockNotice('');
             setCampaignForView(null);
             setViewCampaignId(null);
           }
