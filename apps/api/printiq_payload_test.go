@@ -423,6 +423,21 @@ func TestBuildPrintIQCreateQuotePayloadSendsDueDateAliases(t *testing.T) {
 	}
 }
 
+func TestBuildPrintIQAcceptQuotePayloadSendsDueDate(t *testing.T) {
+	payload := buildPrintIQAcceptQuotePayload("Q50206", " 2026-09-02 ")
+	if payload["QuoteNo"] != "Q50206" {
+		t.Fatalf("unexpected QuoteNo: %#v", payload["QuoteNo"])
+	}
+	if payload["DueDate"] != "2026-09-02" {
+		t.Fatalf("unexpected DueDate: %#v", payload["DueDate"])
+	}
+
+	payload = buildPrintIQAcceptQuotePayload("Q50206", " ")
+	if _, ok := payload["DueDate"]; ok {
+		t.Fatalf("did not expect empty DueDate in payload: %#v", payload)
+	}
+}
+
 func TestExtractPurchaseOrderUploadBuildsAccessibleURL(t *testing.T) {
 	t.Setenv("APP_BASE_URL", "https://app.example.com")
 	tempDir := t.TempDir()

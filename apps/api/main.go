@@ -1415,7 +1415,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	acceptQuotePayload := map[string]any{"QuoteNo": quoteNo}
+	acceptQuotePayload := buildPrintIQAcceptQuotePayload(quoteNo, campaign.Values.DueDate)
 	acceptQuoteResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "AcceptQuote", acceptQuotePayload, a.optionService.acceptQuote)
 	if !ok {
 		return

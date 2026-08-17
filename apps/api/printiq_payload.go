@@ -401,6 +401,12 @@ func buildPrintIQSaveProofContactQuestionsPayload(qqdpKeys []any) map[string]any
 	return map[string]any{"Answers": answers}
 }
 
+func buildPrintIQAcceptQuotePayload(quoteNo, dueDate string) map[string]any {
+	payload := map[string]any{"QuoteNo": quoteNo}
+	setStringIfPresent(payload, "DueDate", dueDate)
+	return payload
+}
+
 func resolveQuantity(values orderFormValues, summary *campaignSummary) int {
 	explicitQuantity, err := strconv.Atoi(strings.TrimSpace(values.Quantity))
 	if err == nil && explicitQuantity > 0 {
