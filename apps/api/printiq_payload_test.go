@@ -412,7 +412,7 @@ func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 	if payload["ProductCode"] != "Double Product" || payload["QuoteNo"] != "Q50206" || payload["CustomerCode"] != "C00003" {
 		t.Fatalf("unexpected payload: %#v", payload)
 	}
-	if payload["JobTitle"] != "C2 / Double Product ( Asahi - GNBC Q3 - Campaign) - SHT-002 - PO-1001" {
+	if payload["JobTitle"] != "C2_Double Product ( Asahi - GNBC Q3 - Campaign)_SHT-002_PO-1001" {
 		t.Fatalf("unexpected job title: %#v", payload["JobTitle"])
 	}
 	quantities, ok := payload["Quantities"].([]map[string]any)
@@ -436,7 +436,7 @@ func TestBuildPrintIQCreateQuotePayloadUsesFormattedJobTitle(t *testing.T) {
 		nil,
 		printIQSheetProduct{ProductCode: "Syd A0 Quad 3364x1189", SheetCode: "SHT-001", Quantity: 25, ArtworkImageID: "artwork-a"},
 	)
-	if payload["JobTitle"] != "C1 / Syd A0 Quad 3364x1189 ( Asahi - GNBC Q3 - Campaign) - SHT-001 - PO-1001" {
+	if payload["JobTitle"] != "C1_Syd A0 Quad 3364x1189 ( Asahi - GNBC Q3 - Campaign)_SHT-001_PO-1001" {
 		t.Fatalf("unexpected job title: %#v", payload["JobTitle"])
 	}
 }

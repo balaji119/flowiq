@@ -91,22 +91,22 @@ func buildPrintIQJobTitle(values orderFormValues, product printIQSheetProduct) s
 	if productCode == "" {
 		productCode = strings.TrimSpace(values.ProductCode)
 	}
-	jobTitle := fmt.Sprintf("C%d / %s", creativeNumber, productCode)
+	jobTitle := fmt.Sprintf("C%d_%s", creativeNumber, productCode)
 	if campaignName == "" {
 		if sheetCode != "" {
-			jobTitle = fmt.Sprintf("%s - %s", jobTitle, sheetCode)
+			jobTitle = fmt.Sprintf("%s_%s", jobTitle, sheetCode)
 		}
 		if purchaseOrderNumber != "" {
-			jobTitle = fmt.Sprintf("%s - %s", jobTitle, purchaseOrderNumber)
+			jobTitle = fmt.Sprintf("%s_%s", jobTitle, purchaseOrderNumber)
 		}
 		return jobTitle
 	}
 	jobTitle = fmt.Sprintf("%s ( %s)", jobTitle, campaignName)
 	if sheetCode != "" {
-		jobTitle = fmt.Sprintf("%s - %s", jobTitle, sheetCode)
+		jobTitle = fmt.Sprintf("%s_%s", jobTitle, sheetCode)
 	}
 	if purchaseOrderNumber != "" {
-		jobTitle = fmt.Sprintf("%s - %s", jobTitle, purchaseOrderNumber)
+		jobTitle = fmt.Sprintf("%s_%s", jobTitle, purchaseOrderNumber)
 	}
 	return jobTitle
 }
