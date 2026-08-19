@@ -831,13 +831,11 @@ func extractSinglePDFPageFile(ctx context.Context, sourcePDFPath, outputDir stri
 	return outputPath, nil
 }
 
-func buildPrintIQUploadArtworkPayload(jobNo string, qstKey any, artwork printIQArtworkUpload, isSupportingDocument, isLastArtworkFile bool) map[string]any {
+func buildPrintIQUploadArtworkPayload(jobNo string, artwork printIQArtworkUpload, isSupportingDocument, isLastArtworkFile bool) map[string]any {
 	return map[string]any{
 		"JobNo":                jobNo,
 		"ArtworkUrl":           artwork.ArtworkURL,
-		"QSTKey":               qstKey,
 		"IsSupportingDocument": isSupportingDocument,
-		"OverrideFileName":     artwork.OverrideFileName,
 		"IsLastArtworkFile":    isLastArtworkFile,
 	}
 }

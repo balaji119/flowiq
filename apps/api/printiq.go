@@ -573,13 +573,6 @@ func extractAcceptedProducts(result any) []printIQAcceptedProduct {
 	return products
 }
 
-func extractQSTKey(result any) any {
-	if qstKey := findNonZeroField(result, "QSTKey"); qstKey != nil {
-		return qstKey
-	}
-	return nil
-}
-
 func findNonZeroField(value any, fieldName string) any {
 	switch typed := value.(type) {
 	case map[string]any:

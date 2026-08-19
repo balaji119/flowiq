@@ -1443,18 +1443,6 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for index, product := range sheetProducts {
-		qstKey := acceptedProducts[index].QSTKey
-		if qstKey == nil {
-			qstKey = extractQSTKey(acceptQuoteResponse)
-		}
-		if qstKey == nil {
-			qstKey = extractQSTKey(createQuoteResponse)
-		}
-		if qstKey == nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ accepted product %d did not include QSTKey for artwork upload", index+1), "details": acceptQuoteResponse})
-			return
-		}
-
 		artwork, err := a.extractCampaignArtworkUpload(r.Context(), campaign.Values, product.ArtworkImageID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1462,7 +1450,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		}
 		if artwork != nil {
 			artworkIsLastFile := index != 0 || purchaseOrderUpload == nil
-			uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, qstKey, *artwork, false, artworkIsLastFile)
+			uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, *artwork, false, artworkIsLastFile)
 			uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
 			uploadResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
 			if !ok {
@@ -1472,7 +1460,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if index == 0 && purchaseOrderUpload != nil {
-			uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, qstKey, *purchaseOrderUpload, true, true)
+			uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, *purchaseOrderUpload, true, true)
 			uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
 			uploadResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
 			if !ok {

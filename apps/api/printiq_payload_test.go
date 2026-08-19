@@ -466,7 +466,7 @@ func TestExtractPurchaseOrderUploadBuildsAccessibleURL(t *testing.T) {
 }
 
 func TestBuildPrintIQUploadArtworkPayloadUsesExplicitSupportingDocumentFlags(t *testing.T) {
-	payload := buildPrintIQUploadArtworkPayload("J29328-01", float64(1), printIQArtworkUpload{
+	payload := buildPrintIQUploadArtworkPayload("J29328-01", printIQArtworkUpload{
 		ArtworkURL:       "https://app.example.com/api/purchase-orders/po.pdf/download",
 		OverrideFileName: "PO-1001",
 	}, true, true)
@@ -477,10 +477,16 @@ func TestBuildPrintIQUploadArtworkPayloadUsesExplicitSupportingDocumentFlags(t *
 	if payload["IsLastArtworkFile"] != true {
 		t.Fatalf("expected last artwork file flag, got %#v", payload["IsLastArtworkFile"])
 	}
+	if _, exists := payload["OverrideFileName"]; exists {
+		t.Fatalf("did not expect OverrideFileName in UploadArtworkURL payload: %#v", payload)
+	}
+	if _, exists := payload["QSTKey"]; exists {
+		t.Fatalf("did not expect QSTKey in UploadArtworkURL payload: %#v", payload)
+	}
 }
 
 func TestSummarizePrintIQPayloadIncludesUploadArtworkURLPayload(t *testing.T) {
-	payload := buildPrintIQUploadArtworkPayload("J29328-01", float64(1), printIQArtworkUpload{
+	payload := buildPrintIQUploadArtworkPayload("J29328-01", printIQArtworkUpload{
 		ArtworkURL:       "https://adsartwork.syd1.cdn.digitaloceanspaces.com/test_artwork.pdf",
 		OverrideFileName: "test_artwork",
 	}, false, true)
