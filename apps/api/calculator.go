@@ -125,6 +125,13 @@ func addBreakdown(target, source quantityBreakdown, multiplier int) {
 	}
 }
 
+func usesMaintenanceAssetForWeek(firstSelectedWeek int, week int, hasMaintenanceAsset bool) bool {
+	if !hasMaintenanceAsset || firstSelectedWeek <= 0 || week <= 0 {
+		return false
+	}
+	return week%2 != firstSelectedWeek%2
+}
+
 func posterTotal(breakdown quantityBreakdown) int {
 	total := 0
 	for key, value := range breakdown {
@@ -193,11 +200,12 @@ func (c *calculatorService) calculateCampaign(tenantID string, lines []campaignL
 		}
 
 		breakdown := createEmptyBreakdown()
+		firstSelectedWeek := selectedWeeks[0]
 		for _, week := range selectedWeeks {
 			runAsset := asset
-			// Maintenance runs are based on the actual campaign week number (every even week),
-			// not on the ordinal position inside the filtered selected week list.
-			if week%2 == 0 && asset.MaintenanceAssetID != nil {
+			// The first scheduled week uses the base asset; maintenance alternates
+			// from there so campaigns starting on an even week stay aligned.
+			if usesMaintenanceAssetForWeek(firstSelectedWeek, week, asset.MaintenanceAssetID != nil) {
 				if maintenance, maintenanceFound := assetLookup[*asset.MaintenanceAssetID]; maintenanceFound {
 					runAsset = maintenance
 				}

@@ -4025,6 +4025,10 @@ export function QuoteBuilderScreen({
             : null;
           const defaultLabel = campaignAsset.assetSearch || campaignAsset.assetId;
           const selectedWeekSet = new Set(campaignAsset.selectedWeeks);
+          const firstSelectedWeek = campaignAsset.selectedWeeks.reduce(
+            (earliest, week) => (week > 0 && week < earliest ? week : earliest),
+            Number.POSITIVE_INFINITY,
+          );
           const state = (
             inferStateFromMarket(market.market)
             ?? normalizeExportState(baseOption?.state || maintenanceOption?.state || '')
@@ -4048,7 +4052,9 @@ export function QuoteBuilderScreen({
           displayRows.forEach((displayRow) => {
             const rowOrder = installRowOrder++;
             allInstallWeeks.forEach((week) => {
-              const usesMaintenanceWeek = week % 2 === 0 && Boolean(maintenanceOption);
+              const usesMaintenanceWeek = Number.isFinite(firstSelectedWeek)
+                && week % 2 !== firstSelectedWeek % 2
+                && Boolean(maintenanceOption);
               const isSelected = selectedWeekSet.has(week);
               const matchesWeek = displayRow.appliesToMaintenanceWeeks ? usesMaintenanceWeek : !usesMaintenanceWeek;
               const breakdown = isSelected && matchesWeek

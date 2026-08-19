@@ -79,3 +79,27 @@ func TestCalculateFrameBreakdownPreservesCustomSheetQuantity(t *testing.T) {
 		t.Fatalf("8-sheet frames = %d, want 2", got)
 	}
 }
+
+func TestUsesMaintenanceAssetForWeekAlternatesFromOddStart(t *testing.T) {
+	if usesMaintenanceAssetForWeek(1, 1, true) {
+		t.Fatal("week 1 should use the base asset for an odd-week start")
+	}
+	if !usesMaintenanceAssetForWeek(1, 2, true) {
+		t.Fatal("week 2 should use the maintenance asset for an odd-week start")
+	}
+}
+
+func TestUsesMaintenanceAssetForWeekAlternatesFromEvenStart(t *testing.T) {
+	if usesMaintenanceAssetForWeek(2, 2, true) {
+		t.Fatal("week 2 should use the base asset for an even-week start")
+	}
+	if !usesMaintenanceAssetForWeek(2, 3, true) {
+		t.Fatal("week 3 should use the maintenance asset for an even-week start")
+	}
+}
+
+func TestUsesMaintenanceAssetForWeekRequiresMaintenanceAsset(t *testing.T) {
+	if usesMaintenanceAssetForWeek(2, 3, false) {
+		t.Fatal("week should use the base asset when no maintenance asset is linked")
+	}
+}
