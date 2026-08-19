@@ -8202,8 +8202,8 @@ export function QuoteBuilderScreen({
                         </div>
                         <div className="flex min-w-0 flex-col rounded-md border border-slate-700/70 bg-slate-950/55 p-3">
                           <Label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500" htmlFor={`artwork-code-${mappedImageId || creativeName}`}>Code</Label>
-                          <Input
-                            className="mt-2 h-9 border-slate-600 bg-slate-900 text-slate-100"
+                          <Textarea
+                            className="mt-2 h-[4.5rem] min-h-[4.5rem] resize-none whitespace-pre-wrap border-slate-600 bg-slate-900 text-slate-100"
                             disabled={!mappedImageId || isSubmittedCampaign}
                             id={`artwork-code-${mappedImageId || creativeName}`}
                             maxLength={80}
