@@ -88,6 +88,7 @@ func buildPrintIQJobTitle(values orderFormValues, product printIQSheetProduct) s
 	campaignName := strings.TrimSpace(values.CampaignName)
 	sheetCode := strings.TrimSpace(product.SheetCode)
 	purchaseOrderNumber := strings.TrimSpace(values.PurchaseOrderNumber)
+	artworkCode := strings.TrimSpace(values.ArtworkCodes[strings.TrimSpace(product.ArtworkImageID)])
 	if productCode == "" {
 		productCode = strings.TrimSpace(values.ProductCode)
 	}
@@ -99,6 +100,9 @@ func buildPrintIQJobTitle(values orderFormValues, product printIQSheetProduct) s
 		if purchaseOrderNumber != "" {
 			jobTitle = fmt.Sprintf("%s_%s", jobTitle, purchaseOrderNumber)
 		}
+		if artworkCode != "" {
+			jobTitle = fmt.Sprintf("%s_%s", jobTitle, artworkCode)
+		}
 		return jobTitle
 	}
 	jobTitle = fmt.Sprintf("%s ( %s)", jobTitle, campaignName)
@@ -107,6 +111,9 @@ func buildPrintIQJobTitle(values orderFormValues, product printIQSheetProduct) s
 	}
 	if purchaseOrderNumber != "" {
 		jobTitle = fmt.Sprintf("%s_%s", jobTitle, purchaseOrderNumber)
+	}
+	if artworkCode != "" {
+		jobTitle = fmt.Sprintf("%s_%s", jobTitle, artworkCode)
 	}
 	return jobTitle
 }

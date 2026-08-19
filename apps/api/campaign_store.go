@@ -103,6 +103,12 @@ func cloneOrderFormValues(values orderFormValues) orderFormValues {
 			cloned.CreativeNameAssignments[key] = value
 		}
 	}
+	if values.ArtworkCodes != nil {
+		cloned.ArtworkCodes = make(map[string]string, len(values.ArtworkCodes))
+		for key, value := range values.ArtworkCodes {
+			cloned.ArtworkCodes[key] = value
+		}
+	}
 	cloned.CampaignMarkets = append([]campaignMarket(nil), values.CampaignMarkets...)
 	for marketIndex := range cloned.CampaignMarkets {
 		if sourceOverrides := values.CampaignMarkets[marketIndex].QuantityOverrides; sourceOverrides != nil {

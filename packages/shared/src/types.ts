@@ -348,6 +348,7 @@ export type OrderFormValues = {
   printImages: CampaignPrintImage[];
   supportingDocuments?: CampaignSupportingDocument[];
   creativeNameAssignments?: Record<string, string>;
+  artworkCodes?: Record<string, string>;
   campaignMarkets: CampaignMarket[];
   contact: ContactDetails;
 };

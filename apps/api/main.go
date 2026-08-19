@@ -2322,6 +2322,21 @@ func remapCreativeNameAssignments(values map[string]string, imageIDMap map[strin
 	return remapped
 }
 
+func remapArtworkCodes(values map[string]string, imageIDMap map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	remapped := make(map[string]string, len(values))
+	for key, value := range values {
+		nextKey := key
+		if mappedKey, exists := imageIDMap[strings.TrimSpace(key)]; exists {
+			nextKey = mappedKey
+		}
+		remapped[nextKey] = value
+	}
+	return remapped
+}
+
 func remapArtworkMaterialAssignments(values map[string][]artworkMaterialAssignment, imageIDMap map[string]string) map[string][]artworkMaterialAssignment {
 	if values == nil {
 		return nil
@@ -2391,6 +2406,7 @@ func (a *app) cloneCampaignPayload(ctx context.Context, source *campaignRecord) 
 	}
 
 	values.CreativeNameAssignments = remapCreativeNameAssignments(values.CreativeNameAssignments, imageIDMap)
+	values.ArtworkCodes = remapArtworkCodes(values.ArtworkCodes, imageIDMap)
 	for marketIndex := range values.CampaignMarkets {
 		values.CampaignMarkets[marketIndex].ID = uuid.NewString()
 		for assetIndex := range values.CampaignMarkets[marketIndex].Assets {

@@ -132,6 +132,7 @@ type orderFormValues struct {
 	PrintImages             []campaignPrintImage `json:"printImages"`
 	SupportingDocuments     []supportingDocument `json:"supportingDocuments,omitempty"`
 	CreativeNameAssignments map[string]string    `json:"creativeNameAssignments,omitempty"`
+	ArtworkCodes            map[string]string    `json:"artworkCodes,omitempty"`
 	CampaignMarkets         []campaignMarket     `json:"campaignMarkets"`
 	Contact                 contactDetails       `json:"contact"`
 }

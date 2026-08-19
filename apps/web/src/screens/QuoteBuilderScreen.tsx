@@ -417,6 +417,17 @@ function normalizeCreativeNameAssignments(input?: Record<string, string>) {
   return normalized;
 }
 
+function normalizeArtworkCodes(input?: Record<string, string>) {
+  const normalized: Record<string, string> = {};
+  Object.entries(input ?? {}).forEach(([imageId, code]) => {
+    const safeImageId = (imageId || '').trim();
+    const safeCode = (code || '').trim();
+    if (!safeImageId || !safeCode) return;
+    normalized[safeImageId] = safeCode;
+  });
+  return normalized;
+}
+
 function normalizeFormValues(values: OrderFormValues): OrderFormValues {
   const normalizeCampaignImageUrl = (url?: string) =>
     url && url.startsWith('/uploads/campaign-images/')
@@ -458,6 +469,7 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
     })),
     supportingDocuments: (values.supportingDocuments ?? []).map((document) => ({ ...document })),
     creativeNameAssignments: normalizeCreativeNameAssignments(values.creativeNameAssignments),
+    artworkCodes: normalizeArtworkCodes(values.artworkCodes),
   };
 }
 
@@ -2969,6 +2981,24 @@ export function QuoteBuilderScreen({
     setEditingCreativeFileName(null);
   }
 
+  function updateArtworkCode(imageId: string, code: string) {
+    const safeImageId = (imageId || '').trim();
+    if (!safeImageId || isSubmittedCampaign) return;
+    setValues((current) => {
+      const nextCodes = normalizeArtworkCodes(current.artworkCodes);
+      const safeCode = code.trim();
+      if (safeCode) {
+        nextCodes[safeImageId] = safeCode;
+      } else {
+        delete nextCodes[safeImageId];
+      }
+      return {
+        ...current,
+        artworkCodes: nextCodes,
+      };
+    });
+  }
+
   function artworkFormatsForAsset(asset: CampaignAsset) {
     const summaryFormats = getCreativeFormatsForBreakdown(summaryLineByAssetId.get(asset.id)?.breakdown);
     const explicitFormats = Array.from(new Set([
@@ -3265,6 +3295,9 @@ export function QuoteBuilderScreen({
       setValues((current) => ({
         ...current,
         printImages: current.printImages.filter((entry) => entry.id !== image.id),
+        artworkCodes: Object.fromEntries(
+          Object.entries(normalizeArtworkCodes(current.artworkCodes)).filter(([imageId]) => imageId !== image.id),
+        ),
       }));
 
       if (previewArtworkImage?.id === image.id) {
@@ -8059,6 +8092,7 @@ export function QuoteBuilderScreen({
                     const mappedImageId = resolvedCreativeNameAssignments[creativeName] || '';
                     const mappedImage = mappedImageId ? artworkImageById.get(mappedImageId) ?? null : null;
                     const artworkSrc = mappedImage?.imageUrl || mappedImage?.thumbnailUrl ? buildApiUrl(mappedImage.imageUrl || mappedImage.thumbnailUrl || '') : '';
+                    const artworkCode = mappedImageId ? values.artworkCodes?.[mappedImageId] ?? '' : '';
                     const isSwapFeedbackRow = recentCreativeSwap?.source === creativeName || recentCreativeSwap?.target === creativeName;
                     const selectedAssignmentMarketId = artworkAssignmentMarketByCreativeName[creativeName] || defaultArtworkAssignmentMarketByCreativeName[creativeName] || '';
                     const selectedAssignmentMarket = values.campaignMarkets.find((market) => market.id === selectedAssignmentMarketId) ?? values.campaignMarkets[0] ?? null;
@@ -8067,7 +8101,7 @@ export function QuoteBuilderScreen({
                       <div
                         key={`creative-name-row-${creativeName}`}
                         className={cn(
-                          'grid gap-4 rounded-lg border border-slate-700/80 bg-slate-900/70 p-3 transition-colors duration-500 ease-out lg:grid-cols-[16rem_minmax(24rem,1fr)_24rem]',
+                          'grid gap-4 rounded-lg border border-slate-700/80 bg-slate-900/70 p-3 transition-colors duration-500 ease-out lg:grid-cols-[16rem_12rem_minmax(24rem,1fr)_24rem]',
                           isSwapFeedbackRow ? 'border-violet-400/50 bg-violet-500/10' : '',
                           creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'above' ? 'border-t-2 border-t-violet-400' : '',
                           creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'below' ? 'border-b-2 border-b-violet-400' : '',
@@ -8165,6 +8199,18 @@ export function QuoteBuilderScreen({
                                 : <Trash2 className="h-3.5 w-3.5" />}
                             </Button>
                           ) : null}
+                        </div>
+                        <div className="flex min-w-0 flex-col rounded-md border border-slate-700/70 bg-slate-950/55 p-3">
+                          <Label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500" htmlFor={`artwork-code-${mappedImageId || creativeName}`}>Code</Label>
+                          <Input
+                            className="mt-2 h-9 border-slate-600 bg-slate-900 text-slate-100"
+                            disabled={!mappedImageId || isSubmittedCampaign}
+                            id={`artwork-code-${mappedImageId || creativeName}`}
+                            maxLength={80}
+                            onChange={(event) => updateArtworkCode(mappedImageId, event.target.value)}
+                            placeholder="Code"
+                            value={artworkCode}
+                          />
                         </div>
                         <button
                           className={cn(

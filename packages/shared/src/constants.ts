@@ -47,6 +47,7 @@ export function createDefaultFormValues(customerCode = '', productCode = ''): Or
     printImages: [],
     supportingDocuments: [],
     creativeNameAssignments: {},
+    artworkCodes: {},
     campaignMarkets: [],
     contact: {
       title: 'Accounts Payable',
