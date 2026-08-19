@@ -47,6 +47,41 @@ func TestResolvePrintIQSheetProductsUsesConfiguredOrderAndFrameQuantities(t *tes
 	}
 }
 
+func TestResolvePrintIQSheetProductsOrdersByCreativeNumber(t *testing.T) {
+	values := orderFormValues{
+		CreativeNameAssignments: map[string]string{
+			"Creative1": "artwork-c1",
+			"Creative2": "artwork-c2",
+		},
+		CampaignMarkets: []campaignMarket{{
+			Market: "NSW",
+			Assets: []campaignAsset{{
+				ID:               "asset-1",
+				CreativeImageIDs: map[string]string{"8-sheet": "artwork-c2", "4-sheet": "artwork-c1"},
+			}},
+		}},
+	}
+	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
+		"NSW": {
+			"8-sheet": testMaterialProductMapping("NSW Quad Product"),
+			"4-sheet": testMaterialProductMapping("NSW Double Product"),
+		},
+	}, map[string]string{}, map[string]bool{})
+	if err != nil {
+		t.Fatalf("resolve products: %v", err)
+	}
+	if len(products) != 2 {
+		t.Fatalf("expected 2 products, got %d", len(products))
+	}
+	if products[0].ArtworkImageID != "artwork-c1" || products[0].FormatKey != "4-sheet" {
+		t.Fatalf("expected Creative1 product first, got %#v", products[0])
+	}
+	if products[1].ArtworkImageID != "artwork-c2" || products[1].FormatKey != "8-sheet" {
+		t.Fatalf("expected Creative2 product second, got %#v", products[1])
+	}
+}
+
 func TestResolvePrintIQSheetProductsRequiresEveryActiveProductCode(t *testing.T) {
 	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "asset-1"}}}}}
 	summary := &campaignSummary{Lines: []campaignLineResult{{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40, "4-sheet": 10}}}}

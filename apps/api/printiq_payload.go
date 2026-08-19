@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -357,6 +358,9 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 	if len(products) == 0 {
 		return nil, errors.New("Campaign has no sheet quantities to submit")
 	}
+	sort.SliceStable(products, func(i, j int) bool {
+		return resolveCreativeNumber(values, products[i].ArtworkImageID) < resolveCreativeNumber(values, products[j].ArtworkImageID)
+	})
 	return products, nil
 }
 
