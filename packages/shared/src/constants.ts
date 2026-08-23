@@ -36,6 +36,7 @@ export function createDefaultFormValues(customerCode = '', productCode = ''): Or
     customerReference: 'Q14259:1.0',
     purchaseOrderNumber: '',
     campaignName: '',
+    clientName: '',
     jobDescription: '',
     notes: '',
     productCode,

@@ -121,6 +121,7 @@ type orderFormValues struct {
 	CustomerReference       string               `json:"customerReference"`
 	PurchaseOrderNumber     string               `json:"purchaseOrderNumber"`
 	CampaignName            string               `json:"campaignName"`
+	ClientName              string               `json:"clientName"`
 	JobDescription          string               `json:"jobDescription"`
 	Notes                   string               `json:"notes"`
 	ProductCode             string               `json:"productCode"`

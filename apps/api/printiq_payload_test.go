@@ -395,6 +395,7 @@ func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 	payload := buildPrintIQGetPriceForProductPayload(
 		orderFormValues{
 			CampaignName:        "Asahi - GNBC Q3 - Campaign",
+			ClientName:          "TestClient",
 			PurchaseOrderNumber: "PO-1001",
 			PrintImages: []campaignPrintImage{
 				{ID: "artwork-a"},
@@ -415,7 +416,7 @@ func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 	if payload["ProductCode"] != "Double Product" || payload["QuoteNo"] != "Q50206" || payload["CustomerCode"] != "C00003" {
 		t.Fatalf("unexpected payload: %#v", payload)
 	}
-	if payload["JobTitle"] != "C2_Double Product ( Asahi - GNBC Q3 - Campaign)_SHT-002_PO-1001_B200" {
+	if payload["JobTitle"] != "C2_TestClient_PO-1001_SHT-002-Double Product-Asahi - GNBC Q3 - Campaign" {
 		t.Fatalf("unexpected job title: %#v", payload["JobTitle"])
 	}
 	quantities, ok := payload["Quantities"].([]map[string]any)
@@ -427,6 +428,7 @@ func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 func TestBuildPrintIQCreateQuotePayloadUsesFormattedJobTitle(t *testing.T) {
 	values := orderFormValues{
 		CampaignName:        "Asahi - GNBC Q3 - Campaign",
+		ClientName:          "TestClient",
 		ProductCode:         "Syd A0 Quad 3364x1189",
 		PurchaseOrderNumber: "PO-1001",
 		Quantity:            "25",
@@ -442,7 +444,7 @@ func TestBuildPrintIQCreateQuotePayloadUsesFormattedJobTitle(t *testing.T) {
 		nil,
 		printIQSheetProduct{ProductCode: "Syd A0 Quad 3364x1189", SheetCode: "SHT-001", Quantity: 25, ArtworkImageID: "artwork-a"},
 	)
-	if payload["JobTitle"] != "C1_Syd A0 Quad 3364x1189 ( Asahi - GNBC Q3 - Campaign)_SHT-001_PO-1001_A100" {
+	if payload["JobTitle"] != "C1_TestClient_PO-1001_SHT-001-Syd A0 Quad 3364x1189-Asahi - GNBC Q3 - Campaign" {
 		t.Fatalf("unexpected job title: %#v", payload["JobTitle"])
 	}
 }

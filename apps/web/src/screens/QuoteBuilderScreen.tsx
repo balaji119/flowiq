@@ -437,6 +437,7 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
   return {
     ...values,
     purchaseOrderNumber: values.purchaseOrderNumber ?? '',
+    clientName: values.clientName ?? '',
     productCode: values.productCode || createDefaultFormValues().productCode,
     campaignMarkets: (values.campaignMarkets ?? []).map((market) => ({
       ...market,
@@ -6148,16 +6149,29 @@ export function QuoteBuilderScreen({
           <div className="grid gap-4 lg:grid-cols-1 lg:items-start">
             <div className="space-y-7">
               <div className={cn('campaign-builder-top-form-scale space-y-4', TOP_FORM_THEME)}>
-                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,226px)_minmax(0,226px)_minmax(0,136px)]">
+                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,320px)_minmax(0,226px)_minmax(0,226px)_minmax(0,136px)]">
               <div className="flex h-11 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
                 <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Campaign Name</span>
                 <Input
-                  className="h-11 rounded-none border-0 bg-transparent px-3"
+                  className="h-11 rounded-none border-0 bg-slate-800/50 px-3"
                   id="campaign-name"
+                  placeholder="Campaign name"
                   type="text"
                   value={values.campaignName}
                   disabled={isSubmittedCampaign}
                   onChange={(event) => updateField('campaignName', event.target.value)}
+                />
+              </div>
+              <div className="flex h-11 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
+                <span className="inline-flex w-28 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Client Name</span>
+                <Input
+                  className="h-11 rounded-none border-0 bg-slate-800/50 px-3"
+                  id="client-name"
+                  placeholder="Client"
+                  type="text"
+                  value={values.clientName}
+                  disabled={isSubmittedCampaign}
+                  onChange={(event) => updateField('clientName', event.target.value)}
                 />
               </div>
               <div className="flex h-11 min-w-0 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
@@ -6313,7 +6327,7 @@ export function QuoteBuilderScreen({
                 </div>
               </div>
                 </div>
-                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,240px)_minmax(0,190px)_minmax(0,190px)_minmax(0,190px)_minmax(0,190px)_minmax(0,136px)] xl:items-center">
+                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,320px)_minmax(0,190px)_minmax(0,190px)_minmax(0,190px)_minmax(0,190px)_minmax(0,136px)] xl:items-center">
                   <div className="flex h-11 w-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/90">
                     <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Purchase Order</span>
                     <button
@@ -6357,7 +6371,7 @@ export function QuoteBuilderScreen({
                         : 'border-white/10 focus-within:border-violet-300/60 focus-within:ring-violet-300/40',
                     )}
                   >
-                    <span className="inline-flex w-36 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Purchase Order No</span>
+                    <span className="inline-flex w-32 shrink-0 items-center whitespace-nowrap border-r border-white/10 px-3 text-xs font-semibold tracking-wide text-slate-300">Purchase Order No</span>
                     <Input
                       aria-label="Purchase order no"
                       className="h-11 min-w-0 flex-1 rounded-none border-0 bg-slate-800/60 px-3 text-sm font-semibold text-slate-100 placeholder:text-slate-400 focus-visible:ring-0"
@@ -6368,7 +6382,7 @@ export function QuoteBuilderScreen({
                           setPurchaseOrderNumberSubmitAttempted(false);
                         }
                       }}
-                      placeholder={showPurchaseOrderNumberRequired ? 'Required' : 'PO number'}
+                      placeholder={showPurchaseOrderNumberRequired ? 'Required' : 'PO Number'}
                       type="text"
                       value={values.purchaseOrderNumber}
                       disabled={isSubmittedCampaign}

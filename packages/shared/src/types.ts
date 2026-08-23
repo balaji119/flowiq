@@ -337,6 +337,7 @@ export type OrderFormValues = {
   customerReference: string;
   purchaseOrderNumber: string;
   campaignName: string;
+  clientName: string;
   jobDescription: string;
   notes: string;
   productCode: string;

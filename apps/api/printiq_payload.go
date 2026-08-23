@@ -86,36 +86,33 @@ func buildPrintIQJobTitle(values orderFormValues, product printIQSheetProduct) s
 	creativeNumber := resolveCreativeNumber(values, product.ArtworkImageID)
 	productCode := strings.TrimSpace(product.ProductCode)
 	campaignName := strings.TrimSpace(values.CampaignName)
+	clientName := strings.TrimSpace(values.ClientName)
 	sheetCode := strings.TrimSpace(product.SheetCode)
 	purchaseOrderNumber := strings.TrimSpace(values.PurchaseOrderNumber)
-	artworkCode := strings.TrimSpace(values.ArtworkCodes[strings.TrimSpace(product.ArtworkImageID)])
 	if productCode == "" {
 		productCode = strings.TrimSpace(values.ProductCode)
 	}
-	jobTitle := fmt.Sprintf("C%d_%s", creativeNumber, productCode)
-	if campaignName == "" {
-		if sheetCode != "" {
-			jobTitle = fmt.Sprintf("%s_%s", jobTitle, sheetCode)
-		}
-		if purchaseOrderNumber != "" {
-			jobTitle = fmt.Sprintf("%s_%s", jobTitle, purchaseOrderNumber)
-		}
-		if artworkCode != "" {
-			jobTitle = fmt.Sprintf("%s_%s", jobTitle, artworkCode)
-		}
-		return jobTitle
-	}
-	jobTitle = fmt.Sprintf("%s ( %s)", jobTitle, campaignName)
-	if sheetCode != "" {
-		jobTitle = fmt.Sprintf("%s_%s", jobTitle, sheetCode)
+	titleParts := []string{fmt.Sprintf("C%d", creativeNumber)}
+	if clientName != "" {
+		titleParts = append(titleParts, clientName)
 	}
 	if purchaseOrderNumber != "" {
-		jobTitle = fmt.Sprintf("%s_%s", jobTitle, purchaseOrderNumber)
+		titleParts = append(titleParts, purchaseOrderNumber)
 	}
-	if artworkCode != "" {
-		jobTitle = fmt.Sprintf("%s_%s", jobTitle, artworkCode)
+	productParts := make([]string, 0, 3)
+	if sheetCode != "" {
+		productParts = append(productParts, sheetCode)
 	}
-	return jobTitle
+	if productCode != "" {
+		productParts = append(productParts, productCode)
+	}
+	if campaignName != "" {
+		productParts = append(productParts, campaignName)
+	}
+	if len(productParts) > 0 {
+		titleParts = append(titleParts, strings.Join(productParts, "-"))
+	}
+	return strings.Join(titleParts, "_")
 }
 
 var printIQSheetFormatOrder = []printIQSheetFormat{
