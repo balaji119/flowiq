@@ -273,7 +273,7 @@ function AppShell() {
         topBarActions={options?.topBarActions}
         onOpenHome={() => navigateTo('home')}
         onOpenLanding={() => navigateTo('landing')}
-        onOpenMappings={canAccessManagement ? () => navigateTo('mappings') : undefined}
+        onOpenMappings={canAccessSuperAdminPages ? () => navigateTo('mappings') : undefined}
         onOpenMaterialMapping={canAccessSuperAdminPages ? () => navigateTo('material-mapping') : undefined}
         onOpenMaterials={canAccessManagement ? () => navigateTo('materials') : undefined}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
@@ -293,7 +293,7 @@ function AppShell() {
     return (
       <UserManagementScreen
         onBack={() => navigateTo('landing')}
-        onOpenMappings={() => navigateTo('mappings')}
+        onOpenMappings={canAccessSuperAdminPages ? () => navigateTo('mappings') : undefined}
         onOpenMaterialMapping={canAccessSuperAdminPages ? () => navigateTo('material-mapping') : undefined}
         onOpenMaterials={() => navigateTo('materials')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
@@ -311,7 +311,7 @@ function AppShell() {
     return (
       <TenantManagementScreen
         onBack={() => navigateTo('landing')}
-        onOpenMappings={() => navigateTo('mappings')}
+        onOpenMappings={canAccessSuperAdminPages ? () => navigateTo('mappings') : undefined}
         onOpenMaterialMapping={canAccessSuperAdminPages ? () => navigateTo('material-mapping') : undefined}
         onOpenMaterials={() => navigateTo('materials')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
@@ -346,7 +346,7 @@ function AppShell() {
     return (
       <ShippingSettingsScreen
         onBack={() => navigateTo('landing')}
-        onOpenMappings={() => navigateTo('mappings')}
+        onOpenMappings={canAccessSuperAdminPages ? () => navigateTo('mappings') : undefined}
         onOpenMaterialMapping={canAccessSuperAdminPages ? () => navigateTo('material-mapping') : undefined}
         onOpenMaterials={() => navigateTo('materials')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
@@ -373,7 +373,7 @@ function AppShell() {
     return (
       <SettingsScreen
         onBack={() => navigateTo('landing')}
-        onOpenMappings={() => navigateTo('mappings')}
+        onOpenMappings={canAccessSuperAdminPages ? () => navigateTo('mappings') : undefined}
         onOpenMaterialMapping={canAccessSuperAdminPages ? () => navigateTo('material-mapping') : undefined}
         onOpenMaterials={() => navigateTo('materials')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
@@ -391,7 +391,7 @@ function AppShell() {
     return (
       <SheetSizeSettingsScreen
         onBack={() => navigateTo('landing')}
-        onOpenMappings={() => navigateTo('mappings')}
+        onOpenMappings={canAccessSuperAdminPages ? () => navigateTo('mappings') : undefined}
         onOpenMaterialMapping={canAccessSuperAdminPages ? () => navigateTo('material-mapping') : undefined}
         onOpenMaterials={() => navigateTo('materials')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
@@ -409,7 +409,7 @@ function AppShell() {
     return (
       <MaterialMappingScreen
         onBack={() => navigateTo('landing')}
-        onOpenMappings={() => navigateTo('mappings')}
+        onOpenMappings={canAccessSuperAdminPages ? () => navigateTo('mappings') : undefined}
         onOpenMaterials={() => navigateTo('materials')}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={() => navigateTo('settings')}
@@ -427,7 +427,7 @@ function AppShell() {
     return (
       <MaterialsSettingsScreen
         onBack={() => navigateTo('landing')}
-        onOpenMappings={() => navigateTo('mappings')}
+        onOpenMappings={canAccessSuperAdminPages ? () => navigateTo('mappings') : undefined}
         onOpenMaterialMapping={canAccessSuperAdminPages ? () => navigateTo('material-mapping') : undefined}
         onOpenPrintingCosts={canAccessSuperAdminPages ? () => navigateTo('printing-costs') : undefined}
         onOpenSettings={() => navigateTo('settings')}

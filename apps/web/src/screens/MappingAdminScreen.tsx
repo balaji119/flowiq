@@ -114,19 +114,20 @@ export function MappingAdminScreen({ onBack, onOpenMaterialMapping, onOpenMateri
   const [selectedMarketFilter, setSelectedMarketFilter] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const canSwitchTenant = session?.user.role === 'super_admin';
-  const effectiveTenantId = canSwitchTenant ? selectedTenantId ?? undefined : session?.user.tenantId ?? undefined;
+  const isSuperAdmin = session?.user.role === 'super_admin';
+  const canSwitchTenant = isSuperAdmin;
+  const effectiveTenantId = isSuperAdmin ? selectedTenantId ?? undefined : undefined;
   const selectedTenant = useMemo(() => tenants.find((tenant) => tenant.id === selectedTenantId) ?? null, [selectedTenantId, tenants]);
 
   useEffect(() => {
-    if (session?.user.role !== 'super_admin') {
+    if (!isSuperAdmin) {
       setSelectedTenantId(session?.user.tenantId ?? null);
       return;
     }
     if (tenantId) {
       setSelectedTenantId(tenantId);
     }
-  }, [session?.user.role, session?.user.tenantId, tenantId]);
+  }, [isSuperAdmin, session?.user.tenantId, tenantId]);
 
   useEffect(() => {
     let active = true;
@@ -513,14 +514,14 @@ export function MappingAdminScreen({ onBack, onOpenMaterialMapping, onOpenMateri
     setMappingDialogOpen(true);
   }
 
-  if (session?.user.role === 'user') {
+  if (!isSuperAdmin) {
     return (
       <main className="dense-main mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-8">
         <Card className="w-full">
           <CardContent className="space-y-4 p-8 text-center">
             <Shield className="mx-auto h-8 w-8 text-violet-300" />
             <CardTitle>Access restricted</CardTitle>
-            <CardDescription>Only admin and super admin users can manage quantity mappings.</CardDescription>
+            <CardDescription>Only super admin users can manage quantity mappings.</CardDescription>
             <Button onClick={onBack} variant="secondary">Back</Button>
           </CardContent>
         </Card>
