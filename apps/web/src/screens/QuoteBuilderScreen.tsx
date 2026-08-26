@@ -1121,6 +1121,8 @@ function ConfirmationDialog({
   confirmLabel,
   cancelLabel = 'Cancel',
   confirming = false,
+  confirmingLabel,
+  warningText = 'This action is permanent and cannot be undone.',
   onConfirm,
   onCancel,
 }: {
@@ -1130,6 +1132,8 @@ function ConfirmationDialog({
   confirmLabel: string;
   cancelLabel?: string;
   confirming?: boolean;
+  confirmingLabel?: string;
+  warningText?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -1147,7 +1151,7 @@ function ConfirmationDialog({
         </DialogHeader>
         <div className="flex items-start gap-3 rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <p className="break-words whitespace-normal">This action is permanent and cannot be undone.</p>
+          <p className="break-words whitespace-normal">{warningText}</p>
         </div>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
           <Button className="w-full sm:w-auto" disabled={confirming} onClick={onCancel} type="button" variant="ghost">
@@ -1155,7 +1159,7 @@ function ConfirmationDialog({
           </Button>
           <Button className="w-full sm:w-auto" disabled={confirming} onClick={onConfirm} type="button" variant="destructive">
             {confirming ? <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" /> : null}
-            {confirming ? 'Deleting...' : confirmLabel}
+            {confirming ? confirmingLabel ?? 'Confirming...' : confirmLabel}
           </Button>
         </div>
       </DialogContent>
@@ -1289,6 +1293,8 @@ export function QuoteBuilderScreen({
   const [submitProgress, setSubmitProgress] = useState({ progress: 0, label: '' });
   const [quoteResponseMessage, setQuoteResponseMessage] = useState('');
   const [quoteResponseStatus, setQuoteResponseStatus] = useState<'success' | 'error'>('success');
+  const [submitConfirmationOpen, setSubmitConfirmationOpen] = useState(false);
+  const [pendingSubmitOptions, setPendingSubmitOptions] = useState<{ test?: boolean } | null>(null);
   const [purchaseOrderNumberSubmitAttempted, setPurchaseOrderNumberSubmitAttempted] = useState(false);
   const [error, setError] = useState('');
   const [exportingTemplates, setExportingTemplates] = useState(false);
@@ -3619,7 +3625,7 @@ export function QuoteBuilderScreen({
     onBack?.();
   }
 
-  async function handleSubmitQuote(options?: { test?: boolean }) {
+  async function handleSubmitQuote(options?: { test?: boolean; confirmed?: boolean }) {
     const isTestSubmission = options?.test === true;
     if (isSubmittedCampaign && !(isTestSubmission && isSuperAdmin)) {
       setQuoteResponseStatus('success');
@@ -3640,6 +3646,11 @@ export function QuoteBuilderScreen({
       setPurchaseOrderNumberSubmitAttempted(true);
       setQuoteResponseStatus('error');
       setQuoteResponseMessage('Enter a purchase order number before submitting.');
+      return;
+    }
+    if (!options?.confirmed) {
+      setPendingSubmitOptions({ test: isTestSubmission });
+      setSubmitConfirmationOpen(true);
       return;
     }
 
@@ -3692,6 +3703,19 @@ export function QuoteBuilderScreen({
         setSubmitting(false);
       }
     }
+  }
+
+  function cancelSubmitConfirmation() {
+    if (isPrintIQSubmitting) return;
+    setSubmitConfirmationOpen(false);
+    setPendingSubmitOptions(null);
+  }
+
+  async function confirmSubmitQuote() {
+    const options = pendingSubmitOptions ?? {};
+    setSubmitConfirmationOpen(false);
+    setPendingSubmitOptions(null);
+    await handleSubmitQuote({ ...options, confirmed: true });
   }
 
   async function handleUploadPurchaseOrder(fileToUpload?: File | null) {
@@ -8694,6 +8718,27 @@ export function QuoteBuilderScreen({
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmationDialog
+        cancelLabel="Cancel"
+        confirmLabel={pendingSubmitOptions?.test ? 'Submit Test Order' : 'Submit Order'}
+        confirming={isPrintIQSubmitting}
+        confirmingLabel={pendingSubmitOptions?.test ? 'Submitting Test...' : 'Submitting...'}
+        description={
+          pendingSubmitOptions?.test
+            ? `Submit a test order for "${truncateForDialog(activeCampaignName, 72)}" to PrintIQ? The campaign will not be marked submitted.`
+            : `Submit "${truncateForDialog(activeCampaignName, 72)}" to PrintIQ?`
+        }
+        onCancel={cancelSubmitConfirmation}
+        onConfirm={() => void confirmSubmitQuote()}
+        open={submitConfirmationOpen}
+        title={pendingSubmitOptions?.test ? 'Submit Test Order to PrintIQ' : 'Submit Order to PrintIQ'}
+        warningText={
+          pendingSubmitOptions?.test
+            ? 'This will create a test order in PrintIQ. Review the campaign, artwork, and purchase order before continuing.'
+            : 'This will create the order in PrintIQ and mark this campaign as submitted.'
+        }
+      />
 
       <Dialog
         open={artworkUploadSuccessOpen}
