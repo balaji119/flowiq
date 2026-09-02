@@ -1118,6 +1118,7 @@ function ConfirmationDialog({
   open,
   title,
   description,
+  descriptionClassName = 'break-all whitespace-normal text-left',
   confirmLabel,
   cancelLabel = 'Cancel',
   confirming = false,
@@ -1129,6 +1130,7 @@ function ConfirmationDialog({
   open: boolean;
   title: string;
   description: string;
+  descriptionClassName?: string;
   confirmLabel: string;
   cancelLabel?: string;
   confirming?: boolean;
@@ -1146,13 +1148,17 @@ function ConfirmationDialog({
     >
       <DialogContent className="[&>button]:hidden overflow-x-hidden" style={{ width: 'min(calc(100vw - 2rem), 30rem)' }}>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription className="break-all whitespace-normal text-left">{description}</DialogDescription>
+          {title ? <DialogTitle>{title}</DialogTitle> : null}
+          {description ? (
+            <DialogDescription className={descriptionClassName}>{description}</DialogDescription>
+          ) : null}
         </DialogHeader>
-        <div className="flex items-start gap-3 rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
-          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <p className="break-words whitespace-normal">{warningText}</p>
-        </div>
+        {warningText ? (
+          <div className="flex items-start gap-3 rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+            <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <p className="break-words whitespace-normal">{warningText}</p>
+          </div>
+        ) : null}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
           <Button className="w-full sm:w-auto" disabled={confirming} onClick={onCancel} type="button" variant="ghost">
             {cancelLabel}
@@ -8720,23 +8726,28 @@ export function QuoteBuilderScreen({
       </Dialog>
 
       <ConfirmationDialog
-        cancelLabel="Cancel"
-        confirmLabel={pendingSubmitOptions?.test ? 'Submit Test Order' : 'Submit Order'}
+        cancelLabel={pendingSubmitOptions?.test ? 'Cancel' : 'No'}
+        confirmLabel={pendingSubmitOptions?.test ? 'Submit Test Order' : 'Yes'}
         confirming={isPrintIQSubmitting}
         confirmingLabel={pendingSubmitOptions?.test ? 'Submitting Test...' : 'Submitting...'}
         description={
           pendingSubmitOptions?.test
             ? `Submit a test order for "${truncateForDialog(activeCampaignName, 72)}" to PrintIQ? The campaign will not be marked submitted.`
-            : `Submit "${truncateForDialog(activeCampaignName, 72)}" to PrintIQ?`
+            : 'Do you want to submit?'
+        }
+        descriptionClassName={
+          pendingSubmitOptions?.test
+            ? undefined
+            : 'break-words whitespace-normal text-left text-lg font-semibold text-white sm:text-xl'
         }
         onCancel={cancelSubmitConfirmation}
         onConfirm={() => void confirmSubmitQuote()}
         open={submitConfirmationOpen}
-        title={pendingSubmitOptions?.test ? 'Submit Test Order to PrintIQ' : 'Submit Order to PrintIQ'}
+        title={pendingSubmitOptions?.test ? 'Submit Test Order to PrintIQ' : ''}
         warningText={
           pendingSubmitOptions?.test
             ? 'This will create a test order in PrintIQ. Review the campaign, artwork, and purchase order before continuing.'
-            : 'This will create the order in PrintIQ and mark this campaign as submitted.'
+            : ''
         }
       />
 
