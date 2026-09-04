@@ -579,7 +579,7 @@ export function CampaignScheduleViewDialog({
                   ? rates.twoPageCost
                   : rates.onePageCost
             : 0;
-          return sum + pages * customRate;
+          return sum + customRate;
         }
         return sum + pages * toNumber(costs[sheetKey]);
       }, 0);

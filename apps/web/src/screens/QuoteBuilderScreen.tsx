@@ -3999,7 +3999,7 @@ export function QuoteBuilderScreen({
                 ? rates.twoPageCost
                 : rates.onePageCost
           : 0;
-        return total + pages * customRate;
+        return total + customRate;
       }
       return total + pages * (costs[sheetKey] ?? 0);
     }, 0);
