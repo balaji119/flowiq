@@ -62,7 +62,6 @@ export function SettingsScreen({
     presetValues: Record<string, string>,
     customValues: CustomOverrideRow[],
     multipleArtworkValues: Record<string, boolean>,
-    customPrintCostValues: Record<string, boolean>,
     customSheetSizeValues: Record<string, boolean>,
   ) {
     const merged: SheetNameOverrides = {};
@@ -79,23 +78,19 @@ export function SettingsScreen({
     const normalizedMultipleArtworkFormats = Object.fromEntries(
       Object.entries(multipleArtworkValues).filter(([, enabled]) => Boolean(enabled)),
     );
-    const normalizedCustomPrintCostFormats = Object.fromEntries(
-      Object.entries(customPrintCostValues).filter(([, enabled]) => Boolean(enabled)),
-    );
     const normalizedCustomSheetSizeFormats = Object.fromEntries(
       Object.entries(customSheetSizeValues).filter(([, enabled]) => Boolean(enabled)),
     );
     return JSON.stringify({
       overrides: merged,
       multipleArtworkFormats: normalizedMultipleArtworkFormats,
-      customPrintCostFormats: normalizedCustomPrintCostFormats,
       customSheetSizeFormats: normalizedCustomSheetSizeFormats,
     });
   }
 
   const currentSnapshot = useMemo(
-    () => buildSettingsSnapshot(presetOverrides, customOverrides, multipleArtworkFormats, customPrintCostFormats, customSheetSizeFormats),
-    [presetOverrides, customOverrides, multipleArtworkFormats, customPrintCostFormats, customSheetSizeFormats],
+    () => buildSettingsSnapshot(presetOverrides, customOverrides, multipleArtworkFormats, customSheetSizeFormats),
+    [presetOverrides, customOverrides, multipleArtworkFormats, customSheetSizeFormats],
   );
   const hasUnsavedChanges = savedSnapshot !== '' && currentSnapshot !== savedSnapshot;
 
@@ -195,7 +190,7 @@ export function SettingsScreen({
           .map(([key, value]) => createCustomRow(key, value))
           .sort((left, right) => left.source.localeCompare(right.source));
         setCustomOverrides(nextCustom);
-        setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}, response.settings.customPrintCostFormats ?? {}, response.settings.customSheetSizeFormats ?? {}));
+        setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}, response.settings.customSheetSizeFormats ?? {}));
       } catch (loadError) {
         if (active) {
           setError(loadError instanceof Error ? loadError.message : 'Unable to load settings');
@@ -235,9 +230,6 @@ export function SettingsScreen({
     const normalizedMultipleArtworkFormats = Object.fromEntries(
       Object.entries(multipleArtworkFormats).filter(([, enabled]) => Boolean(enabled)),
     );
-    const normalizedCustomPrintCostFormats = Object.fromEntries(
-      Object.entries(customPrintCostFormats).filter(([, enabled]) => Boolean(enabled)),
-    );
     const normalizedCustomSheetSizeFormats = Object.fromEntries(
       Object.entries(customSheetSizeFormats).filter(([, enabled]) => Boolean(enabled)),
     );
@@ -249,7 +241,7 @@ export function SettingsScreen({
       const response = await upsertAdminSheetNameOverrides({
         overrides: merged,
         multipleArtworkFormats: normalizedMultipleArtworkFormats,
-        customPrintCostFormats: normalizedCustomPrintCostFormats,
+        customPrintCostFormats,
         customSheetSizeFormats: normalizedCustomSheetSizeFormats,
       }, effectiveTenantId);
       const normalized = sanitizeSheetNameOverrides(response.settings.overrides);
@@ -269,7 +261,7 @@ export function SettingsScreen({
         .map(([key, value]) => createCustomRow(key, value))
         .sort((left, right) => left.source.localeCompare(right.source));
       setCustomOverrides(nextCustom);
-      setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}, response.settings.customPrintCostFormats ?? {}, response.settings.customSheetSizeFormats ?? {}));
+      setSavedSnapshot(buildSettingsSnapshot(nextPreset, nextCustom, response.settings.multipleArtworkFormats ?? {}, response.settings.customSheetSizeFormats ?? {}));
       setNotice('Sheet name overrides saved.');
       return true;
     } catch (saveError) {
@@ -389,7 +381,6 @@ export function SettingsScreen({
                     <col className="w-[340px]" />
                     <col className="w-[180px]" />
                     <col className="w-[180px]" />
-                    <col className="w-[180px]" />
                     <col className="w-[90px]" />
                   </colgroup>
                   <thead>
@@ -397,7 +388,6 @@ export function SettingsScreen({
                       <th className="border border-slate-700 px-4 py-2 text-left">Current Name</th>
                       <th className="border border-slate-700 px-4 py-2 text-left">Override Name</th>
                       <th className="border border-slate-700 px-4 py-2 text-center">Multiple Artwork</th>
-                      <th className="border border-slate-700 px-4 py-2 text-center">Custom Print Cost</th>
                       <th className="border border-slate-700 px-4 py-2 text-center">Custom Sheet Size</th>
                       <th className="border border-slate-700 px-4 py-2 text-center">Action</th>
                     </tr>
@@ -432,19 +422,6 @@ export function SettingsScreen({
                                 [entry.key]: event.target.checked,
                               }))
                             }
-                            type="checkbox"
-                          />
-                        </td>
-                        <td className="border border-slate-700 px-4 py-2 text-center">
-                          <input
-                            checked={Boolean(customPrintCostFormats[entry.key])}
-                            className="h-4 w-4 accent-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={session?.user.role !== 'super_admin'}
-                            onChange={(event) => setCustomPrintCostFormats((current) => ({
-                              ...current,
-                              [entry.key]: event.target.checked,
-                            }))}
-                            title={session?.user.role === 'super_admin' ? 'Use tenant-level custom print cost tiers' : 'Super admin only'}
                             type="checkbox"
                           />
                         </td>
@@ -511,23 +488,6 @@ export function SettingsScreen({
                                   [customKey]: event.target.checked,
                                 }));
                               }}
-                              type="checkbox"
-                            />
-                          </td>
-                          <td className="border border-slate-700 px-4 py-2 text-center">
-                            <input
-                              checked={Boolean(customPrintCostFormats[toCanonicalSheetNameKey(row.source)])}
-                              className="h-4 w-4 accent-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
-                              disabled={session?.user.role !== 'super_admin'}
-                              onChange={(event) => {
-                                const customKey = toCanonicalSheetNameKey(row.source);
-                                if (!customKey) return;
-                                setCustomPrintCostFormats((current) => ({
-                                  ...current,
-                                  [customKey]: event.target.checked,
-                                }));
-                              }}
-                              title={session?.user.role === 'super_admin' ? 'Use tenant-level custom print cost tiers' : 'Super admin only'}
                               type="checkbox"
                             />
                           </td>

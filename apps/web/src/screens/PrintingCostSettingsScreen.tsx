@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, Shield } from 'lucide-react';
-import { CalculatorMappingRecord, CustomPrintCostInput, formatKeys, FormatKey, PrintingCostBreakdown, SheetNameOverrides, TenantRecord } from '@flowiq/shared';
+import { CalculatorMappingRecord, formatKeys, FormatKey, PrintingCostBreakdown, SheetNameOverrides, TenantRecord } from '@flowiq/shared';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
-import { fetchAdminSheetNameOverrides, fetchCalculatorMappings, fetchCustomPrintCosts, fetchMarketAssetPrintingCosts, fetchTenants, upsertCustomPrintCosts, upsertMarketAssetPrintingCosts } from '../services/adminApi';
+import { fetchAdminSheetNameOverrides, fetchCalculatorMappings, fetchMarketAssetPrintingCosts, fetchTenants, upsertAdminSheetNameOverrides, upsertMarketAssetPrintingCosts } from '../services/adminApi';
 import { resolveCanonicalSheetName, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
 
 type PrintingCostSettingsScreenProps = {
@@ -12,7 +12,6 @@ type PrintingCostSettingsScreenProps = {
 };
 
 type AssetCostDraft = Record<string, string>;
-type CustomCostDraft = Record<'onePageCost' | 'twoPageCost' | 'fivePageCost' | 'tenPlusPageCost', string>;
 const posterFormatKeys: FormatKey[] = ['8-sheet', '6-sheet', '4-sheet', '2-sheet', 'QA0'];
 const settingsKeyByFormatKey: Partial<Record<FormatKey, string>> = {
   '8-sheet': '8-sheet',
@@ -56,6 +55,10 @@ function costKey(market: string, assetId: string) {
   return `${market}\x00${assetId}`;
 }
 
+function assetSheetCostFlagKey(assetId: string, sheetKey: string) {
+  return `asset:${assetId}|sheet:${sheetKey}`;
+}
+
 function toDraft(costs?: PrintingCostBreakdown): AssetCostDraft {
   const next: AssetCostDraft = createEmptyCostDraft();
   if (!costs) return next;
@@ -80,29 +83,6 @@ function posterCostValue(draft: AssetCostDraft, activePosterKeys: FormatKey[]): 
   return firstNonEmpty ?? draft['8-sheet'] ?? '0';
 }
 
-function customCostDraft(cost?: CustomPrintCostInput): CustomCostDraft {
-  return {
-    onePageCost: String(cost?.onePageCost ?? 0),
-    twoPageCost: String(cost?.twoPageCost ?? 0),
-    fivePageCost: String(cost?.fivePageCost ?? 0),
-    tenPlusPageCost: String(cost?.tenPlusPageCost ?? 0),
-  };
-}
-
-function parseCustomCost(sheetKey: string, draft: CustomCostDraft): CustomPrintCostInput {
-  const parse = (value: string) => {
-    const parsed = Number.parseFloat(value.trim());
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-  };
-  return {
-    sheetKey,
-    onePageCost: parse(draft.onePageCost),
-    twoPageCost: parse(draft.twoPageCost),
-    fivePageCost: parse(draft.fivePageCost),
-    tenPlusPageCost: parse(draft.tenPlusPageCost),
-  };
-}
-
 export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSettingsScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -115,10 +95,10 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
   const [marketFilter, setMarketFilter] = useState<string>('');
   const [dirtyRows, setDirtyRows] = useState<Record<string, boolean>>({});
   const [sheetNameOverrides, setSheetNameOverrides] = useState<SheetNameOverrides>({});
+  const [multipleArtworkFormats, setMultipleArtworkFormats] = useState<Record<string, boolean>>({});
   const [customPrintCostFormats, setCustomPrintCostFormats] = useState<Record<string, boolean>>({});
   const [customSheetSizeFormats, setCustomSheetSizeFormats] = useState<Record<string, boolean>>({});
-  const [customCostDrafts, setCustomCostDrafts] = useState<Record<string, CustomCostDraft>>({});
-  const [dirtyCustomRows, setDirtyCustomRows] = useState<Record<string, boolean>>({});
+  const [customPrintCostFlagsDirty, setCustomPrintCostFlagsDirty] = useState(false);
 
   const isSuperAdmin = session?.user.role === 'super_admin';
 
@@ -163,11 +143,10 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
       try {
         setLoading(true);
         setError('');
-        const [mappingResponse, costResponse, sheetResponse, customCostResponse] = await Promise.all([
+        const [mappingResponse, costResponse, sheetResponse] = await Promise.all([
           fetchCalculatorMappings(tenant),
           fetchMarketAssetPrintingCosts(tenant),
           fetchAdminSheetNameOverrides(tenant),
-          fetchCustomPrintCosts(tenant),
         ]);
         if (!active) return;
 
@@ -187,15 +166,10 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
         setDraftsByAsset(nextDrafts);
         setDirtyRows({});
         setSheetNameOverrides(sheetResponse.settings.overrides);
+        setMultipleArtworkFormats(sheetResponse.settings.multipleArtworkFormats ?? {});
         setCustomPrintCostFormats(sheetResponse.settings.customPrintCostFormats ?? {});
         setCustomSheetSizeFormats(sheetResponse.settings.customSheetSizeFormats ?? {});
-        const customCostsByKey = new Map(customCostResponse.costs.map((cost) => [cost.sheetKey, cost]));
-        const nextCustomDrafts: Record<string, CustomCostDraft> = {};
-        Object.entries(sheetResponse.settings.customPrintCostFormats ?? {}).forEach(([sheetKey, enabled]) => {
-          if (enabled) nextCustomDrafts[sheetKey] = customCostDraft(customCostsByKey.get(sheetKey));
-        });
-        setCustomCostDrafts(nextCustomDrafts);
-        setDirtyCustomRows({});
+        setCustomPrintCostFlagsDirty(false);
       } catch (loadError) {
         if (active) {
           setError(loadError instanceof Error ? loadError.message : 'Unable to load printing cost settings');
@@ -214,12 +188,6 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
   const marketOptions = useMemo(
     () => [...new Set(mappings.map((mapping) => mapping.market))],
     [mappings],
-  );
-  const customPrintCostKeys = useMemo(
-    () => Object.keys(customPrintCostFormats).filter((key) => customPrintCostFormats[key]).sort((left, right) => (
-      resolveCanonicalSheetName(left, sheetNameOverrides).localeCompare(resolveCanonicalSheetName(right, sheetNameOverrides))
-    )),
-    [customPrintCostFormats, sheetNameOverrides],
   );
   const activePosterFormatKeys = useMemo(
     () => posterFormatKeys.filter((key) => {
@@ -346,38 +314,41 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     });
   }
 
-  function updateCustomCostDraft(sheetKey: string, field: keyof CustomCostDraft, value: string) {
-    setCustomCostDrafts((current) => ({
-      ...current,
-      [sheetKey]: { ...(current[sheetKey] ?? customCostDraft()), [field]: value },
-    }));
-    setDirtyCustomRows((current) => ({ ...current, [sheetKey]: true }));
+  function updateCustomPrintCostFlag(assetId: string, sheetKey: string, checked: boolean) {
+    const flagKey = assetSheetCostFlagKey(assetId, sheetKey);
+    setCustomPrintCostFormats((current) => {
+      const next = { ...current };
+      if (checked) {
+        next[flagKey] = true;
+      } else {
+        delete next[flagKey];
+      }
+      return next;
+    });
+    setCustomPrintCostFlagsDirty(true);
   }
 
   useEffect(() => {
-    if (!selectedTenantId || loading || saving) return;
-    const sheetKeys = Object.keys(dirtyCustomRows).filter((key) => dirtyCustomRows[key]);
-    if (sheetKeys.length === 0) return;
+    if (!selectedTenantId || loading || saving || !customPrintCostFlagsDirty) return;
     const timer = window.setTimeout(async () => {
       setSaving(true);
       setError('');
       try {
-        await upsertCustomPrintCosts({
-          costs: sheetKeys.map((sheetKey) => parseCustomCost(sheetKey, customCostDrafts[sheetKey] ?? customCostDraft())),
+        await upsertAdminSheetNameOverrides({
+          overrides: sheetNameOverrides,
+          multipleArtworkFormats,
+          customPrintCostFormats,
+          customSheetSizeFormats,
         }, selectedTenantId);
-        setDirtyCustomRows((current) => {
-          const next = { ...current };
-          sheetKeys.forEach((key) => delete next[key]);
-          return next;
-        });
+        setCustomPrintCostFlagsDirty(false);
       } catch (saveError) {
-        setError(saveError instanceof Error ? saveError.message : 'Unable to save custom printing costs');
+        setError(saveError instanceof Error ? saveError.message : 'Unable to save custom print cost selections');
       } finally {
         setSaving(false);
       }
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [customCostDrafts, dirtyCustomRows, loading, saving, selectedTenantId]);
+  }, [customPrintCostFlagsDirty, customPrintCostFormats, customSheetSizeFormats, loading, multipleArtworkFormats, saving, selectedTenantId, sheetNameOverrides]);
 
   async function handleSaveMarket(targetMarket: string) {
     if (!selectedTenantId || !targetMarket) return;
@@ -548,14 +519,16 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
             <div className="rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
               <table className="dense-table w-full table-fixed border-collapse text-xs sm:text-sm">
                 <colgroup>
-                  <col className="w-[24%]" />
-                  <col className="w-[52%]" />
-                  <col className="w-[24%]" />
+                  <col className="w-[20%]" />
+                  <col className="w-[42%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[22%]" />
                 </colgroup>
                 <thead>
                   <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
                     <th className="border border-slate-700 px-2 py-2 text-left sm:px-3">Market</th>
                     <th className="border border-slate-700 px-2 py-2 text-left sm:px-3">Asset | Sheet Type</th>
+                    <th className="border border-slate-700 px-1 py-2 text-center sm:px-2">Custom Print Cost</th>
                     <th className="border border-slate-700 px-1 py-2 text-center sm:px-2">Custom Sheet Price ($)</th>
                   </tr>
                 </thead>
@@ -563,6 +536,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
                   {customSheetRows.map(({ mapping, sheetKey, label }, rowIndex) => {
                     const rowKey = costKey(mapping.market, mapping.id);
                     const draft = draftsByAsset[rowKey] || createEmptyCostDraft();
+                    const customPrintCostEnabled = Boolean(customPrintCostFormats[assetSheetCostFlagKey(mapping.id, sheetKey)]);
                     return (
                       <tr
                         key={`cost-row-${mapping.id}-${sheetKey}`}
@@ -572,11 +546,20 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
                         <td className="border border-slate-700 px-2 py-2 text-white sm:px-3">
                           <p className="truncate font-semibold">{label}</p>
                         </td>
+                        <td className="border border-slate-700 px-1 py-1.5 text-center sm:px-2 sm:py-2">
+                          <input
+                            checked={customPrintCostEnabled}
+                            className="h-4 w-4 accent-violet-400"
+                            onChange={(event) => updateCustomPrintCostFlag(mapping.id, sheetKey, event.target.checked)}
+                            type="checkbox"
+                          />
+                        </td>
                         <td className="border border-slate-700 px-1 py-1.5 sm:px-2 sm:py-2">
                           <div className="flex items-center gap-1.5">
                             <span className="text-slate-300">$</span>
                             <Input
                               className="h-8 px-1.5 text-xs sm:px-2 sm:text-sm"
+                              disabled={!customPrintCostEnabled}
                               inputMode="decimal"
                               type="number"
                               min={0}
@@ -593,48 +576,6 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
               </table>
             </div>
           )}
-        {!loading && customPrintCostKeys.length > 0 ? (
-          <div className="space-y-2 pt-2">
-            <h2 className="text-base font-semibold text-white">Custom Cost</h2>
-            <div className="overflow-x-auto rounded-md border border-white/10 bg-[#1a1733] shadow-[0_10px_24px_rgba(2,6,23,0.22)]">
-              <table className="dense-table w-full min-w-[760px] table-fixed border-collapse text-xs sm:text-sm">
-                <thead>
-                  <tr className="bg-slate-950 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-300 sm:text-[11px]">
-                    <th className="border border-slate-700 px-3 py-2 text-left">Sheet Name</th>
-                    <th className="border border-slate-700 px-2 py-2 text-center">1 Page Cost ($)</th>
-                    <th className="border border-slate-700 px-2 py-2 text-center">2 Page Cost ($)</th>
-                    <th className="border border-slate-700 px-2 py-2 text-center">5 Page Cost ($)</th>
-                    <th className="border border-slate-700 px-2 py-2 text-center">10+ Page Cost ($)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {customPrintCostKeys.map((sheetKey, rowIndex) => {
-                    const draft = customCostDrafts[sheetKey] ?? customCostDraft();
-                    const fields: Array<keyof CustomCostDraft> = ['onePageCost', 'twoPageCost', 'fivePageCost', 'tenPlusPageCost'];
-                    return (
-                      <tr key={`custom-print-cost-${sheetKey}`} className={rowIndex % 2 === 0 ? 'bg-[#241c45]/70' : 'bg-[#1a1733]'}>
-                        <td className="border border-slate-700 px-3 py-2 font-semibold text-white">{resolveCanonicalSheetName(sheetKey, sheetNameOverrides)}</td>
-                        {fields.map((field) => (
-                          <td key={`${sheetKey}-${field}`} className="border border-slate-700 px-2 py-1.5">
-                            <Input
-                              className="h-8 text-right text-xs sm:text-sm"
-                              inputMode="decimal"
-                              min={0}
-                              onChange={(event) => updateCustomCostDraft(sheetKey, field, event.target.value)}
-                              step="0.01"
-                              type="number"
-                              value={draft[field]}
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
       </section>
     </main>
   );

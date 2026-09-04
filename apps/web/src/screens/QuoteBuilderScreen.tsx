@@ -6,7 +6,6 @@ import {
   CampaignSupportingDocument,
   CampaignRecord,
   CampaignCalculationSummary,
-  CustomPrintCostRecord,
   CampaignLine,
   CampaignMarket,
   MarketAssetPrintingCostRecord,
@@ -36,7 +35,7 @@ import { acquireCampaignEditLock, appendCampaignSupportingDocuments, createCampa
 import { deleteCampaignImage, downloadCampaignImage, uploadCampaignImage } from '../services/campaignImageApi';
 import { calculateCampaign, fetchCalculatorMetadata } from '../services/calculatorApi';
 import { sendEmailToAds } from '../services/finalizeApi';
-import { fetchCampaignCustomPrintCosts, fetchCampaignMaterials, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
+import { fetchCampaignMaterials, fetchCampaignMarketAssetPrintingCosts, fetchCampaignMarketAssetShippingCosts, fetchCampaignMarketDeliveryAddresses, fetchCampaignMarketShippingRates } from '../services/marketDeliveryApi';
 import { uploadPurchaseOrderFile } from '../services/purchaseOrderApi';
 import { fetchCampaignSheetNameOverrides } from '../services/sheetNameApi';
 import { fetchTenant } from '../services/tenantApi';
@@ -196,6 +195,10 @@ function quantityForSheetKey(breakdown: Record<string, number>, sheetKey: string
   if (typeof breakdown[sheetKey] === 'number') return breakdown[sheetKey];
   const matchingKey = Object.keys(breakdown).find((key) => toCanonicalSheetNameKey(key) === sheetKey);
   return matchingKey ? breakdown[matchingKey] ?? 0 : 0;
+}
+
+function assetSheetCostFlagKey(assetId: string, sheetKey: string) {
+  return `asset:${assetId}|sheet:${sheetKey}`;
 }
 
 function formatBreakdownKeyLabel(key: string, overrides: SheetNameOverrides = {}) {
@@ -1280,7 +1283,6 @@ export function QuoteBuilderScreen({
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<MarketDeliveryAddressRecord[]>([]);
   const [marketShippingRates, setMarketShippingRates] = useState<MarketShippingRateRecord[]>([]);
   const [marketAssetPrintingCosts, setMarketAssetPrintingCosts] = useState<MarketAssetPrintingCostRecord[]>([]);
-  const [customPrintCosts, setCustomPrintCosts] = useState<CustomPrintCostRecord[]>([]);
   const [materials, setMaterials] = useState<MaterialRecord[]>([]);
   const [sheetNameOverrides, setSheetNameOverrides] = useState<SheetNameOverrides>({});
   const [multipleArtworkFormats, setMultipleArtworkFormats] = useState<Record<string, boolean>>({});
@@ -1662,20 +1664,6 @@ export function QuoteBuilderScreen({
 
   useEffect(() => {
     let active = true;
-    async function loadCustomPrintCosts() {
-      try {
-        const response = await fetchCampaignCustomPrintCosts(effectiveTenantId);
-        if (active) setCustomPrintCosts(response.costs);
-      } catch {
-        if (active) setCustomPrintCosts([]);
-      }
-    }
-    void loadCustomPrintCosts();
-    return () => { active = false; };
-  }, [effectiveTenantId]);
-
-  useEffect(() => {
-    let active = true;
     async function loadMaterials() {
       try {
         const response = await fetchCampaignMaterials(effectiveTenantId);
@@ -1926,10 +1914,6 @@ export function QuoteBuilderScreen({
   const printingCostByMarketAsset = useMemo(
     () => new Map(marketAssetPrintingCosts.map((entry) => [`${entry.market}\x00${entry.assetId}`, entry.costs])),
     [marketAssetPrintingCosts],
-  );
-  const customPrintCostBySheetKey = useMemo(
-    () => new Map(customPrintCosts.map((entry) => [toCanonicalSheetNameKey(entry.sheetKey), entry])),
-    [customPrintCosts],
   );
   const selectedAssetByLineId = useMemo(() => {
     const byLineId = new Map<string, { market: string; assetId: string }>();
@@ -3964,34 +3948,23 @@ export function QuoteBuilderScreen({
     const customCost = Object.entries(line.breakdown as Record<string, number>).reduce((total, [rawKey, rawPages]) => {
       const sheetKey = toCanonicalSheetNameKey(rawKey);
       if (customSheetSizeFormats[sheetKey]) return total;
-      const usesCustomCost = Boolean(customPrintCostFormats[sheetKey]);
       const isStandardFormat = (formatKeys as readonly string[]).includes(rawKey);
-      if (!usesCustomCost && isStandardFormat) return total;
+      if (isStandardFormat) return total;
       const pages = Math.max(0, Number(rawPages) || 0);
       if (pages === 0) return total;
-      const rates = usesCustomCost ? customPrintCostBySheetKey.get(sheetKey) : undefined;
-      const customRate = rates
-        ? pages >= 10
-          ? rates.tenPlusPageCost
-          : pages >= 5
-            ? rates.fivePageCost
-            : pages >= 2
-              ? rates.twoPageCost
-              : rates.onePageCost
-        : 0;
-      const rate = customRate > 0 ? customRate : posterRate;
-      return total + pages * rate;
+      return total + pages * posterRate;
     }, 0);
     if (!selectedAsset) return customCost;
     if (!costs) return customCost;
     const qa0Units = line.breakdown.QA0 ?? 0;
     const eightSheetRate = costs['8-sheet'] ?? 0;
     const standardCost = formatKeys.reduce((total, key) => {
-      if (customSheetSizeFormats[toCanonicalSheetNameKey(key)] || customPrintCostFormats[toCanonicalSheetNameKey(key)] || key === 'QA0') return total;
+      if (customSheetSizeFormats[toCanonicalSheetNameKey(key)] || key === 'QA0') return total;
       return total + (line.breakdown[key] ?? 0) * (costs[key] ?? 0);
-    }, 0) + (customPrintCostFormats[toCanonicalSheetNameKey('QA0')] ? 0 : qa0Units * eightSheetRate);
+    }, 0) + qa0Units * eightSheetRate;
     const customSheetCost = Object.keys(customSheetSizeFormats).reduce((total, sheetKey) => {
       if (!customSheetSizeFormats[sheetKey]) return total;
+      if (!selectedAsset || !customPrintCostFormats[assetSheetCostFlagKey(selectedAsset.assetId, sheetKey)]) return total;
       const pages = Math.max(0, quantityForSheetKey(line.breakdown as Record<string, number>, sheetKey));
       if (pages === 0) return total;
       return total + pages * (costs[sheetKey] ?? 0);
@@ -4006,7 +3979,7 @@ export function QuoteBuilderScreen({
 
   const totalPrintingCost = useMemo(
     () => visibleReviewMarkets.reduce((total, marketSummary) => total + calculateMarketPrintingCost(marketSummary.market), 0),
-    [customPrintCostBySheetKey, customPrintCostFormats, customSheetSizeFormats, printingCostByMarketAsset, selectedAssetByLineId, visibleReviewMarkets],
+    [customPrintCostFormats, customSheetSizeFormats, printingCostByMarketAsset, selectedAssetByLineId, visibleReviewMarkets],
   );
   const totalShippingCost = useMemo(
     () => visibleReviewMarkets.reduce((total, marketSummary) => total + calculateMarketShippingCost(marketSummary.market), 0),
