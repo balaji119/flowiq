@@ -314,7 +314,7 @@ func (s *campaignStore) createCampaign(ctx context.Context, user AuthUser, value
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO campaigns (
 			id, tenant_id, name, start_date, due_date, weeks, status, form_data, created_by_user_id, updated_by_user_id, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7::jsonb, $8, $8, NOW(), NOW())
+		) VALUES ($1, $2, $3, $4, $5, $6, 'in_progress', $7::jsonb, $8, $8, NOW(), NOW())
 	`, campaignID, *user.TenantID, strings.TrimSpace(values.CampaignName), parseDateOrNil(values.CampaignStartDate), parseDateOrNil(values.DueDate), parseWeeks(values.NumberOfWeeks), string(formData), user.ID); err != nil {
 		return nil, err
 	}
@@ -393,7 +393,7 @@ func (s *campaignStore) createSubCampaign(ctx context.Context, user AuthUser, pa
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO campaigns (
 			id, tenant_id, parent_campaign_id, name, start_date, due_date, weeks, status, form_data, created_by_user_id, updated_by_user_id, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8::jsonb, $9, $9, NOW(), NOW())
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, 'in_progress', $8::jsonb, $9, $9, NOW(), NOW())
 	`, campaignID, *user.TenantID, parent.ID, strings.TrimSpace(values.CampaignName), parseDateOrNil(values.CampaignStartDate), parseDateOrNil(values.DueDate), parseWeeks(values.NumberOfWeeks), string(formData), user.ID); err != nil {
 		return nil, err
 	}
@@ -440,7 +440,7 @@ func (s *campaignStore) createCampaignClone(ctx context.Context, user AuthUser, 
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO campaigns (
 			id, tenant_id, name, start_date, due_date, weeks, status, form_data, purchase_order, created_by_user_id, updated_by_user_id, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7::jsonb, $8::jsonb, $9, $9, NOW(), NOW())
+		) VALUES ($1, $2, $3, $4, $5, $6, 'in_progress', $7::jsonb, $8::jsonb, $9, $9, NOW(), NOW())
 	`, campaignID, source.TenantID, strings.TrimSpace(values.CampaignName), parseDateOrNil(values.CampaignStartDate), parseDateOrNil(values.DueDate), parseWeeks(values.NumberOfWeeks), string(formData), purchaseOrderData, user.ID); err != nil {
 		return nil, err
 	}
@@ -624,7 +624,7 @@ func (s *campaignStore) updateCampaign(ctx context.Context, user AuthUser, campa
 			start_date = $4,
 			due_date = $5,
 			weeks = $6,
-			status = 'draft',
+			status = 'in_progress',
 			form_data = $7::jsonb,
 			calculation_summary = NULL,
 			latest_quote_amount = NULL,
@@ -859,7 +859,7 @@ func (s *campaignStore) calculateCampaign(ctx context.Context, user AuthUser, ca
 
 	commandTag, err := s.pool.Exec(ctx, `
 		UPDATE campaigns
-		SET status = 'calculated',
+		SET status = 'in_progress',
 			form_data = $3::jsonb,
 			calculation_summary = $4::jsonb,
 			updated_by_user_id = $5,

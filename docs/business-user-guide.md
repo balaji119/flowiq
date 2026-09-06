@@ -29,7 +29,7 @@ When you open a campaign, the app has three steps:
 2. `Review`
 3. `Finalise`
 
-Campaign drafts are saved automatically to the backend, so you can refresh the browser and continue from the same draft.
+In-progress campaigns are saved automatically to the backend, so you can refresh the browser and continue from the same campaign.
 
 ## Step 1: Schedule
 

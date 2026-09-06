@@ -11,7 +11,7 @@ export type PrintIqStockOption = {
 };
 
 export type AuthRole = 'super_admin' | 'admin' | 'user';
-export type CampaignStatus = 'draft' | 'calculated' | 'submitted';
+export type CampaignStatus = 'in_progress' | 'submitted';
 
 export type AuthUser = {
   id: string;

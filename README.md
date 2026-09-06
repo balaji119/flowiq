@@ -125,7 +125,7 @@ After updating tokens, restart `npm run web` (or refresh the running app) to ver
 
 ## Workflow Persistence
 
-- Campaigns are now stored in PostgreSQL with `draft`, `calculated`, and `submitted` states.
+- Campaigns are now stored in PostgreSQL with `in_progress` and `submitted` states.
 - Every core table is tenant-scoped through `tenant_id`.
 - Users authenticate with JWT and only see data for their tenant.
 - Supported user roles are `super_admin`, `admin`, and `user`.

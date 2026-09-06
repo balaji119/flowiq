@@ -26,6 +26,7 @@ function formatCampaignDate(value: string) {
 }
 
 function formatCampaignStatus(status: CampaignListItem['status']) {
+  if (status === 'in_progress') return 'In Progress';
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
@@ -489,9 +490,7 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
                   <td className="px-5 py-2.5 text-center">
                     <span className={campaign.status === 'submitted'
                       ? 'inline-flex rounded-full border border-emerald-300/35 bg-emerald-500/15 px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-emerald-200'
-                      : campaign.status === 'calculated'
-                        ? 'inline-flex rounded-full border border-sky-300/35 bg-sky-500/15 px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-sky-200'
-                        : 'inline-flex rounded-full border border-amber-300/35 bg-amber-500/15 px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-amber-200'}
+                      : 'inline-flex rounded-full border border-amber-300/35 bg-amber-500/15 px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-amber-200'}
                     >
                       {formatCampaignStatus(campaign.status)}
                     </span>

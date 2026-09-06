@@ -1278,7 +1278,7 @@ export function QuoteBuilderScreen({
   const [campaignStartDateInput, setCampaignStartDateInput] = useState('');
   const [dueDateInput, setDueDateInput] = useState('');
   const [campaignId, setCampaignId] = useState<string | null>(selectedCampaignId ?? null);
-  const [campaignStatus, setCampaignStatus] = useState<CampaignRecord['status']>('draft');
+  const [campaignStatus, setCampaignStatus] = useState<CampaignRecord['status']>('in_progress');
   const [parentCampaignId, setParentCampaignId] = useState('');
   const [markets, setMarkets] = useState<MarketMetadata[]>([]);
   const [marketDeliveryAddresses, setMarketDeliveryAddresses] = useState<MarketDeliveryAddressRecord[]>([]);
@@ -1569,7 +1569,7 @@ export function QuoteBuilderScreen({
             return;
           } catch (loadError) {
             if (!active) return;
-            const message = loadError instanceof Error ? loadError.message : 'Unable to load campaign draft';
+            const message = loadError instanceof Error ? loadError.message : 'Unable to load campaign';
             setError(message);
             if (selectedCampaignId) {
               await setStoredCampaignId(null, effectiveTenantId);
@@ -1594,7 +1594,7 @@ export function QuoteBuilderScreen({
         setUploadedPurchaseOrderName('');
         setUploadedPurchaseOrder(null);
         setCampaignId(null);
-        setCampaignStatus('draft');
+        setCampaignStatus('in_progress');
         setParentCampaignId('');
         setTreatDefaultMarketAsPlaceholder(true);
         setMarketPopupManagedFlow(true);
@@ -1603,7 +1603,7 @@ export function QuoteBuilderScreen({
         campaignHydratedRef.current = true;
         await setStoredCampaignId(null, effectiveTenantId);
       } catch {
-        if (active) setError('Unable to load campaign draft');
+        if (active) setError('Unable to load campaign');
       } finally {
         if (active) setLoadingCampaign(false);
       }
@@ -3555,7 +3555,7 @@ export function QuoteBuilderScreen({
       if (fromAutoSave) {
         lastAutoSaveFailedValuesRef.current = currentValuesSerialized;
       }
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save campaign draft');
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save campaign');
       return null;
     } finally {
       setSavingCampaign(false);

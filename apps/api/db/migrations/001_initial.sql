@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
   start_date DATE,
   due_date DATE,
   weeks INTEGER NOT NULL DEFAULT 1 CHECK (weeks > 0),
-  status TEXT NOT NULL CHECK (status IN ('draft', 'calculated', 'submitted')),
+  status TEXT NOT NULL CHECK (status IN ('in_progress', 'submitted')),
   form_data JSONB NOT NULL DEFAULT '{}'::jsonb,
   calculation_summary JSONB,
   purchase_order JSONB,
