@@ -324,6 +324,19 @@ type marketShippingRateRecord struct {
 
 type printingCostBreakdown map[string]float64
 
+type marketPrintingCostInput struct {
+	Market     string  `json:"market"`
+	PosterCost float64 `json:"posterCost"`
+}
+
+type marketPrintingCostRecord struct {
+	TenantID   string  `json:"tenantId"`
+	Market     string  `json:"market"`
+	PosterCost float64 `json:"posterCost"`
+	CreatedAt  string  `json:"createdAt"`
+	UpdatedAt  string  `json:"updatedAt"`
+}
+
 type marketAssetPrintingCostInput struct {
 	Market  string                `json:"market"`
 	AssetID string                `json:"assetId"`

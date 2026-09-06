@@ -259,6 +259,17 @@ export type MarketAssetShippingCostRecord = MarketAssetShippingCostInput & {
 
 export type PrintingCostBreakdown = Record<string, number>;
 
+export type MarketPrintingCostInput = {
+  market: string;
+  posterCost: number;
+};
+
+export type MarketPrintingCostRecord = MarketPrintingCostInput & {
+  tenantId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type MarketAssetPrintingCostInput = {
   market: string;
   assetId: string;

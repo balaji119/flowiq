@@ -67,14 +67,15 @@ type marketShippingRateRow struct {
 }
 
 type marketAssetPrintingCostRow struct {
-	TenantID  string
-	Market    string
-	AssetID   string
-	Asset     string
-	Label     string
-	Costs     []byte
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	TenantID   string
+	Market     string
+	AssetID    string
+	Asset      string
+	Label      string
+	Costs      []byte
+	PosterCost float64
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type marketAssetShippingCostRow struct {
@@ -140,6 +141,8 @@ type missingProductMapping struct {
 	FormatKey string
 	SheetKey  string
 }
+
+var marketPosterCostKeys = []string{"8-sheet", "6-sheet", "4-sheet", "2-sheet", "QA0"}
 
 func newMappingStore(pool *pgxpool.Pool) *mappingStore {
 	return &mappingStore{pool: pool}
@@ -379,6 +382,7 @@ func scanMarketAssetPrintingCostRow(scanner interface {
 		&row.Asset,
 		&row.Label,
 		&row.Costs,
+		&row.PosterCost,
 		&row.CreatedAt,
 		&row.UpdatedAt,
 	)
@@ -465,6 +469,9 @@ func decodeMarketAssetPrintingCostRow(row marketAssetPrintingCostRow) (marketAss
 	if err != nil {
 		return marketAssetPrintingCostRecord{}, err
 	}
+	for _, key := range marketPosterCostKeys {
+		normalizedCosts[key] = row.PosterCost
+	}
 
 	return marketAssetPrintingCostRecord{
 		TenantID:  row.TenantID,
@@ -476,6 +483,16 @@ func decodeMarketAssetPrintingCostRow(row marketAssetPrintingCostRow) (marketAss
 		CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339),
 	}, nil
+}
+
+func decodeMarketPrintingCostRow(tenantID, market string, posterCost float64, createdAt, updatedAt time.Time) marketPrintingCostRecord {
+	return marketPrintingCostRecord{
+		TenantID:   tenantID,
+		Market:     market,
+		PosterCost: posterCost,
+		CreatedAt:  createdAt.UTC().Format(time.RFC3339),
+		UpdatedAt:  updatedAt.UTC().Format(time.RFC3339),
+	}
 }
 
 func decodeMarketAssetShippingCostRow(row marketAssetShippingCostRow) (marketAssetShippingCostRecord, error) {
@@ -910,6 +927,39 @@ func (s *mappingStore) ensureMarket(ctx context.Context, tenantID, marketName st
 		WHERE tenant_id = $1 AND name = $2
 	`, tenantID, marketName).Scan(&marketID)
 	if err != nil {
+		return "", err
+	}
+	return marketID, nil
+}
+
+func (s *mappingStore) ensureMarketWithTx(ctx context.Context, tx pgx.Tx, tenantID, marketName string) (string, error) {
+	var marketID string
+	err := tx.QueryRow(ctx, `
+		SELECT id
+		FROM markets
+		WHERE tenant_id = $1 AND name = $2
+	`, tenantID, marketName).Scan(&marketID)
+	if err == nil {
+		return marketID, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+
+	marketID = uuid.NewString()
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO markets (id, tenant_id, name, created_at, updated_at)
+		VALUES ($1, $2, $3, NOW(), NOW())
+		ON CONFLICT (tenant_id, name) DO NOTHING
+	`, marketID, tenantID, marketName); err != nil {
+		return "", err
+	}
+
+	if err := tx.QueryRow(ctx, `
+		SELECT id
+		FROM markets
+		WHERE tenant_id = $1 AND name = $2
+	`, tenantID, marketName).Scan(&marketID); err != nil {
 		return "", err
 	}
 	return marketID, nil
@@ -1684,18 +1734,28 @@ func (s *mappingStore) listMarketAssetPrintingCosts(ctx context.Context, tenantI
 
 	rows, err := s.pool.Query(ctx, `
 		SELECT
-			mapc.tenant_id,
+			m.tenant_id::text,
 			m.name,
-			mapc.asset_id::text,
+			ma.id::text,
 			ma.asset,
 			ma.label,
-			mapc.costs,
-			mapc.created_at,
-			mapc.updated_at
-		FROM market_asset_printing_costs mapc
-		JOIN markets m ON m.id = mapc.market_id
-		JOIN market_assets ma ON ma.id = mapc.asset_id
-		WHERE mapc.tenant_id = $1
+			COALESCE(mapc.costs, '{}'::jsonb),
+			COALESCE(mpc.poster_cost, 0)::float8,
+			COALESCE(mapc.created_at, mpc.created_at, ma.created_at),
+			GREATEST(
+				COALESCE(mapc.updated_at, ma.updated_at),
+				COALESCE(mpc.updated_at, ma.updated_at)
+			)
+		FROM market_assets ma
+		JOIN markets m ON m.id = ma.market_id
+		LEFT JOIN market_asset_printing_costs mapc
+		  ON mapc.tenant_id = m.tenant_id
+		 AND mapc.market_id = m.id
+		 AND mapc.asset_id = ma.id
+		LEFT JOIN market_printing_costs mpc
+		  ON mpc.tenant_id = m.tenant_id
+		 AND mpc.market_id = m.id
+		WHERE m.tenant_id = $1
 		ORDER BY m.name ASC, ma.label ASC, ma.asset ASC
 	`, tenantID)
 	if err != nil {
@@ -1718,6 +1778,41 @@ func (s *mappingStore) listMarketAssetPrintingCosts(ctx context.Context, tenantI
 	return records, rows.Err()
 }
 
+func (s *mappingStore) listMarketPrintingCosts(ctx context.Context, tenantID string) ([]marketPrintingCostRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT m.tenant_id::text, m.name, COALESCE(mpc.poster_cost, 0)::float8,
+			COALESCE(mpc.created_at, m.created_at), COALESCE(mpc.updated_at, m.updated_at)
+		FROM markets m
+		LEFT JOIN market_printing_costs mpc
+		  ON mpc.tenant_id = m.tenant_id
+		 AND mpc.market_id = m.id
+		WHERE m.tenant_id = $1
+		ORDER BY m.name ASC
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]marketPrintingCostRecord, 0)
+	for rows.Next() {
+		var tenantID string
+		var market string
+		var posterCost float64
+		var createdAt time.Time
+		var updatedAt time.Time
+		if err := rows.Scan(&tenantID, &market, &posterCost, &createdAt, &updatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, decodeMarketPrintingCostRow(tenantID, market, posterCost, createdAt, updatedAt))
+	}
+	return records, rows.Err()
+}
+
 func encodePrintingCosts(costs printingCostBreakdown) (string, error) {
 	normalized, err := normalizePrintingCostBreakdown(costs)
 	if err != nil {
@@ -1728,6 +1823,86 @@ func encodePrintingCosts(costs printingCostBreakdown) (string, error) {
 		return "", err
 	}
 	return string(bytes), nil
+}
+
+func encodeAssetPrintingCosts(costs printingCostBreakdown) (string, error) {
+	normalized := printingCostBreakdown{}
+	for rawKey, value := range removeMarketPosterCosts(costs) {
+		key := strings.TrimSpace(rawKey)
+		if key == "" {
+			continue
+		}
+		if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+			return "", fmt.Errorf("cost for %s must be greater than or equal to 0", key)
+		}
+		normalized[key] = value
+	}
+	bytes, err := json.Marshal(normalized)
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), nil
+}
+
+func removeMarketPosterCosts(costs printingCostBreakdown) printingCostBreakdown {
+	next := printingCostBreakdown{}
+	for key, value := range costs {
+		next[key] = value
+	}
+	for _, key := range marketPosterCostKeys {
+		delete(next, key)
+	}
+	return next
+}
+
+func normalizeMarketPrintingCost(item marketPrintingCostInput) (marketPrintingCostInput, error) {
+	item.Market = strings.TrimSpace(item.Market)
+	if item.Market == "" {
+		return marketPrintingCostInput{}, errors.New("market is required")
+	}
+	if math.IsNaN(item.PosterCost) || math.IsInf(item.PosterCost, 0) || item.PosterCost < 0 {
+		return marketPrintingCostInput{}, errors.New("Poster cost must be greater than or equal to 0")
+	}
+	return item, nil
+}
+
+func (s *mappingStore) upsertMarketPrintingCosts(ctx context.Context, tenantID string, payload []marketPrintingCostInput) ([]marketPrintingCostRecord, error) {
+	if err := s.ensureTenantExists(ctx, tenantID); err != nil {
+		return nil, err
+	}
+	if len(payload) == 0 {
+		return s.listMarketPrintingCosts(ctx, tenantID)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, rawItem := range payload {
+		item, err := normalizeMarketPrintingCost(rawItem)
+		if err != nil {
+			return nil, err
+		}
+		marketID, err := s.ensureMarketWithTx(ctx, tx, tenantID, item.Market)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO market_printing_costs (tenant_id, market_id, poster_cost, created_at, updated_at)
+			VALUES ($1, $2, $3, NOW(), NOW())
+			ON CONFLICT (tenant_id, market_id)
+			DO UPDATE SET poster_cost = EXCLUDED.poster_cost, updated_at = NOW()
+		`, tenantID, marketID, item.PosterCost); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return s.listMarketPrintingCosts(ctx, tenantID)
 }
 
 func (s *mappingStore) upsertMarketAssetPrintingCosts(ctx context.Context, tenantID string, payload []marketAssetPrintingCostInput) ([]marketAssetPrintingCostRecord, error) {
@@ -1756,7 +1931,7 @@ func (s *mappingStore) upsertMarketAssetPrintingCosts(ctx context.Context, tenan
 			return nil, errors.New("assetId is required")
 		}
 
-		costsJSON, err := encodePrintingCosts(item.Costs)
+		costsJSON, err := encodeAssetPrintingCosts(item.Costs)
 		if err != nil {
 			return nil, err
 		}
@@ -1784,7 +1959,14 @@ func (s *mappingStore) upsertMarketAssetPrintingCosts(ctx context.Context, tenan
 			VALUES ($1, $2, $3, $4::jsonb, NOW(), NOW())
 			ON CONFLICT (tenant_id, asset_id)
 			DO UPDATE SET market_id = EXCLUDED.market_id, costs = EXCLUDED.costs, updated_at = NOW()
-			RETURNING tenant_id, $5::text, asset_id::text, $6::text, $7::text, costs, created_at, updated_at
+			RETURNING tenant_id, $5::text, asset_id::text, $6::text, $7::text, costs,
+				COALESCE((
+					SELECT mpc.poster_cost::float8
+					FROM market_printing_costs mpc
+					WHERE mpc.tenant_id = market_asset_printing_costs.tenant_id
+					  AND mpc.market_id = market_asset_printing_costs.market_id
+				), 0)::float8,
+				created_at, updated_at
 		`, tenantID, marketID, assetID, costsJSON, market, asset, label))
 		if err != nil {
 			return nil, err

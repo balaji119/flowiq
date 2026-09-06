@@ -7,6 +7,8 @@ import {
   MarketDeliveryAddressRecord,
   MarketAssetPrintingCostInput,
   MarketAssetPrintingCostRecord,
+  MarketPrintingCostInput,
+  MarketPrintingCostRecord,
   MarketSheetSizeInput,
   MarketSheetSizeRecord,
   MarketAssetShippingCostInput,
@@ -180,6 +182,19 @@ export async function upsertMarketShippingRate(payload: MarketShippingRateInput,
 export async function fetchMarketAssetPrintingCosts(tenantId?: string) {
   const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
   return apiFetchJson<{ costs: MarketAssetPrintingCostRecord[] }>(`/api/admin/market-asset-printing-costs${query}`);
+}
+
+export async function fetchMarketPrintingCosts(tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ costs: MarketPrintingCostRecord[] }>(`/api/admin/market-printing-costs${query}`);
+}
+
+export async function upsertMarketPrintingCosts(payload: { costs: MarketPrintingCostInput[] }, tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return apiFetchJson<{ costs: MarketPrintingCostRecord[] }>(`/api/admin/market-printing-costs${query}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function upsertMarketAssetPrintingCosts(payload: { costs: MarketAssetPrintingCostInput[] }, tenantId?: string) {
