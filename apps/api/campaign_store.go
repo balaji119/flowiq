@@ -475,11 +475,10 @@ func (s *campaignStore) listCampaigns(ctx context.Context, user AuthUser) ([]cam
 			WHERE tenant_id = $1 AND parent_campaign_id IS NOT NULL
 			GROUP BY parent_campaign_id
 		) child_counts ON child_counts.parent_campaign_id = c.id
-		LEFT JOIN campaigns sort_parent ON sort_parent.id = COALESCE(c.parent_campaign_id, c.id) AND sort_parent.tenant_id = c.tenant_id
 		LEFT JOIN users uc ON uc.id = c.created_by_user_id
 		LEFT JOIN users uu ON uu.id = c.updated_by_user_id
 		WHERE c.tenant_id = $1
-		ORDER BY sort_parent.updated_at DESC, CASE WHEN c.parent_campaign_id IS NULL THEN 0 ELSE 1 END, c.created_at ASC
+		ORDER BY c.created_at DESC, c.id DESC
 	`, *user.TenantID)
 	if err != nil {
 		return nil, err
