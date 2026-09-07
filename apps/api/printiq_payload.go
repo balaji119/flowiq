@@ -20,14 +20,16 @@ import (
 )
 
 type parsedDeliveryAddress struct {
-	Name         string
-	AddressLine1 string
-	City         string
-	State        string
-	PostCode     string
-	Country      string
-	Phone        string
-	Notes        string
+	Name          string
+	AddressLine1  string
+	City          string
+	State         string
+	PostCode      string
+	Country       string
+	Phone         string
+	DeliveryTime  string
+	DeliveryPoint string
+	Notes         string
 }
 
 type printIQArtworkUpload struct {
@@ -36,20 +38,22 @@ type printIQArtworkUpload struct {
 }
 
 type printIQSheetProduct struct {
-	Market         string
-	FormatKey      string
-	ProductCode    string
-	SheetCode      string
-	Quantity       int
-	ArtworkImageID string
+	Market          string
+	FormatKey       string
+	ProductCode     string
+	SheetCode       string
+	Quantity        int
+	ArtworkImageID  string
+	DeliveryAddress string
 }
 
 type printIQSheetProductMergeKey struct {
-	Market         string
-	FormatKey      string
-	ProductCode    string
-	SheetCode      string
-	ArtworkImageID string
+	Market          string
+	FormatKey       string
+	ProductCode     string
+	SheetCode       string
+	ArtworkImageID  string
+	DeliveryAddress string
 }
 
 type printIQSheetFormat struct {
@@ -263,11 +267,12 @@ func printIQFrameQuantity(formatKey string, posterQuantity int) int {
 
 func appendPrintIQSheetProduct(products []printIQSheetProduct, indexes map[printIQSheetProductMergeKey]int, product printIQSheetProduct) ([]printIQSheetProduct, int) {
 	key := printIQSheetProductMergeKey{
-		Market:         strings.TrimSpace(product.Market),
-		FormatKey:      strings.TrimSpace(product.FormatKey),
-		ProductCode:    strings.TrimSpace(product.ProductCode),
-		SheetCode:      strings.TrimSpace(product.SheetCode),
-		ArtworkImageID: strings.TrimSpace(product.ArtworkImageID),
+		Market:          strings.TrimSpace(product.Market),
+		FormatKey:       strings.TrimSpace(product.FormatKey),
+		ProductCode:     strings.TrimSpace(product.ProductCode),
+		SheetCode:       strings.TrimSpace(product.SheetCode),
+		ArtworkImageID:  strings.TrimSpace(product.ArtworkImageID),
+		DeliveryAddress: strings.TrimSpace(product.DeliveryAddress),
 	}
 	if index, exists := indexes[key]; exists {
 		products[index].Quantity += product.Quantity
@@ -299,6 +304,7 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 			printIQQuantity := printIQFrameQuantity(format.breakdownKey, posterQuantity)
 			marketProductMappings := productMappingsByMarket[market]
 			asset := assets[summaryLine.ID]
+			deliveryAddress := strings.TrimSpace(asset.DeliveryAddress)
 			productCodeKey := format.settingsKey
 			useCustomSheetSize := customSheetSizeFormats[format.settingsKey] || !isBuiltInPrintIQSheetFormat(format.breakdownKey)
 			productMapping := marketProductMappings[productCodeKey]
@@ -332,7 +338,7 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 				if strings.TrimSpace(artworkImageID) == "" {
 					continue
 				}
-				products, _ = appendPrintIQSheetProduct(products, productIndexes, printIQSheetProduct{Market: market, FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: printIQQuantity, ArtworkImageID: artworkImageID})
+				products, _ = appendPrintIQSheetProduct(products, productIndexes, printIQSheetProduct{Market: market, FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: printIQQuantity, ArtworkImageID: artworkImageID, DeliveryAddress: deliveryAddress})
 				continue
 			}
 
@@ -350,7 +356,7 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 					assignedQuantity = remaining
 				}
 				var productIndex int
-				products, productIndex = appendPrintIQSheetProduct(products, productIndexes, printIQSheetProduct{Market: market, FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: assignedQuantity, ArtworkImageID: assignment.ArtworkImageID})
+				products, productIndex = appendPrintIQSheetProduct(products, productIndexes, printIQSheetProduct{Market: market, FormatKey: format.breakdownKey, ProductCode: productCode, SheetCode: sheetCode, Quantity: assignedQuantity, ArtworkImageID: assignment.ArtworkImageID, DeliveryAddress: deliveryAddress})
 				lastAssignedProductIndex = productIndex
 				remaining -= assignedQuantity
 			}
@@ -369,7 +375,7 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 }
 
 func buildPrintIQGetPriceForProductPayload(values orderFormValues, product printIQSheetProduct, quoteNo, customerCode string) map[string]any {
-	return map[string]any{
+	payload := map[string]any{
 		"ProductCode": product.ProductCode,
 		"Quantities": []map[string]any{{
 			"Quantity": product.Quantity,
@@ -379,8 +385,10 @@ func buildPrintIQGetPriceForProductPayload(values orderFormValues, product print
 		"JobTitle":         buildPrintIQJobTitle(values, product),
 		"CustomerCode":     customerCode,
 		"AccountManagerID": "00000000-0000-0000-0000-000000000000",
-		"CopyDeliveryFromFirstProductToAllProducts": true,
+		"CopyDeliveryFromFirstProductToAllProducts": false,
 	}
+	addPrintIQDeliveryFields(payload, product.DeliveryAddress)
+	return payload
 }
 
 const printIQProofContactAnswer = "15205|ADS Prepress|CONTACT"
@@ -426,17 +434,6 @@ func resolveQuantity(values orderFormValues, summary *campaignSummary) int {
 	return 0
 }
 
-func firstCampaignDeliveryAddress(values orderFormValues) string {
-	for _, market := range values.CampaignMarkets {
-		for _, asset := range market.Assets {
-			if trimmed := strings.TrimSpace(asset.DeliveryAddress); trimmed != "" {
-				return trimmed
-			}
-		}
-	}
-	return ""
-}
-
 func parseCampaignDeliveryAddress(rawAddress string) parsedDeliveryAddress {
 	lines := strings.Split(rawAddress, "\n")
 	cleanLines := make([]string, 0, len(lines))
@@ -474,11 +471,54 @@ func parseCampaignDeliveryAddress(rawAddress string) parsedDeliveryAddress {
 		switch {
 		case strings.HasPrefix(lower, "phone:"):
 			address.Phone = strings.TrimSpace(line[len("phone:"):])
+		case strings.HasPrefix(lower, "delivery time:"):
+			address.DeliveryTime = strings.TrimSpace(line[len("delivery time:"):])
+		case strings.HasPrefix(lower, "delivery point:"):
+			address.DeliveryPoint = strings.TrimSpace(line[len("delivery point:"):])
 		case strings.HasPrefix(lower, "notes:"):
 			address.Notes = strings.TrimSpace(line[len("notes:"):])
 		}
 	}
 	return address
+}
+
+func printIQDeliveryNotes(address parsedDeliveryAddress) string {
+	parts := make([]string, 0, 3)
+	if strings.TrimSpace(address.DeliveryTime) != "" {
+		parts = append(parts, "Delivery time: "+strings.TrimSpace(address.DeliveryTime))
+	}
+	if strings.TrimSpace(address.DeliveryPoint) != "" {
+		parts = append(parts, "Delivery point: "+strings.TrimSpace(address.DeliveryPoint))
+	}
+	if strings.TrimSpace(address.Notes) != "" {
+		parts = append(parts, strings.TrimSpace(address.Notes))
+	}
+	return strings.Join(parts, " | ")
+}
+
+func addPrintIQDeliveryFields(payload map[string]any, rawAddress string) {
+	deliveryAddress := parseCampaignDeliveryAddress(rawAddress)
+
+	address := map[string]any{}
+	setStringIfPresent(address, "Name", deliveryAddress.Name)
+	setStringIfPresent(address, "AddressLine1", deliveryAddress.AddressLine1)
+	setStringIfPresent(address, "City", deliveryAddress.City)
+	setStringIfPresent(address, "State", deliveryAddress.State)
+	setStringIfPresent(address, "PostCode", deliveryAddress.PostCode)
+	setStringIfPresent(address, "Country", deliveryAddress.Country)
+	if stringMapHasValues(address) {
+		payload["Address"] = address
+	}
+
+	deliveryContact := map[string]any{}
+	setStringIfPresent(deliveryContact, "FirstName", deliveryAddress.Name)
+	setStringIfPresent(deliveryContact, "Phone", deliveryAddress.Phone)
+	setStringIfPresent(deliveryContact, "Mobile", deliveryAddress.Phone)
+	if stringMapHasValues(deliveryContact) {
+		deliveryContact["IsAddressSpecific"] = "true"
+		payload["DeliveryContact"] = deliveryContact
+	}
+	setStringIfPresent(payload, "DeliveryNotes", printIQDeliveryNotes(deliveryAddress))
 }
 
 func setStringIfPresent(target map[string]any, key, value string) {
@@ -510,7 +550,6 @@ func stringMapHasValues(value map[string]any) bool {
 
 func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSummary, product printIQSheetProduct) map[string]any {
 	quantity := resolveQuantity(values, summary)
-	deliveryAddress := parseCampaignDeliveryAddress(firstCampaignDeliveryAddress(values))
 
 	payload := map[string]any{
 		"Accept":              "false",
@@ -537,16 +576,7 @@ func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSum
 		}
 	}
 
-	address := map[string]any{}
-	setStringIfPresent(address, "Name", deliveryAddress.Name)
-	setStringIfPresent(address, "AddressLine1", deliveryAddress.AddressLine1)
-	setStringIfPresent(address, "City", deliveryAddress.City)
-	setStringIfPresent(address, "State", deliveryAddress.State)
-	setStringIfPresent(address, "PostCode", deliveryAddress.PostCode)
-	setStringIfPresent(address, "Country", deliveryAddress.Country)
-	if stringMapHasValues(address) {
-		payload["Address"] = address
-	}
+	addPrintIQDeliveryFields(payload, product.DeliveryAddress)
 
 	quoteContact := map[string]any{}
 	setStringIfPresent(quoteContact, "FirstName", values.Contact.FirstName)
@@ -556,16 +586,6 @@ func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSum
 		quoteContact["IsAddressSpecific"] = "true"
 		payload["QuoteContact"] = quoteContact
 	}
-
-	deliveryContact := map[string]any{}
-	setStringIfPresent(deliveryContact, "FirstName", deliveryAddress.Name)
-	setStringIfPresent(deliveryContact, "Phone", deliveryAddress.Phone)
-	setStringIfPresent(deliveryContact, "Mobile", deliveryAddress.Phone)
-	if stringMapHasValues(deliveryContact) {
-		deliveryContact["IsAddressSpecific"] = "true"
-		payload["DeliveryContact"] = deliveryContact
-	}
-	setStringIfPresent(payload, "DeliveryNotes", deliveryAddress.Notes)
 
 	return payload
 }

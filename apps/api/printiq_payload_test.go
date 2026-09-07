@@ -166,6 +166,41 @@ func TestResolvePrintIQSheetProductsMergesSameMarketArtworkAndSheetType(t *testi
 	}
 }
 
+func TestResolvePrintIQSheetProductsKeepsDifferentDeliveryAddressesSeparate(t *testing.T) {
+	values := orderFormValues{
+		CampaignMarkets: []campaignMarket{
+			{
+				Market: "NSW",
+				Assets: []campaignAsset{
+					{ID: "asset-1", CreativeImageIDs: map[string]string{"8-sheet": "artwork-a"}, DeliveryAddress: "Sydney Warehouse\n10 George St\nSydney NSW 2000\nPhone: 02 1111 1111\nAustralia"},
+					{ID: "asset-2", CreativeImageIDs: map[string]string{"8-sheet": "artwork-a"}, DeliveryAddress: "Parramatta Depot\n20 Church St\nParramatta NSW 2150\nPhone: 02 2222 2222\nAustralia"},
+				},
+			},
+		},
+	}
+	summary := &campaignSummary{Lines: []campaignLineResult{
+		{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40}},
+		{ID: "asset-2", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 20}},
+	}}
+	products, err := resolvePrintIQSheetProducts(values, summary, map[string]map[string]materialProductMapping{
+		"NSW": {
+			"8-sheet": testMaterialProductMapping("NSW Quad Product", "SHT-QUAD"),
+		},
+	}, map[string]string{}, map[string]bool{})
+	if err != nil {
+		t.Fatalf("resolve products: %v", err)
+	}
+	if len(products) != 2 {
+		t.Fatalf("expected different delivery addresses to remain separate, got %d: %#v", len(products), products)
+	}
+	if products[0].Quantity != 10 || !strings.Contains(products[0].DeliveryAddress, "Sydney Warehouse") {
+		t.Fatalf("unexpected first delivery product: %#v", products[0])
+	}
+	if products[1].Quantity != 5 || !strings.Contains(products[1].DeliveryAddress, "Parramatta Depot") {
+		t.Fatalf("unexpected second delivery product: %#v", products[1])
+	}
+}
+
 func TestResolvePrintIQSheetProductsIncludesDynamicCustomSheetKeys(t *testing.T) {
 	values := orderFormValues{
 		CampaignMarkets: []campaignMarket{
@@ -425,6 +460,39 @@ func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 	}
 }
 
+func TestBuildPrintIQGetPriceForProductPayloadSendsProductDeliveryAddress(t *testing.T) {
+	payload := buildPrintIQGetPriceForProductPayload(
+		orderFormValues{},
+		printIQSheetProduct{
+			ProductCode:     "Double Product",
+			Quantity:        10,
+			DeliveryAddress: "Melbourne Warehouse\n55 Collins St\nMelbourne VIC 3000\nPhone: 03 3333 3333\nDelivery time: 9am-1pm\nDelivery point: Loading dock\nNotes: Call on arrival\nAustralia",
+		},
+		"Q50206",
+		"C00003",
+	)
+	if payload["CopyDeliveryFromFirstProductToAllProducts"] != false {
+		t.Fatalf("expected product-specific delivery, got %#v", payload["CopyDeliveryFromFirstProductToAllProducts"])
+	}
+	address, ok := payload["Address"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected Address payload, got %#v", payload["Address"])
+	}
+	if address["Name"] != "Melbourne Warehouse" || address["AddressLine1"] != "55 Collins St" || address["City"] != "Melbourne" || address["State"] != "VIC" || address["PostCode"] != "3000" || address["Country"] != "Australia" {
+		t.Fatalf("unexpected Address payload: %#v", address)
+	}
+	deliveryContact, ok := payload["DeliveryContact"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected DeliveryContact payload, got %#v", payload["DeliveryContact"])
+	}
+	if deliveryContact["FirstName"] != "Melbourne Warehouse" || deliveryContact["Phone"] != "03 3333 3333" || deliveryContact["Mobile"] != "03 3333 3333" || deliveryContact["IsAddressSpecific"] != "true" {
+		t.Fatalf("unexpected DeliveryContact payload: %#v", deliveryContact)
+	}
+	if payload["DeliveryNotes"] != "Delivery time: 9am-1pm | Delivery point: Loading dock | Call on arrival" {
+		t.Fatalf("unexpected DeliveryNotes payload: %#v", payload["DeliveryNotes"])
+	}
+}
+
 func TestBuildPrintIQCreateQuotePayloadUsesFormattedJobTitle(t *testing.T) {
 	values := orderFormValues{
 		CampaignName:        "Asahi - GNBC Q3 - Campaign",
@@ -446,6 +514,28 @@ func TestBuildPrintIQCreateQuotePayloadUsesFormattedJobTitle(t *testing.T) {
 	)
 	if payload["JobTitle"] != "C1_TestClient_PO-1001_SHT-001-Syd A0 Quad 3364x1189-Asahi - GNBC Q3 - Campaign" {
 		t.Fatalf("unexpected job title: %#v", payload["JobTitle"])
+	}
+}
+
+func TestBuildPrintIQCreateQuotePayloadUsesProductDeliveryAddress(t *testing.T) {
+	payload := buildPrintIQCreateQuotePayload(
+		orderFormValues{ProductCode: "Quad Product", Quantity: "4"},
+		nil,
+		printIQSheetProduct{
+			ProductCode:     "Quad Product",
+			Quantity:        4,
+			DeliveryAddress: "Brisbane Depot\n100 Queen St\nBrisbane QLD 4000\nPhone: 07 4444 4444\nDelivery point: Reception\nAustralia",
+		},
+	)
+	address, ok := payload["Address"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected Address payload, got %#v", payload["Address"])
+	}
+	if address["Name"] != "Brisbane Depot" || address["AddressLine1"] != "100 Queen St" || address["City"] != "Brisbane" || address["State"] != "QLD" || address["PostCode"] != "4000" {
+		t.Fatalf("unexpected Address payload: %#v", address)
+	}
+	if payload["DeliveryNotes"] != "Delivery point: Reception" {
+		t.Fatalf("unexpected DeliveryNotes payload: %#v", payload["DeliveryNotes"])
 	}
 }
 
