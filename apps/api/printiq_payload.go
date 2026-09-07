@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"mime"
 	"net/url"
 	"os"
@@ -391,6 +392,408 @@ func buildPrintIQGetPriceForProductPayload(values orderFormValues, product print
 	return payload
 }
 
+type campaignShippingAsset struct {
+	Market  string
+	AssetID string
+}
+
+func calculateCampaignShippingCost(values orderFormValues, summary *campaignSummary, shippingRates []marketShippingRateRecord, assetShippingCosts []marketAssetShippingCostRecord, customSheetSizeFormats map[string]bool) float64 {
+	if summary == nil {
+		return 0
+	}
+
+	selectedMarkets := map[string]bool{}
+	selectedAssetByLineID := map[string]campaignShippingAsset{}
+	for _, market := range values.CampaignMarkets {
+		marketName := strings.TrimSpace(market.Market)
+		if marketName != "" {
+			selectedMarkets[marketName] = true
+		}
+		for _, asset := range market.Assets {
+			selectedAssetByLineID[asset.ID] = campaignShippingAsset{Market: market.Market, AssetID: asset.AssetID}
+		}
+	}
+
+	rateByMarket := map[string]marketShippingRateRecord{}
+	for _, rate := range shippingRates {
+		rateByMarket[rate.Market] = rate
+	}
+
+	assetCostByMarketAsset := map[string]marketAssetShippingCostRecord{}
+	for _, cost := range assetShippingCosts {
+		assetCostByMarketAsset[marketAssetShippingCostKey(cost.Market, cost.AssetID)] = cost
+	}
+
+	total := 0.0
+	for _, marketSummary := range summary.PerMarket {
+		if !selectedMarkets[marketSummary.Market] {
+			continue
+		}
+		marketLines := campaignShippingCostLinesForMarket(summary.Lines, marketSummary)
+		total += calculateMarketShippingCost(marketSummary.Market, marketLines, rateByMarket[marketSummary.Market], selectedAssetByLineID, assetCostByMarketAsset, customSheetSizeFormats)
+	}
+	return roundCurrency(total)
+}
+
+func marketAssetShippingCostKey(market, assetID string) string {
+	return strings.TrimSpace(market) + "\x00" + strings.TrimSpace(assetID)
+}
+
+func campaignShippingCostLinesForMarket(lines []campaignLineResult, marketSummary campaignTotals) []campaignLineResult {
+	marketLines := make([]campaignLineResult, 0)
+	for _, line := range lines {
+		if line.Market == marketSummary.Market {
+			marketLines = append(marketLines, line)
+		}
+	}
+	if len(marketLines) == 0 {
+		return marketLines
+	}
+
+	keys := map[string]bool{}
+	for key := range marketSummary.Breakdown {
+		keys[key] = true
+	}
+	for _, line := range marketLines {
+		for key := range line.Breakdown {
+			keys[key] = true
+		}
+	}
+
+	allocatedByLine := make([]quantityBreakdown, len(marketLines))
+	for index := range allocatedByLine {
+		allocatedByLine[index] = quantityBreakdown{}
+	}
+	for key := range keys {
+		target := maxInt(0, marketSummary.Breakdown[key])
+		originalValues := make([]int, len(marketLines))
+		originalTotal := 0
+		for index, line := range marketLines {
+			value := maxInt(0, line.Breakdown[key])
+			originalValues[index] = value
+			originalTotal += value
+		}
+		if target == 0 {
+			for index := range allocatedByLine {
+				allocatedByLine[index][key] = 0
+			}
+			continue
+		}
+		if originalTotal == 0 {
+			for index := range allocatedByLine {
+				if index == 0 {
+					allocatedByLine[index][key] = target
+				} else {
+					allocatedByLine[index][key] = 0
+				}
+			}
+			continue
+		}
+
+		type allocation struct {
+			index     int
+			value     int
+			remainder float64
+		}
+		allocations := make([]allocation, len(originalValues))
+		allocatedTotal := 0
+		for index, value := range originalValues {
+			exact := float64(target*value) / float64(originalTotal)
+			allocated := int(math.Floor(exact))
+			allocations[index] = allocation{index: index, value: allocated, remainder: exact - float64(allocated)}
+			allocatedTotal += allocated
+		}
+		remaining := target - allocatedTotal
+		sort.SliceStable(allocations, func(i, j int) bool {
+			if allocations[i].remainder == allocations[j].remainder {
+				return allocations[i].index < allocations[j].index
+			}
+			return allocations[i].remainder > allocations[j].remainder
+		})
+		for _, allocation := range allocations {
+			if remaining <= 0 {
+				break
+			}
+			allocatedByLine[allocation.index][key]++
+			remaining--
+		}
+		for _, allocation := range allocations {
+			allocatedByLine[allocation.index][key] += allocation.value
+		}
+	}
+
+	result := make([]campaignLineResult, len(marketLines))
+	for index, line := range marketLines {
+		result[index] = line
+		result[index].Breakdown = allocatedByLine[index]
+	}
+	return result
+}
+
+func calculateMarketShippingCost(marketName string, marketLines []campaignLineResult, marketRate marketShippingRateRecord, selectedAssetByLineID map[string]campaignShippingAsset, assetCostByMarketAsset map[string]marketAssetShippingCostRecord, customSheetSizeFormats map[string]bool) float64 {
+	if len(marketLines) == 0 {
+		return 0
+	}
+	isCustomSheetFormat := func(key string) bool {
+		return customSheetSizeFormats[canonicalPrintIQSheetKey(key)]
+	}
+
+	customSheetTotal := 0
+	for _, line := range marketLines {
+		for rawKey, rawQuantity := range line.Breakdown {
+			if isCustomSheetFormat(rawKey) || isBuiltInPrintIQSheetFormat(rawKey) {
+				continue
+			}
+			customSheetTotal += maxInt(0, rawQuantity)
+		}
+	}
+
+	customSheetShipping := 0.0
+	for _, line := range marketLines {
+		selectedAsset, ok := selectedAssetByLineID[line.ID]
+		if !ok {
+			continue
+		}
+		var assetShippingCosts *marketAssetShippingCostRecord
+		if record, exists := assetCostByMarketAsset[marketAssetShippingCostKey(selectedAsset.Market, selectedAsset.AssetID)]; exists {
+			assetShippingCosts = &record
+		}
+		for sheetKey, enabled := range customSheetSizeFormats {
+			if !enabled {
+				continue
+			}
+			quantity := maxInt(0, quantityForShippingSheetKey(line.Breakdown, sheetKey))
+			if quantity == 0 {
+				continue
+			}
+			rate := shippingRateForSheetKey(assetShippingCosts, marketRate, marketName, sheetKey)
+			if useFlatRateMegas(marketRate) {
+				customSheetShipping += rate
+			} else {
+				customSheetShipping += calculateShippingCost(quantity, rate, shippingBoxSizeForSheetKey(marketRate, sheetKey))
+			}
+		}
+	}
+
+	var posterShipping float64
+	if useFlatRateSheeters(marketRate) {
+		hasTwoSheet := !isCustomSheetFormat("2-sheet") && anyMarketLineQuantity(marketLines, "2-sheet")
+		hasFourSheet := !isCustomSheetFormat("4-sheet") && anyMarketLineQuantity(marketLines, "4-sheet")
+		hasSixSheet := !isCustomSheetFormat("6-sheet") && anyMarketLineQuantity(marketLines, "6-sheet")
+		hasEightSheet := customSheetTotal > 0 || ((!isCustomSheetFormat("8-sheet") || !isCustomSheetFormat("QA0")) && anyEightSheetOrQA0Quantity(marketLines, isCustomSheetFormat))
+		if hasTwoSheet {
+			posterShipping += marketRate.TwoSheeterPrice
+		}
+		if hasFourSheet {
+			posterShipping += marketRate.FourSheeterPrice
+		}
+		if hasSixSheet {
+			posterShipping += marketRate.SixSheeterPrice
+		}
+		if hasEightSheet {
+			posterShipping += marketRate.EightSheeterPrice
+		}
+	} else {
+		totalTwoSheet := 0
+		if !isCustomSheetFormat("2-sheet") {
+			totalTwoSheet = sumMarketLineQuantity(marketLines, "2-sheet")
+		}
+		totalFourSheet := 0
+		if !isCustomSheetFormat("4-sheet") {
+			totalFourSheet = sumMarketLineQuantity(marketLines, "4-sheet")
+		}
+		totalSixSheet := 0
+		if !isCustomSheetFormat("6-sheet") {
+			totalSixSheet = sumMarketLineQuantity(marketLines, "6-sheet")
+		}
+		totalEightAndQA0 := customSheetTotal + sumMarketLineEightSheetAndQA0Quantity(marketLines, isCustomSheetFormat)
+		posterShipping = calculatePosterShippingForSheeter(totalEightAndQA0, marketRate.EightSheeterPrice, 4, marketRate.EightSheeterSetsPerBox) +
+			calculatePosterShippingForSheeter(totalSixSheet, marketRate.SixSheeterPrice, 3, marketRate.SixSheeterSetsPerBox) +
+			calculatePosterShippingForSheeter(totalFourSheet, marketRate.FourSheeterPrice, 2, marketRate.FourSheeterSetsPerBox) +
+			calculatePosterShippingForSheeter(totalTwoSheet, marketRate.TwoSheeterPrice, 1, marketRate.TwoSheeterSetsPerBox)
+	}
+
+	return posterShipping + customSheetShipping
+}
+
+func useFlatRateSheeters(rate marketShippingRateRecord) bool {
+	if rate.UseFlatRate && !rate.UseFlatRateSheeters && !rate.UseFlatRateMegas {
+		return true
+	}
+	return rate.UseFlatRateSheeters
+}
+
+func useFlatRateMegas(rate marketShippingRateRecord) bool {
+	if rate.UseFlatRate && !rate.UseFlatRateSheeters && !rate.UseFlatRateMegas {
+		return true
+	}
+	return rate.UseFlatRateMegas
+}
+
+func calculateShippingCost(units int, perBoxPrice float64, postersPerBox int) float64 {
+	if units <= 0 || perBoxPrice <= 0 {
+		return 0
+	}
+	safePostersPerBox := maxInt(1, postersPerBox)
+	return float64(ceilDiv(units, safePostersPerBox)) * perBoxPrice
+}
+
+func calculatePosterShippingForSheeter(posters int, pricePerBox float64, postersPerSet int, setsPerBox int) float64 {
+	if posters <= 0 || pricePerBox <= 0 {
+		return 0
+	}
+	safePostersPerSet := maxInt(1, postersPerSet)
+	safeSetsPerBox := maxInt(1, setsPerBox)
+	return float64(ceilDiv(posters, safePostersPerSet*safeSetsPerBox)) * pricePerBox
+}
+
+func shippingRateForSheetKey(assetShippingCosts *marketAssetShippingCostRecord, marketRate marketShippingRateRecord, marketName, sheetKey string) float64 {
+	formatKey := shippingFormatKeyForSheetKey(sheetKey)
+	assetRate := func(keys ...string) (float64, bool) {
+		if assetShippingCosts == nil {
+			return 0, false
+		}
+		for _, key := range keys {
+			if value, exists := assetShippingCosts.Costs[key]; exists {
+				return value, true
+			}
+		}
+		return 0, false
+	}
+	switch formatKey {
+	case "2-sheet":
+		if value, ok := assetRate(sheetKey, "2-sheet"); ok {
+			return value
+		}
+		return marketRate.TwoSheeterPrice
+	case "4-sheet":
+		if value, ok := assetRate(sheetKey, "4-sheet"); ok {
+			return value
+		}
+		return marketRate.FourSheeterPrice
+	case "6-sheet":
+		if value, ok := assetRate(sheetKey, "6-sheet"); ok {
+			return value
+		}
+		return marketRate.SixSheeterPrice
+	case "8-sheet":
+		if value, ok := assetRate(sheetKey, "8-sheet"); ok {
+			return value
+		}
+		return marketRate.EightSheeterPrice
+	case "QA0":
+		if value, ok := assetRate(sheetKey, "QA0"); ok {
+			return value
+		}
+		return marketRate.EightSheeterPrice
+	case "Mega":
+		if value, ok := assetRate(sheetKey, "Mega"); ok {
+			return value
+		}
+		return marketRate.MegaShippingRate
+	case "DOT M":
+		if value, ok := assetRate(sheetKey, "DOT M"); ok {
+			return value
+		}
+		return marketRate.DotMShippingRate
+	case "MP":
+		if value, ok := assetRate(sheetKey, "MP"); ok {
+			return value
+		}
+		return marketRate.MpShippingRate
+	default:
+		if value, ok := assetRate(sheetKey); ok {
+			return value
+		}
+		return 0
+	}
+}
+
+func shippingFormatKeyForSheetKey(sheetKey string) string {
+	canonicalKey := canonicalPrintIQSheetKey(sheetKey)
+	for _, format := range printIQSheetFormatOrder {
+		if format.settingsKey == canonicalKey {
+			return format.breakdownKey
+		}
+	}
+	return ""
+}
+
+func shippingBoxSizeForSheetKey(marketRate marketShippingRateRecord, sheetKey string) int {
+	switch shippingFormatKeyForSheetKey(sheetKey) {
+	case "2-sheet":
+		return maxInt(1, marketRate.TwoSheeterSetsPerBox)
+	case "4-sheet":
+		return maxInt(1, marketRate.FourSheeterSetsPerBox)
+	case "6-sheet":
+		return maxInt(1, marketRate.SixSheeterSetsPerBox)
+	case "8-sheet", "QA0":
+		return maxInt(1, marketRate.EightSheeterSetsPerBox)
+	default:
+		return maxInt(1, marketRate.MegasPerBox)
+	}
+}
+
+func quantityForShippingSheetKey(breakdown quantityBreakdown, sheetKey string) int {
+	if value, exists := breakdown[sheetKey]; exists {
+		return value
+	}
+	canonicalSheetKey := canonicalPrintIQSheetKey(sheetKey)
+	for key, value := range breakdown {
+		if canonicalPrintIQSheetKey(key) == canonicalSheetKey {
+			return value
+		}
+	}
+	return 0
+}
+
+func anyMarketLineQuantity(lines []campaignLineResult, key string) bool {
+	return sumMarketLineQuantity(lines, key) > 0
+}
+
+func anyEightSheetOrQA0Quantity(lines []campaignLineResult, isCustomSheetFormat func(string) bool) bool {
+	return sumMarketLineEightSheetAndQA0Quantity(lines, isCustomSheetFormat) > 0
+}
+
+func sumMarketLineQuantity(lines []campaignLineResult, key string) int {
+	total := 0
+	for _, line := range lines {
+		total += maxInt(0, line.Breakdown[key])
+	}
+	return total
+}
+
+func sumMarketLineEightSheetAndQA0Quantity(lines []campaignLineResult, isCustomSheetFormat func(string) bool) int {
+	total := 0
+	for _, line := range lines {
+		if !isCustomSheetFormat("8-sheet") {
+			total += maxInt(0, line.Breakdown["8-sheet"])
+		}
+		if !isCustomSheetFormat("QA0") {
+			total += maxInt(0, line.Breakdown["QA0"])
+		}
+	}
+	return total
+}
+
+func ceilDiv(value, divisor int) int {
+	if divisor <= 0 {
+		divisor = 1
+	}
+	return (value + divisor - 1) / divisor
+}
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func roundCurrency(value float64) float64 {
+	return math.Round(value*100) / 100
+}
+
 const printIQProofContactAnswer = "15205|ADS Prepress|CONTACT"
 
 func buildPrintIQGetQuoteQuestionsPayload(qqdKey any) map[string]any {
@@ -548,16 +951,17 @@ func stringMapHasValues(value map[string]any) bool {
 	return false
 }
 
-func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSummary, product printIQSheetProduct) map[string]any {
+func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSummary, product printIQSheetProduct, targetQuoteFreightPrice float64) map[string]any {
 	quantity := resolveQuantity(values, summary)
 
 	payload := map[string]any{
-		"Accept":              "false",
-		"QuoteFiles":          nil,
-		"FilterInput":         nil,
-		"ValidUntill":         nil,
-		"FilterProductToken":  "",
-		"AllArtworkSubmitted": "false",
+		"Accept":                  "false",
+		"QuoteFiles":              nil,
+		"FilterInput":             nil,
+		"ValidUntill":             nil,
+		"FilterProductToken":      "",
+		"AllArtworkSubmitted":     "false",
+		"TargetQuoteFreightPrice": roundCurrency(targetQuoteFreightPrice),
 	}
 	setStringIfPresent(payload, "Notes", values.Notes)
 	setStringIfPresent(payload, "JobTitle", buildPrintIQJobTitle(values, product))

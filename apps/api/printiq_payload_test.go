@@ -201,6 +201,74 @@ func TestResolvePrintIQSheetProductsKeepsDifferentDeliveryAddressesSeparate(t *t
 	}
 }
 
+func TestCalculateCampaignShippingCostMatchesReviewTotal(t *testing.T) {
+	values := orderFormValues{
+		CampaignMarkets: []campaignMarket{
+			{
+				Market: "NSW",
+				Assets: []campaignAsset{
+					{ID: "asset-1", AssetID: "market-asset-1"},
+				},
+			},
+		},
+	}
+	summary := &campaignSummary{
+		Lines: []campaignLineResult{
+			{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40, "6-sheet": 7, "Mini Mega": 3}},
+		},
+		PerMarket: []campaignTotals{
+			{Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 40, "6-sheet": 7, "Mini Mega": 3}},
+			{Market: "VIC", Breakdown: quantityBreakdown{"8-sheet": 100}},
+		},
+	}
+
+	total := calculateCampaignShippingCost(
+		values,
+		summary,
+		[]marketShippingRateRecord{
+			{Market: "NSW", SixSheeterPrice: 30, SixSheeterSetsPerBox: 2, EightSheeterPrice: 25, EightSheeterSetsPerBox: 10, MegasPerBox: 2},
+			{Market: "VIC", EightSheeterPrice: 999, EightSheeterSetsPerBox: 1},
+		},
+		[]marketAssetShippingCostRecord{
+			{Market: "NSW", AssetID: "market-asset-1", Costs: printingCostBreakdown{"mini-mega": 90}},
+		},
+		map[string]bool{"mini-mega": true},
+	)
+
+	if total != 265 {
+		t.Fatalf("expected shipping total 265, got %#v", total)
+	}
+}
+
+func TestCalculateCampaignShippingCostUsesSplitFlatRateFlags(t *testing.T) {
+	values := orderFormValues{
+		CampaignMarkets: []campaignMarket{{
+			Market: "NSW",
+			Assets: []campaignAsset{{ID: "asset-1", AssetID: "market-asset-1"}},
+		}},
+	}
+	summary := &campaignSummary{
+		Lines: []campaignLineResult{
+			{ID: "asset-1", Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 1, "Mini Mega": 3}},
+		},
+		PerMarket: []campaignTotals{
+			{Market: "NSW", Breakdown: quantityBreakdown{"8-sheet": 1, "Mini Mega": 3}},
+		},
+	}
+
+	total := calculateCampaignShippingCost(
+		values,
+		summary,
+		[]marketShippingRateRecord{{Market: "NSW", UseFlatRate: true, UseFlatRateSheeters: true, UseFlatRateMegas: false, EightSheeterPrice: 25, MegasPerBox: 2}},
+		[]marketAssetShippingCostRecord{{Market: "NSW", AssetID: "market-asset-1", Costs: printingCostBreakdown{"mini-mega": 90}}},
+		map[string]bool{"mini-mega": true},
+	)
+
+	if total != 205 {
+		t.Fatalf("expected split flat-rate shipping total 205, got %#v", total)
+	}
+}
+
 func TestResolvePrintIQSheetProductsIncludesDynamicCustomSheetKeys(t *testing.T) {
 	values := orderFormValues{
 		CampaignMarkets: []campaignMarket{
@@ -511,9 +579,23 @@ func TestBuildPrintIQCreateQuotePayloadUsesFormattedJobTitle(t *testing.T) {
 		values,
 		nil,
 		printIQSheetProduct{ProductCode: "Syd A0 Quad 3364x1189", SheetCode: "SHT-001", Quantity: 25, ArtworkImageID: "artwork-a"},
+		123.456,
 	)
 	if payload["JobTitle"] != "C1_TestClient_PO-1001_SHT-001-Syd A0 Quad 3364x1189-Asahi - GNBC Q3 - Campaign" {
 		t.Fatalf("unexpected job title: %#v", payload["JobTitle"])
+	}
+	if payload["TargetQuoteFreightPrice"] != 123.46 {
+		t.Fatalf("unexpected TargetQuoteFreightPrice: %#v", payload["TargetQuoteFreightPrice"])
+	}
+}
+
+func TestSummarizePrintIQPayloadIncludesTargetQuoteFreightPrice(t *testing.T) {
+	summary := summarizePrintIQPayload("CreateQuoteWithDelivery", map[string]any{
+		"ProductCode":             "Quad Product",
+		"TargetQuoteFreightPrice": 265.75,
+	})
+	if summary["TargetQuoteFreightPrice"] != 265.75 {
+		t.Fatalf("unexpected TargetQuoteFreightPrice summary: %#v", summary)
 	}
 }
 
@@ -526,6 +608,7 @@ func TestBuildPrintIQCreateQuotePayloadUsesProductDeliveryAddress(t *testing.T) 
 			Quantity:        4,
 			DeliveryAddress: "Brisbane Depot\n100 Queen St\nBrisbane QLD 4000\nPhone: 07 4444 4444\nDelivery point: Reception\nAustralia",
 		},
+		0,
 	)
 	address, ok := payload["Address"].(map[string]any)
 	if !ok {
@@ -547,6 +630,7 @@ func TestBuildPrintIQCreateQuotePayloadSendsDueDateAliases(t *testing.T) {
 		values,
 		nil,
 		printIQSheetProduct{ProductCode: "Quad Product", Quantity: 1},
+		0,
 	)
 	if payload["CustomerExpectedDate"] != "2026-09-02" {
 		t.Fatalf("unexpected CustomerExpectedDate: %#v", payload["CustomerExpectedDate"])

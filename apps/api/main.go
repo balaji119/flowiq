@@ -1104,6 +1104,7 @@ func summarizePrintIQPayload(step string, payload any) map[string]any {
 	copyStringField(summary, payloadMap, "JobNo")
 	copyStringField(summary, payloadMap, "OverrideFileName")
 	copyStringField(summary, payloadMap, "QQDKey")
+	copyNumberField(summary, payloadMap, "TargetQuoteFreightPrice")
 	if step == "SaveQuoteQuestions" {
 		if answers, ok := payloadMap["Answers"].([]map[string]any); ok {
 			qqdpKeys := make([]string, 0, len(answers))
@@ -1180,6 +1181,21 @@ func copyStringField(target map[string]any, source map[string]any, key string) {
 
 func copyBoolField(target map[string]any, source map[string]any, key string) {
 	if value, ok := source[key].(bool); ok {
+		target[key] = value
+	}
+}
+
+func copyNumberField(target map[string]any, source map[string]any, key string) {
+	switch value := source[key].(type) {
+	case float64:
+		target[key] = value
+	case float32:
+		target[key] = value
+	case int:
+		target[key] = value
+	case int64:
+		target[key] = value
+	case json.Number:
 		target[key] = value
 	}
 }
@@ -1349,6 +1365,17 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	shippingRates, err := a.mappingStore.listMarketShippingRates(r.Context(), campaign.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	assetShippingCosts, err := a.mappingStore.listMarketAssetShippingCosts(r.Context(), campaign.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	targetQuoteFreightPrice := calculateCampaignShippingCost(campaign.Values, campaign.Summary, shippingRates, assetShippingCosts, sheetSettings.CustomSheetSizeFormats)
 	sheetProducts, err := resolvePrintIQSheetProducts(campaign.Values, campaign.Summary, materialProductMappings, sheetSettings.ProductCodes, sheetSettings.CustomSheetSizeFormats)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -1360,7 +1387,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	createQuoteValues.CustomerCode = tenant.Code
 	createQuoteValues.ProductCode = firstProduct.ProductCode
 	createQuoteValues.Quantity = strconv.Itoa(firstProduct.Quantity)
-	createQuotePayload := buildPrintIQCreateQuotePayload(createQuoteValues, campaign.Summary, firstProduct)
+	createQuotePayload := buildPrintIQCreateQuotePayload(createQuoteValues, campaign.Summary, firstProduct, targetQuoteFreightPrice)
 	createQuoteResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "CreateQuoteWithDelivery", createQuotePayload, a.optionService.createQuoteWithDelivery)
 	if !ok {
 		return
