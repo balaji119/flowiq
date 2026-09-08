@@ -1382,6 +1382,11 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	deliveryJobPayloads, err := buildPrintIQDeliveryJobPayloads(campaign.Values, campaign.Summary, sheetProducts, shippingRates, assetShippingCosts, sheetSettings.CustomSheetSizeFormats, tenant.Code)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 	firstProduct := sheetProducts[0]
 	createQuoteValues := campaign.Values
 	createQuoteValues.CustomerCode = tenant.Code
@@ -1448,6 +1453,19 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	for _, payload := range deliveryJobPayloads {
+		payload["QuoteNo"] = quoteNo
+		getPricePayloads = append(getPricePayloads, payload)
+		response, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetPrice", payload, a.optionService.getPrice)
+		if !ok {
+			return
+		}
+		getPriceResponses = append(getPriceResponses, response)
+		if isZeroValue(valueAtPath(response, "ProductKey")) {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "PrintIQ did not create the delivery product", "details": response})
+			return
+		}
+	}
 	acceptQuotePayload := buildPrintIQAcceptQuotePayload(quoteNo, campaign.Values.DueDate)
 	acceptQuoteResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "AcceptQuote", acceptQuotePayload, a.optionService.acceptQuote)
 	if !ok {
@@ -1455,8 +1473,8 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	acceptedProducts := extractAcceptedProducts(acceptQuoteResponse)
-	if len(acceptedProducts) != len(sheetProducts) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ returned %d accepted products for %d submitted product lines", len(acceptedProducts), len(sheetProducts)), "details": acceptQuoteResponse})
+	if len(acceptedProducts) != len(sheetProducts)+len(deliveryJobPayloads) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ returned %d accepted products for %d submitted product lines", len(acceptedProducts), len(sheetProducts)+len(deliveryJobPayloads)), "details": acceptQuoteResponse})
 		return
 	}
 	jobNos := make([]string, len(acceptedProducts))
