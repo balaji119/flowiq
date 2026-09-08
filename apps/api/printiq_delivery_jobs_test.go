@@ -59,3 +59,16 @@ func TestPrintIQDeliveryDate(t *testing.T) {
 		}
 	}
 }
+
+func TestDeliveryJobsAcceptCityMarkets(t *testing.T) {
+	for market, code := range map[string]string{"Brisbane": "QLD Delivery", "Sydney": "NSW Delivery", "Melbourne": "VIC Delivery", " brisbane ": "QLD Delivery", "qld": "QLD Delivery"} {
+		payloads, err := buildPrintIQDeliveryJobPayloads(orderFormValues{CampaignMarkets: []campaignMarket{{Market: market}}}, nil, nil, nil, nil, nil, "C00003")
+		if err != nil || len(payloads) != 1 || payloads[0]["ProductCode"] != code {
+			t.Fatalf("market %q: payloads=%#v error=%v", market, payloads, err)
+		}
+	}
+	_, err := buildPrintIQDeliveryJobPayloads(orderFormValues{CampaignMarkets: []campaignMarket{{Market: "Perth"}}}, nil, nil, nil, nil, nil, "C00003")
+	if err == nil || !strings.Contains(err.Error(), "market Perth, job type Delivery") {
+		t.Fatalf("expected the affected delivery job in error: %v", err)
+	}
+}

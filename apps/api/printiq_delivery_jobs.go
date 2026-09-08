@@ -17,9 +17,9 @@ func buildPrintIQDeliveryJobPayloads(values orderFormValues, summary *campaignSu
 			continue
 		}
 		seen[name] = true
-		code := map[string]string{"VIC": "VIC Delivery", "NSW": "NSW Delivery", "QLD": "QLD Delivery"}[name]
+		code := printIQDeliveryProductCode(name)
 		if code == "" {
-			return nil, fmt.Errorf("No PrintIQ delivery product code configured for market %s", name)
+			return nil, fmt.Errorf("No PrintIQ product code configured for market %s, job type Delivery (dummy job without artwork). Contact Support", name)
 		}
 		marketValues := values
 		marketValues.CampaignMarkets = nil
@@ -78,6 +78,19 @@ func buildPrintIQDeliveryJobPayloads(values orderFormValues, summary *campaignSu
 		payloads = append(payloads, payload)
 	}
 	return payloads, nil
+}
+
+func printIQDeliveryProductCode(market string) string {
+	switch strings.ToLower(strings.TrimSpace(market)) {
+	case "vic", "melbourne":
+		return "VIC Delivery"
+	case "nsw", "sydney":
+		return "NSW Delivery"
+	case "qld", "brisbane":
+		return "QLD Delivery"
+	default:
+		return ""
+	}
 }
 
 func printIQDeliveryCreativeLine(values orderFormValues, product printIQSheetProduct) string {
