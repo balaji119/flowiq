@@ -1,3 +1,4 @@
+import { shippingLinesWithCreatives } from '../services/shippingCreatives';
 import { Fragment, type Dispatch, type DragEvent, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, CircleAlert, Download, Eye, GripVertical, LayoutGrid, LoaderCircle, Maximize2, Pencil, Plus, Search, Table2, Trash2, Upload, X } from 'lucide-react';
 import {
@@ -3879,7 +3880,7 @@ export function QuoteBuilderScreen({
     const sixSheeterSetsPerBox = sixSheeterSetsPerBoxByMarket.get(marketName) ?? 15;
     const eightSheeterSetsPerBox = eightSheeterSetsPerBoxByMarket.get(marketName) ?? 15;
     const megasPerBox = megasPerBoxByMarket.get(marketName) ?? 1;
-    const marketLines = costLinesForMarket(marketName);
+    const marketLines = shippingLinesWithCreatives(costLinesForMarket(marketName), values.campaignMarkets);
     const useFlatRateSheeters = useFlatRateSheetersByMarket.get(marketName) ?? false;
     const useFlatRateMegas = useFlatRateMegasByMarket.get(marketName) ?? false;
     const isCustomSheetFormat = (key: string) => Boolean(customSheetSizeFormats[toCanonicalSheetNameKey(key)]);

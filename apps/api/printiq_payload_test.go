@@ -207,7 +207,7 @@ func TestCalculateCampaignShippingCostMatchesReviewTotal(t *testing.T) {
 			{
 				Market: "NSW",
 				Assets: []campaignAsset{
-					{ID: "asset-1", AssetID: "market-asset-1"},
+					{ID: "asset-1", AssetID: "market-asset-1", CreativeImageIDs: map[string]string{"8-sheet": "art", "6-sheet": "art", "Mini Mega": "art"}},
 				},
 			},
 		},
@@ -244,7 +244,7 @@ func TestCalculateCampaignShippingCostUsesSplitFlatRateFlags(t *testing.T) {
 	values := orderFormValues{
 		CampaignMarkets: []campaignMarket{{
 			Market: "NSW",
-			Assets: []campaignAsset{{ID: "asset-1", AssetID: "market-asset-1"}},
+			Assets: []campaignAsset{{ID: "asset-1", AssetID: "market-asset-1", CreativeImageIDs: map[string]string{"8-sheet": "art", "6-sheet": "art", "Mini Mega": "art"}}},
 		}},
 	}
 	summary := &campaignSummary{

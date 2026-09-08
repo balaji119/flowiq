@@ -420,12 +420,14 @@ func calculateCampaignShippingCost(values orderFormValues, summary *campaignSumm
 
 	selectedMarkets := map[string]bool{}
 	selectedAssetByLineID := map[string]campaignShippingAsset{}
+	creativeAssets := map[string]campaignAsset{}
 	for _, market := range values.CampaignMarkets {
 		marketName := strings.TrimSpace(market.Market)
 		if marketName != "" {
 			selectedMarkets[marketName] = true
 		}
 		for _, asset := range market.Assets {
+			creativeAssets[asset.ID] = asset
 			selectedAssetByLineID[asset.ID] = campaignShippingAsset{Market: market.Market, AssetID: asset.AssetID}
 		}
 	}
@@ -446,9 +448,35 @@ func calculateCampaignShippingCost(values orderFormValues, summary *campaignSumm
 			continue
 		}
 		marketLines := campaignShippingCostLinesForMarket(summary.Lines, marketSummary)
+		for index, line := range marketLines {
+			breakdown := quantityBreakdown{}
+			for format, quantity := range line.Breakdown {
+				if shippingFormatHasCreative(creativeAssets[line.ID], format) {
+					breakdown[format] = quantity
+				}
+			}
+			marketLines[index].Breakdown = breakdown
+		}
 		total += calculateMarketShippingCost(marketSummary.Market, marketLines, rateByMarket[marketSummary.Market], selectedAssetByLineID, assetCostByMarketAsset, customSheetSizeFormats)
 	}
 	return roundCurrency(total)
+}
+
+func shippingFormatHasCreative(asset campaignAsset, format string) bool {
+	assignments := asset.ArtworkMaterialAssignments[format]
+	if len(assignments) > 0 {
+		for _, assignment := range assignments {
+			if assignment.FrameCount > 0 && strings.TrimSpace(assignment.ArtworkImageID) != "" {
+				return true
+			}
+		}
+		return false
+	}
+	imageID := asset.CreativeImageIDs[format]
+	if imageID == "" && format == "8-sheet" {
+		imageID = asset.CreativeImageID
+	}
+	return strings.TrimSpace(imageID) != ""
 }
 
 func marketAssetShippingCostKey(market, assetID string) string {

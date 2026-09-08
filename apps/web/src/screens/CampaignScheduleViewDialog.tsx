@@ -1,3 +1,4 @@
+import { shippingLinesWithCreatives } from '../services/shippingCreatives';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CopyPlus, LoaderCircle, ShoppingCart } from 'lucide-react';
 import { CampaignRecord, CustomPrintCostRecord, formatKeys, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketShippingRateRecord } from '@flowiq/shared';
@@ -593,7 +594,7 @@ export function CampaignScheduleViewDialog({
     return uniqueMarkets.reduce((marketTotal, marketName) => {
       const marketRate = findShippingRateForMarket(marketName);
       if (!marketRate) return marketTotal;
-      const marketLines = campaign.summary!.lines.filter((line) => (line.market || '').trim().toLowerCase() === (marketName || '').trim().toLowerCase());
+      const marketLines = shippingLinesWithCreatives(campaign.summary!.lines.filter((line) => (line.market || '').trim().toLowerCase() === (marketName || '').trim().toLowerCase()), campaign.values.campaignMarkets);
 
       const twoPrice = marketRate.twoSheeterPrice ?? 0;
       const fourPrice = marketRate.fourSheeterPrice ?? 0;
