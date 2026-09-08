@@ -494,8 +494,8 @@ func TestResolvePrintIQArtworkURLUsesFirstPageForSinglePageSourcePDFWithoutMetad
 	}
 }
 
-func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
-	payload := buildPrintIQGetPriceForProductPayload(
+func TestBuildPrintIQGetPricePayload(t *testing.T) {
+	payload := buildPrintIQGetPricePayload(
 		orderFormValues{
 			CampaignName:        "Asahi - GNBC Q3 - Campaign",
 			ClientName:          "TestClient",
@@ -522,14 +522,20 @@ func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 	if payload["JobTitle"] != "C2_TestClient_PO-1001_SHT-002-Double Product-Asahi - GNBC Q3 - Campaign" {
 		t.Fatalf("unexpected job title: %#v", payload["JobTitle"])
 	}
-	quantities, ok := payload["Quantities"].([]map[string]any)
-	if !ok || len(quantities) != 1 || quantities[0]["Quantity"] != 10 || quantities[0]["Kinds"] != 1 {
-		t.Fatalf("unexpected quantities: %#v", payload["Quantities"])
+	quantity, ok := payload["SelectedQuantity"].(map[string]any)
+	if !ok || quantity["Quantity"] != 10 || quantity["Kinds"] != 1 {
+		t.Fatalf("unexpected quantity: %#v", payload["SelectedQuantity"])
+	}
+	if payload["AcceptQuote"] != false || payload["SimpleDetails"] != false {
+		t.Fatalf("expected unaccepted quote with full details: %#v", payload)
+	}
+	if _, exists := payload["Deliveries"]; exists {
+		t.Fatalf("expected no delivery override for blank address: %#v", payload)
 	}
 }
 
-func TestBuildPrintIQGetPriceForProductPayloadOmitsDeliveryFields(t *testing.T) {
-	payload := buildPrintIQGetPriceForProductPayload(
+func TestBuildPrintIQGetPricePayloadSendsProductDelivery(t *testing.T) {
+	payload := buildPrintIQGetPricePayload(
 		orderFormValues{},
 		printIQSheetProduct{
 			ProductCode:     "Double Product",
@@ -539,13 +545,26 @@ func TestBuildPrintIQGetPriceForProductPayloadOmitsDeliveryFields(t *testing.T) 
 		"Q50206",
 		"C00003",
 	)
-	if payload["CopyDeliveryFromFirstProductToAllProducts"] != false {
-		t.Fatalf("expected product-specific delivery, got %#v", payload["CopyDeliveryFromFirstProductToAllProducts"])
-	}
-	for _, field := range []string{"Address", "DeliveryContact", "DeliveryNotes", "Deliveries"} {
+	for _, field := range []string{"Address", "DeliveryContact", "DeliveryNotes", "Quantities", "CopyDeliveryFromFirstProductToAllProducts"} {
 		if _, exists := payload[field]; exists {
 			t.Fatalf("unexpected delivery field %s: %#v", field, payload[field])
 		}
+	}
+	deliveries, ok := payload["Deliveries"].([]map[string]any)
+	if !ok || len(deliveries) != 1 || deliveries[0]["Quantity"] != 10 {
+		t.Fatalf("unexpected deliveries: %#v", payload["Deliveries"])
+	}
+	delivery := deliveries[0]
+	address := delivery["DestinationAddress"].(map[string]any)
+	if address["Name"] != "Melbourne Warehouse" || address["AddressLine1"] != "55 Collins St" || address["City"] != "Melbourne" || address["State"] != "VIC" || address["PostCode"] != "3000" || address["Country"] != "Australia" {
+		t.Fatalf("unexpected address: %#v", address)
+	}
+	contact := delivery["DestinationContact"].(map[string]any)
+	if contact["FirstName"] != "Melbourne Warehouse" || contact["Phone"] != "03 3333 3333" || contact["Mobile"] != "03 3333 3333" {
+		t.Fatalf("unexpected contact: %#v", contact)
+	}
+	if delivery["SpecialInstructions"] != "Delivery time: 9am-1pm | Delivery point: Loading dock | Call on arrival" {
+		t.Fatalf("unexpected instructions: %#v", delivery)
 	}
 }
 
@@ -776,6 +795,25 @@ func TestExtractQQDKeyForProductIndexUsesMatchingProduct(t *testing.T) {
 	}
 	if key := printIQStringValue(extractQQDKey(response)); key != "137263" {
 		t.Fatalf("expected generic extraction to keep first QQDKey behavior, got %#v", key)
+	}
+}
+
+func TestExtractGetPriceQQDKeyMatchesCreatedProduct(t *testing.T) {
+	response := map[string]any{
+		"ProductKey": float64(22),
+		"QuoteDetails": map[string]any{"Products": []any{
+			map[string]any{"ProductKey": float64(22), "Quantities": []any{map[string]any{"MiddlewareProductDetail": map[string]any{"QQDKey": float64(222)}}}},
+			map[string]any{"ProductKey": float64(11), "Quantities": []any{map[string]any{"MiddlewareProductDetail": map[string]any{"QQDKey": float64(111)}}}},
+		}},
+	}
+	if key := printIQStringValue(extractGetPriceQQDKey(response)); key != "222" {
+		t.Fatalf("expected created product quantity, got %q", key)
+	}
+	for _, key := range []any{nil, float64(0), float64(33)} {
+		response["ProductKey"] = key
+		if got := extractGetPriceQQDKey(response); got != nil {
+			t.Fatalf("must not select another product for key %v: %v", key, got)
+		}
 	}
 }
 

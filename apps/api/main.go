@@ -1059,7 +1059,7 @@ func printIQStepLabel(step string) string {
 	switch step {
 	case "CreateQuoteWithDelivery":
 		return "create the PrintIQ quote"
-	case "GetPriceForProduct":
+	case "GetPrice":
 		return "add one of the product lines to the PrintIQ quote"
 	case "GetQuoteQuestions":
 		return "retrieve PrintIQ quote questions"
@@ -1403,16 +1403,20 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 
 	getPricePayloads := make([]any, 0, len(sheetProducts)-1)
 	getPriceResponses := make([]any, 0, len(sheetProducts)-1)
-	for offset, product := range sheetProducts[1:] {
-		productIndex := offset + 1
-		getPricePayload := buildPrintIQGetPriceForProductPayload(campaign.Values, product, quoteNo, tenant.Code)
+	for _, product := range sheetProducts[1:] {
+		getPricePayload := buildPrintIQGetPricePayload(campaign.Values, product, quoteNo, tenant.Code)
 		getPricePayloads = append(getPricePayloads, getPricePayload)
-		getPriceResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetPriceForProduct", getPricePayload, a.optionService.getPriceForProduct)
+		getPriceResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetPrice", getPricePayload, a.optionService.getPrice)
 		if !ok {
 			return
 		}
 		getPriceResponses = append(getPriceResponses, getPriceResponse)
-		quoteQuestionQQDKeys = append(quoteQuestionQQDKeys, extractQQDKeyForProductIndex(getPriceResponse, productIndex))
+		qqdKey := extractGetPriceQQDKey(getPriceResponse)
+		if qqdKey == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "PrintIQ GetPrice response did not identify the new product quantity for proof contact", "details": getPriceResponse})
+			return
+		}
+		quoteQuestionQQDKeys = append(quoteQuestionQQDKeys, qqdKey)
 	}
 
 	getQuoteQuestionsPayloads := make([]any, 0, len(quoteQuestionQQDKeys))
@@ -1420,7 +1424,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	quoteQuestionQQDPKeys := make([]any, 0, len(quoteQuestionQQDKeys))
 	for index, qqdKey := range quoteQuestionQQDKeys {
 		if qqdKey == nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ product %d did not include QQDKey for proof contact", index+1), "details": map[string]any{"createQuoteWithDelivery": createQuoteResponse, "getPriceForProduct": getPriceResponses}})
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ product %d did not include QQDKey for proof contact", index+1), "details": map[string]any{"createQuoteWithDelivery": createQuoteResponse, "getPrice": getPriceResponses}})
 			return
 		}
 		getQuoteQuestionsPayload := buildPrintIQGetQuoteQuestionsPayload(qqdKey)
@@ -1500,7 +1504,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 
 	requestPayload := map[string]any{
 		"createQuoteWithDelivery": createQuotePayload,
-		"getPriceForProduct":      getPricePayloads,
+		"getPrice":                getPricePayloads,
 		"getQuoteQuestions":       getQuoteQuestionsPayloads,
 		"saveQuoteQuestions":      saveQuoteQuestionsPayload,
 		"acceptQuote":             acceptQuotePayload,
@@ -1508,7 +1512,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	}
 	responsePayload := map[string]any{
 		"createQuoteWithDelivery": createQuoteResponse,
-		"getPriceForProduct":      getPriceResponses,
+		"getPrice":                getPriceResponses,
 		"getQuoteQuestions":       getQuoteQuestionsResponses,
 		"saveQuoteQuestions":      saveQuoteQuestionsResponse,
 		"acceptQuote":             acceptQuoteResponse,

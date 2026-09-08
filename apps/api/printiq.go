@@ -474,8 +474,8 @@ func (o *optionService) createQuoteWithDelivery(payload any) (any, int, error) {
 	return o.postQuoteProcess("CreateQuoteWithDelivery", payload)
 }
 
-func (o *optionService) getPriceForProduct(payload any) (any, int, error) {
-	return o.postQuoteProcess("GetPriceForProduct", payload)
+func (o *optionService) getPrice(payload any) (any, int, error) {
+	return o.postQuoteProcess("GetPrice", payload)
 }
 
 func (o *optionService) getQuoteQuestions(payload any) (any, int, error) {
@@ -543,6 +543,20 @@ func extractQQDKeyForProductIndex(result any, productIndex int) any {
 		}
 	}
 	return extractQQDKey(result)
+}
+
+func extractGetPriceQQDKey(result any) any {
+	productKey := printIQStringValue(valueAtPath(result, "ProductKey"))
+	if productKey == "" || productKey == "0" {
+		return nil
+	}
+	products, _ := valueAtPath(result, "QuoteDetails", "Products").([]any)
+	for _, product := range products {
+		if printIQStringValue(valueAtPath(product, "ProductKey")) == productKey {
+			return findNonZeroField(product, "QQDKey")
+		}
+	}
+	return nil
 }
 
 func extractQQDPKey(result any) any {

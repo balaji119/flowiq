@@ -375,18 +375,35 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 	return products, nil
 }
 
-func buildPrintIQGetPriceForProductPayload(values orderFormValues, product printIQSheetProduct, quoteNo, customerCode string) map[string]any {
+func buildPrintIQGetPricePayload(values orderFormValues, product printIQSheetProduct, quoteNo, customerCode string) map[string]any {
 	payload := map[string]any{
 		"ProductCode": product.ProductCode,
-		"Quantities": []map[string]any{{
+		"SelectedQuantity": map[string]any{
 			"Quantity": product.Quantity,
 			"Kinds":    1,
-		}},
+		},
 		"QuoteNo":          quoteNo,
 		"JobTitle":         buildPrintIQJobTitle(values, product),
 		"CustomerCode":     customerCode,
 		"AccountManagerID": "37112904-deff-4e5d-af0c-89f7c395a8a8",
-		"CopyDeliveryFromFirstProductToAllProducts": false,
+		"AcceptQuote":      false,
+		"SimpleDetails":    false,
+	}
+	deliveryFields := map[string]any{}
+	addPrintIQDeliveryFields(deliveryFields, product.DeliveryAddress)
+	if len(deliveryFields) > 0 {
+		delivery := map[string]any{"Quantity": product.Quantity}
+		if address, ok := deliveryFields["Address"]; ok {
+			delivery["DestinationAddress"] = address
+		}
+		if contact, ok := deliveryFields["DeliveryContact"].(map[string]any); ok {
+			delete(contact, "IsAddressSpecific")
+			delivery["DestinationContact"] = contact
+		}
+		if notes, ok := deliveryFields["DeliveryNotes"]; ok {
+			delivery["SpecialInstructions"] = notes
+		}
+		payload["Deliveries"] = []map[string]any{delivery}
 	}
 	return payload
 }
