@@ -528,7 +528,7 @@ func TestBuildPrintIQGetPriceForProductPayload(t *testing.T) {
 	}
 }
 
-func TestBuildPrintIQGetPriceForProductPayloadSendsProductDeliveryAddress(t *testing.T) {
+func TestBuildPrintIQGetPriceForProductPayloadOmitsDeliveryFields(t *testing.T) {
 	payload := buildPrintIQGetPriceForProductPayload(
 		orderFormValues{},
 		printIQSheetProduct{
@@ -542,22 +542,10 @@ func TestBuildPrintIQGetPriceForProductPayloadSendsProductDeliveryAddress(t *tes
 	if payload["CopyDeliveryFromFirstProductToAllProducts"] != false {
 		t.Fatalf("expected product-specific delivery, got %#v", payload["CopyDeliveryFromFirstProductToAllProducts"])
 	}
-	address, ok := payload["Address"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected Address payload, got %#v", payload["Address"])
-	}
-	if address["Name"] != "Melbourne Warehouse" || address["AddressLine1"] != "55 Collins St" || address["City"] != "Melbourne" || address["State"] != "VIC" || address["PostCode"] != "3000" || address["Country"] != "Australia" {
-		t.Fatalf("unexpected Address payload: %#v", address)
-	}
-	deliveryContact, ok := payload["DeliveryContact"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected DeliveryContact payload, got %#v", payload["DeliveryContact"])
-	}
-	if deliveryContact["FirstName"] != "Melbourne Warehouse" || deliveryContact["Phone"] != "03 3333 3333" || deliveryContact["Mobile"] != "03 3333 3333" || deliveryContact["IsAddressSpecific"] != "true" {
-		t.Fatalf("unexpected DeliveryContact payload: %#v", deliveryContact)
-	}
-	if payload["DeliveryNotes"] != "Delivery time: 9am-1pm | Delivery point: Loading dock | Call on arrival" {
-		t.Fatalf("unexpected DeliveryNotes payload: %#v", payload["DeliveryNotes"])
+	for _, field := range []string{"Address", "DeliveryContact", "DeliveryNotes", "Deliveries"} {
+		if _, exists := payload[field]; exists {
+			t.Fatalf("unexpected delivery field %s: %#v", field, payload[field])
+		}
 	}
 }
 

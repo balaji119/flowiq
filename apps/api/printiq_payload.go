@@ -388,7 +388,6 @@ func buildPrintIQGetPriceForProductPayload(values orderFormValues, product print
 		"AccountManagerID": "37112904-deff-4e5d-af0c-89f7c395a8a8",
 		"CopyDeliveryFromFirstProductToAllProducts": false,
 	}
-	addPrintIQDeliveryFields(payload, product.DeliveryAddress)
 	return payload
 }
 
