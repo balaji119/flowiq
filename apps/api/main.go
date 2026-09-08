@@ -1090,6 +1090,25 @@ func printIQStepFailureMessage(step string, status int, parsed any, err error) s
 	return fmt.Sprintf("Unable to %s. PrintIQ returned status %d.", printIQStepLabel(step), status)
 }
 
+func printIQProductFailureDetails(message string, payload any, products []printIQSheetProduct) string {
+	details := []string{}
+	if len(products) > 0 {
+		if market := strings.TrimSpace(products[0].Market); market != "" {
+			details = append(details, "market "+market)
+		}
+		if sheet := strings.TrimSpace(products[0].FormatKey); sheet != "" {
+			details = append(details, "sheet type "+sheet)
+		}
+	}
+	if code := printIQStringValue(valueAtPath(payload, "ProductCode")); code != "" {
+		details = append(details, "ProductCode: "+code)
+	}
+	if len(details) == 0 {
+		return message
+	}
+	return message + " (" + strings.Join(details, ", ") + ")"
+}
+
 func summarizePrintIQPayload(step string, payload any) map[string]any {
 	summary := map[string]any{"step": step}
 	payloadMap, ok := payload.(map[string]any)
@@ -1208,6 +1227,7 @@ func (a *app) runPrintIQSubmissionStep(
 	step string,
 	payload any,
 	call func(any) (any, int, error),
+	products ...printIQSheetProduct,
 ) (any, bool) {
 	a.appendPrintIQLog(map[string]any{
 		"requestId":  requestID,
@@ -1222,7 +1242,7 @@ func (a *app) runPrintIQSubmissionStep(
 
 	parsed, status, err := call(payload)
 	if err != nil {
-		message := printIQStepFailureMessage(step, status, parsed, err)
+		message := printIQProductFailureDetails(printIQStepFailureMessage(step, status, parsed, err), payload, products)
 		a.appendPrintIQLog(map[string]any{
 			"requestId":  requestID,
 			"timestamp":  time.Now().UTC().Format(time.RFC3339),
@@ -1238,7 +1258,7 @@ func (a *app) runPrintIQSubmissionStep(
 		return nil, false
 	}
 	if status < 200 || status >= 300 {
-		message := printIQStepFailureMessage(step, status, parsed, nil)
+		message := printIQProductFailureDetails(printIQStepFailureMessage(step, status, parsed, nil), payload, products)
 		a.appendPrintIQLog(map[string]any{
 			"requestId":  requestID,
 			"timestamp":  time.Now().UTC().Format(time.RFC3339),
@@ -1255,7 +1275,7 @@ func (a *app) runPrintIQSubmissionStep(
 		return nil, false
 	}
 	if isError, message := printIQResponseError(parsed); isError {
-		displayMessage := printIQStepFailureMessage(step, status, parsed, nil)
+		displayMessage := printIQProductFailureDetails(printIQStepFailureMessage(step, status, parsed, nil), payload, products)
 		a.appendPrintIQLog(map[string]any{
 			"requestId":  requestID,
 			"timestamp":  time.Now().UTC().Format(time.RFC3339),
@@ -1393,7 +1413,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	createQuoteValues.ProductCode = firstProduct.ProductCode
 	createQuoteValues.Quantity = strconv.Itoa(firstProduct.Quantity)
 	createQuotePayload := buildPrintIQCreateQuotePayload(createQuoteValues, campaign.Summary, firstProduct, targetQuoteFreightPrice)
-	createQuoteResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "CreateQuoteWithDelivery", createQuotePayload, a.optionService.createQuoteWithDelivery)
+	createQuoteResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "CreateQuoteWithDelivery", createQuotePayload, a.optionService.createQuoteWithDelivery, firstProduct)
 	if !ok {
 		return
 	}
@@ -1411,7 +1431,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	for _, product := range sheetProducts[1:] {
 		getPricePayload := buildPrintIQGetPricePayload(campaign.Values, product, quoteNo, tenant.Code)
 		getPricePayloads = append(getPricePayloads, getPricePayload)
-		getPriceResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetPrice", getPricePayload, a.optionService.getPrice)
+		getPriceResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetPrice", getPricePayload, a.optionService.getPrice, product)
 		if !ok {
 			return
 		}
@@ -1456,7 +1476,7 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	for _, payload := range deliveryJobPayloads {
 		payload["QuoteNo"] = quoteNo
 		getPricePayloads = append(getPricePayloads, payload)
-		response, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetPrice", payload, a.optionService.getPrice)
+		response, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetPrice", payload, a.optionService.getPrice, printIQSheetProduct{Market: strings.TrimSuffix(printIQStringValue(payload["ProductCode"]), " Delivery"), FormatKey: "Delivery"})
 		if !ok {
 			return
 		}
