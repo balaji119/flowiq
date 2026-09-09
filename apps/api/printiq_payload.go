@@ -391,6 +391,7 @@ func buildPrintIQGetPricePayload(values orderFormValues, product printIQSheetPro
 		"AcceptQuote":      false,
 		"SimpleDetails":    false,
 	}
+	setStringIfPresent(payload, "CustomerReference", values.PurchaseOrderNumber)
 	deliveryFields := map[string]any{}
 	addPrintIQDeliveryFields(deliveryFields, product.DeliveryAddress)
 	if len(deliveryFields) > 0 {
@@ -1014,7 +1015,7 @@ func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSum
 	setStringIfPresent(payload, "JobTitle", buildPrintIQJobTitle(values, product))
 	setStringIfPresent(payload, "ProductCode", values.ProductCode)
 	setStringIfPresent(payload, "CustomerCode", values.CustomerCode)
-	setStringIfPresent(payload, "CustomerReference", values.CustomerReference)
+	setStringIfPresent(payload, "CustomerReference", values.PurchaseOrderNumber)
 	setStringIfPresent(payload, "SpecialInstructions", values.JobDescription)
 	setStringIfPresent(payload, "CustomerExpectedDate", values.DueDate)
 	setStringIfPresent(payload, "DueDate", values.DueDate)

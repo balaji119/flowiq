@@ -494,6 +494,31 @@ func TestResolvePrintIQArtworkURLUsesFirstPageForSinglePageSourcePDFWithoutMetad
 	}
 }
 
+func TestCustomerReferenceUsesPurchaseOrderNumber(t *testing.T) {
+	for _, po := range []string{" PO-123 ", ""} {
+		values := orderFormValues{PurchaseOrderNumber: po, CustomerReference: "Q14259:1.0", Quantity: "1"}
+		product := printIQSheetProduct{ProductCode: "Quad", Quantity: 1}
+		deliveryPayloads, err := buildPrintIQDeliveryJobPayloads(orderFormValues{PurchaseOrderNumber: po, CustomerReference: "Q14259:1.0", CampaignMarkets: []campaignMarket{{Market: "VIC"}}}, nil, nil, nil, nil, nil, "C00003")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, payload := range []map[string]any{
+			buildPrintIQCreateQuotePayload(values, nil, product, 0),
+			buildPrintIQGetPricePayload(values, product, "Q123", "C00003"),
+			deliveryPayloads[0],
+		} {
+			got, exists := payload["CustomerReference"]
+			if po == "" {
+				if exists {
+					t.Fatalf("blank PO must omit CustomerReference: %#v", got)
+				}
+			} else if got != "PO-123" {
+				t.Fatalf("expected trimmed PO, got %#v", got)
+			}
+		}
+	}
+}
+
 func TestPrintIQAccountManagerSetForCreationAndAdditionalProducts(t *testing.T) {
 	values := orderFormValues{ProductCode: "Quad", Quantity: "1"}
 	product := printIQSheetProduct{ProductCode: "Quad", Quantity: 1}
