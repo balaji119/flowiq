@@ -494,6 +494,19 @@ func TestResolvePrintIQArtworkURLUsesFirstPageForSinglePageSourcePDFWithoutMetad
 	}
 }
 
+func TestPrintIQAccountManagerSetForCreationAndAdditionalProducts(t *testing.T) {
+	values := orderFormValues{ProductCode: "Quad", Quantity: "1"}
+	product := printIQSheetProduct{ProductCode: "Quad", Quantity: 1}
+	for _, payload := range []map[string]any{
+		buildPrintIQCreateQuotePayload(values, nil, product, 0),
+		buildPrintIQGetPricePayload(values, product, "Q123", "C00003"),
+	} {
+		if payload["AccountManagerID"] != "37112904-deff-4e5d-af0c-89f7c395a8a8" {
+			t.Fatalf("wrong account manager: %#v", payload)
+		}
+	}
+}
+
 func TestBuildPrintIQGetPricePayload(t *testing.T) {
 	payload := buildPrintIQGetPricePayload(
 		orderFormValues{

@@ -62,6 +62,8 @@ type printIQSheetFormat struct {
 	settingsKey  string
 }
 
+const printIQAccountManagerID = "37112904-deff-4e5d-af0c-89f7c395a8a8"
+
 var creativeNamePattern = regexp.MustCompile(`(?i)^Creative(\d+)$`)
 
 func resolveCreativeNumber(values orderFormValues, artworkImageID string) int {
@@ -385,7 +387,7 @@ func buildPrintIQGetPricePayload(values orderFormValues, product printIQSheetPro
 		"QuoteNo":          quoteNo,
 		"JobTitle":         buildPrintIQJobTitle(values, product),
 		"CustomerCode":     customerCode,
-		"AccountManagerID": "37112904-deff-4e5d-af0c-89f7c395a8a8",
+		"AccountManagerID": printIQAccountManagerID,
 		"AcceptQuote":      false,
 		"SimpleDetails":    false,
 	}
@@ -1006,6 +1008,7 @@ func buildPrintIQCreateQuotePayload(values orderFormValues, summary *campaignSum
 		"FilterProductToken":      "",
 		"AllArtworkSubmitted":     "false",
 		"TargetQuoteFreightPrice": roundCurrency(targetQuoteFreightPrice),
+		"AccountManagerID":        printIQAccountManagerID,
 	}
 	setStringIfPresent(payload, "Notes", values.Notes)
 	setStringIfPresent(payload, "JobTitle", buildPrintIQJobTitle(values, product))
