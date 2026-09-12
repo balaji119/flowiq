@@ -26,6 +26,7 @@ type AdminWorkspaceShellProps = AdminWorkspaceHandlers & {
   canAccessManagement: boolean;
   canAccessShippingCosts: boolean;
   canAccessPrintingCosts: boolean;
+  onBeforeLogout?: (action: () => void) => void;
   hideHeader?: boolean;
   pageTitle?: string;
   topBarActions?: ReactNode;
@@ -51,6 +52,7 @@ export function AdminWorkspaceShell({
   canAccessManagement,
   canAccessShippingCosts,
   canAccessPrintingCosts,
+  onBeforeLogout,
   hideHeader,
   pageTitle,
   topBarActions,
@@ -326,7 +328,9 @@ export function AdminWorkspaceShell({
                   className="flex w-full items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-left text-sm font-semibold text-slate-200 transition hover:bg-slate-800 hover:text-white"
                   onClick={() => {
                     setProfileMenuOpen(false);
-                    void logout();
+                    const action = () => { void logout(); };
+                    if (onBeforeLogout) onBeforeLogout(action);
+                    else action();
                   }}
                   type="button"
                 >

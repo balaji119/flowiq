@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, Shield } from 'lucide-react';
 import { CalculatorMappingRecord, formatKeys, FormatKey, MarketAssetShippingCostInput, MarketAssetShippingCostRecord, MarketShippingRateRecord, SheetNameOverrides, TenantRecord } from '@flowiq/shared';
 import { Card, CardDescription, CardHeader, CardTitle, Input } from '@flowiq/ui';
+import { CostNavigationGuard, useCostSettingsSave } from '../components/CostSettingsSaveControls';
 import { useAuth } from '../context/AuthContext';
 import {
   fetchAdminSheetNameOverrides,
@@ -16,6 +17,7 @@ import { resolveCanonicalSheetName, toCanonicalSheetNameKey } from '../services/
 
 type ShippingCostSettingsScreenProps = {
   tenantId?: string | null;
+  navigationGuard: CostNavigationGuard;
 };
 
 type AssetShippingDraft = Record<string, string>;
@@ -81,11 +83,12 @@ function toShippingCosts(draft: AssetShippingDraft): Record<string, number> {
   return next;
 }
 
-export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScreenProps) {
+export function ShippingCostSettingsScreen({ tenantId, navigationGuard }: ShippingCostSettingsScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(tenantId ?? session?.user.tenantId ?? null);
   const [marketFilter, setMarketFilter] = useState('');
@@ -236,7 +239,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
     return () => {
       active = false;
     };
-  }, [isSuperAdmin, selectedTenantId]);
+  }, [isSuperAdmin, selectedTenantId, reloadVersion]);
 
   useEffect(() => {
     if (marketOptions.length === 0) {
@@ -263,7 +266,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
     setMarketUseFlatRateSheeters(Boolean(selectedMarketRate?.useFlatRateSheeters ?? fallbackFlatRate));
     setMarketUseFlatRateMegas(Boolean(selectedMarketRate?.useFlatRateMegas ?? fallbackFlatRate));
     setMarketRateDirty(false);
-  }, [selectedMarketRate]);
+  }, [selectedMarketRate, marketFilter, reloadVersion]);
 
   function updateAssetDraft(market: string, assetId: string, sheetKey: string, value: string) {
     const rowKey = costKey(market, assetId);
@@ -394,32 +397,27 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
     });
   }
 
-  useEffect(() => {
-    if (!selectedTenantId || loading || saving || (!marketRateDirty && dirtyRowKeys.length === 0)) return;
+  async function handleSave() {
+    if (!selectedTenantId || loading || saving) return false;
+    setSaving(true);
+    setError('');
+    try {
+      if (marketRateDirty) await saveMarketPosterSettings();
+      if (dirtyRowKeys.length > 0) await saveAssetMegaSettings();
+      return true;
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save shipping costs');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
 
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        setSaving(true);
-        setError('');
-        try {
-          if (marketRateDirty) {
-            await saveMarketPosterSettings();
-          }
-          if (dirtyRowKeys.length > 0) {
-            await saveAssetMegaSettings();
-          }
-        } catch (saveError) {
-          setError(saveError instanceof Error ? saveError.message : 'Unable to save shipping costs');
-        } finally {
-          setSaving(false);
-        }
-      })();
-    }, 700);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [dirtyRowKeys, draftsByAsset, loading, marketEightSheeterPrice, marketEightSheeterSetsPerBox, marketFilter, marketFlatShippingRate, marketFourSheeterPrice, marketFourSheeterSetsPerBox, marketMegasPerBox, marketRateDirty, marketSixSheeterPrice, marketSixSheeterSetsPerBox, marketTwoSheeterPrice, marketTwoSheeterSetsPerBox, marketUseFlatRateMegas, marketUseFlatRateSheeters, saving, selectedTenantId]);
+  const { controls, confirmNavigation } = useCostSettingsSave({
+    dirty: marketRateDirty || dirtyRowKeys.length > 0, saving, loading,
+    save: handleSave, discard: () => setReloadVersion((current) => current + 1),
+    navigationGuard, error, name: 'Shipping Cost',
+  });
 
   if (!isSuperAdmin) {
     return (
@@ -436,6 +434,8 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
 
   return (
     <main className="dense-main flex min-h-0 w-full flex-col gap-6">
+      {controls}
+      <fieldset disabled={saving || loading} className="min-w-0 space-y-6">
       {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 
       <section className="flex flex-wrap gap-4">
@@ -446,7 +446,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
               id="shipping-cost-tenant"
               className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
               value={selectedTenantId ?? ''}
-              onChange={(event) => setSelectedTenantId(event.target.value || null)}
+              onChange={(event) => { const value = event.target.value; confirmNavigation(() => setSelectedTenantId(value || null)); }}
             >
               {tenants.map((tenant) => (
                 <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
@@ -461,7 +461,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
               id="shipping-cost-market-filter"
               className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
               value={marketFilter}
-              onChange={(event) => setMarketFilter(event.target.value)}
+              onChange={(event) => { const value = event.target.value; confirmNavigation(() => setMarketFilter(value)); }}
             >
               {marketOptions.map((market) => (
                 <option key={`shipping-cost-market-${market}`} value={market}>{market}</option>
@@ -785,6 +785,7 @@ export function ShippingCostSettingsScreen({ tenantId }: ShippingCostSettingsScr
           </>
         )}
       </section>
+      </fieldset>
     </main>
   );
 }

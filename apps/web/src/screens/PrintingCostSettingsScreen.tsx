@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, Shield } from 'lucide-react';
 import { CalculatorMappingRecord, CustomPrintCostInput, formatKeys, FormatKey, PrintingCostBreakdown, SheetNameOverrides, TenantRecord } from '@flowiq/shared';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input } from '@flowiq/ui';
+import { CostNavigationGuard, useCostSettingsSave } from '../components/CostSettingsSaveControls';
 import { useAuth } from '../context/AuthContext';
 import { fetchAdminSheetNameOverrides, fetchCalculatorMappings, fetchCustomPrintCosts, fetchMarketAssetPrintingCosts, fetchMarketPrintingCosts, fetchTenants, upsertAdminSheetNameOverrides, upsertCustomPrintCosts, upsertMarketAssetPrintingCosts, upsertMarketPrintingCosts } from '../services/adminApi';
 import { resolveCanonicalSheetName, toCanonicalSheetNameKey } from '../services/sheetNameOverrides';
@@ -9,6 +10,7 @@ import { resolveCanonicalSheetName, toCanonicalSheetNameKey } from '../services/
 type PrintingCostSettingsScreenProps = {
   onBack: () => void;
   tenantId?: string | null;
+  navigationGuard: CostNavigationGuard;
 };
 
 type AssetCostDraft = Record<string, string>;
@@ -107,11 +109,12 @@ function parseCustomCost(sheetKey: string, draft: CustomCostDraft): CustomPrintC
   };
 }
 
-export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSettingsScreenProps) {
+export function PrintingCostSettingsScreen({ onBack, tenantId, navigationGuard }: PrintingCostSettingsScreenProps) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(tenantId ?? session?.user.tenantId ?? null);
   const [mappings, setMappings] = useState<CalculatorMappingRecord[]>([]);
@@ -229,7 +232,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     return () => {
       active = false;
     };
-  }, [isSuperAdmin, selectedTenantId]);
+  }, [isSuperAdmin, selectedTenantId, reloadVersion]);
 
   const marketOptions = useMemo(
     () => [...new Set(mappings.map((mapping) => mapping.market))],
@@ -362,53 +365,6 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
     setDirtyCustomRows((current) => ({ ...current, [sheetKey]: true }));
   }
 
-  useEffect(() => {
-    if (!selectedTenantId || loading || saving || !customPrintCostFlagsDirty) return;
-    const timer = window.setTimeout(async () => {
-      setSaving(true);
-      setError('');
-      try {
-        await upsertAdminSheetNameOverrides({
-          overrides: sheetNameOverrides,
-          multipleArtworkFormats,
-          customPrintCostFormats,
-          customSheetSizeFormats,
-        }, selectedTenantId);
-        setCustomPrintCostFlagsDirty(false);
-      } catch (saveError) {
-        setError(saveError instanceof Error ? saveError.message : 'Unable to save custom print cost selections');
-      } finally {
-        setSaving(false);
-      }
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [customPrintCostFlagsDirty, customPrintCostFormats, customSheetSizeFormats, loading, multipleArtworkFormats, saving, selectedTenantId, sheetNameOverrides]);
-
-  useEffect(() => {
-    if (!selectedTenantId || loading || saving) return;
-    const sheetKeys = Object.keys(dirtyCustomRows).filter((key) => dirtyCustomRows[key] && customPrintCostFormats[key]);
-    if (sheetKeys.length === 0) return;
-    const timer = window.setTimeout(async () => {
-      setSaving(true);
-      setError('');
-      try {
-        await upsertCustomPrintCosts({
-          costs: sheetKeys.map((sheetKey) => parseCustomCost(sheetKey, customCostDrafts[sheetKey] ?? customCostDraft())),
-        }, selectedTenantId);
-        setDirtyCustomRows((current) => {
-          const next = { ...current };
-          sheetKeys.forEach((key) => delete next[key]);
-          return next;
-        });
-      } catch (saveError) {
-        setError(saveError instanceof Error ? saveError.message : 'Unable to save custom printing costs');
-      } finally {
-        setSaving(false);
-      }
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [customCostDrafts, customPrintCostFormats, dirtyCustomRows, loading, saving, selectedTenantId]);
-
   async function handleSaveMarket(targetMarket: string) {
     if (!selectedTenantId || !targetMarket) return;
     const dirtyAssetIds = Array.from(dirtyAssetIdsByMarket.get(targetMarket) ?? []);
@@ -428,81 +384,84 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
       }
     });
 
+    if (hasDirtyPosterCost) {
+      await upsertMarketPrintingCosts({
+        costs: [{
+          market: targetMarket,
+          posterCost: parseCostValue(posterCostsByMarket[targetMarket] ?? '0'),
+        }],
+      }, selectedTenantId);
+    }
+
+    if (dirtyAssetIds.length > 0) {
+      const nextAssetIds = new Set(dirtyAssetIds);
+      marketMappings.forEach((mapping) => {
+        if (nextAssetIds.has(mapping.id) && mapping.maintenanceAssetId) {
+          nextAssetIds.add(mapping.maintenanceAssetId);
+        }
+      });
+
+      const payload = marketMappings
+        .filter((mapping) => nextAssetIds.has(mapping.id))
+        .map((mapping) => {
+          const sourceMapping = marketMaintenanceAssetIds.has(mapping.id)
+            ? marketParentByMaintenanceAssetId.get(mapping.id) ?? mapping
+            : mapping;
+          const rowKey = costKey(sourceMapping.market, sourceMapping.id);
+          const draft = draftsByAsset[rowKey] || createEmptyCostDraft();
+          return {
+            market: mapping.market,
+            assetId: mapping.id,
+            costs: toBreakdown(draft),
+          };
+        });
+
+      await upsertMarketAssetPrintingCosts({ costs: payload }, selectedTenantId);
+    }
+    setDirtyRows((current) => {
+      const next = { ...current };
+      dirtyAssetIds.forEach((assetId) => {
+        delete next[costKey(targetMarket, assetId)];
+      });
+      return next;
+    });
+    setDirtyPosterMarkets((current) => {
+      const next = { ...current };
+      delete next[targetMarket];
+      return next;
+    });
+  }
+
+  async function handleSave() {
+    if (!selectedTenantId || loading || saving) return false;
     setSaving(true);
     setError('');
-
     try {
-      if (hasDirtyPosterCost) {
-        await upsertMarketPrintingCosts({
-          costs: [{
-            market: targetMarket,
-            posterCost: parseCostValue(posterCostsByMarket[targetMarket] ?? '0'),
-          }],
-        }, selectedTenantId);
+      if (customPrintCostFlagsDirty) {
+        await upsertAdminSheetNameOverrides({ overrides: sheetNameOverrides, multipleArtworkFormats, customPrintCostFormats, customSheetSizeFormats }, selectedTenantId);
+        setCustomPrintCostFlagsDirty(false);
       }
-
-      if (dirtyAssetIds.length > 0) {
-        const nextAssetIds = new Set(dirtyAssetIds);
-        marketMappings.forEach((mapping) => {
-          if (nextAssetIds.has(mapping.id) && mapping.maintenanceAssetId) {
-            nextAssetIds.add(mapping.maintenanceAssetId);
-          }
-        });
-
-        const payload = marketMappings
-          .filter((mapping) => nextAssetIds.has(mapping.id))
-          .map((mapping) => {
-            const sourceMapping = marketMaintenanceAssetIds.has(mapping.id)
-              ? marketParentByMaintenanceAssetId.get(mapping.id) ?? mapping
-              : mapping;
-            const rowKey = costKey(sourceMapping.market, sourceMapping.id);
-            const draft = draftsByAsset[rowKey] || createEmptyCostDraft();
-            return {
-              market: mapping.market,
-              assetId: mapping.id,
-              costs: toBreakdown(draft),
-            };
-          });
-
-        await upsertMarketAssetPrintingCosts({ costs: payload }, selectedTenantId);
+      const sheetKeys = Object.keys(dirtyCustomRows).filter((key) => dirtyCustomRows[key] && customPrintCostFormats[key]);
+      if (sheetKeys.length > 0) {
+        await upsertCustomPrintCosts({ costs: sheetKeys.map((key) => parseCustomCost(key, customCostDrafts[key] ?? customCostDraft())) }, selectedTenantId);
+        setDirtyCustomRows({});
       }
-      setDirtyRows((current) => {
-        const next = { ...current };
-        dirtyAssetIds.forEach((assetId) => {
-          delete next[costKey(targetMarket, assetId)];
-        });
-        return next;
-      });
-      setDirtyPosterMarkets((current) => {
-        const next = { ...current };
-        delete next[targetMarket];
-        return next;
-      });
+      const markets = new Set([...dirtyAssetIdsByMarket.keys(), ...Object.keys(dirtyPosterMarkets).filter((market) => dirtyPosterMarkets[market])]);
+      for (const market of markets) await handleSaveMarket(market);
+      return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save printing costs');
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
-  useEffect(() => {
-    if (!selectedTenantId || loading || saving) return;
-    const dirtyMarkets = Array.from(new Set([
-      ...Array.from(dirtyAssetIdsByMarket.keys()),
-      ...Object.keys(dirtyPosterMarkets).filter((market) => dirtyPosterMarkets[market]),
-    ]));
-    if (dirtyMarkets.length === 0) return;
-    const targetMarket = dirtyMarkets.includes(marketFilter) ? marketFilter : dirtyMarkets[0];
-    if (!targetMarket) return;
-
-    const timer = window.setTimeout(() => {
-      void handleSaveMarket(targetMarket);
-    }, 700);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [dirtyAssetIdsByMarket, dirtyPosterMarkets, draftsByAsset, loading, marketFilter, posterCostsByMarket, saving, selectedTenantId]);
+  const { controls, confirmNavigation } = useCostSettingsSave({
+    dirty: customPrintCostFlagsDirty || Object.values(dirtyRows).some(Boolean) || Object.values(dirtyPosterMarkets).some(Boolean) || Object.values(dirtyCustomRows).some(Boolean), saving, loading,
+    save: handleSave, discard: () => setReloadVersion((current) => current + 1),
+    navigationGuard, error, name: 'Printing Cost',
+  });
 
   if (!isSuperAdmin) {
     return (
@@ -524,6 +483,8 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
 
   return (
     <main className="dense-main flex min-h-0 w-full flex-col gap-6">
+      {controls}
+      <fieldset disabled={saving || loading} className="min-w-0 space-y-6">
       {error ? <div className="rounded-md border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-200">{error}</div> : null}
 
       <section className="flex flex-wrap gap-4">
@@ -534,7 +495,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
               id="printing-cost-tenant"
                 className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
               value={selectedTenantId ?? ''}
-              onChange={(event) => setSelectedTenantId(event.target.value || null)}
+              onChange={(event) => { const value = event.target.value; confirmNavigation(() => setSelectedTenantId(value || null)); }}
             >
               {tenants.map((tenant) => (
                 <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
@@ -549,7 +510,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
               id="printing-cost-market-filter"
                 className="h-full flex-1 bg-slate-800 px-3 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
               value={marketFilter}
-              onChange={(event) => setMarketFilter(event.target.value)}
+              onChange={(event) => { const value = event.target.value; confirmNavigation(() => setMarketFilter(value)); }}
             >
               {marketOptions.map((market) => (
                 <option key={`printing-cost-market-${market}`} value={market}>
@@ -707,6 +668,7 @@ export function PrintingCostSettingsScreen({ onBack, tenantId }: PrintingCostSet
           </div>
         ) : null}
       </section>
+      </fieldset>
     </main>
   );
 }

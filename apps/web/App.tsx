@@ -114,8 +114,11 @@ function AppShell() {
   const [closeAfterEmailSend, setCloseAfterEmailSend] = useState(false);
   const [adminTenantOptions, setAdminTenantOptions] = useState<TenantRecord[]>([]);
   const hydratedHistoryRef = useRef(false);
+  const costNavigationGuard = useRef<((action: () => void) => void) | null>(null);
+  const currentNavState = useRef<AppNavState | null>(null);
 
   function applyNavState(nextState: AppNavState) {
+    currentNavState.current = nextState;
     setView(nextState.view);
     setSelectedAdminTenantId(nextState.selectedAdminTenantId);
     setSelectedCampaignId(nextState.selectedCampaignId);
@@ -128,9 +131,12 @@ function AppShell() {
   }
 
   function navigate(nextState: AppNavState) {
-    applyNavState(nextState);
-    const url = buildUrlFromState(nextState);
-    window.history.pushState(nextState, '', url);
+    const action = () => {
+      applyNavState(nextState);
+      window.history.pushState(nextState, '', buildUrlFromState(nextState));
+    };
+    if (costNavigationGuard.current) costNavigationGuard.current(action);
+    else action();
   }
 
   function navigateTo(nextView: AppView, overrides?: Partial<AppNavState>) {
@@ -175,7 +181,16 @@ function AppShell() {
 
     function handlePopState(event: PopStateEvent) {
       const nextState = (event.state as AppNavState | null) ?? readStateFromUrl(defaultTenantId);
-      applyNavState(nextState);
+      if (costNavigationGuard.current && currentNavState.current) {
+        const previous = currentNavState.current;
+        window.history.replaceState(previous, '', buildUrlFromState(previous));
+        costNavigationGuard.current(() => {
+          applyNavState(nextState);
+          window.history.replaceState(nextState, '', buildUrlFromState(nextState));
+        });
+      } else {
+        applyNavState(nextState);
+      }
     }
 
     window.addEventListener('popstate', handlePopState);
@@ -271,6 +286,7 @@ function AppShell() {
         hideHeader={options?.hideHeader}
         pageTitle={options?.pageTitle}
         topBarActions={options?.topBarActions}
+        onBeforeLogout={(action) => { if (costNavigationGuard.current) costNavigationGuard.current(action); else action(); }}
         onOpenHome={() => navigateTo('home')}
         onOpenLanding={() => navigateTo('landing')}
         onOpenMappings={canAccessSuperAdminPages ? () => navigateTo('mappings') : undefined}
@@ -363,6 +379,7 @@ function AppShell() {
   if (view === 'shipping-costs') {
     return renderGlobalSidebar(
       <ShippingCostSettingsScreen
+        navigationGuard={costNavigationGuard}
         tenantId={selectedAdminTenantId}
       />,
       { pageTitle: 'Freight Rate Card' },
@@ -444,6 +461,7 @@ function AppShell() {
   if (view === 'printing-costs') {
     return renderGlobalSidebar(
       <PrintingCostSettingsScreen
+        navigationGuard={costNavigationGuard}
         onBack={() => navigateTo('landing')}
         tenantId={selectedAdminTenantId}
       />,
