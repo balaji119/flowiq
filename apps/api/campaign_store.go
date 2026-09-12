@@ -991,3 +991,31 @@ func (s *campaignStore) markCampaignSubmitted(ctx context.Context, user AuthUser
 
 	return s.getCampaign(ctx, user, campaignID)
 }
+
+var errCampaignNotSubmitted = errors.New("Only submitted campaigns can be reset to In Progress")
+
+func (s *campaignStore) resetCampaignStatus(ctx context.Context, user AuthUser, campaignID string) (*campaignRecord, error) {
+	if user.Role != "super_admin" {
+		return nil, errors.New("Only super admins can reset campaign status")
+	}
+	if user.TenantID == nil {
+		return nil, errors.New("current user is not assigned to a tenant")
+	}
+	row, err := scanCampaignRow(s.pool.QueryRow(ctx, `
+		UPDATE campaigns
+		SET status = 'in_progress', submitted_at = NULL,
+			updated_by_user_id = $3, updated_at = NOW()
+		WHERE id = $1 AND tenant_id = $2 AND status = 'submitted'
+		RETURNING id, tenant_id, parent_campaign_id::text, created_by_user_id, updated_by_user_id, status, form_data, calculation_summary, purchase_order, latest_quote_amount::text, created_at, updated_at
+	`, campaignID, *user.TenantID, user.ID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		if _, lookupErr := s.getCampaign(ctx, user, campaignID); lookupErr != nil {
+			return nil, lookupErr
+		}
+		return nil, errCampaignNotSubmitted
+	}
+	if err != nil {
+		return nil, err
+	}
+	return decodeCampaignRow(row)
+}

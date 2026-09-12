@@ -1,10 +1,10 @@
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CopyPlus, Download, Eye, FolderKanban, LoaderCircle, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { CopyPlus, Download, Eye, FolderKanban, LoaderCircle, Pencil, Plus, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { CampaignListItem, CampaignRecord, TenantRecord } from '@flowiq/shared';
 import { Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
-import { acquireCampaignEditLock, calculatePersistedCampaign, cloneCampaign, createSubCampaign, deleteCampaign, downloadCampaignPurchaseOrder, fetchCampaign, fetchCampaigns } from '../services/campaignApi';
+import { acquireCampaignEditLock, calculatePersistedCampaign, cloneCampaign, createSubCampaign, deleteCampaign, downloadCampaignPurchaseOrder, fetchCampaign, fetchCampaigns, resetCampaignStatus } from '../services/campaignApi';
 import { CampaignScheduleViewDialog } from './CampaignScheduleViewDialog';
 
 type CampaignLandingScreenProps = {
@@ -88,6 +88,7 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [resettingCampaignId, setResettingCampaignId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [campaignPendingDelete, setCampaignPendingDelete] = useState<CampaignListItem | null>(null);
@@ -159,6 +160,23 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
       return;
     }
     onOpenCampaign(null);
+  }
+
+  async function handleResetCampaignStatus(campaign: CampaignListItem) {
+    if (!isSuperAdmin || campaign.status !== 'submitted' || resettingCampaignId) return;
+    setResettingCampaignId(campaign.id);
+    setError('');
+    try {
+      const response = await resetCampaignStatus(campaign.id, selectedTenantId);
+      setCampaigns((current) => current.map((item) => item.id === campaign.id
+        ? { ...item, status: response.campaign.status, updatedAt: response.campaign.updatedAt }
+        : item));
+      setLandingNotice('Campaign status reset to In Progress.');
+    } catch (resetError) {
+      setError(resetError instanceof Error ? resetError.message : 'Unable to reset campaign status');
+    } finally {
+      setResettingCampaignId(null);
+    }
   }
 
   async function handleOpenCampaign(campaignId: string, status: CampaignListItem['status']) {
@@ -511,6 +529,19 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
                           variant="ghost"
                         >
                           {downloadingPurchaseOrderId === campaign.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-sky-200" /> : <Download className="h-3.5 w-3.5" />}
+                        </Button>
+                      ) : null}
+                      {isSuperAdmin ? (
+                        <Button
+                          aria-label="Reset campaign status to In Progress"
+                          className="h-7 w-7 rounded-md border border-white/10 p-0 text-amber-200 disabled:text-slate-500"
+                          disabled={campaign.status !== 'submitted' || resettingCampaignId !== null}
+                          onClick={() => void handleResetCampaignStatus(campaign)}
+                          title={campaign.status === 'submitted' ? 'Reset status to In Progress' : 'Only submitted campaigns can be reset'}
+                          type="button"
+                          variant="ghost"
+                        >
+                          {resettingCampaignId === campaign.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
                         </Button>
                       ) : null}
                       <Button

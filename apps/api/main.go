@@ -269,6 +269,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("POST /api/campaigns/{campaignId}/calculate", a.withAuth(http.HandlerFunc(a.handleCalculatePersistedCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/submit-to-printiq", a.withAuth(http.HandlerFunc(a.handleSubmitCampaign)))
 	mux.Handle("POST /api/campaigns/{campaignId}/mark-submitted", a.withAuth(http.HandlerFunc(a.handleMarkCampaignSubmitted)))
+	mux.Handle("POST /api/campaigns/{campaignId}/reset-status", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleResetCampaignStatus), "super_admin")))
 	mux.Handle("GET /api/campaigns/{campaignId}/purchase-order/download", a.withAuth(a.requireRoles(http.HandlerFunc(a.handlePurchaseOrderDownload), "super_admin")))
 	mux.Handle("GET /api/market-delivery-addresses", a.withAuth(http.HandlerFunc(a.handleListCampaignMarketDeliveryAddresses)))
 	mux.Handle("PUT /api/market-delivery-addresses", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleUpsertCampaignMarketDeliveryAddress), "super_admin", "admin")))
@@ -1566,6 +1567,31 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"campaign": updatedCampaign, "amount": nil, "quoteNo": quoteNo, "jobNo": jobNos[0], "jobNos": jobNos, "test": testSubmission})
+}
+
+func (a *app) handleResetCampaignStatus(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r.Context())
+	if user == nil || user.Role != "super_admin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Only super admins can reset campaign status"})
+		return
+	}
+	user, resolveErr := a.userWithManagedTenant(r)
+	if resolveErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": resolveErr.Error()})
+		return
+	}
+	campaign, err := a.campaignStore.resetCampaignStatus(r.Context(), *user, r.PathValue("campaignId"))
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, errCampaignNotSubmitted) {
+			status = http.StatusConflict
+		} else if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"campaign": campaign})
 }
 
 func (a *app) handleMarkCampaignSubmitted(w http.ResponseWriter, r *http.Request) {

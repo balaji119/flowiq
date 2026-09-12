@@ -128,3 +128,9 @@ export async function releaseCampaignEditLock(campaignId: string, tenantId?: str
     method: 'DELETE',
   });
 }
+
+export async function resetCampaignStatus(campaignId: string, tenantId?: string | null) {
+  return apiFetchJson<{ campaign: CampaignRecord }>(withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/reset-status`, tenantId), {
+    method: 'POST',
+  });
+}
