@@ -647,6 +647,10 @@ func calculateMarketShippingCost(marketName string, marketLines []campaignLineRe
 		if useFlatRateSheeters(marketRate) {
 			return price
 		}
+		// Custom-sheet freight covers the remainder; charge only full standard-sheet boxes.
+		if hasCustomSheets {
+			return float64(posters/boxCapacity) * price
+		}
 		return calculatePosterShippingForSheeter(posters, price, postersPerSet, setsPerBox)
 	}
 	posterShipping := sheeterShipping(standardQuantity("8-sheet")+standardQuantity("QA0")+customSheetTotal, marketRate.EightSheeterPrice, 4, marketRate.EightSheeterSetsPerBox) +

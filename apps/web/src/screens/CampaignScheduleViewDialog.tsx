@@ -658,7 +658,10 @@ export function CampaignScheduleViewDialog({
         if (posters <= 0) return 0;
         const boxCapacity = postersPerSet * Math.max(1, Math.floor(setsPerBox || 15));
         if (hasCustomSheets && posters < boxCapacity) return 0;
-        return useFlatRateSheeters ? price : calculatePosterShippingForSheeter(posters, price, postersPerSet, setsPerBox);
+        if (useFlatRateSheeters) return price;
+        // Custom-sheet freight covers the remainder; charge only full standard-sheet boxes.
+        if (hasCustomSheets) return Math.floor(posters / boxCapacity) * price;
+        return calculatePosterShippingForSheeter(posters, price, postersPerSet, setsPerBox);
       };
       const posterShipping = sheeterShipping(standardQuantity('8-sheet') + standardQuantity('QA0') + customSheetTotal, eightPrice, 4, eightSets)
         + sheeterShipping(standardQuantity('6-sheet'), sixPrice, 3, sixSets)

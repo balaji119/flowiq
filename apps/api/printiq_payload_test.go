@@ -235,8 +235,8 @@ func TestCalculateCampaignShippingCostMatchesReviewTotal(t *testing.T) {
 		map[string]bool{"mini-mega": true},
 	)
 
-	if total != 265 {
-		t.Fatalf("expected shipping total 265, got %#v", total)
+	if total != 235 {
+		t.Fatalf("expected shipping total 235 (25 + 30 + 180), got %#v", total)
 	}
 }
 
@@ -891,7 +891,7 @@ func TestBuildPrintIQSaveProofContactQuestionsPayloadUsesADSPrepressContact(t *t
 	}
 }
 
-func TestCustomSheetsCoverStandardSheetsBelowBoxCapacity(t *testing.T) {
+func TestCustomSheetsCoverPartialStandardSheetBoxes(t *testing.T) {
 	for _, tc := range []struct {
 		name           string
 		format         string
@@ -910,7 +910,15 @@ func TestCustomSheetsCoverStandardSheetsBelowBoxCapacity(t *testing.T) {
 		{"45 triple with custom", "6-sheet", 45, 2, true, false, 155},
 		{"14 single with custom", "2-sheet", 14, 2, true, false, 100},
 		{"15 single with custom", "2-sheet", 15, 2, true, false, 155},
-		{"61 quad rounds up normally", "8-sheet", 61, 2, true, false, 210},
+		{"61 quad shares remainder", "8-sheet", 61, 2, true, false, 155},
+		{"152 quad shares remainder", "8-sheet", 152, 1, true, false, 210},
+		{"152 quad without custom", "8-sheet", 152, 0, true, false, 165},
+		{"152 quad custom without artwork", "8-sheet", 152, 1, false, false, 165},
+		{"180 quad exact three boxes", "8-sheet", 180, 1, true, false, 265},
+		{"31 double shares remainder", "4-sheet", 31, 1, true, false, 155},
+		{"46 triple shares remainder", "6-sheet", 46, 1, true, false, 155},
+		{"16 single shares remainder", "2-sheet", 16, 1, true, false, 155},
+		{"flat sheeters retain flat charge", "8-sheet", 152, 1, true, true, 155},
 		{"without custom sheets", "8-sheet", 55, 0, true, false, 55},
 		{"custom without creative", "8-sheet", 55, 2, false, false, 55},
 		{"flat sheeters below capacity", "8-sheet", 55, 2, true, true, 100},
