@@ -277,6 +277,8 @@ type marketDeliveryAddressRecord struct {
 
 type marketShippingRateInput struct {
 	Market                 string  `json:"market"`
+	UseMarketFlatRate      bool    `json:"useMarketFlatRate"`
+	MarketFlatRate         float64 `json:"marketFlatRate"`
 	UseFlatRate            bool    `json:"useFlatRate"`
 	UseFlatRateSheeters    bool    `json:"useFlatRateSheeters"`
 	UseFlatRateMegas       bool    `json:"useFlatRateMegas"`
@@ -300,6 +302,8 @@ type marketShippingRateInput struct {
 type marketShippingRateRecord struct {
 	TenantID               string  `json:"tenantId"`
 	Market                 string  `json:"market"`
+	UseMarketFlatRate      bool    `json:"useMarketFlatRate"`
+	MarketFlatRate         float64 `json:"marketFlatRate"`
 	UseFlatRate            bool    `json:"useFlatRate"`
 	UseFlatRateSheeters    bool    `json:"useFlatRateSheeters"`
 	UseFlatRateMegas       bool    `json:"useFlatRateMegas"`

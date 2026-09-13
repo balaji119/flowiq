@@ -44,6 +44,8 @@ type marketDeliveryAddressRow struct {
 type marketShippingRateRow struct {
 	TenantID               string
 	Market                 string
+	UseMarketFlatRate      bool
+	MarketFlatRate         float64
 	UseFlatRate            bool
 	UseFlatRateSheeters    bool
 	UseFlatRateMegas       bool
@@ -347,6 +349,8 @@ func scanMarketShippingRateRow(scanner interface {
 	err := scanner.Scan(
 		&row.TenantID,
 		&row.Market,
+		&row.UseMarketFlatRate,
+		&row.MarketFlatRate,
 		&row.UseFlatRate,
 		&row.UseFlatRateSheeters,
 		&row.UseFlatRateMegas,
@@ -434,6 +438,8 @@ func decodeMarketShippingRateRow(row marketShippingRateRow) marketShippingRateRe
 	return marketShippingRateRecord{
 		TenantID:               row.TenantID,
 		Market:                 row.Market,
+		UseMarketFlatRate:      row.UseMarketFlatRate,
+		MarketFlatRate:         row.MarketFlatRate,
 		UseFlatRate:            row.UseFlatRate,
 		UseFlatRateSheeters:    row.UseFlatRateSheeters,
 		UseFlatRateMegas:       row.UseFlatRateMegas,
@@ -1540,6 +1546,8 @@ func (s *mappingStore) listMarketShippingRates(ctx context.Context, tenantID str
 		SELECT
 			msr.tenant_id,
 			m.name,
+			msr.use_market_flat_rate,
+			msr.market_flat_rate::float8,
 			msr.use_flat_rate,
 			msr.use_flat_rate_sheeters,
 			msr.use_flat_rate_megas,
@@ -1589,6 +1597,9 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 	market, err := sanitizeMappingText(payload.Market, "market")
 	if err != nil {
 		return nil, err
+	}
+	if payload.MarketFlatRate < 0 {
+		return nil, errors.New("marketFlatRate must be greater than or equal to 0")
 	}
 	if payload.ShippingRate < 0 {
 		return nil, errors.New("shippingRate must be greater than or equal to 0")
@@ -1652,6 +1663,8 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 		INSERT INTO market_shipping_rates (
 			tenant_id,
 			market_id,
+			use_market_flat_rate,
+			market_flat_rate,
 			use_flat_rate,
 			use_flat_rate_sheeters,
 			use_flat_rate_megas,
@@ -1673,9 +1686,11 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 			created_at,
 			updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), NOW())
+		VALUES ($1, $2, $22, $23, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW(), NOW())
 		ON CONFLICT (tenant_id, market_id)
 		DO UPDATE SET
+			use_market_flat_rate = EXCLUDED.use_market_flat_rate,
+			market_flat_rate = EXCLUDED.market_flat_rate,
 			use_flat_rate = EXCLUDED.use_flat_rate,
 			use_flat_rate_sheeters = EXCLUDED.use_flat_rate_sheeters,
 			use_flat_rate_megas = EXCLUDED.use_flat_rate_megas,
@@ -1698,6 +1713,8 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 		RETURNING
 			tenant_id,
 			$21::text,
+			use_market_flat_rate,
+			market_flat_rate::float8,
 			use_flat_rate,
 			use_flat_rate_sheeters,
 			use_flat_rate_megas,
@@ -1718,7 +1735,7 @@ func (s *mappingStore) upsertMarketShippingRate(ctx context.Context, tenantID st
 			mp_shipping_rate::float8,
 			created_at,
 			updated_at
-	`, tenantID, marketID, useFlatRate, useFlatRateSheeters, useFlatRateMegas, payload.ShippingRate, payload.PostersPerBox, payload.SheeterSetsPerBox, payload.TwoSheeterSetsPerBox, payload.FourSheeterSetsPerBox, payload.SixSheeterSetsPerBox, payload.EightSheeterSetsPerBox, payload.TwoSheeterPrice, payload.FourSheeterPrice, payload.SixSheeterPrice, payload.EightSheeterPrice, payload.MegasPerBox, payload.MegaShippingRate, payload.DotMShippingRate, payload.MpShippingRate, market))
+	`, tenantID, marketID, useFlatRate, useFlatRateSheeters, useFlatRateMegas, payload.ShippingRate, payload.PostersPerBox, payload.SheeterSetsPerBox, payload.TwoSheeterSetsPerBox, payload.FourSheeterSetsPerBox, payload.SixSheeterSetsPerBox, payload.EightSheeterSetsPerBox, payload.TwoSheeterPrice, payload.FourSheeterPrice, payload.SixSheeterPrice, payload.EightSheeterPrice, payload.MegasPerBox, payload.MegaShippingRate, payload.DotMShippingRate, payload.MpShippingRate, market, payload.UseMarketFlatRate, payload.MarketFlatRate))
 	if err != nil {
 		return nil, err
 	}

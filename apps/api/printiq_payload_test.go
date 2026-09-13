@@ -941,3 +941,34 @@ func TestCustomSheetsCoverPartialStandardSheetBoxes(t *testing.T) {
 		})
 	}
 }
+
+func TestMarketFlatRateOverridesAllShipping(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		quad, custom int
+		artwork      bool
+		want         float64
+	}{
+		{"standard only", 152, 0, true, 75},
+		{"custom only", 0, 5, true, 75},
+		{"mixed sheets", 152, 5, true, 75},
+		{"large quantities", 6000, 200, true, 75},
+		{"no quantities", 0, 0, true, 0},
+		{"no artwork", 152, 5, false, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			creatives := map[string]string{}
+			if tc.artwork {
+				creatives = map[string]string{"8-sheet": "art", "MP": "art"}
+			}
+			values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "line", AssetID: "asset", CreativeImageIDs: creatives}}}}}
+			breakdown := quantityBreakdown{"8-sheet": tc.quad, "MP": tc.custom}
+			summary := &campaignSummary{Lines: []campaignLineResult{{ID: "line", Market: "NSW", Breakdown: breakdown}}, PerMarket: []campaignTotals{{Market: "NSW", Breakdown: breakdown}}}
+			rates := []marketShippingRateRecord{{Market: "NSW", UseMarketFlatRate: true, MarketFlatRate: 75, EightSheeterPrice: 55, EightSheeterSetsPerBox: 15, UseFlatRateMegas: true}}
+			costs := []marketAssetShippingCostRecord{{Market: "NSW", AssetID: "asset", Costs: printingCostBreakdown{"mega-portrait": 100}}}
+			if got := calculateCampaignShippingCost(values, summary, rates, costs, map[string]bool{"mega-portrait": true}); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

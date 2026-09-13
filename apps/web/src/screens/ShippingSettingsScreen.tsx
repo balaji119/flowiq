@@ -394,6 +394,8 @@ export function ShippingSettingsScreen({ onBack, onOpenMappings, onOpenMaterialM
           {
             market: selectedMarketFilter,
             useFlatRate: selectedMarketShippingRateConfig?.useFlatRate ?? false,
+            useMarketFlatRate: selectedMarketShippingRateConfig?.useMarketFlatRate ?? false,
+            marketFlatRate: selectedMarketShippingRateConfig?.marketFlatRate ?? 0,
             shippingRate: parsedShippingRate,
             postersPerBox: normalizedPostersPerBox,
             sheeterSetsPerBox: selectedMarketShippingRateConfig?.sheeterSetsPerBox ?? 15,

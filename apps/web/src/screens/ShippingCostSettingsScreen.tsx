@@ -100,6 +100,8 @@ export function ShippingCostSettingsScreen({ tenantId, navigationGuard }: Shippi
   const [marketFourSheeterPrice, setMarketFourSheeterPrice] = useState('0');
   const [marketSixSheeterPrice, setMarketSixSheeterPrice] = useState('0');
   const [marketEightSheeterPrice, setMarketEightSheeterPrice] = useState('0');
+  const [useMarketFlatRate, setUseMarketFlatRate] = useState(false);
+  const [marketFlatRate, setMarketFlatRate] = useState('0');
   const [marketFlatShippingRate, setMarketFlatShippingRate] = useState('0');
   const [marketTwoSheeterSetsPerBox, setMarketTwoSheeterSetsPerBox] = useState('15');
   const [marketFourSheeterSetsPerBox, setMarketFourSheeterSetsPerBox] = useState('15');
@@ -257,6 +259,8 @@ export function ShippingCostSettingsScreen({ tenantId, navigationGuard }: Shippi
     setMarketSixSheeterPrice(String(selectedMarketRate?.sixSheeterPrice ?? 0));
     setMarketEightSheeterPrice(String(selectedMarketRate?.eightSheeterPrice ?? 0));
     setMarketFlatShippingRate(String(selectedMarketRate?.shippingRate ?? 0));
+    setUseMarketFlatRate(selectedMarketRate?.useMarketFlatRate ?? false);
+    setMarketFlatRate(String(selectedMarketRate?.marketFlatRate ?? 0));
     setMarketTwoSheeterSetsPerBox(String(selectedMarketRate?.twoSheeterSetsPerBox ?? selectedMarketRate?.sheeterSetsPerBox ?? 15));
     setMarketFourSheeterSetsPerBox(String(selectedMarketRate?.fourSheeterSetsPerBox ?? selectedMarketRate?.sheeterSetsPerBox ?? 15));
     setMarketSixSheeterSetsPerBox(String(selectedMarketRate?.sixSheeterSetsPerBox ?? selectedMarketRate?.sheeterSetsPerBox ?? 15));
@@ -290,6 +294,10 @@ export function ShippingCostSettingsScreen({ tenantId, navigationGuard }: Shippi
     const parsedSixSheeterPrice = Number(marketSixSheeterPrice);
     const parsedEightSheeterPrice = Number(marketEightSheeterPrice);
     const parsedFlatShippingRate = Number(marketFlatShippingRate);
+    const parsedMarketFlatRate = Number(marketFlatRate);
+    if (!Number.isFinite(parsedMarketFlatRate) || parsedMarketFlatRate < 0) {
+      throw new Error('Market flat rate must be a valid number greater than or equal to 0.');
+    }
     const parsedTwoSheeterSetsPerBox = Number(marketTwoSheeterSetsPerBox);
     const normalizedTwoSheeterSetsPerBox = Math.floor(parsedTwoSheeterSetsPerBox);
     const parsedFourSheeterSetsPerBox = Number(marketFourSheeterSetsPerBox);
@@ -333,6 +341,8 @@ export function ShippingCostSettingsScreen({ tenantId, navigationGuard }: Shippi
     const existing = rateByMarket.get(marketFilter);
     const response = await upsertMarketShippingRate({
       market: marketFilter,
+      useMarketFlatRate,
+      marketFlatRate: parsedMarketFlatRate,
       useFlatRate: marketUseFlatRateSheeters || marketUseFlatRateMegas,
       useFlatRateSheeters: marketUseFlatRateSheeters,
       useFlatRateMegas: marketUseFlatRateMegas,
@@ -471,7 +481,19 @@ export function ShippingCostSettingsScreen({ tenantId, navigationGuard }: Shippi
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="flex items-center gap-4">
+        <label className="flex shrink-0 items-center gap-3 text-sm font-semibold text-white">
+          <input type="checkbox" checked={useMarketFlatRate} onChange={(event) => { setUseMarketFlatRate(event.target.checked); setMarketRateDirty(true); }} />
+          Market flat rate
+        </label>
+        {useMarketFlatRate ? <Input aria-label="Market freight ($)" className="w-36" type="number" min="0" step="0.01" value={marketFlatRate} onChange={(event) => { setMarketFlatRate(event.target.value); setMarketRateDirty(true); }} /> : null}
+      </section>
+
+      <fieldset
+        disabled={useMarketFlatRate}
+        aria-label="Sheeter and custom sheet freight rates"
+        className={`min-w-0 space-y-4 transition-opacity ${useMarketFlatRate ? 'opacity-40 [&_input]:cursor-not-allowed [&_button]:cursor-not-allowed' : ''}`}
+      >
         {loading ? (
           <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-300">
             <LoaderCircle className="h-4 w-4 animate-spin text-violet-300" />
@@ -784,7 +806,7 @@ export function ShippingCostSettingsScreen({ tenantId, navigationGuard }: Shippi
               </div>
           </>
         )}
-      </section>
+      </fieldset>
       </fieldset>
     </main>
   );

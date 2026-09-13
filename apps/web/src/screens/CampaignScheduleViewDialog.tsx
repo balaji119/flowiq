@@ -595,6 +595,9 @@ export function CampaignScheduleViewDialog({
       const marketRate = findShippingRateForMarket(marketName);
       if (!marketRate) return marketTotal;
       const marketLines = shippingLinesWithCreatives(campaign.summary!.lines.filter((line) => (line.market || '').trim().toLowerCase() === (marketName || '').trim().toLowerCase()), campaign.values.campaignMarkets);
+      if (marketRate.useMarketFlatRate) {
+        return marketTotal + (marketLines.some((line) => Object.values(line.breakdown).some((quantity) => quantity > 0)) ? marketRate.marketFlatRate ?? 0 : 0);
+      }
 
       const twoPrice = marketRate.twoSheeterPrice ?? 0;
       const fourPrice = marketRate.fourSheeterPrice ?? 0;

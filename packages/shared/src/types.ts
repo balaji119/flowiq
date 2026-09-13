@@ -214,6 +214,8 @@ export type MarketDeliveryAddressRecord = {
 
 export type MarketShippingRateInput = {
   market: string;
+  useMarketFlatRate?: boolean;
+  marketFlatRate?: number;
   useFlatRate: boolean;
   useFlatRateSheeters?: boolean;
   useFlatRateMegas?: boolean;

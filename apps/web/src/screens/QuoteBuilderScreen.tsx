@@ -3889,6 +3889,10 @@ export function QuoteBuilderScreen({
     const eightSheeterSetsPerBox = eightSheeterSetsPerBoxByMarket.get(marketName) ?? 15;
     const megasPerBox = megasPerBoxByMarket.get(marketName) ?? 1;
     const marketLines = shippingLinesWithCreatives(costLinesForMarket(marketName), values.campaignMarkets);
+    const marketRate = marketShippingRates.find((rate) => rate.market === marketName);
+    if (marketRate?.useMarketFlatRate) {
+      return marketLines.some((line) => Object.values(line.breakdown).some((quantity) => quantity > 0)) ? marketRate.marketFlatRate ?? 0 : 0;
+    }
     const useFlatRateSheeters = useFlatRateSheetersByMarket.get(marketName) ?? false;
     const useFlatRateMegas = useFlatRateMegasByMarket.get(marketName) ?? false;
     const isCustomSheetFormat = (key: string) => Boolean(customSheetSizeFormats[toCanonicalSheetNameKey(key)]);

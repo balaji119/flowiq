@@ -581,6 +581,16 @@ func calculateMarketShippingCost(marketName string, marketLines []campaignLineRe
 	if len(marketLines) == 0 {
 		return 0
 	}
+	if marketRate.UseMarketFlatRate {
+		for _, line := range marketLines {
+			for _, quantity := range line.Breakdown {
+				if quantity > 0 {
+					return marketRate.MarketFlatRate
+				}
+			}
+		}
+		return 0
+	}
 	isCustomSheetFormat := func(key string) bool {
 		return customSheetSizeFormats[canonicalPrintIQSheetKey(key)]
 	}
