@@ -37,7 +37,7 @@ func TestReceivePrintIQVisuals(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/submit-to-printiq", &body)
 			req.Header.Set("Content-Type", writer.FormDataContentType())
 			dir := t.TempDir()
-			a := &app{uploadDir: dir}
+			a := &app{campaignImageDir: dir}
 			upload, err := a.receivePrintIQVisuals(httptest.NewRecorder(), req)
 			if !tc.valid {
 				if err == nil {
@@ -52,7 +52,7 @@ func TestReceivePrintIQVisuals(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.HasPrefix(upload.ArtworkURL, "https://flowiq.example/api/purchase-orders/campaign-visuals-") {
+			if !strings.HasPrefix(upload.ArtworkURL, "https://flowiq.example/api/campaign-images/campaign-visuals-") {
 				t.Fatalf("unexpected URL: %s", upload.ArtworkURL)
 			}
 			entries, err := os.ReadDir(dir)
@@ -73,7 +73,7 @@ func TestReceivePrintIQVisuals(t *testing.T) {
 
 func TestReceivePrintIQVisualsRequiresAttachment(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/submit-to-printiq", nil)
-	if _, err := (&app{uploadDir: t.TempDir()}).receivePrintIQVisuals(httptest.NewRecorder(), req); err == nil {
+	if _, err := (&app{campaignImageDir: t.TempDir()}).receivePrintIQVisuals(httptest.NewRecorder(), req); err == nil {
 		t.Fatal("missing Visuals PDF was accepted")
 	}
 }

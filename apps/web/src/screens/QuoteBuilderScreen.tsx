@@ -1254,6 +1254,7 @@ export function QuoteBuilderScreen({
   tenantId,
   startFresh = false,
   autoDownloadVisuals = false,
+  printIQVisualsRequestId,
   autoDownloadInstalls = false,
   closeAfterVisualsDownload = false,
   autoSendEmailToAds = false,
@@ -1265,6 +1266,7 @@ export function QuoteBuilderScreen({
   tenantId?: string | null;
   startFresh?: boolean;
   autoDownloadVisuals?: boolean;
+  printIQVisualsRequestId?: string;
   autoDownloadInstalls?: boolean;
   closeAfterVisualsDownload?: boolean;
   autoSendEmailToAds?: boolean;
@@ -1408,7 +1410,7 @@ export function QuoteBuilderScreen({
   const pendingArtworkUploadCount = queuedArtworkUploadJobs.length;
   const uploadingArtworkPages = campaignArtworkUploadJobs.some((job) => job.status === 'queued' || job.status === 'uploading');
   const isSubmittedCampaign = campaignStatus === 'submitted';
-  const isReadOnlyExportAutomation = autoDownloadVisuals || autoDownloadInstalls;
+  const isReadOnlyExportAutomation = autoDownloadVisuals || autoDownloadInstalls || Boolean(printIQVisualsRequestId);
   const isSuperAdmin = session?.user.role === 'super_admin';
   const isPrintIQSubmitting = submitting || testSubmitting;
 
@@ -5931,15 +5933,11 @@ export function QuoteBuilderScreen({
   }
 
   useEffect(() => {
-    if (!autoDownloadVisuals || autoDownloadTriggeredRef.current) return;
-    if (loadingMetadata || loadingCampaign) return;
-    if (!campaignHydratedRef.current) return;
-    if (!campaignId) return;
+    if (!printIQVisualsRequestId || autoDownloadTriggeredRef.current) return;
+    if (loadingMetadata || loadingCampaign || !campaignHydratedRef.current || !campaignId || !sheetNamesLoaded) return;
     autoDownloadTriggeredRef.current = true;
-
     void (async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 180));
-      const visualsRequestId = new URLSearchParams(window.location.search).get('printIQVisuals');
+      const visualsRequestId = printIQVisualsRequestId;
       if (visualsRequestId) {
         try {
           const exportSummary = await ensureExportSummary();
@@ -5953,6 +5951,18 @@ export function QuoteBuilderScreen({
         }
         return;
       }
+    })();
+  }, [printIQVisualsRequestId, loadingMetadata, loadingCampaign, campaignId, sheetNamesLoaded]);
+
+  useEffect(() => {
+    if (!autoDownloadVisuals || printIQVisualsRequestId || autoDownloadTriggeredRef.current) return;
+    if (loadingMetadata || loadingCampaign) return;
+    if (!campaignHydratedRef.current) return;
+    if (!campaignId) return;
+    autoDownloadTriggeredRef.current = true;
+
+    void (async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 180));
       const success = await downloadArtworkVisuals();
       reportQuoteAutomationResult('download-visuals', success ? 'success' : 'error');
       if (!success) return;

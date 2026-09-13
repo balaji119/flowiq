@@ -32,6 +32,7 @@ type AppNavState = {
   selectedCampaignId: string | null;
   startFreshCampaign: boolean;
   autoDownloadVisuals: boolean;
+  printIQVisualsRequestId?: string;
   autoDownloadInstalls: boolean;
   closeAfterVisualsDownload: boolean;
   autoSendEmailToAds: boolean;
@@ -44,6 +45,7 @@ function buildUrlFromState(state: AppNavState) {
   if (state.selectedAdminTenantId) params.set('tenantId', state.selectedAdminTenantId);
   if (state.selectedCampaignId) params.set('campaignId', state.selectedCampaignId);
   if (state.startFreshCampaign) params.set('fresh', '1');
+  if (state.printIQVisualsRequestId) params.set('printIQVisuals', state.printIQVisualsRequestId);
   if (state.autoDownloadVisuals) params.set('downloadVisuals', '1');
   if (state.autoDownloadInstalls) params.set('downloadInstalls', '1');
   if (state.closeAfterVisualsDownload) params.set('closeAfterDownload', '1');
@@ -88,6 +90,7 @@ function readStateFromUrl(defaultTenantId: string | null): AppNavState {
     selectedAdminTenantId: tenantId ?? defaultTenantId,
     selectedCampaignId: campaignId,
     startFreshCampaign: fresh,
+    printIQVisualsRequestId: params.get('printIQVisuals') || undefined,
     autoDownloadVisuals,
     autoDownloadInstalls,
     closeAfterVisualsDownload,
@@ -107,6 +110,7 @@ function AppShell() {
   const [selectedAdminTenantId, setSelectedAdminTenantId] = useState<string | null>(session?.user.tenantId ?? null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [startFreshCampaign, setStartFreshCampaign] = useState(false);
+  const [printIQVisualsRequestId, setPrintIQVisualsRequestId] = useState<string | undefined>();
   const [autoDownloadVisuals, setAutoDownloadVisuals] = useState(false);
   const [autoDownloadInstalls, setAutoDownloadInstalls] = useState(false);
   const [closeAfterVisualsDownload, setCloseAfterVisualsDownload] = useState(false);
@@ -124,6 +128,7 @@ function AppShell() {
     setSelectedCampaignId(nextState.selectedCampaignId);
     setStartFreshCampaign(nextState.startFreshCampaign);
     setAutoDownloadVisuals(nextState.autoDownloadVisuals);
+    setPrintIQVisualsRequestId(nextState.printIQVisualsRequestId);
     setAutoDownloadInstalls(nextState.autoDownloadInstalls);
     setCloseAfterVisualsDownload(nextState.closeAfterVisualsDownload);
     setAutoSendEmailToAds(nextState.autoSendEmailToAds);
@@ -146,6 +151,7 @@ function AppShell() {
       selectedCampaignId,
       startFreshCampaign,
       autoDownloadVisuals,
+      printIQVisualsRequestId,
       autoDownloadInstalls,
       closeAfterVisualsDownload,
       autoSendEmailToAds,
@@ -154,8 +160,9 @@ function AppShell() {
     });
   }
 
-  const clearAutomationFlags: Pick<AppNavState, 'autoDownloadVisuals' | 'autoDownloadInstalls' | 'closeAfterVisualsDownload' | 'autoSendEmailToAds' | 'closeAfterEmailSend'> = {
+  const clearAutomationFlags: Pick<AppNavState, 'printIQVisualsRequestId' | 'autoDownloadVisuals' | 'autoDownloadInstalls' | 'closeAfterVisualsDownload' | 'autoSendEmailToAds' | 'closeAfterEmailSend'> = {
     autoDownloadVisuals: false,
+    printIQVisualsRequestId: undefined,
     autoDownloadInstalls: false,
     closeAfterVisualsDownload: false,
     autoSendEmailToAds: false,
@@ -476,6 +483,7 @@ function AppShell() {
         tenantId={selectedAdminTenantId}
         startFresh={startFreshCampaign}
         autoDownloadVisuals={autoDownloadVisuals}
+        printIQVisualsRequestId={printIQVisualsRequestId}
         autoDownloadInstalls={autoDownloadInstalls}
         closeAfterVisualsDownload={closeAfterVisualsDownload}
         autoSendEmailToAds={autoSendEmailToAds}

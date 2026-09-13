@@ -10,7 +10,6 @@ export function generatePrintIQVisuals(campaignId: string, tenantId?: string | n
     const url = new URL(window.location.pathname, window.location.origin);
     url.searchParams.set('view', 'quote');
     url.searchParams.set('campaignId', campaignId);
-    url.searchParams.set('downloadVisuals', '1');
     url.searchParams.set('printIQVisuals', requestId);
     if (tenantId) url.searchParams.set('tenantId', tenantId);
     const cleanup = () => {
