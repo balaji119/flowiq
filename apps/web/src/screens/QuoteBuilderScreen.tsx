@@ -1,5 +1,5 @@
 import { shippingLinesWithCreatives } from '../services/shippingCreatives';
-import { Fragment, type Dispatch, type DragEvent, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type Dispatch, type DragEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronUp, CircleAlert, Download, Eye, GripVertical, LayoutGrid, LoaderCircle, Maximize2, Pencil, Plus, Search, Table2, Trash2, Upload, X } from 'lucide-react';
 import {
   CampaignAsset,
@@ -1288,6 +1288,7 @@ export function QuoteBuilderScreen({
   const [customPrintCosts, setCustomPrintCosts] = useState<CustomPrintCostRecord[]>([]);
   const [materials, setMaterials] = useState<MaterialRecord[]>([]);
   const [sheetNameOverrides, setSheetNameOverrides] = useState<SheetNameOverrides>({});
+  const [sheetNamesLoaded, setSheetNamesLoaded] = useState(false);
   const [multipleArtworkFormats, setMultipleArtworkFormats] = useState<Record<string, boolean>>({});
   const [customPrintCostFormats, setCustomPrintCostFormats] = useState<Record<string, boolean>>({});
   const [customSheetSizeFormats, setCustomSheetSizeFormats] = useState<Record<string, boolean>>({});
@@ -1768,6 +1769,7 @@ export function QuoteBuilderScreen({
   useEffect(() => {
     let active = true;
     async function loadSheetNameOverrides() {
+      setSheetNamesLoaded(false);
       try {
         const response = await fetchCampaignSheetNameOverrides(effectiveTenantId);
         if (!active) return;
@@ -1781,6 +1783,8 @@ export function QuoteBuilderScreen({
         setMultipleArtworkFormats({});
         setCustomPrintCostFormats({});
         setCustomSheetSizeFormats({});
+      } finally {
+        if (active) setSheetNamesLoaded(true);
       }
     }
     void loadSheetNameOverrides();
@@ -1947,9 +1951,13 @@ export function QuoteBuilderScreen({
   }, [values.campaignMarkets]);
   const summaryLineByAssetId = useMemo(() => new Map((summary?.lines ?? []).map((line) => [line.id, line])), [summary]);
   const defaultMaterialId = useMemo(() => materials.find((material) => material.isDefault)?.id ?? '', [materials]);
+  const materialIdForFormat = useCallback((formatKey: CreativeFormatKey) => {
+    const categoryName = formatBreakdownKeyLabel(formatKey, normalizedSheetNameOverrides).trim().toLowerCase();
+    return materials.find((material) => material.name.trim().toLowerCase() === categoryName)?.id ?? defaultMaterialId;
+  }, [materials, normalizedSheetNameOverrides, defaultMaterialId]);
 
   useEffect(() => {
-    if (loadingCampaign || !defaultMaterialId || summaryLineByAssetId.size === 0) return;
+    if (loadingCampaign || !sheetNamesLoaded || materials.length === 0 || summaryLineByAssetId.size === 0) return;
     setValues((current) => {
       let changed = false;
       const campaignMarkets = current.campaignMarkets.map((market) => ({
@@ -1965,7 +1973,7 @@ export function QuoteBuilderScreen({
             if (totalFrames <= 0 || hasExplicitAssignment) return;
             assignmentsByFormat[formatKey] = [{
               artworkImageId: getCreativeImageIdForFormat(asset, formatKey),
-              materialId: defaultMaterialId,
+              materialId: materialIdForFormat(formatKey),
               frameCount: totalFrames,
             }];
             assetChanged = true;
@@ -1977,7 +1985,7 @@ export function QuoteBuilderScreen({
       }));
       return changed ? { ...current, campaignMarkets } : current;
     });
-  }, [defaultMaterialId, loadingCampaign, summaryLineByAssetId]);
+  }, [materialIdForFormat, materials.length, sheetNamesLoaded, loadingCampaign, summaryLineByAssetId]);
 
   const megasPerBoxByMarket = useMemo(
     () => new Map(marketShippingRates.map((entry) => [entry.market, entry.megasPerBox ?? 1])),
@@ -2742,7 +2750,7 @@ export function QuoteBuilderScreen({
       materialId: assignment.materialId,
       frameCount: assignment.frameCount,
     }));
-    setMultiMaterialRecords(records.length > 0 ? records : [{ id: `multi-material-record-${Date.now()}-0`, materialId: defaultMaterialId, frameCount: safeTotalFrames }]);
+    setMultiMaterialRecords(records.length > 0 ? records : [{ id: `multi-material-record-${Date.now()}-0`, materialId: materialIdForFormat(formatKey), frameCount: safeTotalFrames }]);
     setMaterialTarget({ marketId, assetId, formatKey, totalFrames: safeTotalFrames });
     setMaterialDialogMode('manage');
     setMaterialSelectionRecordIndex(null);
@@ -2841,7 +2849,7 @@ export function QuoteBuilderScreen({
         frameCount: Math.max(0, Math.floor(assignment.frameCount || 0)),
       })).filter((assignment) => assignment.frameCount > 0);
     } else {
-      recordsFromAsset = [{ id: `multi-artwork-record-${Date.now()}-0`, imageId: '', materialId: defaultMaterialId, frameCount: safeTotalFrames }];
+      recordsFromAsset = [{ id: `multi-artwork-record-${Date.now()}-0`, imageId: '', materialId: materialIdForFormat(formatKey), frameCount: safeTotalFrames }];
     }
     setMultiArtworkRecords(recordsFromAsset);
     setMultiArtworkTarget({ marketId, assetId, formatKey, totalFrames: safeTotalFrames });
@@ -3184,7 +3192,7 @@ export function QuoteBuilderScreen({
   }
 
   function addMultiArtworkRecord() {
-    if (isSubmittedCampaign) return;
+    if (isSubmittedCampaign || !multiArtworkTarget) return;
     setMultiArtworkRecords((current) => {
       const usedFrames = current.reduce((sum, record) => sum + Math.max(0, Math.floor(record.frameCount || 0)), 0);
       const remainingFrames = Math.max(0, (multiArtworkTarget?.totalFrames ?? 0) - usedFrames);
@@ -3192,7 +3200,7 @@ export function QuoteBuilderScreen({
         ? Math.max(0, Math.floor(current[current.length - 1].frameCount || 0))
         : remainingFrames;
       const frameCount = Math.min(previousFrameCount, remainingFrames);
-      const next = [...current, { id: `multi-artwork-record-${Date.now()}-${current.length}`, imageId: '', materialId: defaultMaterialId, frameCount }];
+      const next = [...current, { id: `multi-artwork-record-${Date.now()}-${current.length}`, imageId: '', materialId: materialIdForFormat(multiArtworkTarget.formatKey), frameCount }];
       syncMultiArtworkRecordsToAsset(next);
       return next;
     });
