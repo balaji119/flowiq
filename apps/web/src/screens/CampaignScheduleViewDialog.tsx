@@ -650,27 +650,20 @@ export function CampaignScheduleViewDialog({
         }, 0);
       }, 0);
 
-      const posterShipping = useFlatRateSheeters
-        ? (() => {
-            const hasTwo = !isCustomSheetFormat('2-sheet') && marketLines.some((line) => (line.breakdown['2-sheet'] ?? 0) > 0);
-            const hasFour = !isCustomSheetFormat('4-sheet') && marketLines.some((line) => (line.breakdown['4-sheet'] ?? 0) > 0);
-            const hasSix = !isCustomSheetFormat('6-sheet') && marketLines.some((line) => (line.breakdown['6-sheet'] ?? 0) > 0);
-            const hasEight = customSheetTotal > 0
-              || ((!isCustomSheetFormat('8-sheet') || !isCustomSheetFormat('QA0'))
-                && marketLines.some((line) => (isCustomSheetFormat('8-sheet') ? 0 : (line.breakdown['8-sheet'] ?? 0)) + (isCustomSheetFormat('QA0') ? 0 : (line.breakdown.QA0 ?? 0)) > 0));
-            return (hasTwo ? twoPrice : 0) + (hasFour ? fourPrice : 0) + (hasSix ? sixPrice : 0) + (hasEight ? eightPrice : 0);
-          })()
-        : (() => {
-            const totalTwo = isCustomSheetFormat('2-sheet') ? 0 : marketLines.reduce((sum, line) => sum + (line.breakdown['2-sheet'] ?? 0), 0);
-            const totalFour = isCustomSheetFormat('4-sheet') ? 0 : marketLines.reduce((sum, line) => sum + (line.breakdown['4-sheet'] ?? 0), 0);
-            const totalSix = isCustomSheetFormat('6-sheet') ? 0 : marketLines.reduce((sum, line) => sum + (line.breakdown['6-sheet'] ?? 0), 0);
-            const totalEightAndQa0 = customSheetTotal
-              + marketLines.reduce((sum, line) => sum + (isCustomSheetFormat('8-sheet') ? 0 : (line.breakdown['8-sheet'] ?? 0)) + (isCustomSheetFormat('QA0') ? 0 : (line.breakdown.QA0 ?? 0)), 0);
-            return calculatePosterShippingForSheeter(totalEightAndQa0, eightPrice, 4, eightSets)
-              + calculatePosterShippingForSheeter(totalSix, sixPrice, 3, sixSets)
-              + calculatePosterShippingForSheeter(totalFour, fourPrice, 2, fourSets)
-              + calculatePosterShippingForSheeter(totalTwo, twoPrice, 1, twoSets);
-          })();
+      const hasCustomSheets = marketLines.some((line) => Object.keys(customSheetSizeFormats).some((key) =>
+        customSheetSizeFormats[key] && quantityForSheetKey(line.breakdown as Record<string, number>, key) > 0));
+      const standardQuantity = (key: string) => isCustomSheetFormat(key) ? 0
+        : marketLines.reduce((sum, line) => sum + ((line.breakdown as Record<string, number>)[key] ?? 0), 0);
+      const sheeterShipping = (posters: number, price: number, postersPerSet: number, setsPerBox: number) => {
+        if (posters <= 0) return 0;
+        const boxCapacity = postersPerSet * Math.max(1, Math.floor(setsPerBox || 15));
+        if (hasCustomSheets && posters < boxCapacity) return 0;
+        return useFlatRateSheeters ? price : calculatePosterShippingForSheeter(posters, price, postersPerSet, setsPerBox);
+      };
+      const posterShipping = sheeterShipping(standardQuantity('8-sheet') + standardQuantity('QA0') + customSheetTotal, eightPrice, 4, eightSets)
+        + sheeterShipping(standardQuantity('6-sheet'), sixPrice, 3, sixSets)
+        + sheeterShipping(standardQuantity('4-sheet'), fourPrice, 2, fourSets)
+        + sheeterShipping(standardQuantity('2-sheet'), twoPrice, 1, twoSets);
 
       return marketTotal + posterShipping + customSheetShipping;
     }, 0);

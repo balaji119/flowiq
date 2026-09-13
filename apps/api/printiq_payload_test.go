@@ -264,8 +264,8 @@ func TestCalculateCampaignShippingCostUsesSplitFlatRateFlags(t *testing.T) {
 		map[string]bool{"mini-mega": true},
 	)
 
-	if total != 205 {
-		t.Fatalf("expected split flat-rate shipping total 205, got %#v", total)
+	if total != 180 {
+		t.Fatalf("expected split flat-rate shipping total 180, got %#v", total)
 	}
 }
 
@@ -888,5 +888,48 @@ func TestBuildPrintIQSaveProofContactQuestionsPayloadUsesADSPrepressContact(t *t
 		if answer["QQQxKey"] != 5 || answer["QQQLITKey"] != 6 || answer["QQQLIKey"] != 4 {
 			t.Fatalf("answer %d used unexpected question identifiers: %#v", index, answer)
 		}
+	}
+}
+
+func TestCustomSheetsCoverStandardSheetsBelowBoxCapacity(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		format         string
+		quantity       int
+		customQuantity int
+		customCreative bool
+		flatSheeters   bool
+		want           float64
+	}{
+		{"55 quad with custom", "8-sheet", 55, 2, true, false, 100},
+		{"60 quad with custom", "8-sheet", 60, 2, true, false, 155},
+		{"120 quad with custom", "8-sheet", 120, 2, true, false, 210},
+		{"30 double with custom", "4-sheet", 30, 2, true, false, 155},
+		{"29 double with custom", "4-sheet", 29, 2, true, false, 100},
+		{"44 triple with custom", "6-sheet", 44, 2, true, false, 100},
+		{"45 triple with custom", "6-sheet", 45, 2, true, false, 155},
+		{"14 single with custom", "2-sheet", 14, 2, true, false, 100},
+		{"15 single with custom", "2-sheet", 15, 2, true, false, 155},
+		{"61 quad rounds up normally", "8-sheet", 61, 2, true, false, 210},
+		{"without custom sheets", "8-sheet", 55, 0, true, false, 55},
+		{"custom without creative", "8-sheet", 55, 2, false, false, 55},
+		{"flat sheeters below capacity", "8-sheet", 55, 2, true, true, 100},
+		{"flat sheeters at capacity", "8-sheet", 60, 2, true, true, 155},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			creatives := map[string]string{tc.format: "art"}
+			if tc.customCreative {
+				creatives["MP"] = "custom-art"
+			}
+			values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "NSW", Assets: []campaignAsset{{ID: "line-1", AssetID: "asset-1", CreativeImageIDs: creatives}}}}}
+			breakdown := quantityBreakdown{tc.format: tc.quantity, "MP": tc.customQuantity}
+			summary := &campaignSummary{Lines: []campaignLineResult{{ID: "line-1", Market: "NSW", Breakdown: breakdown}}, PerMarket: []campaignTotals{{Market: "NSW", Breakdown: breakdown}}}
+			rates := []marketShippingRateRecord{{Market: "NSW", UseFlatRateMegas: true, UseFlatRateSheeters: tc.flatSheeters, TwoSheeterPrice: 55, FourSheeterPrice: 55, SixSheeterPrice: 55, EightSheeterPrice: 55, TwoSheeterSetsPerBox: 15, FourSheeterSetsPerBox: 15, SixSheeterSetsPerBox: 15, EightSheeterSetsPerBox: 15, MegasPerBox: 1}}
+			costs := []marketAssetShippingCostRecord{{Market: "NSW", AssetID: "asset-1", Costs: printingCostBreakdown{"mega-portrait": 100}}}
+			got := calculateCampaignShippingCost(values, summary, rates, costs, map[string]bool{"mega-portrait": true})
+			if got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

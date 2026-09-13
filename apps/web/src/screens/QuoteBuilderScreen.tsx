@@ -3932,31 +3932,20 @@ export function QuoteBuilderScreen({
       }, 0);
     }, 0);
 
-    const posterShipping = useFlatRateSheeters
-      ? (() => {
-      const hasTwoSheet = !isCustomSheetFormat('2-sheet') && marketLines.some((line) => (line.breakdown['2-sheet'] ?? 0) > 0);
-      const hasFourSheet = !isCustomSheetFormat('4-sheet') && marketLines.some((line) => (line.breakdown['4-sheet'] ?? 0) > 0);
-      const hasSixSheet = !isCustomSheetFormat('6-sheet') && marketLines.some((line) => (line.breakdown['6-sheet'] ?? 0) > 0);
-      const hasEightSheet = customSheetTotal > 0
-        || ((!isCustomSheetFormat('8-sheet') || !isCustomSheetFormat('QA0'))
-          && marketLines.some((line) => (isCustomSheetFormat('8-sheet') ? 0 : (line.breakdown['8-sheet'] ?? 0)) + (isCustomSheetFormat('QA0') ? 0 : (line.breakdown.QA0 ?? 0)) > 0));
-
-      return (hasTwoSheet ? twoSheeterPrice : 0)
-        + (hasFourSheet ? fourSheeterPrice : 0)
-        + (hasSixSheet ? sixSheeterPrice : 0)
-        + (hasEightSheet ? eightSheeterPrice : 0);
-      })()
-      : (() => {
-        const totalTwoSheet = isCustomSheetFormat('2-sheet') ? 0 : marketLines.reduce((total, line) => total + (line.breakdown['2-sheet'] ?? 0), 0);
-        const totalFourSheet = isCustomSheetFormat('4-sheet') ? 0 : marketLines.reduce((total, line) => total + (line.breakdown['4-sheet'] ?? 0), 0);
-        const totalSixSheet = isCustomSheetFormat('6-sheet') ? 0 : marketLines.reduce((total, line) => total + (line.breakdown['6-sheet'] ?? 0), 0);
-        const totalEightAndQa0 = customSheetTotal
-          + marketLines.reduce((total, line) => total + (isCustomSheetFormat('8-sheet') ? 0 : (line.breakdown['8-sheet'] ?? 0)) + (isCustomSheetFormat('QA0') ? 0 : (line.breakdown.QA0 ?? 0)), 0);
-        return calculatePosterShippingForSheeter(totalEightAndQa0, eightSheeterPrice, 4, eightSheeterSetsPerBox)
-          + calculatePosterShippingForSheeter(totalSixSheet, sixSheeterPrice, 3, sixSheeterSetsPerBox)
-          + calculatePosterShippingForSheeter(totalFourSheet, fourSheeterPrice, 2, fourSheeterSetsPerBox)
-          + calculatePosterShippingForSheeter(totalTwoSheet, twoSheeterPrice, 1, twoSheeterSetsPerBox);
-      })();
+    const hasCustomSheets = marketLines.some((line) => Object.keys(customSheetSizeFormats).some((key) =>
+      customSheetSizeFormats[key] && quantityForSheetKey(line.breakdown as Record<string, number>, key) > 0));
+    const standardQuantity = (key: string) => isCustomSheetFormat(key) ? 0
+      : marketLines.reduce((sum, line) => sum + ((line.breakdown as Record<string, number>)[key] ?? 0), 0);
+    const sheeterShipping = (posters: number, price: number, postersPerSet: number, setsPerBox: number) => {
+      if (posters <= 0) return 0;
+      const boxCapacity = postersPerSet * Math.max(1, Math.floor(setsPerBox || 15));
+      if (hasCustomSheets && posters < boxCapacity) return 0;
+      return useFlatRateSheeters ? price : calculatePosterShippingForSheeter(posters, price, postersPerSet, setsPerBox);
+    };
+    const posterShipping = sheeterShipping(standardQuantity('8-sheet') + standardQuantity('QA0') + customSheetTotal, eightSheeterPrice, 4, eightSheeterSetsPerBox)
+      + sheeterShipping(standardQuantity('6-sheet'), sixSheeterPrice, 3, sixSheeterSetsPerBox)
+      + sheeterShipping(standardQuantity('4-sheet'), fourSheeterPrice, 2, fourSheeterSetsPerBox)
+      + sheeterShipping(standardQuantity('2-sheet'), twoSheeterPrice, 1, twoSheeterSetsPerBox);
 
     return posterShipping + customSheetShipping;
   }

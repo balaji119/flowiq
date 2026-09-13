@@ -622,43 +622,37 @@ func calculateMarketShippingCost(marketName string, marketLines []campaignLineRe
 		}
 	}
 
-	var posterShipping float64
-	if useFlatRateSheeters(marketRate) {
-		hasTwoSheet := !isCustomSheetFormat("2-sheet") && anyMarketLineQuantity(marketLines, "2-sheet")
-		hasFourSheet := !isCustomSheetFormat("4-sheet") && anyMarketLineQuantity(marketLines, "4-sheet")
-		hasSixSheet := !isCustomSheetFormat("6-sheet") && anyMarketLineQuantity(marketLines, "6-sheet")
-		hasEightSheet := customSheetTotal > 0 || ((!isCustomSheetFormat("8-sheet") || !isCustomSheetFormat("QA0")) && anyEightSheetOrQA0Quantity(marketLines, isCustomSheetFormat))
-		if hasTwoSheet {
-			posterShipping += marketRate.TwoSheeterPrice
+	hasCustomSheets := false
+	for _, line := range marketLines {
+		for key, enabled := range customSheetSizeFormats {
+			if enabled && quantityForShippingSheetKey(line.Breakdown, key) > 0 {
+				hasCustomSheets = true
+			}
 		}
-		if hasFourSheet {
-			posterShipping += marketRate.FourSheeterPrice
-		}
-		if hasSixSheet {
-			posterShipping += marketRate.SixSheeterPrice
-		}
-		if hasEightSheet {
-			posterShipping += marketRate.EightSheeterPrice
-		}
-	} else {
-		totalTwoSheet := 0
-		if !isCustomSheetFormat("2-sheet") {
-			totalTwoSheet = sumMarketLineQuantity(marketLines, "2-sheet")
-		}
-		totalFourSheet := 0
-		if !isCustomSheetFormat("4-sheet") {
-			totalFourSheet = sumMarketLineQuantity(marketLines, "4-sheet")
-		}
-		totalSixSheet := 0
-		if !isCustomSheetFormat("6-sheet") {
-			totalSixSheet = sumMarketLineQuantity(marketLines, "6-sheet")
-		}
-		totalEightAndQA0 := customSheetTotal + sumMarketLineEightSheetAndQA0Quantity(marketLines, isCustomSheetFormat)
-		posterShipping = calculatePosterShippingForSheeter(totalEightAndQA0, marketRate.EightSheeterPrice, 4, marketRate.EightSheeterSetsPerBox) +
-			calculatePosterShippingForSheeter(totalSixSheet, marketRate.SixSheeterPrice, 3, marketRate.SixSheeterSetsPerBox) +
-			calculatePosterShippingForSheeter(totalFourSheet, marketRate.FourSheeterPrice, 2, marketRate.FourSheeterSetsPerBox) +
-			calculatePosterShippingForSheeter(totalTwoSheet, marketRate.TwoSheeterPrice, 1, marketRate.TwoSheeterSetsPerBox)
 	}
+	standardQuantity := func(key string) int {
+		if isCustomSheetFormat(key) {
+			return 0
+		}
+		return sumMarketLineQuantity(marketLines, key)
+	}
+	sheeterShipping := func(posters int, price float64, postersPerSet, setsPerBox int) float64 {
+		if posters <= 0 {
+			return 0
+		}
+		boxCapacity := postersPerSet * maxInt(1, setsPerBox)
+		if hasCustomSheets && posters < boxCapacity {
+			return 0
+		}
+		if useFlatRateSheeters(marketRate) {
+			return price
+		}
+		return calculatePosterShippingForSheeter(posters, price, postersPerSet, setsPerBox)
+	}
+	posterShipping := sheeterShipping(standardQuantity("8-sheet")+standardQuantity("QA0")+customSheetTotal, marketRate.EightSheeterPrice, 4, marketRate.EightSheeterSetsPerBox) +
+		sheeterShipping(standardQuantity("6-sheet"), marketRate.SixSheeterPrice, 3, marketRate.SixSheeterSetsPerBox) +
+		sheeterShipping(standardQuantity("4-sheet"), marketRate.FourSheeterPrice, 2, marketRate.FourSheeterSetsPerBox) +
+		sheeterShipping(standardQuantity("2-sheet"), marketRate.TwoSheeterPrice, 1, marketRate.TwoSheeterSetsPerBox)
 
 	return posterShipping + customSheetShipping
 }
