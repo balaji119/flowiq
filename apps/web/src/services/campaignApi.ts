@@ -8,6 +8,7 @@ import {
   CampaignSubmitResponse,
   CampaignUpsertPayload,
 } from '@flowiq/shared';
+import { generatePrintIQVisuals } from './printIQVisuals';
 import { buildApiUrl } from './apiBase';
 import { apiFetchJson, getApiAuthToken } from './apiClient';
 
@@ -84,8 +85,12 @@ export async function calculatePersistedCampaign(campaignId: string, tenantId?: 
 export async function submitCampaignToPrintIQ(campaignId: string, tenantId?: string | null, options?: { test?: boolean }) {
   const path = withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/submit-to-printiq`, tenantId);
   const testPath = options?.test ? `${path}${path.includes('?') ? '&' : '?'}test=true` : path;
+  const visuals = await generatePrintIQVisuals(campaignId, tenantId);
+  const body = new FormData();
+  body.append('visuals', visuals);
   return apiFetchJson<CampaignSubmitResponse>(testPath, {
     method: 'POST',
+    body,
   });
 }
 

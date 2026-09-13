@@ -5932,6 +5932,20 @@ export function QuoteBuilderScreen({
 
     void (async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 180));
+      const visualsRequestId = new URLSearchParams(window.location.search).get('printIQVisuals');
+      if (visualsRequestId) {
+        try {
+          const exportSummary = await ensureExportSummary();
+          if (exportSummary === false) throw new Error('Unable to calculate the campaign for the Visuals PDF.');
+          const files = await generateArtworkTemplates(false, 'pdf', 'visuals', '', exportSummary);
+          const pdf = files.find((file) => file.mimeType === 'application/pdf');
+          if (!pdf) throw new Error('The Visuals PDF could not be generated.');
+          window.parent.postMessage({ type: 'flowiq:printiq-visuals-result', requestId: visualsRequestId, file: pdf.blob, fileName: pdf.fileName }, window.location.origin);
+        } catch (error) {
+          window.parent.postMessage({ type: 'flowiq:printiq-visuals-result', requestId: visualsRequestId, error: error instanceof Error ? error.message : 'Unable to generate the Visuals PDF.' }, window.location.origin);
+        }
+        return;
+      }
       const success = await downloadArtworkVisuals();
       reportQuoteAutomationResult('download-visuals', success ? 'success' : 'error');
       if (!success) return;

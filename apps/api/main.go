@@ -1408,6 +1408,11 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	visualsUpload, err := a.receivePrintIQVisuals(w, r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 	firstProduct := sheetProducts[0]
 	createQuoteValues := campaign.Values
 	createQuoteValues.CustomerCode = tenant.Code
@@ -1507,8 +1512,8 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		jobNos[index] = acceptedProduct.JobNo
 	}
 
-	uploadArtworkPayloads := make([]any, 0, len(sheetProducts)+1)
-	uploadArtworkResponses := make([]any, 0, len(sheetProducts)+1)
+	uploadArtworkPayloads := make([]any, 0, len(sheetProducts)+2)
+	uploadArtworkResponses := make([]any, 0, len(sheetProducts)+2)
 	purchaseOrderUpload, err := a.extractPurchaseOrderUpload(r.Context(), campaign.PurchaseOrder)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1522,6 +1527,16 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		}
 		if index == 0 && purchaseOrderUpload != nil {
 			uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, *purchaseOrderUpload, true, false)
+			uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
+			uploadResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
+			if !ok {
+				return
+			}
+			uploadArtworkResponses = append(uploadArtworkResponses, uploadResponse)
+		}
+
+		if index == 0 {
+			uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, *visualsUpload, true, false)
 			uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
 			uploadResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
 			if !ok {
