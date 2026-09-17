@@ -582,7 +582,9 @@ export function CampaignScheduleViewDialog({
             : 0;
           return sum + customRate;
         }
-        return sum + pages * toNumber(costs[sheetKey]);
+        const formatKey = formatKeys.find((key) => canonicalKeyForFormat(key) === sheetKey);
+        const rate = costs[sheetKey] ?? (formatKey ? costs[formatKey] : undefined);
+        return sum + pages * toNumber(rate);
       }, 0);
       return total + lineCost + customCost + customSheetCost;
     }, 0);

@@ -4001,7 +4001,9 @@ export function QuoteBuilderScreen({
           : 0;
         return total + customRate;
       }
-      return total + pages * (costs[sheetKey] ?? 0);
+      const formatKey = formatKeys.find((key) => canonicalKeyForFormat(key) === sheetKey);
+      const rate = costs[sheetKey] ?? (formatKey ? costs[formatKey] : undefined) ?? 0;
+      return total + pages * rate;
     }, 0);
     return standardCost + customCost + customSheetCost;
   }
