@@ -28,22 +28,26 @@ import {
 } from "../services/adminApi";
 
 type TenantManagementScreenProps = {
+  onTenantsChanged?: () => void;
   onBack: () => void;
 } & Omit<AdminWorkspaceHandlers, "onBack" | "onOpenTenants">;
 
 type TenantFormState = {
+  type: "A" | "B";
   name: string;
   code: string;
 };
 
 function emptyTenantForm(): TenantFormState {
   return {
+    type: "A",
     name: "",
     code: "",
   };
 }
 
 export function TenantManagementScreen({
+  onTenantsChanged,
   onBack,
   onOpenMappings,
   onOpenMaterialMapping,
@@ -109,7 +113,7 @@ export function TenantManagementScreen({
 
   function openEditTenantDialog(tenant: TenantRecord) {
     setEditingTenantId(tenant.id);
-    setTenantForm({ name: tenant.name, code: tenant.code });
+    setTenantForm({ name: tenant.name, code: tenant.code, type: tenant.type ?? "A" });
     setTenantDialogError("");
     setTenantDialogOpen(true);
   }
@@ -140,6 +144,7 @@ export function TenantManagementScreen({
         setNotice(`Tenant ${response.tenant.name} updated.`);
       } else {
         const response = await createTenant({
+          type: tenantForm.type,
           name: tenantForm.name,
           code: tenantForm.code,
         });
@@ -150,6 +155,7 @@ export function TenantManagementScreen({
         );
         setNotice(`Tenant ${response.tenant.name} created.`);
       }
+      onTenantsChanged?.();
       closeTenantDialog();
     } catch (saveError) {
       setTenantDialogError(
@@ -181,6 +187,7 @@ export function TenantManagementScreen({
         current.filter((tenant) => tenant.id !== tenantPendingDelete.id),
       );
       setNotice(`Tenant ${tenantPendingDelete.name} deleted.`);
+      onTenantsChanged?.();
       setTenantPendingDelete(null);
     } catch (deleteError) {
       setError(
@@ -294,7 +301,7 @@ export function TenantManagementScreen({
                         <td className="border border-slate-700 px-4 py-3 font-semibold text-white">
                           <span className="inline-flex items-center gap-2">
                             <Building2 className="h-4 w-4 text-violet-300" />
-                            {tenant.name}
+                            {tenant.name} <span className="text-xs text-slate-400">Type {tenant.type ?? "A"}</span>
                           </span>
                         </td>
                         <td className="border border-slate-700 px-4 py-3 font-medium text-slate-200">
@@ -388,6 +395,12 @@ export function TenantManagementScreen({
                 </div>
               ) : null}
 
+              <div className="space-y-2">
+                <Label htmlFor="tenant-type">Tenant type</Label>
+                <select id="tenant-type" className="w-full rounded-md border border-slate-600 bg-slate-900 p-2" disabled={Boolean(editingTenantId)} value={tenantForm.type} onChange={event => setTenantForm(current => ({ ...current, type: event.target.value as "A" | "B" }))}>
+                  <option value="A">Type A</option><option value="B">Type B</option>
+                </select>
+              </div>
               <div className="space-y-2">
                 <Label>Name</Label>
                 <Input

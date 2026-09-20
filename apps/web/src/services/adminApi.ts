@@ -33,7 +33,7 @@ export async function fetchTenants() {
   return apiFetchJson<{ tenants: TenantRecord[] }>('/api/admin/tenants');
 }
 
-export async function createTenant(payload: { name: string; code: string }) {
+export async function createTenant(payload: { name: string; code: string; type?: 'A' | 'B' }) {
   return apiFetchJson<{ tenant: TenantRecord }>('/api/admin/tenants', {
     method: 'POST',
     body: JSON.stringify(payload),

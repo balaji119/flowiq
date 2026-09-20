@@ -29,6 +29,7 @@ export type AuthSession = {
 };
 
 export type TenantRecord = {
+  type?: 'A' | 'B';
   id: string;
   name: string;
   code: string;

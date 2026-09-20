@@ -282,13 +282,14 @@ func (s *authStore) listTenants() ([]TenantRecord, error) {
 			t.id,
 			t.name,
 			t.code,
+			t.tenant_type,
 			COUNT(DISTINCT u.id)::int AS user_count,
 			COUNT(DISTINCT c.id)::int AS campaign_count,
 			t.created_at
 		FROM tenants t
 		LEFT JOIN users u ON u.tenant_id = t.id
 		LEFT JOIN campaigns c ON c.tenant_id = t.id
-		GROUP BY t.id, t.name, t.code, t.created_at
+		GROUP BY t.id, t.name, t.code, t.tenant_type, t.created_at
 		ORDER BY t.name ASC
 	`)
 	if err != nil {
@@ -300,7 +301,7 @@ func (s *authStore) listTenants() ([]TenantRecord, error) {
 	for rows.Next() {
 		var tenant TenantRecord
 		var createdAt time.Time
-		if err := rows.Scan(&tenant.ID, &tenant.Name, &tenant.Code, &tenant.UserCount, &tenant.CampaignCount, &createdAt); err != nil {
+		if err := rows.Scan(&tenant.ID, &tenant.Name, &tenant.Code, &tenant.Type, &tenant.UserCount, &tenant.CampaignCount, &createdAt); err != nil {
 			return nil, err
 		}
 		tenant.CreatedAt = createdAt.UTC().Format(time.RFC3339)
@@ -309,7 +310,7 @@ func (s *authStore) listTenants() ([]TenantRecord, error) {
 	return tenants, rows.Err()
 }
 
-func (s *authStore) createTenant(name, code string) (*TenantRecord, error) {
+func (s *authStore) createTenant(name, code string, types ...string) (*TenantRecord, error) {
 	tenantName := strings.TrimSpace(name)
 	tenantCode := strings.TrimSpace(code)
 	if tenantName == "" {
@@ -319,7 +320,15 @@ func (s *authStore) createTenant(name, code string) (*TenantRecord, error) {
 		return nil, errors.New("Tenant code is required")
 	}
 
+	tenantType := "A"
+	if len(types) > 0 && types[0] != "" {
+		tenantType = types[0]
+	}
+	if tenantType != "A" && tenantType != "B" {
+		return nil, errors.New("Invalid tenant type")
+	}
 	tenant := TenantRecord{
+		Type:          tenantType,
 		ID:            uuid.NewString(),
 		Name:          tenantName,
 		Code:          tenantCode,
@@ -328,9 +337,9 @@ func (s *authStore) createTenant(name, code string) (*TenantRecord, error) {
 		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 	}
 	if _, err := s.pool.Exec(context.Background(), `
-		INSERT INTO tenants (id, tenant_id, name, code, created_at, updated_at)
-		VALUES ($1, $1, $2, $3, NOW(), NOW())
-	`, tenant.ID, tenant.Name, tenant.Code); err != nil {
+		INSERT INTO tenants (id, tenant_id, name, code, tenant_type, created_at, updated_at)
+		VALUES ($1, $1, $2, $3, $4, NOW(), NOW())
+	`, tenant.ID, tenant.Name, tenant.Code, tenant.Type); err != nil {
 		return nil, err
 	}
 	defaultOverridesJSON, err := defaultSheetNameOverridesJSON()
@@ -370,20 +379,21 @@ func (s *authStore) updateTenant(tenantID, name, code string) (*TenantRecord, er
 				code = $3,
 				updated_at = NOW()
 			WHERE id = $1
-			RETURNING id, name, code, created_at
+			RETURNING id, name, code, tenant_type, created_at
 		)
 		SELECT
 			t.id,
 			t.name,
 			t.code,
+			t.tenant_type,
 			COUNT(DISTINCT u.id)::int AS user_count,
 			COUNT(DISTINCT c.id)::int AS campaign_count,
 			t.created_at
 		FROM updated_tenant t
 		LEFT JOIN users u ON u.tenant_id = t.id
 		LEFT JOIN campaigns c ON c.tenant_id = t.id
-		GROUP BY t.id, t.name, t.code, t.created_at
-	`, trimmedTenantID, tenantName, tenantCode).Scan(&tenant.ID, &tenant.Name, &tenant.Code, &tenant.UserCount, &tenant.CampaignCount, &createdAt); err != nil {
+		GROUP BY t.id, t.name, t.code, t.tenant_type, t.created_at
+	`, trimmedTenantID, tenantName, tenantCode).Scan(&tenant.ID, &tenant.Name, &tenant.Code, &tenant.Type, &tenant.UserCount, &tenant.CampaignCount, &createdAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("Tenant not found")
 		}
@@ -396,10 +406,10 @@ func (s *authStore) updateTenant(tenantID, name, code string) (*TenantRecord, er
 func (s *authStore) getTenant(tenantID string) (*TenantRecord, error) {
 	var tenant TenantRecord
 	if err := s.pool.QueryRow(context.Background(), `
-		SELECT id, name, code
+		SELECT id, name, code, tenant_type
 		FROM tenants
 		WHERE id = $1
-	`, strings.TrimSpace(tenantID)).Scan(&tenant.ID, &tenant.Name, &tenant.Code); err != nil {
+	`, strings.TrimSpace(tenantID)).Scan(&tenant.ID, &tenant.Name, &tenant.Code, &tenant.Type); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("Tenant not found")
 		}

@@ -1,7 +1,9 @@
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, ReactNode, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Building2, ChevronRight, CircleDollarSign, Database, Home, LogOut, MapPin, Settings, Truck, Users } from 'lucide-react';
 import { cn } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
+
+export const EmbeddedWorkspaceContext = createContext(false);
 
 export type AdminWorkspaceSection = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings' | 'sheet-size-settings' | 'material-mapping' | 'materials';
 
@@ -71,6 +73,7 @@ export function AdminWorkspaceShell({
   onOpenMaterials,
   children,
 }: AdminWorkspaceShellProps) {
+  const embedded = useContext(EmbeddedWorkspaceContext);
   const { session, logout } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [collapsedSidebarHover, setCollapsedSidebarHover] = useState(false);
@@ -181,6 +184,13 @@ export function AdminWorkspaceShell({
   }
   if (canAccessPrintingCosts && onOpenPrintingCosts) {
     items.push({ id: 'printing-costs', label: 'Printing Cost', icon: <CircleDollarSign className="h-[22px] w-[22px]" />, onClick: onOpenPrintingCosts });
+  }
+
+  if (embedded) {
+    return <>
+      {topBarActions ? <div className="b-actions" style={{ marginBottom: 20 }}>{topBarActions}</div> : null}
+      {children}
+    </>;
   }
 
   return (

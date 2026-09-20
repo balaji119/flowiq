@@ -22,6 +22,8 @@ import { ShippingSettingsScreen } from './src/screens/ShippingSettingsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TenantManagementScreen } from './src/screens/TenantManagementScreen';
 import { UserManagementScreen } from './src/screens/UserManagementScreen';
+import { TypeBWorkspace } from './src/typeB/TypeBWorkspace';
+import { fetchTenant } from './src/services/tenantApi';
 import { fetchTenants } from './src/services/adminApi';
 
 type AppView = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 'mappings' | 'shipping' | 'shipping-costs' | 'printing-costs' | 'settings' | 'sheet-size-settings' | 'material-mapping' | 'materials';
@@ -117,6 +119,20 @@ function AppShell() {
   const [autoSendEmailToAds, setAutoSendEmailToAds] = useState(false);
   const [closeAfterEmailSend, setCloseAfterEmailSend] = useState(false);
   const [adminTenantOptions, setAdminTenantOptions] = useState<TenantRecord[]>([]);
+  const [tenantState, setTenantState] = useState<{ id: string; tenant?: TenantRecord; error?: string } | null>(null);
+  const effectiveTenantId = session?.user.role === 'super_admin' ? selectedAdminTenantId : session?.user.tenantId;
+  useEffect(() => {
+    if (!session || !effectiveTenantId) return;
+    let active = true;
+    void fetchTenant(effectiveTenantId)
+      .then(({ tenant }) => {
+        if (active) setTenantState({ id: effectiveTenantId, tenant });
+      })
+      .catch(error => {
+        if (active) setTenantState({ id: effectiveTenantId, error: error instanceof Error ? error.message : 'Unable to load tenant' });
+      });
+    return () => { active = false; };
+  }, [effectiveTenantId, session]);
   const hydratedHistoryRef = useRef(false);
   const costNavigationGuard = useRef<((action: () => void) => void) | null>(null);
   const currentNavState = useRef<AppNavState | null>(null);
@@ -240,6 +256,13 @@ function AppShell() {
     };
   }, [loading, session]);
 
+  function refreshTenantOptions() {
+    void fetchTenants().then(({ tenants }) => {
+      setAdminTenantOptions(tenants);
+      setSelectedAdminTenantId(current => tenants.some(tenant => tenant.id === current) ? current : tenants[0]?.id ?? null);
+    }).catch(() => { /* Keep the current options if refreshing fails. */ });
+  }
+
   function handleTenantSelection(nextTenantId: string) {
     navigateTo(view, {
       selectedAdminTenantId: nextTenantId,
@@ -278,6 +301,23 @@ function AppShell() {
       return <ResetPasswordScreen token={authRoute.resetToken} />;
     }
     return <LoginScreen />;
+  }
+
+  if (effectiveTenantId && tenantState?.id !== effectiveTenantId) return <div className="p-8">Loading tenant workspace...</div>;
+  if (effectiveTenantId && tenantState?.error) return <div role="alert" className="p-8">{tenantState.error}</div>;
+  if (effectiveTenantId && tenantState?.tenant?.type === 'B') {
+    return (
+      <TypeBWorkspace
+        key={effectiveTenantId}
+        tenant={tenantState.tenant}
+        tenants={adminTenantOptions}
+        view={view}
+        orderId={selectedCampaignId}
+        onNavigate={(next, orderId) => navigateTo(next, { selectedCampaignId: orderId ?? null, ...clearAutomationFlags })}
+        onSelectTenant={id => navigateTo('landing', { selectedAdminTenantId: id, selectedCampaignId: null, ...clearAutomationFlags })}
+        onTenantsChanged={refreshTenantOptions}
+      />
+    );
   }
 
   const canAccessManagement = session.user.role !== 'user';
@@ -333,6 +373,7 @@ function AppShell() {
   if (view === 'tenants') {
     return (
       <TenantManagementScreen
+        onTenantsChanged={refreshTenantOptions}
         onBack={() => navigateTo('landing')}
         onOpenMappings={canAccessSuperAdminPages ? () => navigateTo('mappings') : undefined}
         onOpenMaterialMapping={canAccessSuperAdminPages ? () => navigateTo('material-mapping') : undefined}

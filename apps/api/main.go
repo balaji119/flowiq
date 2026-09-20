@@ -246,6 +246,7 @@ func firstNonEmpty(values ...string) string {
 
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
+	a.registerOrderRoutes(mux)
 
 	mux.HandleFunc("GET /api/health", a.handleHealth)
 	mux.HandleFunc("POST /api/auth/login", a.handleLogin)
@@ -2504,6 +2505,7 @@ func (a *app) handleGetTenant(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
+		Type string `json:"type"`
 		Name string `json:"name"`
 		Code string `json:"code"`
 	}
@@ -2512,7 +2514,7 @@ func (a *app) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenant, err := a.authStore.createTenant(payload.Name, payload.Code)
+	tenant, err := a.authStore.createTenant(payload.Name, payload.Code, payload.Type)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
