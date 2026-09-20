@@ -72,7 +72,7 @@ func buildPrintIQDeliveryJobPayloads(values orderFormValues, summary *campaignSu
 		if len(unassigned) > 0 {
 			sections = append(sections, strings.Join(unassigned, "\n"))
 		}
-		payload := buildPrintIQGetPricePayload(values, printIQSheetProduct{Market: name, ProductCode: code, Quantity: 1}, "", customerCode)
+		payload := buildPrintIQGetPricePayload(values, printIQSheetProduct{ProductCode: code, Quantity: 1}, "", customerCode)
 		payload["JobTitle"] = title
 		payload["JobDescription"] = strings.Join(sections, "\n\n")
 		payloads = append(payloads, payload)

@@ -25,10 +25,6 @@ func TestDeliveryJobsUseMarketCodesCostsAndDescriptions(t *testing.T) {
 		if p["SelectedQuantity"].(map[string]any)["Quantity"] != 1 {
 			t.Fatalf("dummy quantity must be one: %#v", p)
 		}
-		wantDate := []string{"2026-09-16", "2026-09-14", "2026-09-12"}[i]
-		if p["JobDueDate"] != wantDate || p["CustomerExpectedDate"] != wantDate {
-			t.Fatalf("wrong market delivery-job dates: %#v", p)
-		}
 		for _, field := range []string{"ArtworkUrl", "Deliveries", "Notes", "TargetFreightPrice"} {
 			if _, exists := p[field]; exists {
 				t.Fatalf("unexpected field %s: %#v", field, p)

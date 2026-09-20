@@ -428,6 +428,8 @@ export type CampaignSubmitResponse = {
   campaign: CampaignRecord;
   amount: number | string | null;
   quoteNo?: string;
+  quoteNos?: string[];
+  marketQuotes?: { market: string; dueDate: string; quoteNo: string; jobNos: string[] }[];
   jobNo?: string;
   jobNos?: string[];
   test?: boolean;

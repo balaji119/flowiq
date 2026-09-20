@@ -377,22 +377,6 @@ func resolvePrintIQSheetProducts(values orderFormValues, summary *campaignSummar
 	return products, nil
 }
 
-func printIQGetPriceDueDate(raw, market string) string {
-	raw = strings.TrimSpace(raw)
-	date, err := time.Parse("2006-01-02", raw)
-	if err != nil {
-		return raw
-	}
-	days := 0
-	switch strings.ToLower(strings.TrimSpace(market)) {
-	case "brisbane", "qld":
-		days = 4
-	case "sydney", "nsw":
-		days = 2
-	}
-	return date.AddDate(0, 0, -days).Format("2006-01-02")
-}
-
 func buildPrintIQGetPricePayload(values orderFormValues, product printIQSheetProduct, quoteNo, customerCode string) map[string]any {
 	payload := map[string]any{
 		"ProductCode": product.ProductCode,
@@ -408,9 +392,6 @@ func buildPrintIQGetPricePayload(values orderFormValues, product printIQSheetPro
 		"SimpleDetails":    false,
 	}
 	setStringIfPresent(payload, "CustomerReference", values.PurchaseOrderNumber)
-	dueDate := printIQGetPriceDueDate(values.DueDate, product.Market)
-	setStringIfPresent(payload, "JobDueDate", dueDate)
-	setStringIfPresent(payload, "CustomerExpectedDate", dueDate)
 	deliveryFields := map[string]any{}
 	addPrintIQDeliveryFields(deliveryFields, product.DeliveryAddress)
 	if len(deliveryFields) > 0 {

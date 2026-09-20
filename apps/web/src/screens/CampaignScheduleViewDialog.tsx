@@ -714,7 +714,8 @@ export function CampaignScheduleViewDialog({
     try {
       const response = await submitCampaignToPrintIQ(campaign.id, tenantId);
       const jobNumbers = response.jobNos?.length ? response.jobNos.join(', ') : response.jobNo;
-      const printIQNumbers = [response.quoteNo ? `Quote: ${response.quoteNo}` : '', jobNumbers ? `Jobs: ${jobNumbers}` : ''].filter(Boolean).join(', ');
+      const quoteNumbers = response.quoteNos?.length ? response.quoteNos.join(', ') : response.quoteNo;
+      const printIQNumbers = [quoteNumbers ? `Quote${(response.quoteNos?.length ?? 0) > 1 ? 's' : ''}: ${quoteNumbers}` : '', jobNumbers ? `Jobs: ${jobNumbers}` : ''].filter(Boolean).join(', ');
       if (response.campaign.status === 'submitted') setEmailSubmitted(true);
       setActionSuccess(printIQNumbers ? `Order submitted to PrintIQ. ${printIQNumbers}` : 'Order submitted to PrintIQ.');
       onOpenChange(false);

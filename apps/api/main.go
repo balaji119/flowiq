@@ -1221,7 +1221,6 @@ func copyNumberField(target map[string]any, source map[string]any, key string) {
 }
 
 func (a *app) runPrintIQSubmissionStep(
-	w http.ResponseWriter,
 	requestID string,
 	campaign *campaignRecord,
 	user AuthUser,
@@ -1229,7 +1228,7 @@ func (a *app) runPrintIQSubmissionStep(
 	payload any,
 	call func(any) (any, int, error),
 	products ...printIQSheetProduct,
-) (any, bool) {
+) (any, *printIQSubmissionFailure) {
 	a.appendPrintIQLog(map[string]any{
 		"requestId":  requestID,
 		"timestamp":  time.Now().UTC().Format(time.RFC3339),
@@ -1255,8 +1254,7 @@ func (a *app) runPrintIQSubmissionStep(
 			"message":    message,
 			"status":     500,
 		})
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": message, "step": step, "requestId": requestID})
-		return nil, false
+		return nil, &printIQSubmissionFailure{Status: http.StatusInternalServerError, Body: map[string]any{"error": message, "step": step, "requestId": requestID}}
 	}
 	if status < 200 || status >= 300 {
 		message := printIQProductFailureDetails(printIQStepFailureMessage(step, status, parsed, nil), payload, products)
@@ -1272,8 +1270,7 @@ func (a *app) runPrintIQSubmissionStep(
 			"response":   summarizePrintIQResponse(step, parsed),
 			"status":     status,
 		})
-		writeJSON(w, status, map[string]any{"error": message, "step": step, "requestId": requestID})
-		return nil, false
+		return nil, &printIQSubmissionFailure{Status: status, Body: map[string]any{"error": message, "step": step, "requestId": requestID}}
 	}
 	if isError, message := printIQResponseError(parsed); isError {
 		displayMessage := printIQProductFailureDetails(printIQStepFailureMessage(step, status, parsed, nil), payload, products)
@@ -1289,8 +1286,7 @@ func (a *app) runPrintIQSubmissionStep(
 			"response":   summarizePrintIQResponse(step, parsed),
 			"status":     status,
 		})
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": displayMessage, "printIqMessage": message, "step": step, "requestId": requestID})
-		return nil, false
+		return nil, &printIQSubmissionFailure{Status: http.StatusBadRequest, Body: map[string]any{"error": displayMessage, "printIqMessage": message, "step": step, "requestId": requestID}}
 	}
 
 	a.appendPrintIQLog(map[string]any{
@@ -1304,7 +1300,7 @@ func (a *app) runPrintIQSubmissionStep(
 		"response":   summarizePrintIQResponse(step, parsed),
 		"status":     status,
 	})
-	return parsed, true
+	return parsed, nil
 }
 
 func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
@@ -1396,14 +1392,12 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	targetQuoteFreightPrice := calculateCampaignShippingCost(campaign.Values, campaign.Summary, shippingRates, assetShippingCosts, sheetSettings.CustomSheetSizeFormats)
 	sheetProducts, err := resolvePrintIQSheetProducts(campaign.Values, campaign.Summary, materialProductMappings, sheetSettings.ProductCodes, sheetSettings.CustomSheetSizeFormats)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-
-	deliveryJobPayloads, err := buildPrintIQDeliveryJobPayloads(campaign.Values, campaign.Summary, sheetProducts, shippingRates, assetShippingCosts, sheetSettings.CustomSheetSizeFormats, tenant.Code)
+	plans, err := buildPrintIQMarketPlans(campaign.Values, campaign.Summary, sheetProducts, shippingRates, assetShippingCosts, sheetSettings.CustomSheetSizeFormats, tenant.Code)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -1413,175 +1407,45 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	firstProduct := sheetProducts[0]
-	createQuoteValues := campaign.Values
-	createQuoteValues.CustomerCode = tenant.Code
-	createQuoteValues.ProductCode = firstProduct.ProductCode
-	createQuoteValues.Quantity = strconv.Itoa(firstProduct.Quantity)
-	createQuotePayload := buildPrintIQCreateQuotePayload(createQuoteValues, campaign.Summary, firstProduct, targetQuoteFreightPrice)
-	createQuoteResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "CreateQuoteWithDelivery", createQuotePayload, a.optionService.createQuoteWithDelivery, firstProduct)
-	if !ok {
-		return
-	}
-
-	quoteNo := extractQuoteNo(createQuoteResponse)
-	if quoteNo == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "PrintIQ create quote response did not include QuoteNo", "details": createQuoteResponse})
-		return
-	}
-	quoteQuestionQQDKeys := make([]any, 0, len(sheetProducts))
-	quoteQuestionQQDKeys = append(quoteQuestionQQDKeys, extractQQDKeyForProductIndex(createQuoteResponse, 0))
-
-	getPricePayloads := make([]any, 0, len(sheetProducts)-1)
-	getPriceResponses := make([]any, 0, len(sheetProducts)-1)
-	for _, product := range sheetProducts[1:] {
-		getPricePayload := buildPrintIQGetPricePayload(campaign.Values, product, quoteNo, tenant.Code)
-		getPricePayloads = append(getPricePayloads, getPricePayload)
-		getPriceResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetPrice", getPricePayload, a.optionService.getPrice, product)
-		if !ok {
-			return
-		}
-		getPriceResponses = append(getPriceResponses, getPriceResponse)
-		qqdKey := extractGetPriceQQDKey(getPriceResponse)
-		if qqdKey == nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "PrintIQ GetPrice response did not identify the new product quantity for proof contact", "details": getPriceResponse})
-			return
-		}
-		quoteQuestionQQDKeys = append(quoteQuestionQQDKeys, qqdKey)
-	}
-
-	getQuoteQuestionsPayloads := make([]any, 0, len(quoteQuestionQQDKeys))
-	getQuoteQuestionsResponses := make([]any, 0, len(quoteQuestionQQDKeys))
-	quoteQuestionQQDPKeys := make([]any, 0, len(quoteQuestionQQDKeys))
-	for index, qqdKey := range quoteQuestionQQDKeys {
-		if qqdKey == nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ product %d did not include QQDKey for proof contact", index+1), "details": map[string]any{"createQuoteWithDelivery": createQuoteResponse, "getPrice": getPriceResponses}})
-			return
-		}
-		getQuoteQuestionsPayload := buildPrintIQGetQuoteQuestionsPayload(qqdKey)
-		getQuoteQuestionsPayloads = append(getQuoteQuestionsPayloads, getQuoteQuestionsPayload)
-		getQuoteQuestionsResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetQuoteQuestions", getQuoteQuestionsPayload, a.optionService.getQuoteQuestions)
-		if !ok {
-			return
-		}
-		getQuoteQuestionsResponses = append(getQuoteQuestionsResponses, getQuoteQuestionsResponse)
-		qqdpKey := extractQQDPKey(getQuoteQuestionsResponse)
-		if qqdpKey == nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ quote questions for product %d did not include QQDPKey for proof contact", index+1), "details": getQuoteQuestionsResponse})
-			return
-		}
-		quoteQuestionQQDPKeys = append(quoteQuestionQQDPKeys, qqdpKey)
-	}
-
-	saveQuoteQuestionsPayload := buildPrintIQSaveProofContactQuestionsPayload(quoteQuestionQQDPKeys)
-	saveQuoteQuestionsResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "SaveQuoteQuestions", saveQuoteQuestionsPayload, a.optionService.saveQuoteQuestions)
-	if !ok {
-		return
-	}
-
-	for _, payload := range deliveryJobPayloads {
-		payload["QuoteNo"] = quoteNo
-		getPricePayloads = append(getPricePayloads, payload)
-		response, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "GetPrice", payload, a.optionService.getPrice, printIQSheetProduct{Market: strings.TrimSuffix(printIQStringValue(payload["ProductCode"]), " Delivery"), FormatKey: "Delivery"})
-		if !ok {
-			return
-		}
-		getPriceResponses = append(getPriceResponses, response)
-		if isZeroValue(valueAtPath(response, "ProductKey")) {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "PrintIQ did not create the delivery product", "details": response})
-			return
-		}
-	}
-	acceptQuotePayload := buildPrintIQAcceptQuotePayload(quoteNo, campaign.Values.DueDate)
-	acceptQuoteResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "AcceptQuote", acceptQuotePayload, a.optionService.acceptQuote)
-	if !ok {
-		return
-	}
-
-	acceptedProducts := extractAcceptedProducts(acceptQuoteResponse)
-	if len(acceptedProducts) != len(sheetProducts)+len(deliveryJobPayloads) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ returned %d accepted products for %d submitted product lines", len(acceptedProducts), len(sheetProducts)+len(deliveryJobPayloads)), "details": acceptQuoteResponse})
-		return
-	}
-	jobNos := make([]string, len(acceptedProducts))
-	for index, acceptedProduct := range acceptedProducts {
-		if acceptedProduct.JobNo == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("PrintIQ accepted product %d did not include JobNo", index+1), "details": acceptQuoteResponse})
-			return
-		}
-		jobNos[index] = acceptedProduct.JobNo
-	}
-
-	uploadArtworkPayloads := make([]any, 0, len(sheetProducts)+2)
-	uploadArtworkResponses := make([]any, 0, len(sheetProducts)+2)
 	purchaseOrderUpload, err := a.extractPurchaseOrderUpload(r.Context(), campaign.PurchaseOrder)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	for index, product := range sheetProducts {
+	// Resolve every attachment before creating any external quotes.
+	artworkUploads := map[string]*printIQArtworkUpload{}
+	for _, product := range sheetProducts {
+		if _, exists := artworkUploads[product.ArtworkImageID]; exists {
+			continue
+		}
 		artwork, err := a.extractCampaignArtworkUpload(r.Context(), campaign.Values, product.ArtworkImageID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		if index == 0 && purchaseOrderUpload != nil {
-			uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, *purchaseOrderUpload, true, false)
-			uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
-			uploadResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
-			if !ok {
-				return
-			}
-			uploadArtworkResponses = append(uploadArtworkResponses, uploadResponse)
+		artworkUploads[product.ArtworkImageID] = artwork
+	}
+	submissions := make([]*printIQMarketSubmission, 0, len(plans))
+	quoteNos := make([]string, 0, len(plans))
+	jobNos := []string{}
+	updatedCampaign := campaign
+	for index, plan := range plans {
+		submission, failure := a.submitPrintIQMarket(requestID, campaign, *user, plan, tenant.Code, purchaseOrderUpload, visualsUpload, artworkUploads)
+		if failure != nil {
+			writePrintIQMarketFailure(w, failure, plan.Market, submissions, submission)
+			return
 		}
-
-		if index == 0 {
-			uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, *visualsUpload, true, false)
-			uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
-			uploadResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
-			if !ok {
-				return
-			}
-			uploadArtworkResponses = append(uploadArtworkResponses, uploadResponse)
+		// Persist each quote and its jobs separately. Only the final market completes the campaign.
+		updatedCampaign, err = a.campaignStore.recordSubmission(r.Context(), *user, campaign.ID, submission.RequestPayload, submission.ResponsePayload, nil, submission.JobNos, !testSubmission && index == len(plans)-1)
+		if err != nil {
+			writePrintIQMarketFailure(w, &printIQSubmissionFailure{Status: http.StatusInternalServerError, Body: map[string]any{"error": "Unable to save the PrintIQ submission: " + err.Error()}}, plan.Market, submissions, submission)
+			return
 		}
-
-		if artwork != nil {
-			uploadPayload := buildPrintIQUploadArtworkPayload(acceptedProducts[index].JobNo, *artwork, false, true)
-			uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
-			uploadResponse, ok := a.runPrintIQSubmissionStep(w, requestID, campaign, *user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
-			if !ok {
-				return
-			}
-			uploadArtworkResponses = append(uploadArtworkResponses, uploadResponse)
-		}
+		submissions = append(submissions, submission)
+		quoteNos = append(quoteNos, submission.QuoteNo)
+		jobNos = append(jobNos, submission.JobNos...)
 	}
-
-	requestPayload := map[string]any{
-		"createQuoteWithDelivery": createQuotePayload,
-		"getPrice":                getPricePayloads,
-		"getQuoteQuestions":       getQuoteQuestionsPayloads,
-		"saveQuoteQuestions":      saveQuoteQuestionsPayload,
-		"acceptQuote":             acceptQuotePayload,
-		"uploadArtworkURL":        uploadArtworkPayloads,
-	}
-	responsePayload := map[string]any{
-		"createQuoteWithDelivery": createQuoteResponse,
-		"getPrice":                getPriceResponses,
-		"getQuoteQuestions":       getQuoteQuestionsResponses,
-		"saveQuoteQuestions":      saveQuoteQuestionsResponse,
-		"acceptQuote":             acceptQuoteResponse,
-		"uploadArtworkURL":        uploadArtworkResponses,
-		"quoteNo":                 quoteNo,
-		"jobNos":                  jobNos,
-	}
-
-	updatedCampaign, err := a.campaignStore.recordSubmission(r.Context(), *user, campaign.ID, requestPayload, responsePayload, nil, jobNos, !testSubmission)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"campaign": updatedCampaign, "amount": nil, "quoteNo": quoteNo, "jobNo": jobNos[0], "jobNos": jobNos, "test": testSubmission})
+	writeJSON(w, http.StatusOK, map[string]any{"campaign": updatedCampaign, "amount": nil, "quoteNo": quoteNos[0], "quoteNos": quoteNos, "marketQuotes": submissions, "jobNo": jobNos[0], "jobNos": jobNos, "test": testSubmission})
 }
 
 func (a *app) handleResetCampaignStatus(w http.ResponseWriter, r *http.Request) {

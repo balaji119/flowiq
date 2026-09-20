@@ -3689,7 +3689,8 @@ export function QuoteBuilderScreen({
       if (!savedCampaignId) return;
       const response = await submitCampaignToPrintIQ(savedCampaignId, effectiveTenantId, { test: isTestSubmission });
       const jobNumbers = response.jobNos?.length ? response.jobNos.join(', ') : response.jobNo;
-      const printIQNumbers = [response.quoteNo ? `Quote: ${response.quoteNo}` : '', jobNumbers ? `Jobs: ${jobNumbers}` : ''].filter(Boolean).join(', ');
+      const quoteNumbers = response.quoteNos?.length ? response.quoteNos.join(', ') : response.quoteNo;
+      const printIQNumbers = [quoteNumbers ? `Quote${(response.quoteNos?.length ?? 0) > 1 ? 's' : ''}: ${quoteNumbers}` : '', jobNumbers ? `Jobs: ${jobNumbers}` : ''].filter(Boolean).join(', ');
       applyCampaignToScreen(response.campaign, setValues, setSummary, setUploadedPurchaseOrderName, setUploadedPurchaseOrder, setCampaignId, setCampaignStatus, setParentCampaignId);
       lastPersistedValuesRef.current = stableSerialize(response.campaign.values);
       if (isTestSubmission) {
