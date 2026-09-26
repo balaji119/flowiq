@@ -1,8 +1,9 @@
+import { NavigationLink, navigationUrl } from '../components/NavigationLink';
 import { createPortal } from 'react-dom';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyPlus, Download, Eye, FolderKanban, LoaderCircle, Pencil, Plus, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { CampaignListItem, CampaignRecord, TenantRecord } from '@flowiq/shared';
-import { Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
+import { buttonVariants, cn, Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import { acquireCampaignEditLock, calculatePersistedCampaign, cloneCampaign, createSubCampaign, deleteCampaign, downloadCampaignPurchaseOrder, fetchCampaign, fetchCampaigns, resetCampaignStatus } from '../services/campaignApi';
 import { CampaignScheduleViewDialog } from './CampaignScheduleViewDialog';
@@ -11,6 +12,7 @@ type CampaignLandingScreenProps = {
   onOpenCampaign: (campaignId: string | null) => void;
   selectedTenantId?: string | null;
   showHero?: boolean;
+  initialPreviewCampaignId?: string;
   tenantOptions?: TenantRecord[];
   requiresTenantSelection?: boolean;
   onTenantChange?: (tenantId: string) => void;
@@ -83,7 +85,7 @@ function WorkflowIllustration() {
   );
 }
 
-export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHero = false, tenantOptions = [], requiresTenantSelection = false, onTenantChange }: CampaignLandingScreenProps) {
+export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, initialPreviewCampaignId, showHero = false, tenantOptions = [], requiresTenantSelection = false, onTenantChange }: CampaignLandingScreenProps) {
   const { session } = useAuth();
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,6 +108,15 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
   const [cloningCampaignId, setCloningCampaignId] = useState<string | null>(null);
   const [downloadingPurchaseOrderId, setDownloadingPurchaseOrderId] = useState<string | null>(null);
   const [bottomBarHost, setBottomBarHost] = useState<HTMLElement | null>(null);
+  const openedPreview = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialPreviewCampaignId || (requiresTenantSelection && !selectedTenantId)) return;
+    const key = `${selectedTenantId}:${initialPreviewCampaignId}`;
+    if (openedPreview.current === key) return;
+    openedPreview.current = key;
+    void handleOpenCampaignView(initialPreviewCampaignId);
+  }, [initialPreviewCampaignId, selectedTenantId, requiresTenantSelection]);
+
   const isSuperAdmin = session?.user.role === 'super_admin';
 
   const loadCampaigns = useCallback(async () => {
@@ -474,14 +485,14 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
                       {campaign.parentCampaignId ? (
                         <span className="shrink-0 text-violet-300" title={`Child of ${campaign.parentCampaignName || 'parent campaign'}`}>↳</span>
                       ) : null}
-                      <button
+                      <NavigationLink
                         className="block min-w-0 truncate whitespace-nowrap text-left text-white transition hover:text-violet-200"
-                        onClick={() => void handleOpenCampaignView(campaign.id)}
+                        href={navigationUrl('landing', { tenantId: selectedTenantId, previewCampaignId: campaign.id })}
+                        onNavigate={() => void handleOpenCampaignView(campaign.id)}
                         title={campaignDisplayName(campaign)}
-                        type="button"
                       >
                         {campaignDisplayName(campaign)}
-                      </button>
+                      </NavigationLink>
                       {campaign.parentCampaignId ? (
                         <span className="shrink-0 rounded-full border border-violet-300/30 bg-violet-500/15 px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em] text-violet-200">
                           Sub
@@ -515,9 +526,9 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
                   </td>
                   <td className="px-5 py-2.5">
                     <div className="flex justify-center gap-1.5">
-                      <Button aria-label="View campaign" className="h-7 w-7 rounded-md border border-white/10 p-0 text-slate-200" onClick={() => void handleOpenCampaignView(campaign.id)} title="View campaign" type="button" variant="ghost">
+                      <NavigationLink aria-label="View campaign" className={cn(buttonVariants({ variant: 'ghost' }), "h-7 w-7 rounded-md border border-white/10 p-0 text-slate-200", "aria-disabled:opacity-50")} href={navigationUrl('landing', { tenantId: selectedTenantId, previewCampaignId: campaign.id })} onNavigate={() => void handleOpenCampaignView(campaign.id)} title="View campaign">
                         <Eye className="h-3.5 w-3.5" />
-                      </Button>
+                      </NavigationLink>
                       {isSuperAdmin ? (
                         <Button
                           aria-label="Download purchase order"
@@ -568,17 +579,17 @@ export function CampaignLandingScreen({ onOpenCampaign, selectedTenantId, showHe
                           {creatingSubCampaignId === campaign.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-emerald-200" /> : <Plus className="h-3.5 w-3.5" />}
                         </Button>
                       ) : null}
-                      <Button
+                      <NavigationLink
                         aria-label="Edit campaign"
-                        className="h-7 w-7 rounded-md border border-white/10 p-0 text-slate-200"
+                        className={cn(buttonVariants({ variant: 'ghost' }), "h-7 w-7 rounded-md border border-white/10 p-0 text-slate-200", "aria-disabled:opacity-50")}
                         disabled={campaign.status === 'submitted'}
-                        onClick={() => void handleOpenCampaign(campaign.id, campaign.status)}
+                        href={navigationUrl('quote', { tenantId: selectedTenantId, campaignId: campaign.id })} onNavigate={() => void handleOpenCampaign(campaign.id, campaign.status)}
                         title={campaign.status === 'submitted' ? 'Submitted campaigns cannot be edited' : 'Edit campaign'}
-                        type="button"
-                        variant="ghost"
+
+
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                      </Button>
+                      </NavigationLink>
                       <Button
                         aria-label="Delete campaign"
                         className="h-7 w-7 rounded-md border border-white/10 p-0 text-rose-300"

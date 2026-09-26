@@ -1,3 +1,4 @@
+import { NavigationLink, navigationUrl } from '../components/NavigationLink';
 import { useEffect, useState } from "react";
 import { TenantRecord } from "@flowiq/shared";
 import {
@@ -121,18 +122,19 @@ export function TypeBWorkspace({
   return (
     <div className="type-b-workspace">
       <aside className="b-sidebar">
-        <button
+        <NavigationLink
           className="b-brand"
           disabled={busy}
-          onClick={() => onNavigate("landing")}
+          href={navigationUrl("landing", { tenantId: tenant.id })}
+              onNavigate={() => onNavigate("landing")}
           aria-label="Captive Vision dashboard"
         >
           <img src="/captive-vision.svg" alt="Captive Vision" />
           <span>ORDER PORTAL</span>
-        </button>
+        </NavigationLink>
         <nav aria-label="Main navigation">
           {links.map(({ id, label, icon: Icon }) => (
-            <button
+            <NavigationLink
               key={id}
               disabled={busy}
               aria-current={
@@ -141,11 +143,12 @@ export function TypeBWorkspace({
                   ? "page"
                   : undefined
               }
-              onClick={() => onNavigate(id)}
+              href={navigationUrl(id, { tenantId: tenant.id })}
+              onNavigate={() => onNavigate(id)}
             >
               <Icon size={19} />
               <span>{label}</span>
-            </button>
+            </NavigationLink>
           ))}
         </nav>
         <div className="b-profile">

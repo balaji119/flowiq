@@ -30,6 +30,7 @@ type AppView = 'home' | 'landing' | 'quote' | 'artwork' | 'users' | 'tenants' | 
 
 type AppNavState = {
   view: AppView;
+  previewCampaignId?: string;
   selectedAdminTenantId: string | null;
   selectedCampaignId: string | null;
   startFreshCampaign: boolean;
@@ -44,6 +45,7 @@ type AppNavState = {
 function buildUrlFromState(state: AppNavState) {
   const params = new URLSearchParams();
   params.set('view', state.view);
+  if (state.previewCampaignId) params.set('previewCampaignId', state.previewCampaignId);
   if (state.selectedAdminTenantId) params.set('tenantId', state.selectedAdminTenantId);
   if (state.selectedCampaignId) params.set('campaignId', state.selectedCampaignId);
   if (state.startFreshCampaign) params.set('fresh', '1');
@@ -58,6 +60,7 @@ function buildUrlFromState(state: AppNavState) {
 }
 
 function parseView(raw: string | null): AppView {
+  if (raw === 'landing') return 'landing';
   if (raw === 'users') return 'users';
   if (raw === 'tenants') return 'tenants';
   if (raw === 'mappings') return 'mappings';
@@ -89,6 +92,7 @@ function readStateFromUrl(defaultTenantId: string | null): AppNavState {
 
   return {
     view,
+    previewCampaignId: params.get('previewCampaignId') || undefined,
     selectedAdminTenantId: tenantId ?? defaultTenantId,
     selectedCampaignId: campaignId,
     startFreshCampaign: fresh,
@@ -108,6 +112,7 @@ function AppShell() {
     resetToken: null,
     ready: false,
   });
+  const [previewCampaignId, setPreviewCampaignId] = useState<string | undefined>();
   const [view, setView] = useState<AppView>('home');
   const [selectedAdminTenantId, setSelectedAdminTenantId] = useState<string | null>(session?.user.tenantId ?? null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
@@ -140,6 +145,7 @@ function AppShell() {
   function applyNavState(nextState: AppNavState) {
     currentNavState.current = nextState;
     setView(nextState.view);
+    setPreviewCampaignId(nextState.previewCampaignId);
     setSelectedAdminTenantId(nextState.selectedAdminTenantId);
     setSelectedCampaignId(nextState.selectedCampaignId);
     setStartFreshCampaign(nextState.startFreshCampaign);
@@ -558,6 +564,7 @@ function AppShell() {
     return renderGlobalSidebar(
       <CampaignLandingScreen
         showHero
+        initialPreviewCampaignId={previewCampaignId}
         selectedTenantId={selectedAdminTenantId}
         tenantOptions={canAccessSuperAdminPages ? adminTenantOptions : []}
         requiresTenantSelection={canAccessSuperAdminPages}
@@ -577,6 +584,7 @@ function AppShell() {
   return renderGlobalSidebar(
     <CampaignLandingScreen
       showHero
+      initialPreviewCampaignId={previewCampaignId}
       selectedTenantId={selectedAdminTenantId}
       tenantOptions={canAccessSuperAdminPages ? adminTenantOptions : []}
       requiresTenantSelection={canAccessSuperAdminPages}

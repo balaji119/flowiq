@@ -60,7 +60,7 @@ body.type-b-active {
   display: grid;
   gap: 8px;
 }
-.b-sidebar nav button {
+.b-sidebar nav a {
   display: flex;
   gap: 12px;
   align-items: center;
@@ -72,10 +72,10 @@ body.type-b-active {
   text-align: left;
   font-size: 13px;
 }
-.b-sidebar nav button:hover {
+.b-sidebar nav a:hover {
   background: #253421;
 }
-.b-sidebar nav button[aria-current="page"] {
+.b-sidebar nav a[aria-current="page"] {
   background: #7fbe3f;
   color: #14200b;
   font-weight: 700;
@@ -487,12 +487,12 @@ body.type-b-active [class*="bg-[#241c45]"] {
     width: 48px;
   }
   .b-brand span,
-  .b-sidebar nav button span,
+  .b-sidebar nav a span,
   .b-profile strong,
   .b-profile small {
     display: none;
   }
-  .b-sidebar nav button {
+  .b-sidebar nav a {
     padding: 13px;
   }
   .b-profile {
@@ -536,3 +536,6 @@ body.type-b-active [class*="bg-[#241c45]"] {
   color: #b1d58e;
   font-size: 11px;
 }
+
+.b-sidebar a { text-decoration: none; }
+.b-sidebar a[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }

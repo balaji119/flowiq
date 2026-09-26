@@ -1,6 +1,7 @@
 import { createContext, useContext, ReactNode, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Building2, ChevronRight, CircleDollarSign, Database, Home, LogOut, MapPin, Settings, Truck, Users } from 'lucide-react';
 import { cn } from '@flowiq/ui';
+import { NavigationLink, navigationUrl } from './NavigationLink';
 import { useAuth } from '../context/AuthContext';
 
 export const EmbeddedWorkspaceContext = createContext(false);
@@ -41,6 +42,7 @@ type NavItem = {
   icon: ReactNode;
   onClick: () => void;
   menuItems?: Array<{
+    id: AdminWorkspaceSection;
     label: string;
     active: boolean;
     onClick: () => void;
@@ -171,10 +173,10 @@ export function AdminWorkspaceShell({
       },
       menuItems: onOpenSheetSizeSettings || onOpenMaterialMapping || onOpenMaterials
         ? [
-            { label: 'Sheet Name', active: activeSection === 'settings', onClick: onOpenSettings },
-            ...(onOpenSheetSizeSettings ? [{ label: 'Sheet Size', active: activeSection === 'sheet-size-settings', onClick: onOpenSheetSizeSettings }] : []),
-            ...(onOpenMaterialMapping ? [{ label: 'Product Mapping', active: activeSection === 'material-mapping', onClick: onOpenMaterialMapping }] : []),
-            ...(onOpenMaterials ? [{ label: 'Materials', active: activeSection === 'materials', onClick: onOpenMaterials }] : []),
+            { id: 'settings' as AdminWorkspaceSection, label: 'Sheet Name', active: activeSection === 'settings', onClick: onOpenSettings },
+            ...(onOpenSheetSizeSettings ? [{ id: 'sheet-size-settings' as AdminWorkspaceSection, label: 'Sheet Size', active: activeSection === 'sheet-size-settings', onClick: onOpenSheetSizeSettings }] : []),
+            ...(onOpenMaterialMapping ? [{ id: 'material-mapping' as AdminWorkspaceSection, label: 'Product Mapping', active: activeSection === 'material-mapping', onClick: onOpenMaterialMapping }] : []),
+            ...(onOpenMaterials ? [{ id: 'materials' as AdminWorkspaceSection, label: 'Materials', active: activeSection === 'materials', onClick: onOpenMaterials }] : []),
           ]
         : undefined,
     });
@@ -207,14 +209,14 @@ export function AdminWorkspaceShell({
           {expanded ? (
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex items-center gap-1.5">
-                <button
-                  className="h-8 w-8 overflow-hidden border border-slate-600 bg-slate-900/90 transition hover:border-violet-300/50"
-                  onClick={() => (onOpenHome ?? onOpenLanding)?.()}
+                <NavigationLink
+                  className="block h-8 w-8 overflow-hidden border border-slate-600 bg-slate-900/90 transition hover:border-violet-300/50"
+                  href={navigationUrl(onOpenHome ? 'home' : 'landing')}
+                onNavigate={() => (onOpenHome ?? onOpenLanding)?.()}
                   title="Go to Landing Page"
-                  type="button"
                 >
                   <img alt="ADS logo" className="h-full w-full object-contain" src="/ads-logo.webp" />
-                </button>
+                </NavigationLink>
                 <p className="truncate text-xs font-bold uppercase leading-none tracking-[0.16em] text-violet-300">Connect</p>
               </div>
               <button
@@ -228,14 +230,14 @@ export function AdminWorkspaceShell({
             </div>
           ) : (
             <div className="flex items-center justify-center">
-              <button
-                className="h-10 w-10 overflow-hidden border border-slate-600 bg-slate-900/90 transition hover:border-violet-300/50"
-                onClick={() => (onOpenHome ?? onOpenLanding)?.()}
+              <NavigationLink
+                className="block h-10 w-10 overflow-hidden border border-slate-600 bg-slate-900/90 transition hover:border-violet-300/50"
+                href={navigationUrl(onOpenHome ? 'home' : 'landing')}
+                onNavigate={() => (onOpenHome ?? onOpenLanding)?.()}
                 title="Go to Landing Page"
-                type="button"
               >
                 <img alt="ADS logo" className="h-full w-full object-contain" src="/ads-logo.webp" />
-              </button>
+              </NavigationLink>
             </div>
           )}
         </div>
@@ -259,40 +261,53 @@ export function AdminWorkspaceShell({
             .filter((item) => (item.id === 'shipping-costs' ? canAccessShippingCosts : true))
             .map((item) => {
               const active = item.id === activeSection || Boolean(item.menuItems?.some((menuItem) => menuItem.active));
+              const itemClassName = cn(
+                'flex items-center rounded-md text-[8px] font-semibold uppercase leading-none tracking-[0.02em] transition-[background-color,border-color,color,transform,box-shadow] duration-200 [&_svg]:transition-opacity [&_svg]:duration-200',
+                expanded ? 'h-11 w-full justify-start gap-2.5 px-2.5' : 'mx-auto h-11 w-11 justify-center',
+                active
+                  ? 'border border-violet-300/35 bg-gradient-to-r from-violet-500/20 to-transparent text-white shadow-[0_0_0_1px_rgba(119, 87, 217,0.22),0_6px_14px_rgba(15,23,42,0.28)] [&_svg]:opacity-100'
+                  : 'border border-transparent text-slate-400 [&_svg]:opacity-80 hover:-translate-y-[1px] hover:border-white/10 hover:bg-slate-800/65 hover:text-white hover:shadow-[0_6px_14px_rgba(15,23,42,0.24)] hover:[&_svg]:opacity-100',
+              );
               return (
                 <div key={item.id} className="relative" ref={item.id === 'settings' ? settingsMenuRef : undefined}>
-                  <button
-                    className={cn(
-                      'flex items-center rounded-md text-[8px] font-semibold uppercase leading-none tracking-[0.02em] transition-[background-color,border-color,color,transform,box-shadow] duration-200 [&_svg]:transition-opacity [&_svg]:duration-200',
-                      expanded ? 'h-11 w-full justify-start gap-2.5 px-2.5' : 'mx-auto h-11 w-11 justify-center',
-                      active
-                        ? 'border border-violet-300/35 bg-gradient-to-r from-violet-500/20 to-transparent text-white shadow-[0_0_0_1px_rgba(119, 87, 217,0.22),0_6px_14px_rgba(15,23,42,0.28)] [&_svg]:opacity-100'
-                        : 'border border-transparent text-slate-400 [&_svg]:opacity-80 hover:-translate-y-[1px] hover:border-white/10 hover:bg-slate-800/65 hover:text-white hover:shadow-[0_6px_14px_rgba(15,23,42,0.24)] hover:[&_svg]:opacity-100',
-                    )}
-                    onClick={item.onClick}
-                    title={!expanded ? item.label : undefined}
-                    type="button"
-                  >
-                    {item.icon}
-                    {expanded ? <span className="truncate text-[12px]">{item.label}</span> : null}
-                  </button>
+                  {item.menuItems ? (
+                    <button
+                      className={itemClassName}
+                      onClick={item.onClick}
+                      title={!expanded ? item.label : undefined}
+                      type="button"
+                    >
+                      {item.icon}
+                      {expanded ? <span className="truncate text-[12px]">{item.label}</span> : null}
+                    </button>
+                  ) : (
+                    <NavigationLink
+                      className={itemClassName}
+                      href={navigationUrl(item.id)}
+                      onNavigate={item.onClick}
+                      title={!expanded ? item.label : undefined}
+                    >
+                      {item.icon}
+                      {expanded ? <span className="truncate text-[12px]">{item.label}</span> : null}
+                    </NavigationLink>
+                  )}
                   {item.menuItems && settingsMenuOpen ? (
                     <div className="absolute left-full top-0 z-40 ml-2 w-56 rounded-md border border-slate-300 bg-slate-100 p-1 shadow-[0_16px_40px_rgba(0,0,0,0.45)]">
                       {item.menuItems.map((menuItem) => (
-                        <button
+                        <NavigationLink
                           key={menuItem.label}
                           className={cn(
                             'flex w-full items-center rounded-md px-3 py-2 text-left text-sm font-semibold transition',
                             menuItem.active ? 'bg-violet-600 text-white' : 'text-slate-900 hover:bg-violet-100 hover:text-violet-950',
                           )}
-                          onClick={() => {
+                          href={navigationUrl(menuItem.id)}
+                          onNavigate={() => {
                             setSettingsMenuOpen(false);
                             menuItem.onClick();
                           }}
-                          type="button"
                         >
                           {menuItem.label}
-                        </button>
+                        </NavigationLink>
                       ))}
                     </div>
                   ) : null}
@@ -303,18 +318,18 @@ export function AdminWorkspaceShell({
 
         {onBack ? (
           <div className="border-t border-slate-700/80 p-2">
-            <button
+            <NavigationLink
               className={cn(
                 'flex w-full items-center rounded-md px-3 py-2.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800/80 hover:text-white',
                 expanded ? 'justify-start gap-3' : 'justify-center',
               )}
-              onClick={onBack}
+              href={navigationUrl('landing')}
+              onNavigate={onBack}
               title={!expanded ? 'Back' : undefined}
-              type="button"
             >
               <ArrowLeft className="h-4 w-4" />
               {expanded ? <span>Back</span> : null}
-            </button>
+            </NavigationLink>
           </div>
         ) : null}
 
