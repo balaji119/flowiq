@@ -119,6 +119,9 @@ func buildPrintIQJobTitle(values orderFormValues, product printIQSheetProduct) s
 	if len(productParts) > 0 {
 		titleParts = append(titleParts, strings.Join(productParts, "-"))
 	}
+	if creator := strings.TrimSpace(values.CreatedByDisplayName); creator != "" {
+		titleParts = append(titleParts, creator)
+	}
 	return strings.Join(titleParts, "_")
 }
 

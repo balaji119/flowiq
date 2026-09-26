@@ -18,6 +18,18 @@ type campaignStore struct {
 	pool *pgxpool.Pool
 }
 
+// Match the dashboard's Created By name/email fallback, including its N/A display.
+func (s *campaignStore) campaignCreatorDisplayName(ctx context.Context, campaignID, tenantID string) (string, error) {
+	var name string
+	err := s.pool.QueryRow(ctx, `
+		SELECT COALESCE(NULLIF(TRIM(COALESCE(NULLIF(TRIM(u.name), ''), u.email)), ''), 'N/A')
+		FROM campaigns c
+		LEFT JOIN users u ON u.id = c.created_by_user_id
+		WHERE c.id = $1 AND c.tenant_id = $2
+	`, campaignID, tenantID).Scan(&name)
+	return name, err
+}
+
 type campaignRow struct {
 	ID                string
 	TenantID          string

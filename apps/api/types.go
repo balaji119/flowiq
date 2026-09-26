@@ -118,6 +118,8 @@ type campaignPrintImage struct {
 }
 
 type orderFormValues struct {
+	// Resolved from the campaign creator at submission time, never from client input.
+	CreatedByDisplayName    string               `json:"-"`
 	CustomerCode            string               `json:"customerCode"`
 	CustomerReference       string               `json:"customerReference"`
 	PurchaseOrderNumber     string               `json:"purchaseOrderNumber"`

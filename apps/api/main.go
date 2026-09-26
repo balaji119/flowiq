@@ -1398,7 +1398,14 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	plans, err := buildPrintIQMarketPlans(campaign.Values, campaign.Summary, sheetProducts, shippingRates, assetShippingCosts, sheetSettings.CustomSheetSizeFormats, tenant.Code)
+	creatorName, err := a.campaignStore.campaignCreatorDisplayName(r.Context(), campaign.ID, campaign.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Unable to resolve campaign creator"})
+		return
+	}
+	submissionValues := campaign.Values
+	submissionValues.CreatedByDisplayName = creatorName
+	plans, err := buildPrintIQMarketPlans(submissionValues, campaign.Summary, sheetProducts, shippingRates, assetShippingCosts, sheetSettings.CustomSheetSizeFormats, tenant.Code)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
