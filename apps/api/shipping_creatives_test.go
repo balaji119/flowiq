@@ -2,6 +2,43 @@ package main
 
 import "testing"
 
+func TestCustomSheetFlatFreightSharedPerMarket(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		flat       bool
+		secondRate float64
+		want       float64
+	}{
+		{"equal flat rates charged once", true, 84, 84},
+		{"highest flat rate selected", true, 100, 100},
+		{"zero rate does not suppress freight", true, 0, 84},
+		{"box rates remain additive", false, 84, 252},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "Sydney", Assets: []campaignAsset{
+				{ID: "first", AssetID: "a", CreativeImageIDs: map[string]string{"Mega": "art"}},
+				{ID: "second", AssetID: "b", CreativeImageIDs: map[string]string{"Mega": "art", "MP": "art"}},
+				{ID: "unassigned", AssetID: "c"},
+			}}}}
+			summary := &campaignSummary{Lines: []campaignLineResult{
+				{ID: "first", Market: "Sydney", Breakdown: quantityBreakdown{"Mega": 1}},
+				{ID: "second", Market: "Sydney", Breakdown: quantityBreakdown{"Mega": 1, "MP": 1}},
+				{ID: "unassigned", Market: "Sydney", Breakdown: quantityBreakdown{"Mega": 1}},
+			}, PerMarket: []campaignTotals{{Market: "Sydney", Breakdown: quantityBreakdown{"Mega": 3, "MP": 1}}}}
+			rates := []marketShippingRateRecord{{Market: "Sydney", UseFlatRateMegas: tc.flat, MegasPerBox: 1}}
+			costs := []marketAssetShippingCostRecord{
+				{Market: "Sydney", AssetID: "a", Costs: printingCostBreakdown{"mega": 84}},
+				{Market: "Sydney", AssetID: "b", Costs: printingCostBreakdown{"mega": tc.secondRate, "mega-portrait": tc.secondRate}},
+				{Market: "Sydney", AssetID: "c", Costs: printingCostBreakdown{"mega": 999}},
+			}
+			got := calculateCampaignShippingCost(values, summary, rates, costs, map[string]bool{"mega": true, "mega-portrait": true})
+			if got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestShippingExcludesUnassignedFormatsAndLines(t *testing.T) {
 	values := orderFormValues{CampaignMarkets: []campaignMarket{{Market: "VIC", Assets: []campaignAsset{
 		{ID: "assigned", CreativeImageID: "art"}, {ID: "unassigned"},

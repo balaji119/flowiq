@@ -3930,13 +3930,15 @@ export function QuoteBuilderScreen({
       const selectedAsset = selectedAssetByLineId.get(line.id);
       if (!selectedAsset) return total;
       const assetShippingCosts = shippingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`);
-      return total + Object.keys(customSheetSizeFormats).reduce((lineTotal, sheetKey) => {
+      // Carry the market total through each asset so flat freight is charged once.
+      return Object.keys(customSheetSizeFormats).reduce((lineTotal, sheetKey) => {
         if (!customSheetSizeFormats[sheetKey]) return lineTotal;
         const quantity = Math.max(0, quantityForSheetKey(line.breakdown as Record<string, number>, sheetKey));
         if (quantity === 0) return lineTotal;
         const rate = shippingRateForSheetKey(assetShippingCosts, sheetKey);
-        return lineTotal + (useFlatRateMegas ? rate : calculateShippingCost(quantity, rate, shippingBoxSizeForSheetKey(sheetKey)));
-      }, 0);
+        return useFlatRateMegas ? Math.max(lineTotal, rate)
+          : lineTotal + calculateShippingCost(quantity, rate, shippingBoxSizeForSheetKey(sheetKey));
+      }, total);
     }, 0);
 
     const hasCustomSheets = marketLines.some((line) => Object.keys(customSheetSizeFormats).some((key) =>

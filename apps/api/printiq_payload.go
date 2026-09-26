@@ -628,7 +628,8 @@ func calculateMarketShippingCost(marketName string, marketLines []campaignLineRe
 			}
 			rate := shippingRateForSheetKey(assetShippingCosts, marketRate, marketName, sheetKey)
 			if useFlatRateMegas(marketRate) {
-				customSheetShipping += rate
+				// All custom sheets in the market share one flat freight charge.
+				customSheetShipping = math.Max(customSheetShipping, rate)
 			} else {
 				customSheetShipping += calculateShippingCost(quantity, rate, shippingBoxSizeForSheetKey(marketRate, sheetKey))
 			}

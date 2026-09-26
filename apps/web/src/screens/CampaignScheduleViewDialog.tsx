@@ -646,13 +646,15 @@ export function CampaignScheduleViewDialog({
           ? shippingCostByMarketAsset.get(`${selectedAsset.market}\x00${selectedAsset.assetId}`)
             ?? findShippingCostsForAsset(selectedAsset.market, [selectedAsset.assetId, selectedAsset.assetSearch, selectedAsset.id, line.assetLabel, line.id])
           : null;
-        return sum + Object.keys(customSheetSizeFormats).reduce((lineSum, sheetKey) => {
+        // Carry the market total through each asset so flat freight is charged once.
+        return Object.keys(customSheetSizeFormats).reduce((lineSum, sheetKey) => {
           if (!customSheetSizeFormats[sheetKey]) return lineSum;
           const quantity = Math.max(0, quantityForSheetKey(line.breakdown as Record<string, number>, sheetKey));
           if (quantity === 0) return lineSum;
           const rate = shippingRateForSheetKey(assetShipping, sheetKey);
-          return lineSum + (useFlatRateMegas ? rate : calculateShippingCost(quantity, rate, shippingBoxSizeForSheetKey(sheetKey)));
-        }, 0);
+          return useFlatRateMegas ? Math.max(lineSum, rate)
+            : lineSum + calculateShippingCost(quantity, rate, shippingBoxSizeForSheetKey(sheetKey));
+        }, sum);
       }, 0);
 
       const hasCustomSheets = marketLines.some((line) => Object.keys(customSheetSizeFormats).some((key) =>
