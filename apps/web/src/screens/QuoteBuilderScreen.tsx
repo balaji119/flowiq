@@ -21,6 +21,8 @@ import {
   OrderFormValues,
   QuantityBreakdown,
   SheetNameOverrides,
+  assignCreativeName,
+  creativeNameValidationError,
   createCampaignAsset,
   createCampaignMarket,
   createDefaultFormValues,
@@ -1361,12 +1363,10 @@ export function QuoteBuilderScreen({
   const [deleteArtworkCandidate, setDeleteArtworkCandidate] = useState<CampaignPrintImage | null>(null);
   const [confirmingArtworkDelete, setConfirmingArtworkDelete] = useState(false);
   const [artworkDialogError, setArtworkDialogError] = useState('');
-  const [creativeNameAssignments, setCreativeNameAssignments] = useState<Record<string, string>>({});
-  const [editingCreativeFileName, setEditingCreativeFileName] = useState<string | null>(null);
-  const [artworkAssignmentMarketByCreativeName, setArtworkAssignmentMarketByCreativeName] = useState<Record<string, string>>({});
-  const [draggingCreativeName, setDraggingCreativeName] = useState<string | null>(null);
-  const [creativeDropTarget, setCreativeDropTarget] = useState<{ name: string; position: 'above' | 'below' } | null>(null);
-  const [recentCreativeSwap, setRecentCreativeSwap] = useState<{ source: string; target: string } | null>(null);
+  const [creativeNameTargetId, setCreativeNameTargetId] = useState<string | null>(null);
+  const [creativeNameSelectionError, setCreativeNameSelectionError] = useState('');
+  const [creativeNameSearch, setCreativeNameSearch] = useState('');
+  const [artworkAssignmentMarketByImageId, setArtworkAssignmentMarketByImageId] = useState<Record<string, string>>({});
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
   const [newAddressDialogOpen, setNewAddressDialogOpen] = useState(false);
   const [addMarketDialogOpen, setAddMarketDialogOpen] = useState(false);
@@ -1404,7 +1404,6 @@ export function QuoteBuilderScreen({
   const lastPersistedValuesRef = useRef('');
   const lastAutoSaveFailedValuesRef = useRef<string | null>(null);
   const autoSaveTimeoutRef = useRef<number | null>(null);
-  const creativeSwapFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSubCampaign = Boolean(parentCampaignId);
   const campaignArtworkUploadJobs = useMemo(
     () => (campaignId ? artworkUploadJobs.filter((job) => job.campaignId === campaignId) : []),
@@ -1442,21 +1441,6 @@ export function QuoteBuilderScreen({
       // Best effort only.
     }
   }
-
-  useEffect(() => {
-    return () => {
-      if (creativeSwapFeedbackTimerRef.current) {
-        clearTimeout(creativeSwapFeedbackTimerRef.current);
-        creativeSwapFeedbackTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    const nextAssignments = normalizeCreativeNameAssignments(values.creativeNameAssignments);
-    if (stableSerialize(nextAssignments) === stableSerialize(creativeNameAssignments)) return;
-    setCreativeNameAssignments(nextAssignments);
-  }, [creativeNameAssignments, values.creativeNameAssignments]);
 
   useEffect(() => {
     setCampaignStartDateInput(formatDateInputDisplay(values.campaignStartDate));
@@ -2044,53 +2028,33 @@ export function QuoteBuilderScreen({
       return name.includes(query);
     });
   }, [artworkSearchQuery, values.printImages]);
-  const creativeNames = useMemo(
-    () => Array.from({ length: Math.max(values.printImages.length, 1) }, (_, index) => `Creative${index + 1}`),
-    [values.printImages.length],
-  );
+  const creativeNames = useMemo(() => {
+    const savedNames = Object.entries(values.creativeNameAssignments ?? {})
+      .filter(([name, id]) => /^Creative[1-9]\d*$/.test(name) && values.printImages.some((image) => image.id === id))
+      .map(([name]) => name);
+    return Array.from(new Set([
+      ...Array.from({ length: Math.max(values.printImages.length, 1) }, (_, index) => `Creative${index + 1}`),
+      ...savedNames,
+    ])).sort((a, b) => Number(a.slice(8)) - Number(b.slice(8)));
+  }, [values.printImages, values.creativeNameAssignments]);
+  const creativeNamesError = creativeNameValidationError(values);
   const artworkImageById = useMemo(() => {
     const map = new Map<string, CampaignPrintImage>();
     values.printImages.forEach((image) => map.set(image.id, image));
     return map;
   }, [values.printImages]);
-  const resolvedCreativeNameAssignments = useMemo(() => {
-    const resolved: Record<string, string> = {};
-    const usedImageIds = new Set<string>();
-
-    creativeNames.forEach((creativeName) => {
-      const mappedId = creativeNameAssignments[creativeName];
-      if (mappedId && artworkImageById.has(mappedId) && !usedImageIds.has(mappedId)) {
-        resolved[creativeName] = mappedId;
-        usedImageIds.add(mappedId);
-      }
-    });
-
-    const unassignedImages = values.printImages.filter((image) => !usedImageIds.has(image.id));
-    let unassignedIndex = 0;
-    creativeNames.forEach((creativeName) => {
-      if (resolved[creativeName]) return;
-      const nextImage = unassignedImages[unassignedIndex];
-      if (!nextImage) return;
-      resolved[creativeName] = nextImage.id;
-      usedImageIds.add(nextImage.id);
-      unassignedIndex += 1;
-    });
-    return resolved;
-  }, [artworkImageById, creativeNameAssignments, creativeNames, values.printImages]);
-  const filteredCreativeNames = useMemo(() => {
+  const resolvedCreativeNameAssignments = useMemo(() => Object.fromEntries(
+    Object.entries(values.creativeNameAssignments ?? {}).filter(([name, imageId]) =>
+      /^Creative[1-9]\d*$/.test(name) && artworkImageById.has(imageId)),
+  ), [artworkImageById, values.creativeNameAssignments]);
+  const creativeNameByImageId = useMemo(() => new Map(
+    Object.entries(resolvedCreativeNameAssignments).map(([name, id]) => [id, name]),
+  ), [resolvedCreativeNameAssignments]);
+  const filteredCreativeImages = useMemo(() => {
     const query = artworkSearchQuery.trim().toLowerCase();
-    if (!query) return creativeNames;
-    return creativeNames.filter((creativeName) => {
-      const imageId = resolvedCreativeNameAssignments[creativeName] || '';
-      const image = imageId ? artworkImageById.get(imageId) ?? null : null;
-      const searchable = [
-        creativeName,
-        image?.name || '',
-        image?.fileName || '',
-      ].join(' ').toLowerCase();
-      return searchable.includes(query);
-    });
-  }, [artworkImageById, artworkSearchQuery, creativeNames, resolvedCreativeNameAssignments]);
+    return values.printImages.filter((image) =>
+      [creativeNameByImageId.get(image.id) || '', image.name, image.fileName].join(' ').toLowerCase().includes(query));
+  }, [artworkSearchQuery, creativeNameByImageId, values.printImages]);
   const assignedAssetRefsByArtworkImageId = useMemo(() => {
     const refsByImageId = new Map<string, Array<{ marketId: string; assetId: string }>>();
     const pushRef = (imageId: string, marketId: string, assetId: string) => {
@@ -2121,20 +2085,8 @@ export function QuoteBuilderScreen({
     });
     return index;
   }, [assignedAssetRefsByArtworkImageId]);
-  const defaultArtworkAssignmentMarketByCreativeName = useMemo(() => {
-    const defaults: Record<string, string> = {};
-    creativeNames.forEach((creativeName) => {
-      const imageId = resolvedCreativeNameAssignments[creativeName] || '';
-      const firstAssignedRef = imageId ? assignedAssetRefsByArtworkImageId.get(imageId)?.[0] : null;
-      defaults[creativeName] = firstAssignedRef?.marketId || values.campaignMarkets[0]?.id || '';
-    });
-    return defaults;
-  }, [assignedAssetRefsByArtworkImageId, creativeNames, resolvedCreativeNameAssignments, values.campaignMarkets]);
   const creativeNumberByImageId = useMemo(() => {
     const next = new Map<string, number>();
-    values.printImages.forEach((image, index) => {
-      next.set(image.id, index + 1);
-    });
     Object.entries(resolvedCreativeNameAssignments).forEach(([creativeName, imageId]) => {
       const match = /^Creative(\d+)$/i.exec((creativeName || '').trim());
       if (!match) return;
@@ -2237,12 +2189,13 @@ export function QuoteBuilderScreen({
   }, [error, hasDeliveryDueDate, hasPurchaseOrderNumber, isCampaignStartDatePast, isDeliveryDueDatePast]);
 
   useEffect(() => {
+    if (creativeNamesError && reviewActionError === creativeNamesError) return;
     if (!hasDeliveryDueDate && reviewActionNeedsDueDate) return;
     if (reviewActionError.toLowerCase().includes('purchase order number') && !hasPurchaseOrderNumber) return;
     if (!reviewActionError) return;
     setReviewActionError('');
     setReviewActionNeedsDueDate(false);
-  }, [hasDeliveryDueDate, hasPurchaseOrderNumber, reviewActionError, reviewActionNeedsDueDate]);
+  }, [creativeNamesError, hasDeliveryDueDate, hasPurchaseOrderNumber, reviewActionError, reviewActionNeedsDueDate]);
 
   const setReviewValidationError = (message: string, options?: { dueDate?: boolean }) => {
     setError(message);
@@ -2874,115 +2827,26 @@ export function QuoteBuilderScreen({
     setAssignArtworkTarget(null);
     setArtworkDialogError('');
     setArtworkSearchQuery('');
-    setEditingCreativeFileName(null);
-    setDraggingCreativeName(null);
-    setCreativeDropTarget(null);
-    setRecentCreativeSwap(null);
-    if (creativeSwapFeedbackTimerRef.current) {
-      clearTimeout(creativeSwapFeedbackTimerRef.current);
-      creativeSwapFeedbackTimerRef.current = null;
-    }
+    setCreativeNameTargetId(null);
+    setCreativeNameSelectionError('');
     if (artworkPdfInputRef.current) {
       artworkPdfInputRef.current.value = '';
     }
   }
 
-  function showCreativeSwapFeedback(sourceCreativeName: string, targetCreativeName: string) {
-    setRecentCreativeSwap({ source: sourceCreativeName, target: targetCreativeName });
-    if (creativeSwapFeedbackTimerRef.current) {
-      clearTimeout(creativeSwapFeedbackTimerRef.current);
-    }
-    creativeSwapFeedbackTimerRef.current = setTimeout(() => {
-      setRecentCreativeSwap(null);
-      creativeSwapFeedbackTimerRef.current = null;
-    }, 650);
-  }
-
-  function reorderCreativeAssignments(sourceCreativeName: string, targetCreativeName: string, position: 'above' | 'below') {
-    if (isSubmittedCampaign) return;
-    if (sourceCreativeName === targetCreativeName) return;
-    const orderedImageIds = creativeNames.map((creativeName) => resolvedCreativeNameAssignments[creativeName] || '');
-    const sourceIndex = creativeNames.indexOf(sourceCreativeName);
-    const targetIndex = creativeNames.indexOf(targetCreativeName);
-    if (sourceIndex < 0 || targetIndex < 0) return;
-    const movingImageId = orderedImageIds[sourceIndex];
-    if (!movingImageId) return;
-
-    const nextIds = [...orderedImageIds];
-    nextIds.splice(sourceIndex, 1);
-    let insertIndex = position === 'below' ? targetIndex + 1 : targetIndex;
-    if (sourceIndex < insertIndex) insertIndex -= 1;
-    nextIds.splice(insertIndex, 0, movingImageId);
-
-    const nextAssignments: Record<string, string> = {};
-    creativeNames.forEach((creativeName, index) => {
-      const imageId = nextIds[index] || '';
-      if (imageId) {
-        nextAssignments[creativeName] = imageId;
-      }
-    });
-    setCreativeNameAssignments(nextAssignments);
-    setValues((current) => {
-      if (current.printImages.length <= 1) return current;
-      const imageById = new Map(current.printImages.map((image) => [image.id, image]));
-      const reorderedImages: CampaignPrintImage[] = [];
-      nextIds.forEach((imageId) => {
-        const image = imageById.get(imageId);
-        if (!image) return;
-        reorderedImages.push(image);
-        imageById.delete(imageId);
-      });
-      if (reorderedImages.length === 0) return current;
-      if (imageById.size > 0) reorderedImages.push(...Array.from(imageById.values()));
-      const normalizedCurrentAssignments = normalizeCreativeNameAssignments(current.creativeNameAssignments);
-      const isSameOrder =
-        reorderedImages.length === current.printImages.length
-        && reorderedImages.every((image, index) => image.id === current.printImages[index]?.id);
-      const isSameAssignments = stableSerialize(normalizedCurrentAssignments) === stableSerialize(nextAssignments);
-      if (isSameOrder && isSameAssignments) return current;
-      return {
-        ...current,
-        printImages: reorderedImages,
-        creativeNameAssignments: nextAssignments,
-      };
-    });
-    showCreativeSwapFeedback(sourceCreativeName, targetCreativeName);
-  }
-
-  function changeCreativeArtworkFile(creativeName: string, nextImageId: string) {
-    if (isSubmittedCampaign) return;
-    const safeCreativeName = (creativeName || '').trim();
-    const safeNextImageId = (nextImageId || '').trim();
-    if (!safeCreativeName || !safeNextImageId) return;
-
-    const currentImageId = resolvedCreativeNameAssignments[safeCreativeName] || '';
-    if (currentImageId === safeNextImageId) {
-      setEditingCreativeFileName(null);
+  function selectCreativeName(name: string) {
+    if (isSubmittedCampaign || !creativeNameTargetId) return;
+    const result = assignCreativeName(values.creativeNameAssignments ?? {}, values.printImages.map((image) => image.id), creativeNameTargetId, name);
+    if (result.error) {
+      setCreativeNameSelectionError(result.error);
       return;
     }
-
-    const nextAssignments = { ...resolvedCreativeNameAssignments, [safeCreativeName]: safeNextImageId };
-    const swappedCreativeName = creativeNames.find((entry) => entry !== safeCreativeName && resolvedCreativeNameAssignments[entry] === safeNextImageId);
-    if (swappedCreativeName && currentImageId) {
-      nextAssignments[swappedCreativeName] = currentImageId;
-    }
-
-    setCreativeNameAssignments(nextAssignments);
     setValues((current) => {
-      const normalizedCurrentAssignments = normalizeCreativeNameAssignments(current.creativeNameAssignments);
-      const isSameAssignments = stableSerialize(normalizedCurrentAssignments) === stableSerialize(nextAssignments);
-      if (isSameAssignments) return current;
-      return {
-        ...current,
-        creativeNameAssignments: nextAssignments,
-      };
+      const latest = assignCreativeName(current.creativeNameAssignments ?? {}, current.printImages.map((image) => image.id), creativeNameTargetId, name);
+      return latest.error ? current : { ...current, creativeNameAssignments: latest.assignments };
     });
-    if (swappedCreativeName) {
-      showCreativeSwapFeedback(safeCreativeName, swappedCreativeName);
-    } else {
-      showCreativeSwapFeedback(safeCreativeName, safeCreativeName);
-    }
-    setEditingCreativeFileName(null);
+    setCreativeNameSelectionError('');
+    setCreativeNameTargetId(null);
   }
 
   function updateArtworkCode(imageId: string, code: string) {
@@ -3634,6 +3498,11 @@ export function QuoteBuilderScreen({
       setQuoteResponseMessage('Test submit is available only for super admin.');
       return;
     }
+    if (creativeNamesError) {
+      setQuoteResponseStatus('error');
+      setQuoteResponseMessage(creativeNamesError);
+      return;
+    }
     if (!hasUploadedPurchaseOrder) {
       setQuoteResponseStatus('error');
       setQuoteResponseMessage('Upload a purchase order file before submitting.');
@@ -4017,6 +3886,8 @@ export function QuoteBuilderScreen({
     summaryOverride: CampaignCalculationSummary | null = null,
   ): Promise<GeneratedVisualExportFile[]> {
     try {
+      const nameError = creativeNameValidationError(values);
+      if (nameError) throw new Error(nameError);
       const ExcelJSRuntime = ExcelJS as any;
       const generationStartedAt = performance.now();
       const logInstallGeneration = (stage: string, details?: Record<string, unknown>) => {
@@ -4048,9 +3919,9 @@ export function QuoteBuilderScreen({
       });
 
       const imageById = new Map(
-        values.printImages.map((image, index) => [
+        values.printImages.map((image) => [
           image.id,
-          { image, creativeNumber: creativeNumberByImageId.get(image.id) ?? (index + 1) },
+          { image, creativeNumber: creativeNumberByImageId.get(image.id)! },
         ]),
       );
       const mappingOptionByMarketAssetId = new Map<string, MarketMetadata['assets'][number]>();
@@ -5721,6 +5592,7 @@ export function QuoteBuilderScreen({
   }
 
   async function downloadArtworkVisuals() {
+    if (creativeNamesError) { setReviewValidationError(creativeNamesError); return false; }
     if (exportingTemplates || sendingAdsEmail) return false;
     if (!hasDeliveryDueDate) {
       setReviewValidationError('Add a due date for each market before downloading visuals.', { dueDate: true });
@@ -5778,6 +5650,7 @@ export function QuoteBuilderScreen({
   }
 
   async function downloadInstallationSheet() {
+    if (creativeNamesError) { setReviewValidationError(creativeNamesError); return false; }
     if (exportingTemplates || sendingAdsEmail) return false;
     const installDownloadRequestId = `installs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const installDownloadStartedAt = performance.now();
@@ -5973,6 +5846,7 @@ export function QuoteBuilderScreen({
   }, [autoSendEmailToAds, loadingMetadata, loadingCampaign, campaignId]);
 
   async function sendArtworkEmailToAds() {
+    if (creativeNamesError) { setReviewValidationError(creativeNamesError); return false; }
     if (sendingAdsEmail || exportingTemplates) return false;
     if (!hasDeliveryDueDate) {
       setReviewValidationError('Add a due date for each market before sending email to ADS.', { dueDate: true });
@@ -8104,6 +7978,9 @@ export function QuoteBuilderScreen({
                 {artworkDialogError}
               </div>
             ) : null}
+            {creativeNamesError ? (
+              <p className="rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">{creativeNamesError}</p>
+            ) : null}
             {isSubCampaign ? (
               <div className="rounded-md border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm font-medium text-sky-100">
                 Artwork deletion is disabled for sub campaigns because these files may also be referenced by the parent campaign.
@@ -8112,95 +7989,40 @@ export function QuoteBuilderScreen({
             {values.printImages.length > 0 ? (
               <div className="min-h-[calc(95vh-9rem)] max-h-[calc(95vh-9rem)] overflow-auto rounded-lg border border-slate-700 bg-slate-950/70 p-3">
                 <div className="min-h-full space-y-3">
-                  {filteredCreativeNames.map((creativeName) => {
-                    const mappedImageId = resolvedCreativeNameAssignments[creativeName] || '';
-                    const mappedImage = mappedImageId ? artworkImageById.get(mappedImageId) ?? null : null;
+                  {filteredCreativeImages.map((mappedImage) => {
+                    const mappedImageId = mappedImage.id;
+                    const creativeName = creativeNameByImageId.get(mappedImageId) || '';
                     const artworkSrc = mappedImage?.imageUrl || mappedImage?.thumbnailUrl ? buildApiUrl(mappedImage.imageUrl || mappedImage.thumbnailUrl || '') : '';
                     const artworkCode = mappedImageId ? values.artworkCodes?.[mappedImageId] ?? '' : '';
-                    const isSwapFeedbackRow = recentCreativeSwap?.source === creativeName || recentCreativeSwap?.target === creativeName;
-                    const selectedAssignmentMarketId = artworkAssignmentMarketByCreativeName[creativeName] || defaultArtworkAssignmentMarketByCreativeName[creativeName] || '';
+                    const selectedAssignmentMarketId = artworkAssignmentMarketByImageId[mappedImageId] || assignedAssetRefsByArtworkImageId.get(mappedImageId)?.[0]?.marketId || '';
                     const selectedAssignmentMarket = values.campaignMarkets.find((market) => market.id === selectedAssignmentMarketId) ?? values.campaignMarkets[0] ?? null;
                     const selectedArtworkAssetKeys = mappedImageId ? artworkAssignedAssetKeySetByImageId.get(mappedImageId) ?? new Set<string>() : new Set<string>();
                     return (
                       <div
-                        key={`creative-name-row-${creativeName}`}
-                        className={cn(
-                          'grid gap-4 rounded-lg border border-slate-700/80 bg-slate-900/70 p-3 transition-colors duration-500 ease-out lg:grid-cols-[16rem_12rem_minmax(24rem,1fr)_24rem]',
-                          isSwapFeedbackRow ? 'border-violet-400/50 bg-violet-500/10' : '',
-                          creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'above' ? 'border-t-2 border-t-violet-400' : '',
-                          creativeDropTarget?.name === creativeName && creativeDropTarget.position === 'below' ? 'border-b-2 border-b-violet-400' : '',
-                          draggingCreativeName ? 'bg-slate-900/85' : '',
-                        )}
-                        onDragOver={(event) => {
-                          if (!draggingCreativeName || draggingCreativeName === creativeName) return;
-                          event.preventDefault();
-                          event.dataTransfer.dropEffect = 'move';
-                          const rect = event.currentTarget.getBoundingClientRect();
-                          const position = event.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
-                          if (creativeDropTarget?.name !== creativeName || creativeDropTarget.position !== position) {
-                            setCreativeDropTarget({ name: creativeName, position });
-                          }
-                        }}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          const sourceCreativeName = event.dataTransfer.getData('text/plain');
-                          if (!sourceCreativeName || sourceCreativeName === creativeName) return;
-                          const rect = event.currentTarget.getBoundingClientRect();
-                          const position = event.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
-                          reorderCreativeAssignments(sourceCreativeName, creativeName, position);
-                          setDraggingCreativeName(null);
-                          setCreativeDropTarget(null);
-                        }}
+                        key={`creative-name-row-${mappedImageId}`}
+                        className="grid gap-4 rounded-lg border border-slate-700/80 bg-slate-900/70 p-3 lg:grid-cols-[16rem_12rem_minmax(24rem,1fr)_24rem]"
                       >
                         <div className="flex min-w-0 flex-col justify-between gap-3 rounded-md border border-slate-700/70 bg-slate-950/55 p-3">
                           <div className="min-w-0 space-y-3">
                             <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Name</p>
-                              <p className="mt-1 break-words text-sm font-semibold text-slate-100">{creativeName}</p>
+                              <Label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500" htmlFor={`creative-name-${mappedImageId}`}>Name</Label>
+                              <Button
+                                id={`creative-name-${mappedImageId}`}
+                                aria-label={`Select creative name for ${mappedImage.fileName}`}
+                                aria-haspopup="dialog"
+                                className="mt-1 w-full justify-between"
+                                disabled={isSubmittedCampaign}
+                                onClick={() => { setCreativeNameTargetId(mappedImageId); setCreativeNameSelectionError(''); setCreativeNameSearch(''); }}
+                                type="button"
+                                variant="outline"
+                              >
+                                {creativeName || 'Select creative name'}
+                                <Search className="ml-2 h-4 w-4" />
+                              </Button>
                             </div>
                             <div>
                               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">File</p>
-                              {editingCreativeFileName === creativeName ? (
-                                <div className="mt-2 space-y-2">
-                                  <select
-                                    aria-label={`Change artwork file for ${creativeName}`}
-                                    className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-xs font-medium text-slate-100 outline-none transition focus:border-violet-300/70 focus:ring-1 focus:ring-violet-300/35"
-                                    onChange={(event) => changeCreativeArtworkFile(creativeName, event.target.value)}
-                                    value={mappedImageId}
-                                  >
-                                    {values.printImages.map((image) => (
-                                      <option className="bg-slate-950 text-slate-100" key={`creative-file-option-${creativeName}-${image.id}`} value={image.id}>
-                                        {image.name || image.fileName || `Artwork ${image.id.slice(0, 6)}`}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <Button
-                                    className="h-7 rounded-md border border-white/10 px-2 text-xs text-slate-300"
-                                    onClick={() => setEditingCreativeFileName(null)}
-                                    type="button"
-                                    variant="ghost"
-                                  >
-                                    Cancel
-                                  </Button>
-                                </div>
-                              ) : (
-                                <div className="mt-1 flex items-start justify-between gap-2">
-                                  <p className="min-w-0 break-words text-xs leading-5 text-slate-300">
-                                    {mappedImage ? mappedImage.name || mappedImage.fileName : 'No artwork mapped'}
-                                  </p>
-                                  <Button
-                                    aria-label={`Change artwork file for ${creativeName}`}
-                                    className="h-7 w-7 shrink-0 rounded-md border border-white/10 p-0 text-slate-200"
-                                    disabled={values.printImages.length <= 1}
-                                    onClick={() => setEditingCreativeFileName(creativeName)}
-                                    title={values.printImages.length > 1 ? 'Change file' : 'Upload another artwork file to change'}
-                                    type="button"
-                                    variant="ghost"
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
-                              )}
+                              <p className="mt-1 break-words text-xs leading-5 text-slate-300">{mappedImage.name || mappedImage.fileName}</p>
                             </div>
                           </div>
                           {mappedImage && !isSubCampaign ? (
@@ -8241,21 +8063,10 @@ export function QuoteBuilderScreen({
                             'flex min-w-0 items-center justify-center rounded-md border border-slate-700 bg-slate-950/45 p-3 text-left transition hover:border-violet-300/45 hover:bg-slate-950/70',
                             assignArtworkTarget !== null ? 'cursor-pointer' : '',
                           )}
-                          draggable={Boolean(mappedImageId)}
                           onClick={() => {
                             if (assignArtworkTarget !== null && mappedImageId) {
                               assignArtworkImageToTarget(mappedImageId);
                             }
-                          }}
-                          onDragEnd={() => {
-                            setDraggingCreativeName(null);
-                            setCreativeDropTarget(null);
-                          }}
-                          onDragStart={(event) => {
-                            if (!mappedImageId) return;
-                            event.dataTransfer.setData('text/plain', creativeName);
-                            event.dataTransfer.effectAllowed = 'move';
-                            setDraggingCreativeName(creativeName);
                           }}
                           type="button"
                         >
@@ -8277,18 +8088,18 @@ export function QuoteBuilderScreen({
                           {values.campaignMarkets.length > 0 ? (
                             <div className="mt-2 flex min-h-0 flex-1 flex-col gap-2">
                               <select
-                                aria-label={`Choose market for ${creativeName}`}
+                                aria-label={`Choose market for ${creativeName || mappedImage.fileName}`}
                                 className="h-9 w-full shrink-0 rounded-md border border-slate-700 bg-slate-900 px-2 text-xs font-medium text-slate-100 outline-none transition focus:border-violet-300/70 focus:ring-1 focus:ring-violet-300/35"
                                 onChange={(event) =>
-                                  setArtworkAssignmentMarketByCreativeName((current) => ({
+                                  setArtworkAssignmentMarketByImageId((current) => ({
                                     ...current,
-                                    [creativeName]: event.target.value,
+                                    [mappedImageId]: event.target.value,
                                   }))
                                 }
                                 value={selectedAssignmentMarket?.id || ''}
                               >
                                 {values.campaignMarkets.map((market) => (
-                                  <option className="bg-slate-950 text-slate-100" key={`artwork-assignment-market-${creativeName}-${market.id}`} value={market.id}>
+                                  <option className="bg-slate-950 text-slate-100" key={`artwork-assignment-market-${mappedImageId}-${market.id}`} value={market.id}>
                                     {market.market || 'Unnamed market'}
                                   </option>
                                 ))}
@@ -8300,7 +8111,7 @@ export function QuoteBuilderScreen({
                                     return (
                                       <label
                                         className="flex items-start gap-2 rounded px-2 py-1.5 text-xs text-slate-200 hover:bg-slate-800/70"
-                                        key={`artwork-assignment-asset-${creativeName}-${selectedAssignmentMarket.id}-${asset.id}`}
+                                        key={`artwork-assignment-asset-${mappedImageId}-${selectedAssignmentMarket.id}-${asset.id}`}
                                       >
                                         <input
                                           checked={selectedArtworkAssetKeys.has(assetKey)}
@@ -8325,7 +8136,7 @@ export function QuoteBuilderScreen({
                       </div>
                     );
                   })}
-                  {filteredCreativeNames.length === 0 ? (
+                  {filteredCreativeImages.length === 0 ? (
                     <div className="flex min-h-[calc(95vh-11rem)] items-center justify-center rounded-md border border-dashed border-slate-700 bg-slate-900/70 px-4 py-8 text-center text-sm text-slate-400">
                       No artwork matches this search.
                     </div>
@@ -8338,6 +8149,25 @@ export function QuoteBuilderScreen({
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(creativeNameTargetId)} onOpenChange={(open) => { if (!open) setCreativeNameTargetId(null); }}>
+        <DialogContent style={{ width: 'min(calc(100vw - 2rem), 32rem)' }}>
+          <DialogHeader>
+            <DialogTitle>Select creative name</DialogTitle>
+            <DialogDescription>{artworkImageById.get(creativeNameTargetId || '')?.fileName}</DialogDescription>
+          </DialogHeader>
+          <Input aria-label="Search creative names" placeholder="Search creative names" value={creativeNameSearch} onChange={(event) => setCreativeNameSearch(event.target.value)} />
+          {creativeNameSelectionError ? <p role="alert" className="rounded-md border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100">{creativeNameSelectionError}</p> : null}
+          <div className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto">
+            {creativeNames.filter((name) => name.toLowerCase().includes(creativeNameSearch.toLowerCase().trim())).map((name) => (
+              <Button key={name} type="button" variant="outline" disabled={isSubmittedCampaign} onClick={() => selectCreativeName(name)}>
+                {name}{resolvedCreativeNameAssignments[name] && resolvedCreativeNameAssignments[name] !== creativeNameTargetId ? ' (chosen)' : ''}
+              </Button>
+            ))}
+          </div>
+          <Button type="button" variant="outline" disabled={isSubmittedCampaign} onClick={() => selectCreativeName('')}>Clear creative name</Button>
         </DialogContent>
       </Dialog>
 

@@ -1363,6 +1363,10 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err := validateCreativeNames(campaign.Values); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 	if strings.TrimSpace(campaign.Values.PurchaseOrderNumber) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Enter a purchase order number before submitting."})
 		return

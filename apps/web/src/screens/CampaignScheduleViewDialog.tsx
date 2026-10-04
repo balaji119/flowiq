@@ -1,7 +1,7 @@
 import { shippingLinesWithCreatives } from '../services/shippingCreatives';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CopyPlus, LoaderCircle, ShoppingCart } from 'lucide-react';
-import { CampaignRecord, CustomPrintCostRecord, formatKeys, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketShippingRateRecord } from '@flowiq/shared';
+import { creativeNameValidationError, CampaignRecord, CustomPrintCostRecord, formatKeys, MarketAssetPrintingCostRecord, MarketAssetShippingCostRecord, MarketShippingRateRecord } from '@flowiq/shared';
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@flowiq/ui';
 import { useAuth } from '../context/AuthContext';
 import { submitCampaignToPrintIQ } from '../services/campaignApi';
@@ -173,6 +173,9 @@ export function CampaignScheduleViewDialog({
   function startQuoteAutomation(action: QuoteAutomationAction) {
     if (!campaign || typeof window === 'undefined') return;
     if (downloadingVisuals || downloadingInstalls || sendingAdsEmail) return;
+
+    const nameError = creativeNameValidationError(campaign.values);
+    if (nameError) { setActionSuccess(''); setActionError(nameError); return; }
 
     if (action === 'download-visuals' || action === 'download-installs') {
       if (!hasDeliveryDueDate) {
@@ -708,6 +711,8 @@ export function CampaignScheduleViewDialog({
     if (!campaign || isEditLockedByOtherUser || (isSubmittedCampaign && !canSubmitSubmittedCampaign) || submittingOrder || downloadingVisuals || downloadingInstalls || sendingAdsEmail) return;
     setActionError('');
     setActionSuccess('');
+    const nameError = creativeNameValidationError(campaign.values);
+    if (nameError) { setActionError(nameError); return; }
     if (!hasUploadedPurchaseOrder) {
       setActionError('Upload a purchase order file before submitting.');
       return;
