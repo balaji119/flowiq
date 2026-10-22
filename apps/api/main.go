@@ -1400,9 +1400,14 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, map[string]string{"error": "Unable to load submission progress"})
 		return
 	}
-	if journal != nil && (journal.Fingerprint != campaignSubmissionFingerprint(campaign) || journal.Test != testSubmission) {
-		writeJSON(w, 409, map[string]string{"error": "This campaign has an unfinished PrintIQ submission with different inputs. ADS must reconcile it before submitting changed data"})
-		return
+	if journal != nil && journal.needsFreshSubmission(campaign, testSubmission) {
+		// Retain the old attempt for audit, but rebuild with current inputs and mappings.
+		// A fresh attempt can create duplicate PrintIQ quotes/jobs.
+		if _, err := a.campaignStore.pool.Exec(r.Context(), `UPDATE printiq_submission_progress SET completed=true, updated_at=NOW(), data=jsonb_set(data, '{Superseded}', 'true'::jsonb) WHERE id=$1 AND campaign_id=$2 AND tenant_id=$3 AND NOT completed`, journal.ID, campaign.ID, campaign.TenantID); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "Unable to restart submission"})
+			return
+		}
+		journal = nil
 	}
 	if journal == nil {
 		if err := a.checkPrintIQHistory(r.Context(), campaign); err != nil {

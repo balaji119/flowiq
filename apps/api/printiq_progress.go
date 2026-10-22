@@ -122,6 +122,18 @@ func campaignSubmissionFingerprint(c *campaignRecord) string {
 	return fmt.Sprintf("%x", sha256.Sum256(encoded))
 }
 
+func (j *printIQJournal) needsFreshSubmission(c *campaignRecord, test bool) bool {
+	if j.Fingerprint != campaignSubmissionFingerprint(c) || j.Test != test {
+		return true
+	}
+	step := j.Steps[j.CurrentStep]
+	if step == nil || step.State != "failed" || step.Failure == nil {
+		return false
+	}
+	message, _ := step.Failure.Body["printIqMessage"].(string)
+	return strings.EqualFold(strings.TrimSpace(message), "Product code does not exist.")
+}
+
 func (a *app) loadPrintIQJournal(ctx context.Context, campaign *campaignRecord) (*printIQJournal, error) {
 	var raw []byte
 	err := a.campaignStore.pool.QueryRow(ctx, `SELECT data FROM printiq_submission_progress WHERE campaign_id=$1 AND tenant_id=$2 AND NOT completed`, campaign.ID, campaign.TenantID).Scan(&raw)

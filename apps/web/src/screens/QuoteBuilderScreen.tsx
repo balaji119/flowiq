@@ -457,6 +457,8 @@ function normalizeFormValues(values: OrderFormValues): OrderFormValues {
       sourcePdfFileName: image.sourcePdfFileName,
       sourcePdfStoredName: image.sourcePdfStoredName,
       sourcePdfUrl: normalizeCampaignImageUrl(image.sourcePdfUrl),
+      sourcePdfPageNumber: image.sourcePdfPageNumber,
+      sourcePdfPageCount: image.sourcePdfPageCount,
     })),
     supportingDocuments: (values.supportingDocuments ?? []).map((document) => ({ ...document })),
     creativeNameAssignments: normalizeCreativeNameAssignments(values.creativeNameAssignments),

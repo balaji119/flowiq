@@ -10,6 +10,33 @@ import (
 	"testing"
 )
 
+func TestPrintIQFreshSubmission(t *testing.T) {
+	campaign := &campaignRecord{}
+	for _, tc := range []struct {
+		name, state, message string
+		changed, test, want  bool
+	}{
+		{name: "unchanged resumes"},
+		{name: "changed inputs restart", changed: true, want: true},
+		{name: "changed mode restarts", test: true, want: true},
+		{name: "missing product rebuilds mappings", state: "failed", message: "Product code does not exist.", want: true},
+		{name: "uncertain outcome stays blocked", state: "pending", message: "Product code does not exist."},
+		{name: "upload rejection resumes", state: "failed", message: "Artwork rejected"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			j := &printIQJournal{Fingerprint: campaignSubmissionFingerprint(campaign), CurrentStep: "Melbourne:7", Steps: map[string]*printIQSavedStep{
+				"Melbourne:7": {State: tc.state, Failure: &printIQSubmissionFailure{Body: map[string]any{"printIqMessage": tc.message}}},
+			}}
+			if tc.changed {
+				j.Fingerprint = "old inputs"
+			}
+			if got := j.needsFreshSubmission(campaign, tc.test); got != tc.want {
+				t.Fatalf("needsFreshSubmission = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPrintIQJournalResumeAfterRestart(t *testing.T) {
 	j := &printIQJournal{Steps: map[string]*printIQSavedStep{}}
 	var disk []byte
