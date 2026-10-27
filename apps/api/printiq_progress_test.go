@@ -79,7 +79,9 @@ func TestPrintIQAutomaticUploadRetry(t *testing.T) {
 	}{
 		{"recovers", "UploadArtworkURL", "Artwork rejected", true, 2},
 		{"stops after one retry", "UploadArtworkURL", "Artwork rejected", false, 2},
-		{"application timeout", "UploadArtworkURL", "The operation has timed out", false, 1},
+		{"application timeout recovers", "UploadArtworkURL", "The operation has timed out", true, 2},
+		{"application timeout stops after one retry", "UploadArtworkURL", "The operation has timed out", false, 2},
+		{"quote timeout is not retried", "AcceptQuote", "The operation has timed out", false, 1},
 		{"network error", "UploadArtworkURL", "", false, 1},
 		{"quote creation", "CreateQuoteWithDelivery", "Rejected", false, 1},
 	} {
@@ -139,13 +141,13 @@ func TestPrintIQTimeoutRequiresReconciliation(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		j.run("Sydney:5", "UploadArtworkURL", map[string]any{"JobNo": "J1"}, call)
 	}
-	if calls != 1 {
-		t.Fatal("timeout was blindly retried")
+	if calls != 2 {
+		t.Fatal("timeout did not stop after one automatic retry")
 	}
 	if err := j.resolveUpload("Sydney:5", "confirmed_uploaded", "Verified attachment on J1", "admin"); err != nil {
 		t.Fatal(err)
 	}
-	if _, failure := j.run("Sydney:5", "UploadArtworkURL", map[string]any{"JobNo": "J1"}, call); failure != nil || calls != 1 {
+	if _, failure := j.run("Sydney:5", "UploadArtworkURL", map[string]any{"JobNo": "J1"}, call); failure != nil || calls != 2 {
 		t.Fatal("confirmed upload resent")
 	}
 	j.Steps["create"] = &printIQSavedStep{Name: "CreateQuoteWithDelivery", State: "pending"}

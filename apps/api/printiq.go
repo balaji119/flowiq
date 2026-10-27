@@ -491,6 +491,18 @@ func (o *optionService) acceptQuote(payload any) (any, int, error) {
 }
 
 func (o *optionService) uploadArtworkURL(payload any) (any, int, error) {
+	// HEAD is diagnostic only: unavailable metadata must not block an upload.
+	fields, _ := payload.(map[string]any)
+	artworkURL, _ := fields["ArtworkUrl"].(string)
+	if request, err := http.NewRequest(http.MethodHead, artworkURL, nil); err == nil {
+		client := &http.Client{Timeout: 5 * time.Second}
+		if response, err := client.Do(request); err == nil {
+			if response.StatusCode >= 200 && response.StatusCode < 300 {
+				log.Printf("PrintIQ artwork upload job=%v size_bytes=%d", fields["JobNo"], response.ContentLength)
+			}
+			response.Body.Close()
+		}
+	}
 	return o.postQuoteProcess("UploadArtworkURL", payload)
 }
 

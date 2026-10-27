@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -48,9 +49,9 @@ func progressFailure(message string) *printIQSubmissionFailure {
 func (j *printIQJournal) run(key, step string, payload any, call func() (any, *printIQSubmissionFailure)) (any, *printIQSubmissionFailure) {
 	response, failure := j.runOnce(key, step, payload, call, false)
 	saved := j.Steps[key]
-	// Retry only a durably recorded, explicit upload rejection. Unknown outcomes,
-	// persistence failures and all quote/job operations must never be replayed.
-	if step != "UploadArtworkURL" || failure == nil || saved == nil || saved.State != "failed" || saved.Failure != failure {
+	// Retry one explicit upload rejection or PrintIQ timeout response. Transport
+	// failures and quote/job operations are not automatically replayed.
+	if step != "UploadArtworkURL" || failure == nil || saved == nil || (saved.State != "failed" && saved.State != "retryable_timeout") || saved.Failure != failure {
 		return response, failure
 	}
 	saved.AutoRetry = true
@@ -97,7 +98,16 @@ func (j *printIQJournal) runOnce(key, step string, payload any, call func() (any
 	if err := j.save(); err != nil {
 		return nil, progressFailure("Unable to save submission progress; no further PrintIQ request was sent")
 	}
+	attempt := 1
+	if autoRetry {
+		attempt = 2
+	}
+	started := time.Now()
 	response, failure := call()
+	if step == "UploadArtworkURL" {
+		fields, _ := payload.(map[string]any)
+		log.Printf("PrintIQ artwork upload submission=%s step=%s job=%v attempt=%d duration_ms=%d success=%t", j.ID, key, fields["JobNo"], attempt, time.Since(started).Milliseconds(), failure == nil)
+	}
 	saved.Response, saved.Failure = response, failure
 	if failure == nil {
 		saved.State = "done"
@@ -108,6 +118,9 @@ func (j *printIQJournal) runOnce(key, step string, payload any, call func() (any
 		lower := strings.ToLower(message)
 		if explicit && !strings.Contains(lower, "timed out") && !strings.Contains(lower, "timeout") {
 			saved.State = "failed"
+		} else if explicit && step == "UploadArtworkURL" && !autoRetry {
+			// A second timeout stays pending for reconciliation; never retry forever.
+			saved.State = "retryable_timeout"
 		}
 	}
 	if err := j.save(); err != nil {
@@ -179,7 +192,7 @@ func (a *app) bindPrintIQJournal(requestContext context.Context, j *printIQJourn
 		}
 	}
 	j.wait = func() error { return waitFor(time.Second) }
-	j.waitRetry = func() error { return waitFor(2 * time.Second) }
+	j.waitRetry = func() error { return waitFor(30 * time.Second) }
 }
 
 func (a *app) createPrintIQJournal(ctx context.Context, campaign *campaignRecord, j *printIQJournal) error {
