@@ -144,7 +144,9 @@ func (j *printIQJournal) needsFreshSubmission(c *campaignRecord, test bool) bool
 		return false
 	}
 	message, _ := step.Failure.Body["printIqMessage"].(string)
-	return strings.EqualFold(strings.TrimSpace(message), "Product code does not exist.")
+	message = strings.TrimSpace(message)
+	return strings.EqualFold(message, "Product code does not exist.") ||
+		strings.EqualFold(message, "Failed to get price for product.")
 }
 
 func (a *app) loadPrintIQJournal(ctx context.Context, campaign *campaignRecord) (*printIQJournal, error) {

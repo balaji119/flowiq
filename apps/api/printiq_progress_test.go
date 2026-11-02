@@ -20,6 +20,9 @@ func TestPrintIQFreshSubmission(t *testing.T) {
 		{name: "changed inputs restart", changed: true, want: true},
 		{name: "changed mode restarts", test: true, want: true},
 		{name: "missing product rebuilds mappings", state: "failed", message: "Product code does not exist.", want: true},
+		{name: "pricing failure starts new quote", state: "failed", message: "Failed to get price for product.", want: true},
+		{name: "pricing failure ignores casing and whitespace", state: "failed", message: "  failed to GET PRICE for product.  ", want: true},
+		{name: "uncertain pricing outcome stays blocked", state: "pending", message: "Failed to get price for product."},
 		{name: "uncertain outcome stays blocked", state: "pending", message: "Product code does not exist."},
 		{name: "upload rejection resumes", state: "failed", message: "Artwork rejected"},
 	} {
