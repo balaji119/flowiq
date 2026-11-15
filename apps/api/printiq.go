@@ -25,6 +25,9 @@ type optionService struct {
 	cacheExpiry      time.Time
 }
 
+// A failure before sending the mutation can be retried without duplicating it.
+type printIQRequestNotSentError struct{ error }
+
 func newOptionService(baseURL, dataDir string) *optionService {
 	return &optionService{
 		baseURL:    strings.TrimRight(baseURL, "/"),
@@ -438,17 +441,20 @@ func (o *optionService) refreshOptionsCache() (cacheRefreshBucket, cacheRefreshB
 func (o *optionService) postQuoteProcess(endpoint string, payload any) (any, int, error) {
 	token, err := o.getLoginToken()
 	if err != nil {
-		return nil, 500, err
+		return nil, 500, printIQRequestNotSentError{err}
 	}
 	requestURL := appendLoginToken(o.baseURL+"/api/QuoteProcess/"+strings.TrimLeft(endpoint, "/"), url.QueryEscape(token))
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, 500, err
+		return nil, 500, printIQRequestNotSentError{err}
 	}
 
 	log.Printf("PrintIQ %s request: %v", endpoint, summarizePrintIQPayload(endpoint, payload))
 
-	request, _ := http.NewRequest(http.MethodPost, requestURL, bytes.NewReader(body))
+	request, err := http.NewRequest(http.MethodPost, requestURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, 500, printIQRequestNotSentError{err}
+	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := o.httpClient.Do(request)
 	if err != nil {
@@ -553,6 +559,9 @@ func extractQQDKeyForProductIndex(result any, productIndex int) any {
 		if qqdKey := findNonZeroField(rawProducts[productIndex], "QQDKey"); qqdKey != nil {
 			return qqdKey
 		}
+		if quantityKey := findNonZeroField(rawProducts[productIndex], "QuantityKey"); quantityKey != nil {
+			return quantityKey
+		}
 	}
 	return extractQQDKey(result)
 }
@@ -565,7 +574,10 @@ func extractGetPriceQQDKey(result any) any {
 	products, _ := valueAtPath(result, "QuoteDetails", "Products").([]any)
 	for _, product := range products {
 		if printIQStringValue(valueAtPath(product, "ProductKey")) == productKey {
-			return findNonZeroField(product, "QQDKey")
+			if key := findNonZeroField(product, "QQDKey"); key != nil {
+				return key
+			}
+			return findNonZeroField(product, "QuantityKey")
 		}
 	}
 	return nil

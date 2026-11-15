@@ -13,12 +13,15 @@ type printIQProgressSummary struct {
 	TotalCalls       int    `json:"totalCalls"`
 	CompletedUploads int    `json:"completedUploads"`
 	TotalUploads     int    `json:"totalUploads"`
+	HasSubmission    bool   `json:"hasSubmission"`
+	Status           string `json:"status"`
+	InputsChanged    bool   `json:"inputsChanged"`
 }
 
 // Weights describe completed work, not elapsed time or bytes transferred.
 // Each upload includes PrintIQ downloading/processing the file and our pacing.
 func (j *printIQJournal) progressSummary() printIQProgressSummary {
-	result := printIQProgressSummary{Progress: 5, Label: "Preparing PrintIQ submission"}
+	result := printIQProgressSummary{Progress: 5, Label: "Preparing PrintIQ submission", HasSubmission: true, Status: j.submissionStatus()}
 	for _, plan := range j.Plans {
 		result.TotalCalls += 2*len(plan.Products) + 2 + len(plan.DeliveryPayloads)
 		if j.PurchaseOrder != nil {
@@ -68,13 +71,16 @@ func (j *printIQJournal) progressSummary() printIQProgressSummary {
 		}
 		if step.Name == "UploadArtworkURL" {
 			result.Label += fmt.Sprintf(" — %d of %d complete", result.CompletedUploads, result.TotalUploads)
-			if step.AutoRetry && step.State != "done" {
-				result.Label += " (automatic retry 1 of 1)"
-			}
+		}
+		if step.AutoRetry && step.State != "done" {
+			result.Label += " (automatic retry 1 of 1)"
 		}
 	}
 	if result.TotalCalls > 0 && result.CompletedCalls == result.TotalCalls {
 		result.Label = "Saving submission results"
+	}
+	if j.Completed {
+		result.Progress, result.Label = 100, "Submission complete"
 	}
 	return result
 }
@@ -93,7 +99,7 @@ func (a *app) handleSubmissionProgress(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]string{"error": "Campaign not found"})
 		return
 	}
-	j, err := a.loadPrintIQJournal(r.Context(), campaign)
+	j, err := a.loadLatestPrintIQJournal(r.Context(), campaign, parseBoolQuery(r.URL.Query().Get("test")))
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": "Unable to load submission progress"})
 		return
@@ -102,5 +108,7 @@ func (a *app) handleSubmissionProgress(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, printIQProgressSummary{Progress: 5, Label: "Preparing PrintIQ submission"})
 		return
 	}
-	writeJSON(w, 200, j.progressSummary())
+	summary := j.progressSummary()
+	summary.InputsChanged = j.hasChangedInputs(campaign, j.Test)
+	writeJSON(w, 200, summary)
 }

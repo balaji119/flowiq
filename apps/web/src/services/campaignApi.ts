@@ -82,7 +82,13 @@ export async function calculatePersistedCampaign(campaignId: string, tenantId?: 
   });
 }
 
-export type CampaignSubmissionProgress = { progress: number; label: string };
+export type CampaignSubmissionProgress = {
+  progress: number;
+  label: string;
+  hasSubmission?: boolean;
+  status?: 'running' | 'failed' | 'needs_reconciliation' | 'completed';
+  inputsChanged?: boolean;
+};
 
 export async function submitCampaignToPrintIQ(campaignId: string, tenantId?: string | null, options?: {
   test?: boolean;
@@ -90,10 +96,19 @@ export async function submitCampaignToPrintIQ(campaignId: string, tenantId?: str
 }) {
   const path = withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/submit-to-printiq`, tenantId);
   const testPath = options?.test ? `${path}${path.includes('?') ? '&' : '?'}test=true` : path;
-  options?.onProgress?.({ progress: 3, label: 'Preparing campaign visuals' });
-  const visuals = await generatePrintIQVisuals(campaignId, tenantId);
+  const progressPath = withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/submission-progress`, tenantId);
+  const modeProgressPath = options?.test ? `${progressPath}${progressPath.includes('?') ? '&' : '?'}test=true` : progressPath;
   const body = new FormData();
-  body.append('visuals', visuals);
+  const saved = await apiFetchJson<CampaignSubmissionProgress>(
+    modeProgressPath,
+    { cache: 'no-store' },
+  );
+  const freshTest = options?.test && (saved.status === 'completed' || saved.inputsChanged);
+  if (!saved.hasSubmission || freshTest) {
+    options?.onProgress?.({ progress: 3, label: 'Preparing campaign visuals' });
+    const visuals = await generatePrintIQVisuals(campaignId, tenantId);
+    body.append('visuals', visuals);
+  }
   options?.onProgress?.({ progress: 5, label: 'Preparing PrintIQ submission' });
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -103,10 +118,12 @@ export async function submitCampaignToPrintIQ(campaignId: string, tenantId?: str
     const timeout = setTimeout(() => controller?.abort(), 5000);
     try {
       const progress = await apiFetchJson<CampaignSubmissionProgress & { totalCalls: number }>(
-        withTenant(`/api/campaigns/${encodeURIComponent(campaignId)}/submission-progress`, tenantId),
+        modeProgressPath,
         { signal: controller.signal, cache: 'no-store' },
       );
-      if (!stopped && progress.totalCalls > 0) options?.onProgress?.(progress);
+      if (!stopped && progress.totalCalls > 0 && !(options?.test && (progress.status === 'completed' || progress.inputsChanged))) {
+        options?.onProgress?.(progress);
+      }
     } catch {
       if (!stopped) options?.onProgress?.({ progress: 0, label: 'Submission is running; waiting for a progress update' });
     } finally {

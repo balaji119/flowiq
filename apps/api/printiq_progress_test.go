@@ -10,18 +10,18 @@ import (
 	"testing"
 )
 
-func TestPrintIQFreshSubmission(t *testing.T) {
+func TestPrintIQResumeInputValidation(t *testing.T) {
 	campaign := &campaignRecord{}
 	for _, tc := range []struct {
 		name, state, message string
 		changed, test, want  bool
 	}{
 		{name: "unchanged resumes"},
-		{name: "changed inputs restart", changed: true, want: true},
-		{name: "changed mode restarts", test: true, want: true},
-		{name: "missing product rebuilds mappings", state: "failed", message: "Product code does not exist.", want: true},
-		{name: "pricing failure starts new quote", state: "failed", message: "Failed to get price for product.", want: true},
-		{name: "pricing failure ignores casing and whitespace", state: "failed", message: "  failed to GET PRICE for product.  ", want: true},
+		{name: "changed inputs require reconciliation", changed: true, want: true},
+		{name: "changed mode requires separate campaign", test: true, want: true},
+		{name: "missing product retains quote", state: "failed", message: "Product code does not exist."},
+		{name: "pricing failure retains quote", state: "failed", message: "Failed to get price for product."},
+		{name: "pricing failure ignores casing and whitespace", state: "failed", message: "  failed to GET PRICE for product.  "},
 		{name: "uncertain pricing outcome stays blocked", state: "pending", message: "Failed to get price for product."},
 		{name: "uncertain outcome stays blocked", state: "pending", message: "Product code does not exist."},
 		{name: "upload rejection resumes", state: "failed", message: "Artwork rejected"},
@@ -33,8 +33,8 @@ func TestPrintIQFreshSubmission(t *testing.T) {
 			if tc.changed {
 				j.Fingerprint = "old inputs"
 			}
-			if got := j.needsFreshSubmission(campaign, tc.test); got != tc.want {
-				t.Fatalf("needsFreshSubmission = %v, want %v", got, tc.want)
+			if got := j.hasChangedInputs(campaign, tc.test); got != tc.want {
+				t.Fatalf("hasChangedInputs = %v, want %v", got, tc.want)
 			}
 		})
 	}
@@ -82,11 +82,14 @@ func TestPrintIQAutomaticUploadRetry(t *testing.T) {
 	}{
 		{"recovers", "UploadArtworkURL", "Artwork rejected", true, 2},
 		{"stops after one retry", "UploadArtworkURL", "Artwork rejected", false, 2},
-		{"application timeout recovers", "UploadArtworkURL", "The operation has timed out", true, 2},
-		{"application timeout stops after one retry", "UploadArtworkURL", "The operation has timed out", false, 2},
+		{"application timeout needs reconciliation", "UploadArtworkURL", "The operation has timed out", false, 1},
 		{"quote timeout is not retried", "AcceptQuote", "The operation has timed out", false, 1},
 		{"network error", "UploadArtworkURL", "", false, 1},
-		{"quote creation", "CreateQuoteWithDelivery", "Rejected", false, 1},
+		{"quote creation rejection retries once", "CreateQuoteWithDelivery", "Rejected", false, 2},
+		{"pricing rejection retries once", "GetPrice", "Rejected", false, 2},
+		{"acceptance rejection retries once", "AcceptQuote", "Rejected", false, 2},
+		{"proof answers rejection retries once", "SaveQuoteQuestions", "Rejected", false, 2},
+		{"read network failure retries once", "GetQuoteQuestions", "", false, 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls, waits := 0, 0
@@ -144,13 +147,13 @@ func TestPrintIQTimeoutRequiresReconciliation(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		j.run("Sydney:5", "UploadArtworkURL", map[string]any{"JobNo": "J1"}, call)
 	}
-	if calls != 2 {
-		t.Fatal("timeout did not stop after one automatic retry")
+	if calls != 1 {
+		t.Fatal("uncertain upload was resent")
 	}
 	if err := j.resolveUpload("Sydney:5", "confirmed_uploaded", "Verified attachment on J1", "admin"); err != nil {
 		t.Fatal(err)
 	}
-	if _, failure := j.run("Sydney:5", "UploadArtworkURL", map[string]any{"JobNo": "J1"}, call); failure != nil || calls != 2 {
+	if _, failure := j.run("Sydney:5", "UploadArtworkURL", map[string]any{"JobNo": "J1"}, call); failure != nil || calls != 1 {
 		t.Fatal("confirmed upload resent")
 	}
 	j.Steps["create"] = &printIQSavedStep{Name: "CreateQuoteWithDelivery", State: "pending"}

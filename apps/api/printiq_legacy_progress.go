@@ -10,14 +10,16 @@ import (
 	"path/filepath"
 )
 
-func (a *app) checkPrintIQHistory(ctx context.Context, campaign *campaignRecord) error {
+func (a *app) checkPrintIQHistory(ctx context.Context, campaign *campaignRecord, testModes ...bool) error {
+	test := len(testModes) > 0 && testModes[0]
 	// Completed durable records supersede log errors from reconciled attempts.
-	// Every subsequent attempt uses the journal, including unfinished attempts.
-	var completed bool
-	if err := a.campaignStore.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM printiq_submission_progress WHERE campaign_id=$1 AND tenant_id=$2 AND completed)`, campaign.ID, campaign.TenantID).Scan(&completed); err != nil {
+	// The other mode has its own journal, so its unfinished modern attempt must
+	// not be mistaken for a legacy failure that blocks switching modes.
+	var knownProgress bool
+	if err := a.campaignStore.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM printiq_submission_progress WHERE campaign_id=$1 AND tenant_id=$2 AND (completed OR COALESCE(data->>'Test','false')<>$3))`, campaign.ID, campaign.TenantID, fmt.Sprint(test)).Scan(&knownProgress); err != nil {
 		return err
 	}
-	if completed {
+	if knownProgress {
 		return nil
 	}
 	return a.checkLegacyPrintIQProgress(campaign)
@@ -86,7 +88,7 @@ func (a *app) checkLegacyPrintIQProgress(campaign *campaignRecord) error {
 			latest = entry
 		}
 	}
-	if latest != nil && (latest.Failed || latest.Kind == "request") {
+	if latest != nil && (latest.Quote != "" || latest.Failed || latest.Kind == "request") {
 		return fmt.Errorf("An earlier PrintIQ submission has unresolved progress (quote %s). ADS must reconcile the existing jobs before creating another quote; historical attempts cannot be resumed automatically", latest.Quote)
 	}
 	return nil

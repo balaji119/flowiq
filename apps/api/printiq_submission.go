@@ -46,11 +46,26 @@ func writePrintIQMarketFailure(w http.ResponseWriter, failure *printIQSubmission
 }
 
 func (a *app) submitPrintIQMarket(requestID string, campaign *campaignRecord, user AuthUser, plan printIQMarketPlan, customerCode string, purchaseOrderUpload, visualsUpload *printIQArtworkUpload, artworkUploads map[string]*printIQArtworkUpload, journals ...*printIQJournal) (*printIQMarketSubmission, *printIQSubmissionFailure) {
+	if len(journals) > 0 {
+		journal := journals[0]
+		journal.recover = func(key, step string, payload any) (any, bool) {
+			return a.recoverPrintIQStep(journal, plan, key, step, payload)
+		}
+	}
 	stepIndex := 0
 	run := func(requestID string, campaign *campaignRecord, user AuthUser, step string, payload any, call func(any) (any, int, error), products ...printIQSheetProduct) (any, *printIQSubmissionFailure) {
 		key := fmt.Sprintf("%s:%d", plan.Market, stepIndex)
 		stepIndex++
 		if len(journals) > 0 {
+			journals[0].validate = func(step string, response any) error {
+				if err := validatePrintIQStepResponse(step, response, len(plan.Products)+len(plan.DeliveryPayloads)); err != nil {
+					return err
+				}
+				if step == "GetPrice" && len(products) > 0 && products[0].FormatKey != "Delivery" && extractGetPriceQQDKey(response) == nil {
+					return fmt.Errorf("PrintIQ pricing response did not identify the new product quantity")
+				}
+				return nil
+			}
 			return journals[0].run(key, step, payload, func() (any, *printIQSubmissionFailure) {
 				return a.runPrintIQSubmissionStep(requestID, campaign, user, step, payload, call, products...)
 			})
@@ -166,6 +181,9 @@ func (a *app) submitPrintIQMarket(requestID string, campaign *campaignRecord, us
 			uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
 			uploadResponse, failure := run(requestID, campaign, user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
 			if failure != nil {
+				if failure.Body["stopSubmission"] == true {
+					return result, failure
+				}
 				uploadFailure = failure
 				failedUploads = append(failedUploads, map[string]any{"jobNo": uploadPayload["JobNo"], "artworkUrl": uploadPayload["ArtworkUrl"], "error": failure.Body["error"]})
 			}
@@ -177,6 +195,9 @@ func (a *app) submitPrintIQMarket(requestID string, campaign *campaignRecord, us
 			uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
 			uploadResponse, failure := run(requestID, campaign, user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
 			if failure != nil {
+				if failure.Body["stopSubmission"] == true {
+					return result, failure
+				}
 				uploadFailure = failure
 				failedUploads = append(failedUploads, map[string]any{"jobNo": uploadPayload["JobNo"], "artworkUrl": uploadPayload["ArtworkUrl"], "error": failure.Body["error"]})
 			}
@@ -188,6 +209,9 @@ func (a *app) submitPrintIQMarket(requestID string, campaign *campaignRecord, us
 			uploadArtworkPayloads = append(uploadArtworkPayloads, uploadPayload)
 			uploadResponse, failure := run(requestID, campaign, user, "UploadArtworkURL", uploadPayload, a.optionService.uploadArtworkURL)
 			if failure != nil {
+				if failure.Body["stopSubmission"] == true {
+					return result, failure
+				}
 				uploadFailure = failure
 				failedUploads = append(failedUploads, map[string]any{"jobNo": uploadPayload["JobNo"], "artworkUrl": uploadPayload["ArtworkUrl"], "error": failure.Body["error"]})
 			}

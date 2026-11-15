@@ -272,6 +272,7 @@ func (a *app) routes() http.Handler {
 	mux.Handle("GET /api/campaigns/{campaignId}/submission-progress", a.withAuth(http.HandlerFunc(a.handleSubmissionProgress)))
 	mux.Handle("GET /api/campaigns/{campaignId}/printiq-progress", a.withAuth(a.requireRoles(http.HandlerFunc(a.handlePrintIQProgress), "super_admin")))
 	mux.Handle("POST /api/campaigns/{campaignId}/printiq-progress/resolve-upload", a.withAuth(a.requireRoles(http.HandlerFunc(a.handlePrintIQProgress), "super_admin")))
+	mux.Handle("POST /api/campaigns/{campaignId}/printiq-progress/resolve-step", a.withAuth(a.requireRoles(http.HandlerFunc(a.handlePrintIQProgress), "super_admin")))
 	mux.Handle("POST /api/campaigns/{campaignId}/mark-submitted", a.withAuth(http.HandlerFunc(a.handleMarkCampaignSubmitted)))
 	mux.Handle("POST /api/campaigns/{campaignId}/reset-status", a.withAuth(a.requireRoles(http.HandlerFunc(a.handleResetCampaignStatus), "super_admin")))
 	mux.Handle("GET /api/campaigns/{campaignId}/purchase-order/download", a.withAuth(a.requireRoles(http.HandlerFunc(a.handlePurchaseOrderDownload), "super_admin")))
@@ -1258,7 +1259,8 @@ func (a *app) runPrintIQSubmissionStep(
 			"message":    message,
 			"status":     500,
 		})
-		return nil, &printIQSubmissionFailure{Status: http.StatusInternalServerError, Body: map[string]any{"error": message, "step": step, "requestId": requestID}}
+		var notSent printIQRequestNotSentError
+		return parsed, &printIQSubmissionFailure{Status: http.StatusInternalServerError, Body: map[string]any{"error": message, "step": step, "requestId": requestID, "requestNotSent": errors.As(err, &notSent)}}
 	}
 	if status < 200 || status >= 300 {
 		message := printIQProductFailureDetails(printIQStepFailureMessage(step, status, parsed, nil), payload, products)
@@ -1274,7 +1276,7 @@ func (a *app) runPrintIQSubmissionStep(
 			"response":   summarizePrintIQResponse(step, parsed),
 			"status":     status,
 		})
-		return nil, &printIQSubmissionFailure{Status: status, Body: map[string]any{"error": message, "step": step, "requestId": requestID}}
+		return parsed, &printIQSubmissionFailure{Status: status, Body: map[string]any{"error": message, "step": step, "requestId": requestID}}
 	}
 	if isError, message := printIQResponseError(parsed); isError {
 		displayMessage := printIQProductFailureDetails(printIQStepFailureMessage(step, status, parsed, nil), payload, products)
@@ -1290,7 +1292,7 @@ func (a *app) runPrintIQSubmissionStep(
 			"response":   summarizePrintIQResponse(step, parsed),
 			"status":     status,
 		})
-		return nil, &printIQSubmissionFailure{Status: http.StatusBadRequest, Body: map[string]any{"error": displayMessage, "printIqMessage": message, "step": step, "requestId": requestID}}
+		return parsed, &printIQSubmissionFailure{Status: http.StatusBadRequest, Body: map[string]any{"error": displayMessage, "printIqMessage": message, "step": step, "requestId": requestID}}
 	}
 
 	a.appendPrintIQLog(map[string]any{
@@ -1349,8 +1351,31 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
+	journal, err := a.loadLatestPrintIQJournal(r.Context(), campaign, testSubmission)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": "Unable to load submission progress"})
+		return
+	}
+	// A successful test is intentionally repeatable and creates a fresh order.
+	// Normal submission checkpoints are selected separately and remain reusable.
+	if journal != nil && journal.Completed && testSubmission {
+		journal = nil
+	}
+	if journal != nil && journal.Completed {
+		if journal.hasChangedInputs(campaign, testSubmission) {
+			writeJSON(w, 409, map[string]string{"error": "Campaign inputs changed after the PrintIQ submission completed. Clone the campaign to submit a revised order."})
+			return
+		}
+		result, err := journal.completedResult(campaign)
+		if err != nil {
+			writeJSON(w, 409, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
 	isSubmittedCampaign := strings.EqualFold(strings.TrimSpace(campaign.Status), "submitted")
-	if isSubmittedCampaign && !canResubmitSubmittedCampaign(*user) {
+	if isSubmittedCampaign && !testSubmission {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "Campaign has already been submitted"})
 		return
 	}
@@ -1395,24 +1420,20 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 
 	requestID := createRequestID()
 
-	journal, err := a.loadPrintIQJournal(r.Context(), campaign)
-	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "Unable to load submission progress"})
+	supersededTestID := ""
+	if journal != nil && testSubmission && journal.hasChangedInputs(campaign, testSubmission) {
+		supersededTestID, journal = journal.ID, nil
+	}
+	if journal != nil && journal.hasChangedInputs(campaign, testSubmission) {
+		writeJSON(w, 409, map[string]string{"error": "Campaign inputs or submission mode changed. Resume requires the original inputs and mode. ADS must reconcile changes to existing PrintIQ quotes/jobs."})
 		return
 	}
-	if journal != nil && journal.needsFreshSubmission(campaign, testSubmission) {
-		// Retain the old attempt for audit, but rebuild with current inputs and mappings.
-		// A fresh attempt can create duplicate PrintIQ quotes/jobs.
-		if _, err := a.campaignStore.pool.Exec(r.Context(), `UPDATE printiq_submission_progress SET completed=true, updated_at=NOW(), data=jsonb_set(data, '{Superseded}', 'true'::jsonb) WHERE id=$1 AND campaign_id=$2 AND tenant_id=$3 AND NOT completed`, journal.ID, campaign.ID, campaign.TenantID); err != nil {
-			writeJSON(w, 500, map[string]string{"error": "Unable to restart submission"})
-			return
-		}
-		journal = nil
-	}
 	if journal == nil {
-		if err := a.checkPrintIQHistory(r.Context(), campaign); err != nil {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
-			return
+		if supersededTestID == "" {
+			if err := a.checkPrintIQHistory(r.Context(), campaign, testSubmission); err != nil {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+				return
+			}
 		}
 		tenant, err := a.authStore.getTenant(campaign.TenantID)
 		if err != nil {
@@ -1480,12 +1501,19 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 			artworkUploads[product.ArtworkImageID] = artwork
 		}
 		journal = &printIQJournal{Test: testSubmission, Creator: creatorName, Plans: plans, CustomerCode: tenant.Code, PurchaseOrder: purchaseOrderUpload, Visuals: visualsUpload, Artworks: artworkUploads}
-		if err := a.createPrintIQJournal(r.Context(), campaign, journal); err != nil {
+		if err := a.createPrintIQJournal(r.Context(), campaign, journal, supersededTestID); err != nil {
 			writeJSON(w, 500, map[string]string{"error": "Unable to save submission progress"})
 			return
 		}
 	}
-	a.bindPrintIQJournal(r.Context(), journal)
+	if err := a.bindPrintIQJournal(r.Context(), journal); err != nil {
+		writeJSON(w, 409, map[string]string{"error": "Unable to claim submission progress. Submit again to load the latest saved state."})
+		return
+	}
+	if err := a.refreshFailedPrintIQMappings(r.Context(), campaign, journal); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "Unable to refresh failed product mappings: " + err.Error()})
+		return
+	}
 	plans := journal.Plans
 
 	submissions := make([]*printIQMarketSubmission, 0, len(plans))
@@ -1495,6 +1523,14 @@ func (a *app) handleSubmitCampaign(w http.ResponseWriter, r *http.Request) {
 	for index, plan := range plans {
 		submission, failure := a.submitPrintIQMarket(requestID, campaign, *user, plan, journal.CustomerCode, journal.PurchaseOrder, journal.Visuals, journal.Artworks, journal)
 		if failure != nil {
+			failure.Body["progressSaved"] = true
+			failure.Body["submissionStatus"] = journal.submissionStatus()
+			failure.Body["submissionId"] = journal.ID
+			if journal.submissionStatus() == "needs_reconciliation" {
+				failure.Body["error"] = fmt.Sprintf("%v. Progress is saved. ADS must verify uncertain PrintIQ results before submission can resume.", failure.Body["error"])
+			} else {
+				failure.Body["error"] = fmt.Sprintf("%v. Progress is saved. Submit again to resume using the existing quotes and jobs.", failure.Body["error"])
+			}
 			writePrintIQMarketFailure(w, failure, plan.Market, submissions, submission)
 			return
 		}
